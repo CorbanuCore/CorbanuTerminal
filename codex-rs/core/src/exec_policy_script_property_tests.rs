@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 58;
+const CONSTRUCTS: u64 = 66;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -122,6 +122,35 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         // Review round 2: comments the grammar sees where bash does not.
         56 => format!("x=(a)#; {inner}"),
         57 => format!("echo a\\\n#b; {inner}"),
+        // Review round 2: other places where the grammar and the shells
+        // split text differently, and zsh-only evaluation.
+        58 => match inner.split_once(' ') {
+            Some((head, tail)) if !head.contains(['\'', '"', '\n']) => {
+                format!("{head} 2>&1 {tail}")
+            }
+            _ => format!("{inner} 2>&1"),
+        },
+        59 => match inner.char_indices().nth(1) {
+            Some((at, _)) if inner.starts_with(|ch: char| ch.is_ascii_alphabetic()) => {
+                format!("{}\\\n{}", &inner[..at], &inner[at..])
+            }
+            _ => format!("echo a\\\r\n{inner}"),
+        },
+        60 => format!("(echo == x; {inner}\n)"),
+        61 => format!("echo ${{x#{{}}; {inner}\necho }}"),
+        62 => format!("zsh -c {}", single_quoted(&format!("[ -t {arithmetic} ]"))),
+        63 => format!(
+            "zsh -c {}",
+            single_quoted(&format!(
+                "echo $HOME[{}]",
+                single_quoted(&format!("$({inner}\n)"))
+            ))
+        ),
+        64 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("nocorrect X=1 {inner}"))
+        ),
+        65 => format!("echo a\\\r\n{inner}"),
         _ => format!("noglob {inner}"),
     }
 }
@@ -192,4 +221,29 @@ async fn composed_scripts_never_run_unasked() {
         scripts.len() * 6,
         failures.join("\n")
     );
+}
+
+/// The share of a corpus of real agent scripts (NUL-separated, path in
+/// `CORBANU_SCRIPT_CORPUS`) that asks in full access because some unrelated
+/// forbidden rule exists. Run by hand to measure what fail-closed reading
+/// costs: `cargo test -p codex-core --lib script_corpus_ask_rate -- --ignored --nocapture`.
+#[tokio::test]
+#[ignore = "needs a corpus file"]
+async fn script_corpus_ask_rate() {
+    let Ok(path) = std::env::var("CORBANU_SCRIPT_CORPUS") else {
+        return;
+    };
+    let corpus = std::fs::read_to_string(path).expect("corpus");
+    let rules = r#"prefix_rule(pattern=["zz-unrelated"], decision="forbidden")"#;
+    let (mut total, mut asks) = (0, 0);
+    for script in corpus.split('\0').filter(|script| !script.is_empty()) {
+        total += 1;
+        if !matches!(
+            check(script, rules, /*mode*/ 0).await,
+            ExecApprovalRequirement::Skip { .. }
+        ) {
+            asks += 1;
+        }
+    }
+    eprintln!("CORPUS {asks} of {total} scripts ask");
 }

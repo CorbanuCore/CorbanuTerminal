@@ -157,6 +157,20 @@ fn shapes_not_fully_understood_are_unread() {
         // A comment where bash sees none.
         "x=(a)#; git push",
         "echo a\\\n#b; git push",
+        // Review round 2: the grammar and bash split these differently.
+        "git 2>&1 push origin",
+        "echo a\\\r\ngit push",
+        "git pu\\\nsh",
+        "(echo == x; git push)",
+        "echo $(echo =~ x; git push)",
+        "echo ${x#{}; git push; echo }",
+        "[[ -t 'path[$(git push)]' ]]",
+        "[ -t x ]",
+        "echo $HOME['$(git push)']",
+        "echo \"$HOME[1]\"",
+        "nocorrect X=1 git push",
+        "NULLCMD=reboot",
+        "precmd_functions=(x)",
         // Does not parse.
         "git push (",
         "echo *(e:'git push':)",
@@ -172,12 +186,12 @@ fn understood_shapes_are_read() {
         "x=$(git log -1); echo \"$x\"",
         "for f in *.rs; do wc -l \"$f\"; done",
         "while read -r line; do echo \"$line\"; done < file",
-        "if [ -f x ]; then echo a; elif [[ -d y && $z == *.rs ]]; then :; else exit 1; fi",
+        "if [ -f x ]; then echo a; elif [[ -d y && -n $z ]]; then :; else exit 1; fi",
         "case $x in a|b) echo a;; *) :;; esac",
         "f() { echo \"$1\"; }; f x",
         "export PATH=\"$HOME/bin:$PATH\"; local x=1; readonly R=2; declare -x A",
         "unset x y",
-        "echo ${x:-default} ${x#*/} ${x%%.*} ${#x} ${x/a/b} \"${@}\" $1 $?",
+        "echo ${x:-default} ${x:=b} \"${@}\" $1 $?",
         "[ $? -eq 0 ] && [[ \"$#\" -gt 1 ]]",
         "cat <<'EOF' > out.txt\nhello $x\nEOF",
         "diff <(sort a) <(sort b) 2>&1 | head",
@@ -187,6 +201,8 @@ fn understood_shapes_are_read() {
         "cat <<'EOF' > f.py && python3 f.py\nprint(1)\nEOF",
         "cat <<'EOF' | python3\nprint(1)\nEOF",
         "cat <<'EOF'\nuse `code` and $(this) literally\nEOF",
+        "true;#note",
+        "[ -t 1 ] && [[ -t 0 ]]",
     ] {
         let read = read_script(script);
         assert!(!read.unread, "{script:?}: {read:?}");
@@ -218,5 +234,28 @@ fn ambiguous_heredocs_are_not_reduced_to_one_command() {
             None,
             "{script:?}"
         );
+    }
+}
+
+/// The lexical pre-filter (`script_lexical`): shapes the syntax tree reads,
+/// but outside the safe set, fail closed.
+#[test]
+fn lexically_unsafe_scripts_are_unread() {
+    for script in [
+        "[[ $y == *.rs ]]",
+        "[[ $x =~ ^a(b|c)$ ]]",
+        "echo ${x#*/} ${x%%.*} ${#x} ${x/a/b}",
+        "echo a \\\n  b",
+        "echo \"a\\\nb\"",
+        "ls /usr/bin/gi[t]",
+        "echo {a,b}",
+        "echo $((1 + 2))",
+        "cat <<EOF\n$(date)\nEOF",
+        "echo caf\u{e9}",
+        "echo a\u{a0}b",
+        "echo a\r",
+        "cat <<E\"O\"F\nx\nE\"O\"F",
+    ] {
+        assert!(read_script(script).unread, "{script:?}");
     }
 }

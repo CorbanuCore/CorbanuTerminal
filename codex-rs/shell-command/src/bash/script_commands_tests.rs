@@ -105,9 +105,7 @@ fn words_bash_builds_at_run_time_are_unknown() {
             partial(&[&["git", "?"], &["echo", "push"]]),
         ),
         ("/usr/bin/gi? push", partial(&[&["?", "push"]])),
-        ("/usr/bin/gi[t] push", partial(&[&["?", "push"]])),
         ("/usr/bin/g*t push", partial(&[&["?", "push"]])),
-        ("git {pu,}sh", partial(&[&["git", "?"]])),
         ("~/bin/git push", partial(&[&["?", "push"]])),
         ("=git push", partial(&[&["?", "push"]])),
         ("[ -f x ] && 'git' push", partial(&[&["git", "push"]])),
@@ -134,7 +132,15 @@ fn words_bash_builds_at_run_time_are_unknown() {
 #[test]
 fn unparsable_scripts_are_unreadable() {
     // The grammar does not read a brace expansion as a command name.
-    for script in ["git push (", "'git push", "if then fi", "{git,} push"] {
+    // #2548: so are words the lexical pre-filter does not accept.
+    for script in [
+        "git push (",
+        "'git push",
+        "if then fi",
+        "{git,} push",
+        "/usr/bin/gi[t] push",
+        "git {pu,}sh",
+    ] {
         assert_eq!(
             read_script_commands(script),
             ScriptCommands::Unreadable,

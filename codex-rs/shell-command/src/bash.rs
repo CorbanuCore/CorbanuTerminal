@@ -10,6 +10,7 @@ use crate::shell_detect::detect_shell_type;
 
 mod heredoc;
 
+mod script_lexical;
 mod script_read;
 pub use script_read::ARITHMETIC_TESTS;
 pub use script_read::CommandStdin;

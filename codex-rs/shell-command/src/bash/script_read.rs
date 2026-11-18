@@ -17,6 +17,7 @@
 use super::heredoc::heredoc_boundaries_readable;
 use super::heredoc::literal_heredoc;
 use super::script_command_words;
+use super::script_lexical::lexically_safe;
 use super::script_word;
 use super::try_parse_shell;
 use super::word_only_command_nodes;
@@ -43,6 +44,8 @@ pub struct ReadCommand {
     /// script runs (it may also become no word or several).
     pub words: Vec<Option<String>>,
     pub stdin: CommandStdin,
+    /// Per word: it is always a number (`$?`, `$#`, `$$`, `$!`, digits).
+    pub numbers: Vec<bool>,
 }
 
 /// See the module documentation.
@@ -71,7 +74,10 @@ pub fn read_script(script: &str) -> ScriptRead {
         return unread;
     };
     let root = tree.root_node();
-    if root.has_error() || !heredoc_boundaries_readable(root, script) {
+    if root.has_error()
+        || !heredoc_boundaries_readable(root, script)
+        || !continuations_read_as_bash(root, script)
+    {
         return unread;
     }
     let mut reader = Reader {
@@ -87,6 +93,9 @@ pub fn read_script(script: &str) -> ScriptRead {
         .map(|(_, command)| command)
         .filter(|command| !command.words.is_empty())
         .collect();
+    // The lexical pre-filter: a script outside the safe set is unread
+    // whatever the syntax tree says.
+    reader.unread |= !lexically_safe(script);
     let plain = !reader.unread
         && word_only_command_nodes(&tree).is_some()
         && commands
@@ -106,6 +115,38 @@ pub fn read_script(script: &str) -> ScriptRead {
     }
 }
 
+/// The grammar drops a backslash-newline between tokens, and also before a
+/// carriage return; bash joins the text around it (`git pu\<newline>sh` runs
+/// `git push`) and escapes a carriage return. Both read alike only where a
+/// continuation sits inside a token that removes it, or beside whitespace.
+fn continuations_read_as_bash(root: Node<'_>, script: &str) -> bool {
+    if script.contains("\\\r") {
+        return false;
+    }
+    script.match_indices("\\\n").all(|(at, _)| {
+        let inside_token = root
+            .descendant_for_byte_range(at, at + 2)
+            .is_some_and(|node| {
+                matches!(
+                    node.kind(),
+                    "word"
+                        | "string"
+                        | "string_content"
+                        | "raw_string"
+                        | "ansi_c_string"
+                        | "comment"
+                        | "heredoc_body"
+                        | "heredoc_content"
+                )
+            });
+        let before = script[..at].chars().next_back();
+        let after = script[at + 2..].chars().next();
+        inside_token
+            || before.is_none_or(char::is_whitespace)
+            || after.is_none_or(char::is_whitespace)
+    })
+}
+
 /// Words that are reserved at the start of a command in bash or zsh. One
 /// the reader does not strip there, or that follows `coproc`, is a shape it
 /// does not read.
@@ -123,8 +164,19 @@ pub const RESERVED_WORDS: &[&str] = &[
 pub fn runs_code_from_variable(name: &str) -> bool {
     matches!(
         name,
-        "BASH_ENV" | "ENV" | "PS4" | "SHELLOPTS" | "BASHOPTS" | "PROMPT_COMMAND" | "ZDOTDIR"
+        "BASH_ENV"
+            | "ENV"
+            | "PS4"
+            | "SHELLOPTS"
+            | "BASHOPTS"
+            | "PROMPT_COMMAND"
+            | "ZDOTDIR"
+            // zsh runs these for a line that is only a redirection.
+            | "NULLCMD"
+            | "READNULLCMD"
     ) || name.starts_with("BASH_FUNC_")
+        // zsh's hook functions.
+        || name.ends_with("_functions")
         || INTEGER_SPECIALS.contains(&name)
 }
 
@@ -197,6 +249,7 @@ impl<'a> Reader<'a> {
                         self.commands.push((
                             node.start_byte(),
                             ReadCommand {
+                                numbers: Vec::new(),
                                 words: script_command_words(node, self.src),
                                 stdin: CommandStdin::Redirected,
                             },
@@ -219,7 +272,7 @@ impl<'a> Reader<'a> {
         before
             .chars()
             .next_back()
-            .is_none_or(|before| matches!(before, ' ' | '\t' | '\n'))
+            .is_none_or(|before| matches!(before, ' ' | '\t' | '\n' | ';' | '&' | '|'))
     }
 
     fn deny<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
@@ -318,8 +371,10 @@ impl<'a> Reader<'a> {
         let mut inner = vec![node];
         while let Some(part) = inner.pop() {
             let children = fields(part, /*named_only*/ true);
+            // zsh's `-t FD` evaluates FD as arithmetic too.
             let arithmetic = children.iter().any(|(_, child)| {
-                child.kind() == "test_operator" && ARITHMETIC_TESTS.contains(&self.text(*child))
+                child.kind() == "test_operator"
+                    && (ARITHMETIC_TESTS.contains(&self.text(*child)) || self.text(*child) == "-t")
             });
             for (_, child) in children {
                 match child.kind() {
@@ -387,10 +442,13 @@ impl<'a> Reader<'a> {
         let mut nodes = command_word_nodes(command);
         let mut words = script_command_words(command, self.src);
         // The reserved prefixes bash reads before a pipeline: any sequence
-        // of `!` and `time [-p] [--]`, then `coproc`.
+        // of `!` and `time [-p] [--]` (and zsh's `nocorrect`, which allows an
+        // assignment after it), then `coproc`.
         let mut skip = 0;
         loop {
+            let unquoted = nodes.get(skip).and_then(|node| self.unquoted(*node));
             match nodes.get(skip).and_then(|node| self.reserved(*node)) {
+                _ if unquoted == Some("nocorrect") => skip += 1,
                 Some("!") => skip += 1,
                 Some("time") => {
                     skip += 1;
@@ -435,8 +493,17 @@ impl<'a> Reader<'a> {
             [Some(literal)] => CommandStdin::Literal(literal.clone()),
             _ => CommandStdin::Redirected,
         };
-        self.commands
-            .push((command.start_byte(), ReadCommand { words, stdin }));
+        self.commands.push((
+            command.start_byte(),
+            ReadCommand {
+                numbers: nodes
+                    .iter()
+                    .map(|node| numeric_operand(self.text(*node)))
+                    .collect(),
+                words,
+                stdin,
+            },
+        ));
         true
     }
 
@@ -485,10 +552,18 @@ impl<'a> Reader<'a> {
         match node.kind() {
             "file_redirect" => {
                 let mut operator = None;
+                let mut destinations = 0;
                 for (field, child) in fields(node, /*named_only*/ false) {
                     match field {
                         Some("descriptor") => {}
-                        Some("destination") => stack.push((child, Visit::Word)),
+                        // The grammar takes later words for more
+                        // destinations; bash runs them as arguments
+                        // (`git 2>&1 push`).
+                        Some("destination") if destinations > 0 => self.deny(child, stack),
+                        Some("destination") => {
+                            destinations += 1;
+                            stack.push((child, Visit::Word));
+                        }
                         _ if child.is_named() => self.deny(child, stack),
                         _ => operator = operator.or(Some(child.kind())),
                     }
@@ -559,11 +634,64 @@ impl<'a> Reader<'a> {
         }
     }
 
+    /// Whether `${…}` holds a brace of its own (not in a nested expansion,
+    /// substitution or quotes): the grammar nests `{` where bash ends the
+    /// expansion at the first `}`.
+    fn braces_in_expansion(&self, node: Node<'_>) -> bool {
+        let text = self.text(node).trim_start();
+        let start = node.end_byte() - text.len() + 2;
+        let end = node.end_byte().saturating_sub(1);
+        let mut own = String::new();
+        let mut at = start;
+        for (_, child) in fields(node, /*named_only*/ true) {
+            if matches!(
+                child.kind(),
+                "expansion"
+                    | "simple_expansion"
+                    | "command_substitution"
+                    | "process_substitution"
+                    | "string"
+                    | "raw_string"
+                    | "ansi_c_string"
+            ) && child.start_byte() >= at
+            {
+                own.push_str(&self.src[at..child.start_byte()]);
+                at = child.end_byte();
+            }
+        }
+        own.push_str(self.src.get(at..end).unwrap_or_default());
+        own.contains(['{', '}'])
+    }
+
+    /// Whether a `regex` or `extglob_pattern` token is where bash reads a
+    /// pattern as the grammar does.
+    fn pattern_in_place(&self, node: Node<'_>) -> bool {
+        let text = self.text(node);
+        match node.parent().map(|parent| parent.kind()) {
+            Some("binary_expression") => {
+                !(text.contains(';')
+                    || text.contains('\n')
+                    || text.contains("&&")
+                    || text.contains("||"))
+            }
+            Some("case_item") => node.kind() == "extglob_pattern",
+            Some("expansion") => node.kind() == "regex" && !text.contains(['{', '}']),
+            _ => false,
+        }
+    }
+
     fn word<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         match node.kind() {
             "word" | "number" | "string_content" | "regex" | "extglob_pattern"
                 if hides_expansion(self.text(node)) =>
             {
+                self.deny(node, stack);
+            }
+            // The scanner reads these tokens past `;`, `|` and newlines
+            // where bash ends them (`echo == x; cmd`): read only in a test's
+            // operand, a case pattern, or an expansion's pattern without
+            // braces (the scanner nests `{`, bash does not).
+            "regex" | "extglob_pattern" if !self.pattern_in_place(node) => {
                 self.deny(node, stack);
             }
             "word"
@@ -583,6 +711,14 @@ impl<'a> Reader<'a> {
             "string" | "concatenation" | "brace_expression" => {
                 push_named_children(node, Visit::Word, stack);
             }
+            // zsh reads `$name[…]` as a subscript, which it evaluates.
+            "simple_expansion"
+                if self.src[node.end_byte()..]
+                    .trim_start_matches(|ch: char| ch.is_ascii_alphanumeric() || ch == '_')
+                    .starts_with('[') =>
+            {
+                self.deny(node, stack);
+            }
             "simple_expansion" => {
                 for (_, child) in fields(node, /*named_only*/ true) {
                     if !matches!(child.kind(), "variable_name" | "special_variable_name") {
@@ -592,7 +728,10 @@ impl<'a> Reader<'a> {
             }
             // The grammar starts an expansion in a string at the space
             // before it.
-            "expansion" if simple_expansion_text(self.text(node).trim_start()) => {
+            "expansion"
+                if simple_expansion_text(self.text(node).trim_start())
+                    && !self.braces_in_expansion(node) =>
+            {
                 for (_, child) in fields(node, /*named_only*/ true) {
                     if child.kind() == "subscript" {
                         self.deny(child, stack);

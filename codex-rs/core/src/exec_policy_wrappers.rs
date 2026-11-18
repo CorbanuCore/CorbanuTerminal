@@ -55,16 +55,18 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
 /// at run time ask where needed when checked.
 pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
     read.unread
-        || read.commands.iter().any(|ReadCommand { words, stdin }| {
+        || read.commands.iter().any(|read_command| {
+            let ReadCommand { words, stdin, .. } = read_command;
             let Some(command) = words.iter().cloned().collect::<Option<Vec<_>>>() else {
                 // `eval "$x"`: its program is known to run text.
                 let argv: Vec<String> = words
                     .iter()
                     .map(|word| word.clone().unwrap_or_else(|| UNKNOWN_WORD.to_string()))
                     .collect();
+                let role_words = role_words(read_command);
                 return policy_wrapper_commands(&argv).starts.iter().any(|&start| {
                     words[start].as_deref().is_some_and(|program| {
-                        roles::runs_more_than_argv(program, &words[start + 1..])
+                        roles::runs_more_than_argv(program, &role_words[start + 1..])
                     })
                 });
             };
@@ -72,6 +74,20 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
             let start = wrappers.starts.last().copied().unwrap_or(0);
             roles::role(&command[..start], &command[start..], stdin) != Role::Argv
         })
+}
+
+/// #2548: `command`'s words for deciding what its program runs: a word
+/// known only at run time that is always a number (`$?`) reads as one.
+fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
+    command
+        .words
+        .iter()
+        .enumerate()
+        .map(|(index, word)| match word {
+            None if command.numbers.get(index) == Some(&true) => Some("0".to_string()),
+            word => word.clone(),
+        })
+        .collect()
 }
 
 /// #2546: whether [`check`] asks for a PowerShell script in `commands` that
@@ -450,7 +466,9 @@ fn queue_script(
     if read.unread || (single && (read.commands.len() > 1 || read.text_after_commands)) {
         ask |= any_strict_rule();
     }
-    for ReadCommand { words, stdin } in read.commands {
+    for read_command in read.commands {
+        let role_words = role_words(&read_command);
+        let ReadCommand { words, stdin, .. } = read_command;
         if let Some(command) = words.iter().cloned().collect::<Option<Vec<_>>>() {
             if past_bound {
                 ask = true;
@@ -463,8 +481,15 @@ fn queue_script(
                 });
             }
         } else {
-            ask |=
-                partial_command_matches(policy, &words, options, any_strict_rule, matches, folded);
+            ask |= partial_command_matches(
+                policy,
+                &words,
+                &role_words,
+                options,
+                any_strict_rule,
+                matches,
+                folded,
+            );
         }
     }
     ask
@@ -496,6 +521,7 @@ fn runs_unread_script(command: &[String]) -> bool {
 fn partial_command_matches(
     policy: &Policy,
     words: &[Option<String>],
+    role_words: &[Option<String>],
     options: &MatchOptions,
     any_strict_rule: &mut impl FnMut() -> bool,
     matches: &mut Vec<RuleMatch>,
@@ -531,7 +557,7 @@ fn partial_command_matches(
         let known = &argv[start..end];
         // An unknown program, or a shell (#2585: PowerShell too), `eval` or
         // a builtin that runs code given unknown words, runs anything.
-        if known.is_empty() || roles::runs_more_than_argv(&known[0], &words[start + 1..]) {
+        if known.is_empty() || roles::runs_more_than_argv(&known[0], &role_words[start + 1..]) {
             return any_strict_rule();
         }
         let mut found = policy

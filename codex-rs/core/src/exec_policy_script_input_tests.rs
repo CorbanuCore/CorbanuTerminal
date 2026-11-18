@@ -206,6 +206,22 @@ async fn unknown_scripts_table() {
         "coproc OPTIND='a[$(git push)]'",
         "x=(a)#; git push",
         "echo a\\\n#b; git push",
+        // Review round 2 (#2613).
+        "git 2>&1 push origin",
+        "git >/dev/null push",
+        "echo a\\\r\ngit push",
+        "git pu\\\nsh",
+        "(echo == x; git push)",
+        "test 1 == 1; git push ]",
+        "echo $(echo =~ x; git push)",
+        "echo ${x#{}; git push; echo }",
+        "zsh -c \"[[ -t 'path[\\$(git push)]' ]]\"",
+        "zsh -c \"[ -t 'path[\\$(git push)]' ]\"",
+        "zsh -c \"test -t 'path[\\$(git push)]'\"",
+        "zsh -c \"echo \\$HOME['\\$(git push)']\"",
+        "zsh -c \"a=\\$HOME['\\$(git push)']\"",
+        "zsh -c 'nocorrect X=1 git push'",
+        "zsh -c \"nocorrect OPTIND='a[\\$(git push)]'\"",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",
         "xargs sh -c 'source ./x.sh'",
@@ -249,6 +265,11 @@ async fn negative_controls_and_no_rule() {
         "cat <<'EOF' | python3\nprint(1)\nEOF",
         "printf '%s\\n' \"$x\" | sort",
         "shift 2; exit 0",
+        // Review round 2: everyday job control, status and formats stay read.
+        "sleep 1 & pid=$!; kill $pid; wait $!",
+        "f() { return $?; }; f; exit $?",
+        "printf '%s: %d\\n' \"$name\" 3",
+        "true;#note",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(

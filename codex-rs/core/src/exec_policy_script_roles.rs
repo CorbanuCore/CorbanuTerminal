@@ -162,14 +162,15 @@ const ARGV_ONLY_BUILTINS: &[&str] = &[
     "command", "builtin", "noglob", "-", ":", "true", "false", "echo", "pwd", "cd", "chdir",
     "pushd", "popd", "dirs", "type", "which", "whence", "where", "rehash", "unhash", "times",
     "help", "suspend", "unalias", "log",
+    // Jobs, processes and the file mode: no shell evaluates these.
+    "kill", "disown", "bg", "fg", "umask",
 ];
 
 /// Builtins whose arguments are numbers, which zsh and ksh evaluate as
 /// arithmetic (`shift 'a[$(…)]'` runs the substitution): read only where
 /// every argument is an option or a number.
 const NUMERIC_BUILTINS: &[&str] = &[
-    "exit", "return", "break", "continue", "shift", "logout", "bye", "caller", "ulimit", "kill",
-    "wait", "jobs", "disown", "bg", "fg", "umask",
+    "exit", "return", "break", "continue", "shift", "logout", "bye", "caller", "ulimit",
 ];
 
 /// Every other builtin of bash, zsh (with its code-running module builtins)
@@ -181,6 +182,8 @@ const OTHER_BUILTINS: &[&str] = &[
     "source",
     "eval",
     "exec",
+    "jobs",
+    "wait",
     "alias",
     "bind",
     "complete",
@@ -272,21 +275,20 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
         || known() && words().all(|arg| !arg.contains('[') && !runs_code_from_variable(arg));
     match name {
         _ if ARGV_ONLY_BUILTINS.contains(&name) => true,
-        // Options are letters; everything else a number. `jobs -x` runs a
-        // command; `umask` takes an octal or symbolic mode.
+        // Options are letters; everything else a number.
         _ if NUMERIC_BUILTINS.contains(&name) => {
             known()
                 && words().all(|arg| {
                     is_number(arg)
                         || (arg.starts_with('-')
-                            && arg[1..].bytes().all(|byte| byte.is_ascii_alphabetic())
-                            && !(name == "jobs" && arg.contains('x')))
-                        || (name == "umask"
-                            && arg.bytes().all(|byte| b"ugoa=+-,rwxXst".contains(&byte)))
+                            && arg[1..].bytes().all(|byte| byte.is_ascii_alphabetic()))
                         || (name == "ulimit" && arg == "unlimited")
-                        || (name == "kill" && arg.bytes().all(|byte| byte.is_ascii_uppercase()))
                 })
         }
+        // `jobs -x` runs a command.
+        "jobs" => known() && words().all(|arg| !(arg.starts_with('-') && arg.contains('x'))),
+        // `wait -p NAME` assigns, so a word known only at run time may.
+        "wait" => plain_names(),
         // `-v NAME` assigns; options end at the format. A numeric
         // conversion (`%d`, `%*s`) reads its argument as arithmetic in zsh
         // and ksh.
@@ -294,11 +296,13 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
             let Some(Some(format)) = args.first() else {
                 return args.is_empty();
             };
+            let slots = numeric_slots(format);
             !format.starts_with('-')
-                && (!numeric_conversion(format)
-                    || args[1..]
-                        .iter()
-                        .all(|arg| arg.as_deref().is_some_and(is_number)))
+                && args[1..].iter().enumerate().all(|(index, arg)| {
+                    slots.is_empty()
+                        || !slots[index % slots.len()]
+                        || arg.as_deref().is_some_and(is_number)
+                })
         }
         "test" | "[" => {
             known()
@@ -306,6 +310,12 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
                     let arg = arg.as_deref().unwrap_or_default();
                     if matches!(arg, "-v" | "-R") {
                         return false;
+                    }
+                    // zsh's `-t FD` evaluates FD as arithmetic.
+                    if arg == "-t" {
+                        return args
+                            .get(index + 1)
+                            .is_none_or(|fd| fd.as_deref().is_some_and(numeric_operand));
                     }
                     // zsh's `test` reads these operands as arithmetic.
                     !ARITHMETIC_TESTS.contains(&arg)
@@ -346,8 +356,11 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
     }
 }
 
-/// A `printf` format with a conversion that reads a number.
-fn numeric_conversion(format: &str) -> bool {
+/// Per argument a `printf` format reads (it repeats for more arguments):
+/// whether it reads a number (`%d`, a `*` width), which zsh and ksh evaluate
+/// as arithmetic.
+fn numeric_slots(format: &str) -> Vec<bool> {
+    let mut slots = Vec::new();
     let mut chars = format.chars();
     while let Some(ch) = chars.next() {
         if ch != '%' {
@@ -356,15 +369,21 @@ fn numeric_conversion(format: &str) -> bool {
         for spec in chars.by_ref() {
             match spec {
                 '%' => break,
-                '*' => return true,
+                '*' => slots.push(true),
                 'd' | 'i' | 'o' | 'u' | 'x' | 'X' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'a'
-                | 'A' | 'c' => return true,
-                _ if spec.is_ascii_alphabetic() => break,
+                | 'A' => {
+                    slots.push(true);
+                    break;
+                }
+                _ if spec.is_ascii_alphabetic() => {
+                    slots.push(false);
+                    break;
+                }
                 _ => {}
             }
         }
     }
-    false
+    slots
 }
 
 /// `read`'s timeout, count and file descriptor options (`-t`, `-n`, `-N`,
