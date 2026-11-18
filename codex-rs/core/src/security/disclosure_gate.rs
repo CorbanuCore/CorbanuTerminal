@@ -42,9 +42,9 @@ use zeroize::Zeroizing;
 /// Environment values shorter than this are flags, not credentials.
 const MIN_ENV_VALUE_BYTES: usize = 8;
 /// URL password strings registered from one environment value, and from all
-/// of them (#2401). Each costs about a dozen output-gate entries and the gate
-/// must still arm with room for every other managed value, so these stay
-/// well below its capacity.
+/// of them, beyond each value's first URL password (#2401). Each costs about
+/// a dozen output-gate entries and the gate must still arm with room for
+/// every other managed value, so these stay well below its capacity.
 const MAX_URL_PASSWORDS_PER_VALUE: usize = 64;
 const MAX_URL_PASSWORDS_TOTAL: usize = 128;
 const MAX_URL_PASSWORD_BYTES_TOTAL: usize = 64 * 1024;
@@ -925,42 +925,49 @@ where
         {
             values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
         }
-        let mut url_passwords = 0;
+        // The first URL's password exactly as before #2401, at any length and
+        // outside the limits below, so no value loses what it registered.
+        let first = secretless_launch::first_url_password(value);
+        if let Some(password) = first
+            && is_plausible_secret(password)
+        {
+            values.push((
+                format!("env:{name}:password"),
+                Zeroizing::new(password.to_string()),
+            ));
+        }
+        // Every other reading, raw spellings before decoded ones: tools can
+        // echo the URL verbatim or print its decoded password. Escapes of
+        // whitespace alone are not a credential.
+        let mut raw = Vec::new();
+        let mut decoded = Vec::new();
         for password in secretless_launch::url_password_candidates(value, MIN_ENV_VALUE_BYTES) {
-            if url_passwords + 2 > MAX_URL_PASSWORDS_PER_VALUE
-                || url_passwords_total + 2 > MAX_URL_PASSWORDS_TOTAL
-                || url_password_bytes + 2 * password.len() > MAX_URL_PASSWORD_BYTES_TOTAL
-            {
-                break;
-            }
-            // Keep both spellings: tools can echo the URL verbatim or print
-            // its decoded password (#2401). Escapes of whitespace alone are
-            // not a credential.
-            let decoded = Zeroizing::new(
+            let plain = Zeroizing::new(
                 urlencoding::decode(password)
                     .map(std::borrow::Cow::into_owned)
                     .unwrap_or_else(|_| password.to_string()),
             );
-            if decoded.trim().is_empty() {
+            if plain.trim().is_empty() {
                 continue;
             }
-            let decoded_plausible = is_plausible_secret(&decoded);
-            let mut added = 0;
-            if decoded_plausible || is_plausible_secret(password) {
-                values.push((
-                    format!("env:{name}:password"),
-                    Zeroizing::new(password.to_string()),
-                ));
-                added += 1;
-                url_password_bytes += password.len();
+            let plain_plausible = is_plausible_secret(&plain);
+            if (plain_plausible || is_plausible_secret(password)) && Some(password) != first {
+                raw.push(Zeroizing::new(password.to_string()));
             }
-            if decoded_plausible && decoded.as_str() != password {
-                url_password_bytes += decoded.len();
-                values.push((format!("env:{name}:password"), decoded));
-                added += 1;
+            if plain_plausible && plain.as_str() != password && Some(plain.as_str()) != first {
+                decoded.push(plain);
             }
-            url_passwords += added;
-            url_passwords_total += added;
+        }
+        for (count, password) in raw.into_iter().chain(decoded).enumerate() {
+            if count == MAX_URL_PASSWORDS_PER_VALUE
+                || url_passwords_total == MAX_URL_PASSWORDS_TOTAL
+                || url_password_bytes + password.len() > MAX_URL_PASSWORD_BYTES_TOTAL
+            {
+                break;
+            }
+            url_passwords_total += 1;
+            url_password_bytes += password.len();
+            values.push((format!("env:{name}:password"), password));
         }
         for (param, secret) in url_query_secrets(value) {
             values.push((format!("env:{name}:{param}"), secret));

@@ -107,11 +107,12 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
 fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_registered() {
     for value in [
         "status: ready contact: alice@example.com git@host:repo",
-        "http://user@host user@[::1]:3128 mailto:alice@example.com",
-        "http://u:@host u:@proxy http://u:   @host",
+        "http://user@host user@[::1]:3128",
+        "http://u:@host",
         "u:%20%20%20%20%20%20%20%20@proxy",
         "http://u:Word-12@host",
-        "http://u:postgres@host user:ordinary@proxy",
+        "http://u:postgres@host",
+        "user:ordinary@proxy",
         "10:30@home",
         "a:b@c",
         "/opt/homebrew/opt/node@20/bin:/usr/bin",
@@ -122,20 +123,39 @@ fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_registered() {
             "{value}"
         );
     }
-    // As before #2401, a plausible encoded spelling is registered even when
-    // its decoded text is too short to be.
-    assert_eq!(
-        registered(
-            "PROXY",
-            "http://u:Word-12@host u:%57%6f%72%64%2d%31%32@proxy"
+    // The first URL's password is still read exactly as before #2401, so
+    // values whose authority runs on past whitespace register the same text.
+    for (value, before) in [
+        (
+            "http://u:@host u:@proxy http://u:   @host",
+            vec!["@host u:"],
         ),
-        vec!["%57%6f%72%64%2d%31%32"],
-    );
-    // A password padded with whitespace is still read as before #2401.
-    assert_eq!(
-        registered("PROXY", "http://u: Spaced-2401 @proxy"),
-        vec!["Spaced-2401"],
-    );
+        (
+            "http://user@host user@[::1]:3128 mailto:alice@example.com",
+            vec![":1]:3128 mailto:alice"],
+        ),
+        (
+            "http://u:postgres@host user:ordinary@proxy",
+            vec!["postgres@host user:ordinary"],
+        ),
+        (
+            "http://u:Word-12@host u:%57%6f%72%64%2d%31%32@proxy",
+            vec![
+                "Word-12@host u:%57%6f%72%64%2d%31%32",
+                "%57%6f%72%64%2d%31%32",
+            ],
+        ),
+        ("http://u: Spaced-2401 @proxy", vec!["Spaced-2401"]),
+        // A plausible encoded spelling is registered even when its decoded
+        // text is too short to be.
+        (
+            "u:%57%6f%72%64%2d%31%32@proxy",
+            vec!["%57%6f%72%64%2d%31%32"],
+        ),
+        ("http://u:pass word1@proxy", vec!["pass word1"]),
+    ] {
+        assert_eq!(registered("PROXY", value), before, "{value}");
+    }
     // Eight decoded bytes and mixed character classes meet the existing
     // environment-seeding threshold; encoded length alone does not count.
     assert_eq!(
@@ -175,7 +195,8 @@ fn issue_2401_large_flagged_values_still_arm_the_gate() {
             .iter()
             .any(|(_, secret)| secret.as_str() == "Synth-Pw-2401")
     );
-    assert!(values.len() <= MAX_URL_PASSWORDS_TOTAL);
+    // One first-URL password per value, plus the capped readings.
+    assert!(values.len() <= MAX_URL_PASSWORDS_TOTAL + vars.len());
     let gate = OutputGate::new();
     let entries: Vec<_> = values
         .iter()
@@ -190,6 +211,55 @@ fn issue_2401_large_flagged_values_still_arm_the_gate() {
             "{index}"
         );
     }
+}
+
+#[test]
+fn issue_2401_limits_never_drop_what_was_registered_before() {
+    // Two long lists of encoded passwords use up the shared limit; a later
+    // value still registers its first URL's password.
+    let list = |tag: &str| {
+        (0..40)
+            .map(|index| format!("http://u{index}:Pw%21{tag}{index}-Synth@h{index}.example"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    // A first-URL token longer than every candidate limit.
+    let token = format!("eyJ2ZXIiOjEs{}", "A1b2".repeat(300));
+    let index_url = format!("https://aws:{token}@d-1.codeartifact.example/pypi/r/simple/");
+    let vars = [
+        ("PROXY_LIST_A", list("a")),
+        ("PROXY_LIST_B", list("b")),
+        (
+            "DATABASE_URL",
+            "postgres://app:Db-Synth-2401@db/app".to_string(),
+        ),
+        ("PIP_INDEX_URL", index_url),
+    ];
+    let values = env_values(
+        vars.iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+    );
+    let has = |label: &str, secret: &str| {
+        values
+            .iter()
+            .any(|(name, value)| name == label && value.as_str() == secret)
+    };
+    assert!(has("env:DATABASE_URL:password", "Db-Synth-2401"));
+    assert!(has("env:PIP_INDEX_URL:password", &token));
+    // Raw spellings come before decoded ones: all forty in one list.
+    for index in 0..40 {
+        assert!(
+            has("env:PROXY_LIST_A:password", &format!("Pw%21a{index}-Synth")),
+            "{index}"
+        );
+    }
+    let gate = OutputGate::new();
+    let entries: Vec<_> = values
+        .iter()
+        .map(|(label, value)| (label.as_str(), SecretClass::Operational, value.as_str()))
+        .collect();
+    gate.register_all(&entries)
+        .expect("gate admits every URL password");
 }
 
 /// Deterministic xorshift generator: the property test needs no new

@@ -446,13 +446,16 @@ fn issue_2401_candidate_work_is_bounded() {
 }
 
 #[test]
-fn issue_2401_first_url_password_is_still_a_candidate() {
+fn issue_2401_first_url_password_reads_as_before() {
     assert_eq!(
-        url_password_candidates("http://u: Spaced-2401 @proxy", 8),
-        vec!["Spaced-2401"],
+        first_url_password("http://u: Spaced-2401 @proxy"),
+        Some("Spaced-2401")
     );
     assert_eq!(
-        url_password_candidates("http://u:@host u:@proxy http://u:   @host", 1),
-        Vec::<&str>::new(),
+        first_url_password("http://u:Pass@word,2401@host"),
+        Some("Pass@word,2401")
     );
+    assert_eq!(first_url_password("http://u:@host"), None);
+    assert_eq!(first_url_password("https://user@host"), None);
+    assert_eq!(first_url_password("user:Secret-2401@proxy"), None);
 }

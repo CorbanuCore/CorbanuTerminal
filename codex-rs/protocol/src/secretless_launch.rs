@@ -219,12 +219,13 @@ fn authority_has_password(rest: &str) -> bool {
 
 /// Longest URL password candidate, in bytes.
 const MAX_URL_PASSWORD_BYTES: usize = 1024;
-/// Most candidates returned for one value, and most `@` readings kept for one
-/// `:`. They keep redaction within the output gate's capacity: every
-/// registered string costs about a dozen gate entries, and the gate refuses
-/// to arm (so the session does not start) when they overflow. Readings are
-/// returned round-robin, nearest `user:password@host` reading of every `:`
-/// first, so a list of up to this many credential URLs registers each one.
+/// Most candidates returned for one value, most `:` of each kind with
+/// readings, and most `@` readings kept for one `:`. They keep redaction
+/// within the output gate's capacity: every registered string costs about a
+/// dozen gate entries, and the gate refuses to arm (so the session does not
+/// start) when they overflow. Readings are returned round-robin, nearest
+/// `user:password@host` reading of every `:` first, so a list of up to this
+/// many credential URLs yields each password.
 const MAX_URL_PASSWORD_CANDIDATES: usize = 64;
 const MAX_ENDS_PER_COLON: usize = 16;
 /// Most `@` positions looked at after one `:`.
@@ -248,22 +249,36 @@ const MAX_BRACKETED_HOST_BYTES: usize = 64;
 ///
 /// Candidates are borrowed verbatim (percent escapes are not decoded), are at
 /// least `min_bytes` and at most `MAX_URL_PASSWORD_BYTES` long, and are
-/// ordered: the first URL's password as read before #2401, then round-robin
-/// the nearest `@` followed by a host for each `:`, the next reading of each,
-/// and so on. Callers apply their own
+/// ordered round-robin: the nearest `@` followed by a host for each `:`
+/// (after `//user:` first), then the next reading of each, and so on. See also
+/// [`first_url_password`]. Callers apply their own
 /// credential test, to the decoded text as well.
 pub fn url_password_candidates(value: &str, min_bytes: usize) -> Vec<&str> {
     if !value_has_url_password(value) {
         return Vec::new();
     }
     let bytes = value.as_bytes();
-    let ats: Vec<usize> = (0..bytes.len())
+    // Each `@` with whether a host follows it, computed once.
+    let ats: Vec<(usize, bool)> = (0..bytes.len())
         .filter(|&index| bytes[index] == b'@')
+        .map(|index| (index, host_follows(&value[index + 1..])))
         .collect();
-    let mut readings: Vec<(usize, Vec<usize>)> = Vec::new();
+    // Readings after `//user:` first, then after scheme-less user names
+    // (which compact JSON such as `"10:30"` also produces).
+    let mut readings: [Vec<(usize, Vec<usize>)>; 2] = [Vec::new(), Vec::new()];
     let mut stop = 0;
     let mut word_end = 0;
     for colon in userinfo_colons(value) {
+        let kind = usize::from(!follows_authority_user(bytes, colon));
+        if readings[kind].len() == MAX_URL_PASSWORD_CANDIDATES {
+            if readings
+                .iter()
+                .all(|kind| kind.len() == MAX_URL_PASSWORD_CANDIDATES)
+            {
+                break;
+            }
+            continue;
+        }
         if stop <= colon {
             stop = next_index(bytes, colon + 1, ends_password);
         }
@@ -271,36 +286,24 @@ pub fn url_password_candidates(value: &str, min_bytes: usize) -> Vec<&str> {
             word_end = next_index(bytes, colon + 1, |byte| byte.is_ascii_whitespace());
         }
         let limit = word_end.min(colon + 1 + MAX_URL_PASSWORD_BYTES);
-        let first = ats.partition_point(|&at| at <= colon + 1);
+        let first = ats.partition_point(|&(at, _)| at <= colon + 1);
         // `user:password@host` readings first, then every other `@`.
-        let (mut ends, others): (Vec<usize>, Vec<usize>) = ats[first..]
+        let (hosts, others): (Vec<_>, Vec<_>) = ats[first..]
             .iter()
             .copied()
-            .take_while(|&at| at < limit)
+            .take_while(|&(at, _)| at < limit)
             .take(MAX_ATS_PER_COLON)
-            .partition(|&at| at < stop && host_follows(&value[at + 1..]));
-        ends.extend(others);
+            .partition(|&(at, host)| host && at < stop);
+        let mut ends: Vec<usize> = hosts.into_iter().chain(others).map(|(at, _)| at).collect();
         ends.truncate(MAX_ENDS_PER_COLON);
         if !ends.is_empty() {
-            readings.push((colon, ends));
-            if readings.len() == MAX_URL_PASSWORD_CANDIDATES {
-                break;
-            }
+            readings[kind].push((colon, ends));
         }
     }
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
-    // The first URL's password as main read it before #2401, so nothing it
-    // registered is lost (for example a user name holding whitespace).
-    if let Some(password) = first_url_password(value)
-        && password.len() >= min_bytes.max(1)
-        && password.len() <= MAX_URL_PASSWORD_BYTES
-    {
-        seen.insert(password);
-        candidates.push(password);
-    }
     for rank in 0..MAX_ENDS_PER_COLON {
-        for (colon, ends) in &readings {
+        for (colon, ends) in readings.iter().flatten() {
             let Some(&at) = ends.get(rank) else {
                 continue;
             };
@@ -316,15 +319,18 @@ pub fn url_password_candidates(value: &str, min_bytes: usize) -> Vec<&str> {
     candidates
 }
 
-/// The password of the value's first `scheme://` authority, trimmed, unless
-/// it is empty or holds whitespace (then it spans several words).
-fn first_url_password(value: &str) -> Option<&str> {
+/// The password of the value's first `scheme://` authority, trimmed, exactly
+/// as redaction read it before #2401, when the value is flagged. Callers
+/// register it without the limits that bound [`url_password_candidates`].
+pub fn first_url_password(value: &str) -> Option<&str> {
+    if !value_has_url_password(value) {
+        return None;
+    }
     let (_, rest) = value.split_once("://")?;
     let authority = rest.split(['/', '?', '#']).next()?;
     let (userinfo, _) = authority.rsplit_once('@')?;
     let (_, password) = userinfo.split_once(':')?;
-    let password = password.trim();
-    (!password.is_empty() && !password.contains(char::is_whitespace)).then_some(password)
+    Some(password.trim()).filter(|password| !password.is_empty())
 }
 
 /// True when some `:` that follows a user name is followed by a nonempty
