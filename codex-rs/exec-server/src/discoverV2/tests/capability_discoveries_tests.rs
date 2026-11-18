@@ -298,6 +298,7 @@ async fn discovery_resolves_optional_skill_metadata() -> anyhow::Result<()> {
         allow_implicit_invocation: Some(false),
         products: vec![Product::Codex, Product::Chatgpt],
     });
+    let diagnostic_start = std::time::Instant::now();
     for (yaml, dependencies, policy) in [
         (None, None, None),
         (Some("interface: [invalid]"), None, None),
@@ -340,8 +341,11 @@ policy:
                 write(temp.path(), &format!("{root}/agents/openai.yaml"), yaml)?;
             }
         }
+        eprintln!("BZ2 metadata {:?}: creating manager", diagnostic_start.elapsed());
         let manager = CapabilityManager::new(LocalFileSystem::unsandboxed());
+        eprintln!("BZ2 metadata {:?}: seeding", diagnostic_start.elapsed());
         manager.seed_prewarmed_locations(request.clone()).await?;
+        eprintln!("BZ2 metadata {:?}: seeded", diagnostic_start.elapsed());
         let response = manager
             .get_or_refresh_discovery(DiscoverV2CapabilitiesRequest {
                 cwd: PathUri::from_host_native_path(temp.path().join("project"))?,
@@ -364,6 +368,9 @@ policy:
         expected.discovery_root = None;
         assert_eq!(response.plugins[0].skills, vec![expected]);
         assert_eq!(response.warnings, Vec::<String>::new());
+        eprintln!("BZ2 metadata {:?}: dropping manager", diagnostic_start.elapsed());
+        drop(manager);
+        eprintln!("BZ2 metadata {:?}: manager dropped", diagnostic_start.elapsed());
     }
     Ok(())
 }

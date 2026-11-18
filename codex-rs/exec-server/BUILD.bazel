@@ -32,6 +32,8 @@ codex_rust_crate(
     integration_test_args = ["--test-threads=1"],
     test_tags = ["no-sandbox"],
     unit_test_args = ["--test-threads=1"],
+    # Temporary qualification diagnostic: measure completion beyond 300 seconds.
+    unit_test_timeout = "long",
 )
 
 exec_server_compat_test(
