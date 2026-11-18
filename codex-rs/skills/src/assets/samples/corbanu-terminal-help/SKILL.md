@@ -37,7 +37,8 @@ match (subject to the documented PowerShell gap); with
 approvals disabled, that means refusal. Allow rules require exact spelling,
 including Windows executable suffixes and listed drive-letter case, unless a
 rule explicitly opts into sync's canonical matching. This sync baseline lacks
-main's D692 platform rule folding and #2531 general nested-script checking;
+main's D692 platform rule folding, #2503 launcher-name case folding, and #2531
+general nested-script checking;
 main merge #11 is pending.
 
 Do not promise complete shell interpretation: the guide records the nested

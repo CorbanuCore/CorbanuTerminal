@@ -31,12 +31,13 @@ this example matches both `git push` and `git push origin main`. Use a list of
 alternatives for one word, such as `["git", ["push", "fetch"]]`.
 
 - `prompt` requests approval through the configured approval path.
-- Sync also supports `prompt_user`, which requires a fresh human decision.
 - `forbidden` refuses the command.
 - `allow` supplies a command-rule approval; other safety checks still apply.
 
-The strictest matching decision wins: `forbidden`, then `prompt_user`, then
-`prompt`, then `allow`.
+The strictest matching decision wins. In `.rules` files the order is `forbidden`,
+then `prompt`, then `allow`. Managed `requirements.toml` rules can also use
+`prompt-user`, which requires a fresh human decision and ranks between
+`forbidden` and `prompt`; it is not a valid `.rules` decision.
 `match` and `not_match` are examples checked when the file loads. They check the
 rule's prefix, not the whole runtime safety decision.
 
@@ -100,9 +101,10 @@ differences, not guarantees carried by this documentation port.
 
 Prefix rules compare case exactly by default on this sync baseline. Main's
 additional macOS/Windows prompt-and-forbidden program-name folding (D692) is
-still pending in main merge #11. Launcher recognition and the built-in dangerous
-command check already recognize platform-equivalent spellings; that is separate
-from rule matching. Windows basename lookup also retains its existing name
+still pending in main merge #11. Launcher-name case folding (#2503/D688) is also
+missing here: `SUDO git push` does not receive the inner `git push` rule check.
+The built-in dangerous-command check already recognizes platform-equivalent
+spellings; that is separate from rule matching. Windows basename lookup also retains its existing name
 normalization for restrictive rules.
 
 Sync supports explicit `canonical_matching=True` on a rule, which compares all
@@ -143,7 +145,7 @@ forbidden rule for `git push`:
 | `xargs -I{} git {}`  | Asks: input could replace `{}` with `push`. |
 
 If input could complete a forbidden rule, sync requires a fresh human decision
-(`prompt_user`); fixed words already matching that rule are refused. Allow rules
+(`prompt-user`); fixed words already matching that rule are refused. Allow rules
 alone do not trigger this extra input-dependent prompt. However,
 `xargs sh -c`, `xargs env`, and `xargs command -v` still require approval even
 without a restrictive rule. Unknown `xargs` options also require approval.

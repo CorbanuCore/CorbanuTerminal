@@ -4,7 +4,7 @@
 
 - Policy engine and CLI built around `prefix_rule(pattern=[...], decision?, justification?, match?, not_match?)` plus `host_executable(name=..., paths=[...])`.
 - This release covers the prefix-rule subset of the execpolicy language plus host executable metadata; a richer language will follow.
-- Tokens are matched in order; any `pattern` element may be a list to denote alternatives. `decision` defaults to `allow`; valid values: `allow`, `prompt`, `prompt_user`, `forbidden`. `prompt_user` requires a fresh human decision.
+- Tokens are matched in order; any `pattern` element may be a list to denote alternatives. `decision` defaults to `allow`; valid values: `allow`, `prompt`, `forbidden`. Managed `requirements.toml` rules additionally support `prompt-user` (a fresh human decision); `.rules` files do not.
 - `justification` is an optional human-readable rationale for why a rule exists. It can be provided for any `decision` and may be surfaced in different contexts (for example, in approval prompts or rejection messages). When `decision = "forbidden"` is used, include a recommended alternative in the `justification`, when appropriate (e.g., ``"Use `jj` instead of `git`."``).
 - `match` / `not_match` supply example invocations that are validated at load time (think of them as unit tests); examples can be token arrays or strings (strings are tokenized with `shlex`).
 - The CLI always prints the JSON serialization of the evaluation result.
@@ -13,8 +13,8 @@
 
 See the [command-rule guide](../../docs/execpolicy.md) for rule files, examples,
 launcher checks, quoted and run-time words, xargs, and known limits. This sync
-baseline differs from main: D692 platform rule folding and #2531 general nested
-script checking await main merge #11; PowerShell uses an in-process literal
+baseline differs from main: D692 platform rule folding, #2503 launcher-name case
+folding, and #2531 general nested-script checking await main merge #11; PowerShell uses an in-process literal
 parser rather than main's trusted external parser and #2568 command-line reader.
 
 `execpolicy check` tests supplied prefixes, including explicitly enabled canonical
@@ -98,20 +98,20 @@ cargo run -p codex-execpolicy -- check --rules path/to/policy.rules git status
     {
       "prefixRuleMatch": {
         "matchedPrefix": ["<token>", "..."],
-        "decision": "allow|prompt|prompt_user|forbidden",
+        "decision": "allow|prompt|forbidden",
         "resolvedProgram": "/absolute/path/to/program",
         "justification": "..."
       }
     }
   ],
-  "decision": "allow|prompt|prompt_user|forbidden"
+  "decision": "allow|prompt|forbidden"
 }
 ```
 
 - When no rules match, `matchedRules` is an empty array and `decision` is omitted.
 - `matchedRules` lists every rule whose prefix matched the command; `matchedPrefix` is the exact prefix that matched.
 - `resolvedProgram` is omitted unless an absolute executable path matched via basename fallback.
-- The effective `decision` is the strictest severity across all matches (`forbidden` > `prompt_user` > `prompt` > `allow`).
+- The effective `decision` is the strictest severity across all matches (`forbidden` > `prompt` > `allow` for this `.rules` CLI).
 
 Note: `execpolicy` commands are still in preview. The API may have breaking changes in the future.
 
