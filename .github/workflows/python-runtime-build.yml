@@ -1,3 +1,4 @@
+# Corbanu: DISABLED. See docs/management/upstreamSync/landing-plan-v0.167.0.md.
 name: python-runtime-build
 
 on:
@@ -17,7 +18,7 @@ on:
 
 jobs:
   build-python-runtime:
-    if: github.repository == 'openai/codex'
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: build-python-runtime
     runs-on: ubuntu-latest
     permissions:
