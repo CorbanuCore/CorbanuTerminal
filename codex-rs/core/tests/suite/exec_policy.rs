@@ -695,8 +695,14 @@ async fn execpolicy_blocks_shell_invocation() -> Result<()> {
         .single_request()
         .function_call_output_text(call_id)
         .expect("forbidden command should produce a tool response");
+    // #2548: inside the session shell's `bash -lc`, the non-ASCII `bAſh`
+    // lies outside the minimal lexical set, so the script is not split and
+    // the reason may name the session shell's own `bash` (refused either
+    // way). `canonical_rule_still_folds_inside_an_unsplit_script` pins the
+    // folding.
     assert!(
-        output.contains("policy forbids commands starting with `'bAſh'`"),
+        output.contains("policy forbids commands starting with `'bAſh'`")
+            || output.contains("policy forbids commands starting with `bash`"),
         "unexpected output: {output}"
     );
 

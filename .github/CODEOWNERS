@@ -152,6 +152,14 @@
 /.github/actions/windows-code-sign/ @corbanu-security
 /.github/actions/setup-akv-pkcs11-codesigning/ @corbanu-security
 /.github/scripts/macos-signing/ @corbanu-security
+# Disabled upstream packaging candidates: an enabling change needs security review.
+/.github/workflows/python-runtime-build.yml @corbanu-security
+/.github/workflows/python-runtime-release.yml @corbanu-security
+/.github/workflows/python-sdk-build.yml @corbanu-security
+/.github/workflows/python-sdk-release.yml @corbanu-security
+/.github/workflows/python-sdk-cli-release.yml @corbanu-security
+/.github/workflows/rust-release-provisioned-macos.yml @corbanu-security
+/.github/scripts/test_sync_workflow_reconciliation.py @corbanu-security
 # END Corbanu security owners
 
 # BEGIN sync-branch security owners (upstream sync; revert before the final PR)

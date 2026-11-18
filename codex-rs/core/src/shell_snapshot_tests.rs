@@ -1855,6 +1855,112 @@ async fn brokered_snapshot_drops_secret_and_provider_names_case_insensitively() 
     Ok(())
 }
 
+/// #2147 review r2 / #310: a zsh startup file (`.zshenv`, which the brokered
+/// non-login capture reads) exports a brokered GitHub token and ties the
+/// secret-named array `deploy_token` to `DEPLOY_TOKEN`, a copy of it. Core's
+/// secret-name filter drops the export (its value check would too), and the
+/// capture still records `DEPLOY_TOKEN` as an alias of the brokered token
+/// instead of bailing on it (`invalid_export`): the snapshot is written, the
+/// alias reaches neither the file nor a replay of it, and a brokered child that
+/// inherited the token and the alias gets neither the alias nor any copy of the
+/// token (D640: no placeholders for aliases). A non-secret export in the same
+/// file is kept. Runs where zsh is native (macOS).
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> Result<()> {
+    const SECRET: &str = "ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
+    let dir = tempdir()?;
+    std::fs::write(
+        dir.path().join(".zshenv"),
+        format!(
+            "export GITHUB_TOKEN='{SECRET}'\n\
+             typeset -T DEPLOY_TOKEN deploy_token\n\
+             deploy_token=(prefix \"Bearer $GITHUB_TOKEN\")\n\
+             export DEPLOY_TOKEN\n\
+             export KEEP_ME_VISIBLE=plainvaluethree\n"
+        ),
+    )?;
+    let started_proxy = credential_snapshot_proxy().await?;
+    let shell = Shell {
+        shell_type: ShellType::Zsh,
+        shell_path: PathBuf::from("/bin/zsh"),
+    };
+    let shell_environment_policy = ShellEnvironmentPolicy {
+        r#set: HashMap::from([("ZDOTDIR".to_string(), dir.path().display().to_string())]),
+        ..ShellEnvironmentPolicy::default()
+    };
+    let credential_broker = SnapshotCredentialBroker {
+        network_proxy: started_proxy.proxy(),
+        shell_environment_policy: shell_environment_policy.clone(),
+        allow_login_shell: false,
+    };
+    let path = dir.path().join("snapshot.sh").abs();
+    let credentials = write_shell_snapshot(
+        &shell,
+        &path,
+        &dir.path().abs(),
+        &shell_environment_policy,
+        Some(&credential_broker),
+        /*sandbox*/ None,
+        /*removed_env_vars*/ &[],
+    )
+    .await?;
+    let snapshot = fs::read_to_string(&path).await?;
+    assert!(
+        snapshot.contains("KEEP_ME_VISIBLE"),
+        "control: the startup export is captured: {snapshot}"
+    );
+    for hidden in ["DEPLOY_TOKEN", "deploy_token", SECRET, "Bearer"] {
+        assert!(!snapshot.contains(hidden), "{hidden} reached the file");
+    }
+    assert!(
+        credentials
+            .as_ref()
+            .is_some_and(|credentials| credentials.fail_open_aliases.contains_key("DEPLOY_TOKEN")),
+        "control: the capture saw DEPLOY_TOKEN as an alias of the brokered token"
+    );
+    let replay = Command::new("/bin/zsh")
+        .arg("-f")
+        .arg("-c")
+        .arg(". \"$1\" && printf '%s|%s' \"${DEPLOY_TOKEN-unset}\" \"${KEEP_ME_VISIBLE-unset}\"")
+        .arg("snapshot")
+        .arg(path.as_path())
+        .env_clear()
+        .output()?;
+    assert!(replay.status.success(), "{replay:?}");
+    assert_eq!(String::from_utf8(replay.stdout)?, "unset|plainvaluethree");
+
+    let snapshot_file = ShellSnapshotFile {
+        shell_environment_policy: ShellEnvironmentPolicy::default(),
+        path,
+        credentials,
+    };
+    // As if the command inherited the token and its alias.
+    let mut brokered_env = HashMap::from([
+        ("GITHUB_TOKEN".to_string(), SECRET.to_string()),
+        (
+            "DEPLOY_TOKEN".to_string(),
+            format!("prefix:Bearer {SECRET}"),
+        ),
+    ]);
+    let credential_context =
+        snapshot_file.restore_credentials(&mut brokered_env, &shell_environment_policy);
+    brokered_env = credential_context
+        .prepare_child_environment(
+            &credential_broker.network_proxy,
+            brokered_env,
+            /*environment_id*/ None,
+        )?
+        .env;
+    snapshot_file.restore_fail_open_aliases(&mut brokered_env, /*environment_id*/ None);
+    assert_eq!(brokered_env.get("DEPLOY_TOKEN"), None);
+    assert!(
+        brokered_env.values().all(|value| !value.contains(SECRET)),
+        "a brokered child got a copy of the credential: {brokered_env:?}"
+    );
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn timed_out_snapshot_shell_is_terminated() -> Result<()> {

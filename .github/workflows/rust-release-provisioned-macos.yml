@@ -1,3 +1,4 @@
+# Corbanu: DISABLED. See docs/management/upstreamSync/landing-plan-v0.167.0.md.
 # Verified Cargo side packages, published by rust-release.yml when enabled.
 # The legacy CLI, npm, installer and DMG packages are unchanged.
 # Required secrets in the codesigning environment:
@@ -20,7 +21,7 @@ env:
 
 jobs:
   sign:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/rust-v') && vars.CODEX_PROVISIONED_MACOS_CANDIDATE == 'true'
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment:
@@ -118,6 +119,7 @@ jobs:
           if-no-files-found: warn
 
   verify:
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     needs: sign
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30

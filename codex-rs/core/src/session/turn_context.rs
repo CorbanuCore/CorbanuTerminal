@@ -558,6 +558,9 @@ pub struct TurnContext {
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
+    /// D625 (a): policy requests the person allowed at the post-taint dispatch check.
+    pub(crate) post_taint_policy_answers:
+        Arc<crate::security::protected_surface::PostTaintPolicyAnswers>,
     pub(crate) repeated_tool_call_state: Arc<RepeatedToolCallState>,
     pub(crate) pending_tool_calls: Arc<crate::tools::parallel::PendingToolCalls>,
     /// Shares the session-owned store; session approvals remain live across turns. D520 (a):
@@ -658,6 +661,7 @@ impl TurnContext {
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            post_taint_policy_answers: Arc::default(),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             pending_tool_calls: Arc::default(),
             session_grants: self.session_grants.clone(),
@@ -1165,6 +1169,7 @@ impl TurnContext {
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
+            post_taint_policy_answers: Arc::clone(&self.post_taint_policy_answers),
             repeated_tool_call_state: Arc::clone(&self.repeated_tool_call_state),
             pending_tool_calls: Arc::clone(&self.pending_tool_calls),
             session_grants: self.session_grants.clone(),
@@ -1609,6 +1614,7 @@ impl Session {
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            post_taint_policy_answers: Arc::default(),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             pending_tool_calls: Arc::default(),
             session_grants,

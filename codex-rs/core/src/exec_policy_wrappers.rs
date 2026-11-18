@@ -10,12 +10,19 @@ use codex_execpolicy::Evaluation;
 use codex_execpolicy::MatchOptions;
 use codex_execpolicy::Policy;
 use codex_execpolicy::RuleMatch;
-use codex_shell_command::bash::ScriptCommands;
+use codex_shell_command::bash::CommandStdin;
+use codex_shell_command::bash::ReadCommand;
+use codex_shell_command::bash::ScriptRead;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
-use codex_shell_command::bash::shell_lc_script_commands;
+use codex_shell_command::bash::read_script;
+use codex_shell_command::bash::shell_lc_script_read;
 use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 use codex_shell_command::powershell::UnreadPowershell;
 use codex_shell_command::powershell::unread_powershell_command_line;
+use roles::Role;
+
+#[path = "exec_policy_script_roles.rs"]
+mod roles;
 
 /// #2531 (D553): how many shell scripts nested in one another
 /// (`bash -lc "bash -c '…'"`, also through launchers such as
@@ -38,6 +45,11 @@ fn script_commands(
     if parsed.commands.len() != 1 || parsed.commands[0] != command {
         return Some((parsed.commands, false));
     }
+    // #2548: a here-document a shell reads as its script (or any script
+    // whose commands run more than their argv) is read whole, input and all.
+    if shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read)) {
+        return None;
+    }
     parse_shell_lc_single_command_prefix(command).map(|single| (vec![single], true))
 }
 
@@ -57,6 +69,8 @@ pub(super) fn has_wrappers(
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || (read_own_scripts && script_commands(command, platform).is_some())
+        // #2548: nor can one for a script rules read only in part.
+        || shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read))
         // #2568: an amendment for a PowerShell command line whose script
         // rules cannot read cannot approve the commands inside.
         || unread_powershell_line(command).is_some()
@@ -173,14 +187,25 @@ pub(crate) fn unread_script_matches(
     platform: DangerousCommandPlatform,
 ) -> (Vec<RuleMatch>, Vec<RuleMatch>) {
     let respelled = policy_shell_script(command);
-    let reading = shell_lc_script_commands(respelled.as_deref().unwrap_or(command));
-    let plain = matches!(reading, Some(ScriptCommands::Plain(_))) && respelled.is_none();
+    let reading = shell_lc_script_read(respelled.as_deref().unwrap_or(command));
+    // #2548: a plain script the split lowered to its commands is read there,
+    // unless one runs a script file, whose unread commands ask below.
+    let plain = reading
+        .as_ref()
+        .is_some_and(|read| read.plain && !runs_more_than_argv(read) && !runs_script_file(read))
+        && respelled.is_none();
     // A top-level heredoc script has its own pass
-    // (`apply_heredoc_restrictive_matches`).
-    if plain
-        || (reading.is_none() && !runs_unread_script(command))
-        || parse_shell_lc_single_command_prefix(command).is_some()
-    {
+    // (`apply_heredoc_restrictive_matches`) unless (#2548) it runs more than
+    // its one command's argv (a shell given the here-document), or lies
+    // outside the minimal lexical set where a rule could match (it asks).
+    let strict_rules = policy
+        .strictest_rule_matching_more_args_by(&[], options, possible_rule_decision)
+        .is_some();
+    let heredoc_pass_suffices = parse_shell_lc_single_command_prefix(command).is_some()
+        && reading.as_ref().is_none_or(|read| {
+            !runs_more_than_argv(read) && (!read.fails_closed() || !strict_rules)
+        });
+    if plain || (reading.is_none() && !runs_unread_script(command)) || heredoc_pass_suffices {
         return (Vec::new(), Vec::new());
     }
     let checked = check(
@@ -220,6 +245,8 @@ struct Pending {
     command: Vec<String>,
     depth: usize,
     restrict_only: bool,
+    /// #2548: where its input comes from, for a command from a script.
+    stdin: CommandStdin,
 }
 
 /// Where a word is known only at run time (#2543), launchers read this.
@@ -259,10 +286,10 @@ pub(super) fn check(
     let mut next = commands.iter();
     loop {
         let owned = pending.pop();
-        let (command, depth, restrict_only) = match &owned {
-            Some(item) => (&item.command, item.depth, item.restrict_only),
+        let (command, depth, restrict_only, stdin) = match &owned {
+            Some(item) => (&item.command, item.depth, item.restrict_only, &item.stdin),
             None => match next.next() {
-                Some(command) => (command, 0, false),
+                Some(command) => (command, 0, false, &CommandStdin::Inherited),
                 None => break,
             },
         };
@@ -325,6 +352,7 @@ pub(super) fn check(
                         command,
                         restrict_only,
                         depth,
+                        stdin: CommandStdin::Inherited,
                     }));
                 } else if depth < MAX_SCRIPT_DEPTH || start > 0 {
                     // #2556, #2583 (D553): known literal prefixes of a script
@@ -335,6 +363,7 @@ pub(super) fn check(
                         command,
                         restrict_only: true,
                         depth: depth + 1,
+                        stdin: CommandStdin::Inherited,
                     }));
                 }
             }
@@ -371,6 +400,17 @@ pub(super) fn check(
                 if used_complex_parsing {
                     push_prompt(&mut matches, inner);
                 }
+                // #2548 (D553): a script outside the minimal lexical set (a
+                // here-document) asks wherever a rule could match a command
+                // in it, as main's `asks_outside_minimal_set`; D691: a fresh
+                // human decision where a forbidden or prompt-user rule could.
+                if shell_lc_script_read(parsed_as)
+                    .is_some_and(|read| !read.minimal || runs_script_file(&read))
+                {
+                    let ask = any_rule();
+                    raise_match(&mut matches, inner, ask);
+                    unread_script_prompts |= ask.is_some();
+                }
                 if !reads_past_bound {
                     // #2531: nested too deep to read; D691: a fresh human
                     // decision where a forbidden or prompt-user rule could
@@ -387,45 +427,28 @@ pub(super) fn check(
                         command,
                         depth: depth + 1,
                         restrict_only,
+                        stdin: CommandStdin::Inherited,
                     }));
                 }
-            } else if reads_script && let Some(reading) = shell_lc_script_commands(parsed_as) {
-                // #2543 (D553, D688): a script rules cannot read as plain
-                // commands. The literal argv above keeps its fallback; the
-                // commands inside can only add prompts and refusals, and
-                // where a command cannot be known, any rule that could match
-                // it asks (sync: by D691's levels).
+            } else if reads_script && let Some(read) = shell_lc_script_read(parsed_as) {
+                // #2543 (D553, D688), #2548: a script rules cannot read as
+                // plain commands. The literal argv above keeps its fallback;
+                // the commands inside can only add prompts and refusals, and
+                // where a command or part cannot be known, any rule that
+                // could match it asks (sync: by D691's levels).
                 let reading_from = matches.len();
-                let mut ask = None;
-                match reading {
-                    ScriptCommands::Plain(_) => {}
-                    ScriptCommands::Unreadable => ask = any_rule(),
-                    ScriptCommands::Partial(commands) => {
-                        for words in commands {
-                            if let Some(command) = words.iter().cloned().collect::<Option<Vec<_>>>()
-                            {
-                                if reads_past_bound {
-                                    pending.push(Pending {
-                                        command,
-                                        depth: depth + 1,
-                                        restrict_only: true,
-                                    });
-                                } else {
-                                    ask = ask.max(Some(Decision::Prompt)).max(any_rule());
-                                }
-                            } else {
-                                ask = ask.max(partial_command_decision(
-                                    policy,
-                                    &words,
-                                    options,
-                                    &mut any_rule,
-                                    &mut matches,
-                                    &mut folded,
-                                ));
-                            }
-                        }
-                    }
-                }
+                let ask = queue_script(
+                    read,
+                    /*single*/ false,
+                    depth,
+                    /*past_bound*/ !reads_past_bound,
+                    policy,
+                    options,
+                    &mut any_rule,
+                    &mut matches,
+                    &mut folded,
+                    &mut pending,
+                );
                 raise_match(&mut matches, inner, ask);
                 unread_script_prompts |= matches[reading_from..]
                     .iter()
@@ -437,6 +460,42 @@ pub(super) fn check(
                 raise_match(&mut matches, inner, ask);
                 unread_script_prompts |= ask.is_some();
             }
+        }
+        // #2548 (D553): a command whose program runs more than its argv:
+        // `eval`'s words and a shell's here-document are read as scripts;
+        // code rules cannot read asks where a rule could match it. At the
+        // top (depth 0) a command is argv as given: a shell there reads the
+        // caller's input, as before; any other program (a builtin wrapper
+        // such as `/usr/bin/jobs -x`) is still classified.
+        if let Some(&start) = wrappers.starts.last()
+            && (depth > 0 || !inner_runs_shell(&command[start..]))
+        {
+            let inner = &command[start..];
+            let reading_from = matches.len();
+            let ask = match roles::role(&command[..start], inner, stdin) {
+                Role::Argv => None,
+                Role::Unread | Role::File => any_rule(),
+                Role::Script { text, single } => {
+                    let past_bound = depth >= MAX_SCRIPT_DEPTH;
+                    let ask = queue_script(
+                        read_script(&text),
+                        single,
+                        depth,
+                        past_bound,
+                        policy,
+                        options,
+                        &mut any_rule,
+                        &mut matches,
+                        &mut folded,
+                        &mut pending,
+                    );
+                    if past_bound { ask.max(any_rule()) } else { ask }
+                }
+            };
+            raise_match(&mut matches, inner, ask);
+            unread_script_prompts |= matches[reading_from..]
+                .iter()
+                .any(|rule_match| rule_match.decision() > Decision::Allow);
         }
         if restrict_only {
             unread_script_prompts |= matches[matches_before..]
@@ -457,6 +516,127 @@ pub(super) fn check(
         folded,
         unread_script_prompts,
     }
+}
+
+/// #2543, #2548: queues the commands of a script read in part, each to add
+/// only prompts and refusals; returns what it must ask besides: part of it
+/// is not read (or lies outside the minimal lexical set), or `single` and it
+/// holds more than one command (a shell reading its script from stdin
+/// shares that input with its commands, which may consume script text).
+#[allow(clippy::too_many_arguments)]
+fn queue_script(
+    read: ScriptRead,
+    single: bool,
+    depth: usize,
+    past_bound: bool,
+    policy: &Policy,
+    options: &MatchOptions,
+    any_rule: &mut impl FnMut() -> Option<Decision>,
+    matches: &mut Vec<RuleMatch>,
+    folded: &mut Vec<RuleMatch>,
+    pending: &mut Vec<Pending>,
+) -> Option<Decision> {
+    let mut ask = None;
+    // Text after a stdin script's one command may become commands once it
+    // reads some of that input (`head -c 1` then `#git push`).
+    if read.fails_closed() || (single && (read.commands.len() > 1 || read.text_after_commands)) {
+        ask = ask.max(any_rule());
+    }
+    for read_command in read.commands {
+        let role_words = role_words(&read_command);
+        let ReadCommand { words, stdin, .. } = read_command;
+        if let Some(command) = words.iter().cloned().collect::<Option<Vec<_>>>() {
+            if past_bound {
+                ask = ask.max(Some(Decision::Prompt)).max(any_rule());
+            } else {
+                pending.push(Pending {
+                    command,
+                    depth: depth + 1,
+                    restrict_only: true,
+                    stdin,
+                });
+            }
+        } else {
+            ask = ask.max(partial_command_decision(
+                policy,
+                &words,
+                &role_words,
+                options,
+                any_rule,
+                matches,
+                folded,
+            ));
+        }
+    }
+    ask
+}
+
+/// #2548: whether `read` holds code rules see only by reading more than
+/// its commands' argv: a part not read, or a command whose program runs
+/// text (`eval`, a shell's here-document). Commands with words known only
+/// at run time ask where needed when checked.
+pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
+    read.unread
+        || read.commands.iter().any(|read_command| {
+            let ReadCommand { words, stdin, .. } = read_command;
+            let Some(command) = words.iter().cloned().collect::<Option<Vec<_>>>() else {
+                // `eval "$x"`: its program is known to run text.
+                let argv: Vec<String> = words
+                    .iter()
+                    .map(|word| word.clone().unwrap_or_else(|| UNKNOWN_WORD.to_string()))
+                    .collect();
+                let role_words = role_words(read_command);
+                return policy_wrapper_commands(&argv).starts.iter().any(|&start| {
+                    words[start].as_deref().is_some_and(|program| {
+                        roles::runs_more_than_argv(program, &role_words[start + 1..])
+                    })
+                });
+            };
+            let wrappers = policy_wrapper_commands(&command);
+            let start = wrappers.starts.last().copied().unwrap_or(0);
+            !matches!(
+                roles::role(&command[..start], &command[start..], stdin),
+                Role::Argv | Role::File
+            )
+        })
+}
+
+/// #2548: whether a command of `read` is a shell running a named script file
+/// ([`Role::File`]): split like argv, but its commands are unread.
+pub(super) fn runs_script_file(read: &ScriptRead) -> bool {
+    read.commands.iter().any(|read_command| {
+        let Some(command) = read_command
+            .words
+            .iter()
+            .cloned()
+            .collect::<Option<Vec<_>>>()
+        else {
+            return false;
+        };
+        let wrappers = policy_wrapper_commands(&command);
+        let start = wrappers.starts.last().copied().unwrap_or(0);
+        roles::role(&command[..start], &command[start..], &read_command.stdin) == Role::File
+    })
+}
+
+fn inner_runs_shell(command: &[String]) -> bool {
+    command
+        .first()
+        .is_some_and(|program| roles::runs_shell(program))
+}
+
+/// #2548: `command`'s words for deciding what its program runs: a word
+/// known only at run time that is always a number (`$?`) reads as one.
+fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
+    command
+        .words
+        .iter()
+        .enumerate()
+        .map(|(index, word)| match word {
+            None if command.numbers.get(index) == Some(&true) => Some("0".to_string()),
+            word => word.clone(),
+        })
+        .collect()
 }
 
 /// Ask for approval of `command`'s script.
@@ -503,6 +683,7 @@ fn runs_unread_script(command: &[String]) -> bool {
 fn partial_command_decision(
     policy: &Policy,
     words: &[Option<String>],
+    role_words: &[Option<String>],
     options: &MatchOptions,
     any_rule: &mut impl FnMut() -> Option<Decision>,
     matches: &mut Vec<RuleMatch>,
@@ -536,8 +717,9 @@ fn partial_command_decision(
             end = end.min(open.known_end.max(start));
         }
         let known = &argv[start..end];
-        // An unknown program, or a shell given unknown words, runs anything.
-        if known.is_empty() || (end < words.len() && policy_runs_shell(&known[0])) {
+        // An unknown program, or a shell (#2585: PowerShell too), `eval` or
+        // a builtin that runs code given unknown words, runs anything.
+        if known.is_empty() || roles::runs_more_than_argv(&known[0], &role_words[start + 1..]) {
             return any_rule();
         }
         let mut found = policy

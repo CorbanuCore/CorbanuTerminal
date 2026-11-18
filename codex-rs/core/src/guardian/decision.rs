@@ -104,8 +104,19 @@ pub(crate) fn decide_approval(
         let model_requires_review =
             requirements.auto_review_required_for_model(&context.model_info.slug);
         // Shared with Corbanu's post-taint dispatch gate (`check_dispatch`).
-        let require_guardian = options.require_guardian
-            || requirements.automatic_reviewer_forced(&context.model_info.slug);
+        let forced_by_requirements =
+            requirements.automatic_reviewer_forced(&context.model_info.slug);
+        let require_guardian = options.require_guardian || forced_by_requirements;
+        // D625 (a) (ii): from this same live read, a reviewer the requirements
+        // force never answers a permissions request alone after untrusted
+        // content, whenever they were reloaded.
+        if forced_by_requirements
+            && let Ok(GuardianApprovalRequest::RequestPermissions { id, .. }) = &request.request
+            && let Some(refusal) =
+                crate::security::protected_surface::forced_review_refusal(&session, turn, id)
+        {
+            return Some(ReviewDecision::denied(refusal));
+        }
         let full_access = context.environments().has_full_access(
             context.approval_policy,
             &turn.config.permissions.effective_permission_profile(),
