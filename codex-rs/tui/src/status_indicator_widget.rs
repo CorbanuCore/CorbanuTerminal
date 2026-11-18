@@ -171,6 +171,13 @@ impl StatusIndicatorWidget {
         self.details.as_deref()
     }
 
+    /// Sync port of main #2560: the elapsed and blink clocks live in the
+    /// bottom pane's [`StatusTimer`]; this row only owns the shimmer origin.
+    #[cfg(test)]
+    pub(crate) fn reset_header_timer_for_tests(&mut self, now: Instant) {
+        self.header_started_at = now;
+    }
+
     pub(crate) fn set_interrupt_hint_visible(&mut self, visible: bool) {
         self.show_interrupt_hint = visible;
     }

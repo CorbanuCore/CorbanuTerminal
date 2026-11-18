@@ -1,43 +1,25 @@
 name: rust-ci changed crate tests (macOS)
 
-# #1989 (owner decision D503): a non-blocking macOS twin of rust-ci.yml's
+# #1989 (owner decisions D503/D623): a required macOS twin of rust-ci.yml's
 # `Changed crate tests` (#1984, Linux only), for a few crates with macOS-only
 # code paths that no PR, postmerge or nightly job tested on macOS. Runs the
 # package's unit and integration tests with nextest, one package per matrix
 # leg, on PRs that change it (the Linux job's selection, through the shared
 # `cargo_packages` list) or this job's files.
 #
-# It is NOT called from blocking-ci.yml, so `CI required` neither waits for it
-# nor fails with it. Known macOS failures are listed with their issues in
-# .github/macos-changed-crate-known-failures.txt and excluded, so a new failure
-# stands out. Make it required only after it has a cost and flake record.
+# blocking-ci.yml calls this workflow on PRs and main. The terminal job accepts
+# a skipped test matrix only when package selection succeeded with no packages.
+# Known macOS failures are listed with their issues in
+# .github/macos-changed-crate-known-failures.txt and excluded.
 # Restore-only: it reuses the macOS sccache that postmerge's core security job
 # saves (same target and profile), and saves nothing (#636).
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/rust-ci-changed-crate-tests-macos.yml"
-      - ".github/actions/check-clean-worktree/**"
-      - ".github/actions/setup-ci/**"
-      - ".github/macos-changed-crate-known-failures.txt"
-      - ".github/scripts/argument_comment_lint_packages.py"
-      - ".github/scripts/changed_crate_test_packages.py"
-      - ".github/scripts/macos_changed_crate_tests.py"
-      - ".github/scripts/windows_integration_known_failures.py"
-      - "codex-rs/.config/nextest.toml"
-      - "codex-rs/Cargo.toml"
-      - "codex-rs/rust-toolchain.toml"
-      - "codex-rs/exec-server/**"
-      - "codex-rs/keyring-store/**"
-      - "codex-rs/network-proxy/**"
-      - "third_party/rama-dns/**"
-      - "codex-rs/process-hardening/**"
-      - "codex-rs/sandboxing/**"
+  workflow_call:
 
 concurrency:
   group: rust-ci-changed-crate-tests-macos::${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
 
 permissions:
   contents: read
@@ -67,7 +49,7 @@ jobs:
           if [[ "$EVENT" == "pull_request" ]]; then
             python3 "$select" packages "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
           else
-            # Manual runs test every package.
+            # Main and manual runs test every package.
             python3 "$select" packages --all >> "$GITHUB_OUTPUT"
           fi
           grep '^packages=' "$GITHUB_OUTPUT"
@@ -162,3 +144,19 @@ jobs:
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree
+
+  required:
+    name: macOS changed crate tests required
+    if: ${{ always() }}
+    needs: [packages, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Require selected packages to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/macos_changed_crate_tests.py check-results

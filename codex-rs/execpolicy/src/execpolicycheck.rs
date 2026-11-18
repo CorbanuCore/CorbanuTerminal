@@ -47,6 +47,7 @@ impl ExecPolicyCheckCommand {
             /*heuristics_fallback*/ None,
             &MatchOptions {
                 resolve_host_executables: self.resolve_host_executables,
+                fold_program_case: false,
             },
         );
 

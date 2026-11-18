@@ -510,17 +510,25 @@ impl ExecPolicyManager {
             allow_prefix_rules,
             live_aggressive,
         );
-        // Avoid reusable approvals when this model does not honor prefix rules.
-        // A wrapper-only amendment cannot approve stricter inner commands,
-        // and an uncertain boundary must never become a remembered bypass.
-        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
-            && !commands
-                .iter()
-                .any(|command| wrappers::has_wrappers(command))
-            // Upstream keeps top-level heredocs as shell argv. The restrictive
-            // heredoc pass still sees wrappers inside that script, as on main.
-            && parse_shell_lc_single_command_prefix(full_command)
-                .is_none_or(|command| !wrappers::has_wrappers(&command));
+        // #2524: a respelled PowerShell (`PWSH -c`) keeps its literal argv
+        // too, as a respelled bash does (#2510), so reading its script only
+        // adds checks. Sync: either PowerShell origin; the respelling is
+        // host-gated as on main.
+        #[cfg(windows)]
+        let commands = {
+            let mut commands = commands;
+            if command_platform == DangerousCommandPlatform::Windows
+                && matches!(
+                    command_origin,
+                    ExecPolicyCommandOrigin::PowerShell
+                        | ExecPolicyCommandOrigin::PowerShellLiteral
+                )
+                && crate::security::tainted_action::policy_powershell_script(command).is_some()
+            {
+                commands.push(command.to_vec());
+            }
+            commands
+        };
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -536,18 +544,45 @@ impl ExecPolicyManager {
         };
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way. Sync: a
+            // command for a remote Windows executor folds too (stricter only).
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE
+                || command_platform == DangerousCommandPlatform::Windows,
         };
-        let mut evaluation = check_with_wrappers(
-            exec_policy.as_ref(),
-            &commands,
-            &exec_policy_fallback,
-            &match_options,
-            command_platform,
-        );
+        // Avoid reusable approvals when this model does not honor prefix rules.
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
+            && !commands
+                .iter()
+                .any(|command| wrappers::has_wrappers(command, command_platform))
+            // Upstream keeps top-level heredocs as shell argv. The restrictive
+            // heredoc pass still sees wrappers inside that script, as on main.
+            && parse_shell_lc_single_command_prefix(full_command)
+                .is_none_or(|command| !wrappers::has_wrappers(&command, command_platform));
+        // #2531: rules read a shell script among the commands given, which on
+        // main always come from the caller's split. Sync: a command line the
+        // split left whole (a top-level heredoc) keeps its own script to the
+        // heredoc pass below, as before.
+        let read_own_scripts = !(commands.len() == 1 && commands[0] == full_command);
+        let check_commands = |policy: &Policy, fallback: &dyn Fn(&[String]) -> Decision| {
+            wrappers::check(
+                policy,
+                &commands,
+                read_own_scripts,
+                &fallback,
+                &match_options,
+                command_platform,
+            )
+        };
+        let (mut evaluation, mut case_folded) =
+            check_commands(exec_policy.as_ref(), &exec_policy_fallback);
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
         apply_heredoc_restrictive_matches(
             &mut evaluation,
+            &mut case_folded,
             exec_policy.as_ref(),
             full_command,
             &match_options,
@@ -587,21 +622,19 @@ impl ExecPolicyManager {
                 ),
             },
             Decision::Prompt | Decision::PromptUser => {
-                let prompt_is_rule = evaluation.matched_rules.iter().any(|rule_match| {
-                    is_policy_match(rule_match) && rule_match.decision() == evaluation.decision
-                });
+                // D692: a prompt only a differently cased rule asks for is
+                // rejected or approved as the fallback's prompt would be.
+                let prompt_is_rule = wrappers::has_exact_rule_match(
+                    &evaluation.matched_rules,
+                    &case_folded,
+                    evaluation.decision,
+                );
                 // #626: which remembered approvals Aggressive suspended, where
                 // the full policy would have run the command unasked.
                 let suspended_note = live_aggressive
                     .then(|| {
                         self.aggressive_suspended_note(|policy| {
-                            check_with_wrappers(
-                                policy,
-                                &commands,
-                                &exec_policy_fallback,
-                                &match_options,
-                                command_platform,
-                            )
+                            check_commands(policy, &exec_policy_fallback).0
                         })
                     })
                     .flatten();
@@ -651,14 +684,9 @@ impl ExecPolicyManager {
             Decision::Allow => ExecApprovalRequirement::Skip {
                 // Bypass sandbox only when every parsed command segment is
                 // explicitly allowed by execpolicy.
-                bypass_sandbox: check_with_wrappers(
-                    exec_policy.as_ref(),
-                    &commands,
-                    &|_| Decision::Forbidden,
-                    &match_options,
-                    command_platform,
-                )
-                .decision
+                bypass_sandbox: check_commands(exec_policy.as_ref(), &|_| Decision::Forbidden)
+                    .0
+                    .decision
                     == Decision::Allow,
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
                     without_credentials(try_derive_execpolicy_amendment_for_allow_rules(
@@ -740,6 +768,7 @@ impl ExecPolicyManager {
         }
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         };
         let existing_evaluation = current_policy.check_multiple_with_options(
             [&amendment.command],
@@ -1279,8 +1308,11 @@ fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatc
 /// `python3` applied. Upstream dropped that parse, which keeps such scripts in
 /// the sandbox (stricter for allow rules) but stopped those rules matching.
 /// This adds back only the prompt and forbidden rule matches; it never allows.
+/// The D692 case-folded ones it adds also go to `case_folded`, as main's
+/// heredoc parse put them there.
 fn apply_heredoc_restrictive_matches(
     evaluation: &mut Evaluation,
+    case_folded: &mut Vec<RuleMatch>,
     policy: &Policy,
     command: &[String],
     match_options: &MatchOptions,
@@ -1292,12 +1324,18 @@ fn apply_heredoc_restrictive_matches(
     // #2396: through wrappers too (`sudo python3 <<EOF`). With an Allow
     // fallback, a heuristic above Allow can only come from the wrapper
     // checks (an uncertain wrapper or a wrapped heredoc), so it is kept.
-    let found = check_with_wrappers(
+    let (found, folded) = wrappers::check_with_wrappers_and_folded(
         policy,
         std::slice::from_ref(&heredoc_command),
         &|_: &[String]| Decision::Allow,
         match_options,
         command_platform,
+    );
+    case_folded.extend(
+        folded
+            .into_iter()
+            .filter(|rule_match| rule_match.decision() > Decision::Allow)
+            .filter(|rule_match| !evaluation.matched_rules.contains(rule_match)),
     );
     let restrictive = found
         .matched_rules
@@ -1405,17 +1443,26 @@ fn commands_for_exec_policy_for_platform(
         };
     }
 
-    if command_platform == DangerousCommandPlatform::Windows
-        && let Some((_, script)) =
-            codex_shell_command::powershell::extract_powershell_command(command)
-        && let Some(commands) =
+    if command_platform == DangerousCommandPlatform::Windows {
+        // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
+        // `pwsh -c`, `powershell.exe -Command`. Sync: upstream reads the
+        // script in process, so main's #2546 trusted-parser lookup does not
+        // apply; the respelling is host-gated as on main.
+        #[cfg(windows)]
+        let respelled = crate::security::tainted_action::policy_powershell_script(command);
+        #[cfg(not(windows))]
+        let respelled: Option<Vec<String>> = None;
+        if let Some((_, script)) = codex_shell_command::powershell::extract_powershell_command(
+            respelled.as_deref().unwrap_or(command),
+        ) && let Some(commands) =
             codex_shell_command::powershell::parse_powershell_script_into_plain_commands(script)
-        && !commands.is_empty()
-    {
-        return ExecPolicyCommands {
-            command_origin: powershell_command_origin(script, &commands),
-            commands,
-        };
+            && !commands.is_empty()
+        {
+            return ExecPolicyCommands {
+                command_origin: powershell_command_origin(script, &commands),
+                commands,
+            };
+        }
     }
 
     ExecPolicyCommands {

@@ -1,7 +1,9 @@
 //! Apply command rules and fallback decisions to every known wrapper layer.
 //! Keep the literal outer match, so adding a wrapper can only tighten policy.
 
+use super::ExecPolicyCommands;
 use super::commands_for_exec_policy_for_platform;
+use crate::security::tainted_action::policy_shell_script;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -11,12 +13,34 @@ use codex_execpolicy::RuleMatch;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
 use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 
-pub(super) fn has_wrappers(command: &[String]) -> bool {
+/// #2531 (D553): how many shell scripts nested in one another
+/// (`bash -lc "bash -c '…'"`, also through launchers such as
+/// `sudo bash -c "env bash -c '…'"`) rules see into below each command they
+/// are given. A script nested deeper asks for approval; one behind a
+/// launcher or a respelled shell is still read too.
+pub(crate) const MAX_SCRIPT_DEPTH: usize = 8;
+
+/// The commands inside `command` when it is a shell script rules can read
+/// (`bash -c 'git push'`); `None` for any other command, which parses as
+/// itself. Sync: split for `platform`, as the outer command was.
+fn script_commands(
+    command: &[String],
+    platform: DangerousCommandPlatform,
+) -> Option<ExecPolicyCommands> {
+    let parsed = commands_for_exec_policy_for_platform(command, platform);
+    (parsed.commands.len() != 1 || parsed.commands[0] != command).then_some(parsed)
+}
+
+pub(super) fn has_wrappers(command: &[String], platform: DangerousCommandPlatform) -> bool {
     let wrappers = policy_wrapper_commands(command);
     wrappers.uncertain
         || wrappers.approval_only
         || wrappers.starts.len() > 1
         || wrappers.open.is_some()
+        || policy_shell_script(command).is_some()
+        // #2531: a script nested in the script; an amendment for its
+        // literal argv cannot approve the commands inside.
+        || script_commands(command, platform).is_some()
 }
 
 /// D677/D686 (#2506), D691 and #2519: what a command gets for a rule that
@@ -54,16 +78,75 @@ pub(crate) fn check_with_wrappers(
     options: &MatchOptions,
     platform: DangerousCommandPlatform,
 ) -> Evaluation {
+    check_with_wrappers_and_folded(policy, commands, fallback, options, platform).0
+}
+
+/// D692: whether `matched` holds a rule match for `decision` other than the
+/// case-folded ones in `folded` (which [`check_with_wrappers_and_folded`]
+/// also put in `matched`). A decision only a differently cased rule makes is
+/// approved and sandboxed as the fallback's would be, so folding only adds.
+pub(crate) fn has_exact_rule_match(
+    matched: &[RuleMatch],
+    folded: &[RuleMatch],
+    decision: Decision,
+) -> bool {
+    let count = |matches: &[RuleMatch]| {
+        matches
+            .iter()
+            .filter(|rule_match| {
+                matches!(rule_match, RuleMatch::PrefixRuleMatch { .. })
+                    && rule_match.decision() == decision
+            })
+            .count()
+    };
+    count(matched) > count(folded)
+}
+
+/// [`check_with_wrappers`], also returning the case-folded rule matches
+/// (D692, [`Policy::case_folded_matches`]) it added to the evaluation.
+pub(crate) fn check_with_wrappers_and_folded(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    fallback: &impl Fn(&[String]) -> Decision,
+    options: &MatchOptions,
+    platform: DangerousCommandPlatform,
+) -> (Evaluation, Vec<RuleMatch>) {
+    check(
+        policy, commands, /*read_own_scripts*/ true, fallback, options, platform,
+    )
+}
+
+/// [`check_with_wrappers_and_folded`], reading each given command's own
+/// shell script only with `read_own_scripts`. Sync: the approval path passes
+/// `false` for a command line it could not split, whose own heredoc script
+/// (`bash -lc "python3 <<'PY' …"`) upstream keeps as shell argv and
+/// `apply_heredoc_restrictive_matches` reads, as main's caller split it
+/// first. Scripts behind a launcher or a respelled shell in it, and scripts
+/// nested in those, are still read. Main uses the same switch for the
+/// zsh-fork escalation path, which the sync branch no longer has.
+pub(super) fn check(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    read_own_scripts: bool,
+    fallback: &impl Fn(&[String]) -> Decision,
+    options: &MatchOptions,
+    platform: DangerousCommandPlatform,
+) -> (Evaluation, Vec<RuleMatch>) {
     let mut matches = Vec::new();
+    let mut folded = Vec::new();
     // Inner shell scripts can themselves contain wrapped commands. Use a work
     // list rather than recursion; preserve every outer match along the way.
-    let mut pending = Vec::new();
+    // Each entry carries how many scripts it is nested in.
+    let mut pending: Vec<(Vec<String>, usize)> = Vec::new();
     let mut next = commands.iter();
     loop {
         let owned = pending.pop();
-        let command = match owned.as_ref().or_else(|| next.next()) {
-            Some(command) => command,
-            None => break,
+        let (command, depth) = match &owned {
+            Some((command, depth)) => (command, *depth),
+            None => match next.next() {
+                Some(command) => (command, 0),
+                None => break,
+            },
         };
         let wrappers = policy_wrapper_commands(command);
         // Keep only the strictest fallback for this chain. Copying the entire
@@ -105,6 +188,10 @@ pub(crate) fn check_with_wrappers(
                 raise(&mut heuristic, candidate, Some(fallback(candidate)));
             }
             matches.extend(found);
+            // D692: kept beside the fallback, so this only adds checks.
+            let case_folded = policy.case_folded_matches(candidate, options);
+            matches.extend(case_folded.iter().cloned());
+            folded.extend(case_folded);
             if let Some(open) = &wrappers.open {
                 let known = &command[start..open.known_end.max(start)];
                 raise(&mut heuristic, candidate, could_complete(known));
@@ -116,31 +203,59 @@ pub(crate) fn check_with_wrappers(
                 decision,
             });
         }
-        if let Some(&start) = wrappers.starts.last()
-            && start > 0
-        {
+        if let Some(&start) = wrappers.starts.last() {
             let inner = &command[start..];
-            let parsed = commands_for_exec_policy_for_platform(inner, platform);
-            if parsed.commands.len() != 1 || parsed.commands[0] != inner {
-                pending.extend(parsed.commands);
-            } else if let Some(single) = parse_shell_lc_single_command_prefix(inner) {
-                // Sync: upstream's parser no longer reduces a heredoc script to
-                // its first command (main's `used_complex_parsing`); do it here
-                // so a wrapped heredoc keeps main's prompt and inner rules.
-                matches.push(RuleMatch::HeuristicsRuleMatch {
-                    command: inner.to_vec(),
-                    decision: Decision::Prompt,
-                });
-                pending.push(single);
+            // #2510 (D688): a shell spelled as this platform runs it
+            // (`BASH -lc`, `bash.exe -c`) unwraps like `bash -lc`. The
+            // literal argv above keeps its own match and fallback.
+            let respelled = policy_shell_script(inner);
+            let parsed_as = respelled.as_deref().unwrap_or(inner);
+            // Scripts behind a launcher or a respelled shell are read at any
+            // depth: each is a strict substring of the one around it.
+            let always_read = start > 0 || respelled.is_some();
+            // #2531: a script with no launcher before it too. Its commands
+            // come from a script already (`bash -lc "bash -c 'git push'"`
+            // gives `bash -c 'git push'`), or are those the caller gives.
+            let read = always_read || depth > 0 || read_own_scripts;
+            let script = if read {
+                match script_commands(parsed_as, platform) {
+                    Some(parsed) => Some((parsed.commands, false)),
+                    // Sync: upstream's parser no longer reduces a heredoc
+                    // script to its first command (main's
+                    // `used_complex_parsing`); do it here so a heredoc keeps
+                    // main's prompt and inner rules.
+                    None => parse_shell_lc_single_command_prefix(parsed_as)
+                        .map(|single| (vec![single], true)),
+                }
+            } else {
+                None
+            };
+            if let Some((inner_commands, used_complex_parsing)) = script {
+                if used_complex_parsing || depth >= MAX_SCRIPT_DEPTH {
+                    matches.push(RuleMatch::HeuristicsRuleMatch {
+                        command: inner.to_vec(),
+                        decision: Decision::Prompt,
+                    });
+                }
+                // Past the bound, still read what is always read, so a
+                // command a rule refuses stays refused, not only asked.
+                if depth < MAX_SCRIPT_DEPTH || always_read {
+                    pending.extend(
+                        inner_commands
+                            .into_iter()
+                            .map(|command| (command, depth + 1)),
+                    );
+                }
             }
         }
     }
-    Evaluation {
+    let evaluation = Evaluation {
         decision: matches
             .iter()
             .map(RuleMatch::decision)
             .max()
             .unwrap_or(Decision::Prompt),
         matched_rules: matches,
-    }
+    };
+    (evaluation, folded)
 }
