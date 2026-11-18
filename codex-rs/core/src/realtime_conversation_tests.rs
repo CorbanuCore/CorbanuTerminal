@@ -253,6 +253,9 @@ async fn natural_close_finishes_before_successor_and_ignores_old_identity() {
 #[path = "realtime_webrtc_accounting_tests.rs"]
 mod webrtc_accounting;
 
+#[path = "realtime_admission_carry_tests.rs"]
+mod admission_carries;
+
 fn pf_30_realtime_start(
     model_client: crate::client::ModelClient,
     base_url: String,
