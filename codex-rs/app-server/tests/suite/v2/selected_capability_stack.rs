@@ -399,7 +399,7 @@ async fn selected_capabilities_become_available_between_samples_in_one_turn() ->
     let mut exec_server =
         spawn_exec_server(fixture.codex_home.path(), &fixture.exec_server_url).await?;
     add_environment(&mut app_server, &fixture.exec_server_url).await?;
-    wait_for_environment_ready(&mut app_server, EXECUTOR_ID).await?;
+    wait_for_environment_ready(&mut app_server).await?;
     app_server
         .send_response(
             request_id,
@@ -717,14 +717,13 @@ async fn add_environment(app_server: &mut TestAppServer, exec_server_url: &str) 
     Ok(())
 }
 
-async fn wait_for_environment_ready(
-    app_server: &mut TestAppServer,
-    environment_id: &str,
-) -> Result<()> {
-    timeout(READ_TIMEOUT, async {
+async fn wait_for_environment_ready(app_server: &mut TestAppServer) -> Result<()> {
+    let mut last_status = None;
+    let mut last_error = None;
+    let result = timeout(READ_TIMEOUT, async {
         loop {
             let params = EnvironmentStatusParams {
-                environment_id: environment_id.to_string(),
+                environment_id: EXECUTOR_ID.to_string(),
             };
             let request_id = app_server
                 .send_raw_request("environment/status", Some(serde_json::to_value(params)?))
@@ -733,14 +732,21 @@ async fn wait_for_environment_ready(
                 .read_stream_until_response_message(RequestId::Integer(request_id))
                 .await?;
             let response: EnvironmentStatusResponse = to_response(response)?;
+            last_status = Some(response.status);
+            last_error = response.error;
             if response.status == EnvironmentStatusKind::Ready {
                 return Ok::<_, anyhow::Error>(());
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
-    .await??;
-    Ok(())
+    .await;
+    match result {
+        Ok(result) => result,
+        Err(_) => panic!(
+            "timed out after {READ_TIMEOUT:?} waiting for environment `{EXECUTOR_ID}` to become ready; last status: {last_status:?}; last error: {last_error:?}"
+        ),
+    }
 }
 
 async fn wait_for_selected_mcp_server(
