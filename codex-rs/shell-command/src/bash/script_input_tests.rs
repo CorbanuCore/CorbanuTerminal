@@ -20,6 +20,7 @@ fn stdin_syntax_keeps_literal_bodies_and_unknown_producers_distinct() {
         ("{ bash; } <<EOF\ngit push\nEOF", None),
         ("exec <<EOF\ngit push\nEOF\nbash", None),
         ("f() { bash; }; f <<EOF\ngit push\nEOF", None),
+        ("f() { bash; }; time -p -- f <<EOF\ngit push\nEOF", None),
         ("bash <<EOF < file\necho safe\nEOF", None),
     ] {
         let argv = vec!["bash".into(), "-c".into(), script.into()];
@@ -45,6 +46,19 @@ fn mixed_delimiters_fail_closed_for_the_whole_script() {
         let script = format!("cat <<{delimiter}\necho safe\n{delimiter}");
         assert_eq!(read_script_commands(&script), ScriptCommands::Unreadable);
         let argv = vec!["sh".into(), "-c".into(), script];
+        assert_eq!(parse_shell_lc_single_command_prefix(&argv), None);
+    }
+}
+
+#[test]
+fn split_terminators_and_trailing_arguments_fail_closed() {
+    for script in [
+        "cat <<EOF\nx\nEO\\\nF\ngit push\nEOF",
+        "bash <<'A' -c 'git push'\necho safe\nA",
+        "git <<'A' push --force\nA",
+    ] {
+        assert_eq!(read_script_commands(script), ScriptCommands::Unreadable);
+        let argv = vec!["sh".into(), "-c".into(), script.into()];
         assert_eq!(parse_shell_lc_single_command_prefix(&argv), None);
     }
 }

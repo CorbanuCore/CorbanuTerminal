@@ -84,6 +84,7 @@ async fn literal_scripts_table() {
 
 #[tokio::test]
 async fn unknown_scripts_table() {
+    let mut failures = Vec::new();
     for script in [
         "eval \"$script\"",
         "eval echo \"$arg\"",
@@ -116,12 +117,19 @@ async fn unknown_scripts_table() {
         "command exec <<'EOF'\ngit push\nEOF\nbash",
         "builtin exec <<'EOF'\ngit push\nEOF\nbash",
         "f() { bash; }; f <<'EOF'\ngit push\nEOF",
+        "f() { bash; }; time f <<'EOF'\ngit push\nEOF",
+        "f() { bash; }; time -p -- f <<'EOF'\ngit push\nEOF",
+        "time eval 'f() { bash; }'; f <<'EOF'\ngit push\nEOF",
+        "time -p eval 'exec <<EOF\ngit push\nEOF'; bash",
         "f() { eval bash; }; f <<'EOF'\ngit push\nEOF",
         "eval 'f() { bash; }'; f <<EOF\ngit push\nEOF",
         "eval 'exec <<EOF\ngit push\nEOF'; bash",
         // The scanner does not apply shell quote removal to mixed delimiters.
         "bash <<E\"O\"F\necho '\nEOF\ngit push\n'\nE\"O\"F",
         "cat <<E\"O\"F\necho '\nEOF\ngit push\n'\nE\"O\"F",
+        "cat <<EOF\nx\nEO\\\nF\ngit push\nEOF",
+        "bash <<'A' -c 'git push'\necho safe\nA",
+        "git <<'A' push --force\nA",
         "bash < ./x.sh",
         "bash <<EOF < ./x.sh\necho safe\nEOF",
         "bash <<EOF\necho safe\nEOF\n. ./x.sh",
@@ -142,11 +150,14 @@ async fn unknown_scripts_table() {
             for rules in [FORBID, PROMPT] {
                 for mode in 0..3 {
                     let result = check(&script, rules, mode).await;
-                    assert!(asks(&result), "{mode} {script:?}: {result:?}");
+                    if !asks(&result) {
+                        failures.push(format!("{rules} {mode} {script:?}: {result:?}"));
+                    }
                 }
             }
         }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[tokio::test]

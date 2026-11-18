@@ -117,7 +117,7 @@ pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
 fn input_target(mut words: &[Option<String>]) -> Option<&str> {
     while words
         .first()
-        .is_some_and(|word| matches!(word.as_deref(), Some("command" | "builtin")))
+        .is_some_and(|word| matches!(word.as_deref(), Some("command" | "builtin" | "time")))
     {
         words = &words[1..];
         while words
@@ -136,6 +136,17 @@ fn input_target(mut words: &[Option<String>]) -> Option<&str> {
 pub(super) fn heredoc_boundaries_readable(root: Node<'_>, script: &str) -> bool {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
+        // Bash joins escaped newlines before recognizing an unquoted end
+        // marker. The scanner can miss that end and swallow outer commands.
+        // It also omits argv placed after a here-document start from commands.
+        if (node.kind() == "heredoc_body"
+            && node
+                .utf8_text(script.as_bytes())
+                .is_ok_and(|text| text.contains("\\\n")))
+            || (node.kind() == "heredoc_redirect" && node.child_by_field_name("argument").is_some())
+        {
+            return false;
+        }
         if node.kind() == "heredoc_start" {
             let Ok(text) = node.utf8_text(script.as_bytes()) else {
                 return false;
@@ -184,6 +195,7 @@ fn literal_heredoc(redirect: Node<'_>, script: &str) -> Option<String> {
         || redirect.child_by_field_name("descriptor").is_some()
         || redirect.child_by_field_name("redirect").is_some()
         || redirect.child_by_field_name("right").is_some()
+        || redirect.child_by_field_name("argument").is_some()
     {
         return None;
     }
