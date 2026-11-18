@@ -52,14 +52,17 @@ fn by_policy(result: &ExecApprovalRequirement) -> bool {
     )
 }
 
-/// Asks with no remembered approval on offer.
+/// Asks with no remembered approval on offer. Sync: where a forbidden or
+/// prompt-user rule could match a command the check cannot read (an open
+/// `xargs`, an unreadable launcher name), D691/#2519 ask a human instead
+/// (`NeedsHumanApproval`, which offers no remembered approval either).
 fn asks(result: &ExecApprovalRequirement) -> bool {
     matches!(
         result,
         ExecApprovalRequirement::NeedsApproval {
             proposed_execpolicy_amendment: None,
             ..
-        }
+        } | ExecApprovalRequirement::NeedsHumanApproval { .. }
     )
 }
 
