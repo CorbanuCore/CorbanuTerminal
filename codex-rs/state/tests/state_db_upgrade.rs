@@ -119,6 +119,8 @@ async fn upgrade(name: &str, released_through: i64) -> anyhow::Result<()> {
             .iter()
             .map(|(_, ours, description)| (*ours, (*description).to_string())),
     );
+    // Corbanu added this migration after the upstream migration range was renumbered.
+    expected.push((70, "provider reset hint".to_string()));
     assert_eq!(added, expected, "{name}: migrations added by the upgrade");
 
     // The conversations survive, and upstream's schema is in place.

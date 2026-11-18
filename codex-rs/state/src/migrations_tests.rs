@@ -1147,7 +1147,11 @@ fn upstream_migrations_are_renumbered_after_0053() {
         .iter()
         .map(|migration| migration.version)
         .collect();
-    assert_eq!(versions, (1..=69).collect::<Vec<_>>());
+    assert_eq!(versions, (1..=70).collect::<Vec<_>>());
+    assert_eq!(
+        STATE_MIGRATOR.migrations.last().unwrap().description,
+        "provider reset hint"
+    );
     let described = |version: i64| {
         STATE_MIGRATOR
             .migrations

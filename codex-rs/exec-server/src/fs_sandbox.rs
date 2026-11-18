@@ -926,6 +926,7 @@ mod tests {
             FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
                     pattern: pattern.to_string(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ),
@@ -949,7 +950,8 @@ mod tests {
                 .find(|entry| { matches!(entry.path, FileSystemPath::GlobPattern { .. }) }),
             Some(FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
-                    pattern: absolute_pattern
+                    pattern: absolute_pattern,
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ))
