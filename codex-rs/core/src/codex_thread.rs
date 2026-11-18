@@ -984,6 +984,15 @@ impl CodexThread {
         result.await.unwrap_or(Err(CodexErr::InternalAgentDied))
     }
 
+    /// D624 (a): whether untrusted content has reached this live session. `thread/revert`
+    /// captures it before shutdown and carries it into the reloaded session.
+    pub fn untrusted_content_seen(&self) -> bool {
+        self.session
+            .services
+            .model_client()
+            .untrusted_content_seen()
+    }
+
     /// Restores thread-owned mutable settings captured from another loaded runtime.
     ///
     /// Runtime replacement uses this after resume so clients keep their current thread settings
