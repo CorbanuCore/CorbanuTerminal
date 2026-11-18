@@ -84,14 +84,18 @@ to 4096 bytes; the helper removes them before native process creation. Use
   semantics and scan limits as the existing Windows sandbox.
 - Native deny paths depend on the host's capability probe. An installed Windows
   update alone is not treated as evidence that every policy feature is enabled.
-- When MXC is the executor's selected backend, managed networking defaults
+- When MXC is this machine's selected backend, managed networking defaults
   `allow_local_binding` to `true`. An effective `false` after applying managed
   requirements is a configuration error: native host-loopback access
   is bidirectional, and MXC's proxy-peer identity mode is not integrated here.
   `true` permits local servers and direct host-loopback connections and removes
   the proxy's additional private-network destination checks. Proxy domain rules
-  still apply to proxied traffic; direct DNS remains denied. This default also
-  applies to remote Windows executors and does not enable disabled networking.
+  still apply to proxied traffic; direct DNS remains denied. The default does
+  not enable disabled networking. Corbanu keeps this upstream default for local
+  MXC (D715): MXC is opt-in, and Moderate and Aggressive count it as no sandbox
+  (D522), so it matters only at Permissive. A remote Windows executor using MXC
+  has no such default: it needs `allow_local_binding = true` set explicitly,
+  and a launch where neither side sets it is refused (D616).
 - Read-only volume-root grants recurse without enumerating children. Writable
   volume-root grants do not recurse, so the adapter grants the root and its
   immediate children; new children added during a running command are not

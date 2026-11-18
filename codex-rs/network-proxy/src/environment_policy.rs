@@ -69,6 +69,8 @@ impl EnvironmentNetworkPolicy {
         }
         // An omitted controller policy leaves socket permissions to the attachment;
         // an explicitly empty socket map still supplies a restrictive ceiling.
+        // D714: a controller that sets neither `dangerously_allow_all_unix_sockets`
+        // nor `unix_sockets` therefore inherits the owner's allow-all grant.
         let inherited_allow_all = config
             .dangerously_allow_all_unix_sockets
             .unwrap_or(config.unix_sockets.is_none());
@@ -102,7 +104,8 @@ impl EnvironmentNetworkPolicy {
             }
         }
 
-        // Socket and upstream-proxy permissions require both controller and owner grants.
+        // Socket and upstream-proxy permissions require both controller and owner
+        // grants; for sockets an unset controller setting counts as a grant (D714).
         config.unix_sockets = (!effective_sockets.entries.is_empty()).then_some(effective_sockets);
         config.dangerously_allow_all_unix_sockets =
             Some(inherited_permits_all && owner_permits_all);
@@ -114,3 +117,7 @@ impl EnvironmentNetworkPolicy {
         };
     }
 }
+
+#[cfg(test)]
+#[path = "environment_policy_tests.rs"]
+mod tests;
