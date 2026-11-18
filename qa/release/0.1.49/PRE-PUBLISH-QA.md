@@ -22,11 +22,21 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
 ## Gates before the release branch and version-bump merge
 
 - [ ] #2549 merged (quoted script command-rule bypass).
-- [ ] #2555 merged (trusted PowerShell parser).
+- [x] #2555 merged (trusted PowerShell parser), 2026-11-18 01:56:42Z;
+  merge `5ddb26bb2651cddb8965fa0bc27a37c78c2135b1`.
 - [x] #2558 merged (exact Windows allow-rule spelling), 2026-11-18 00:29:16Z;
   merge `135197a9a1f10d2cfd4af116af1c27e516e873b0`.
 - [ ] #2573 merged (fixing **issue** #2567, provider cooldown).
-- [ ] #2571 merged (astra-models62 new models).
+- [x] #2571 merged (astra-models62 new models), 2026-11-18 01:56:12Z;
+  merge `1036647d52c95fd02ce32112c69b799d0e5f8328`.
+- [ ] #2580 merged (fixing issue #2568, Windows PowerShell command parsing).
+- [ ] The accepted fixing PR for #2584 merged (fresh Medium-integrity Windows
+  sandbox registry failure); identify and record its PR and merge SHA.
+
+The coordinator added #2568 and #2584 as release gates on 2026-11-18.
+Keep this preparation PR as the evidence home. After #2584's fix merges,
+repeat the measured Medium-token case on the release-candidate build; require
+successful tool execution and retain both the original failure and replay.
 
 Poll GitHub about every 20 minutes and record merge commits/times. An open or
 closed-unmerged PR, or an issue closed without the accepted fix, does not pass.

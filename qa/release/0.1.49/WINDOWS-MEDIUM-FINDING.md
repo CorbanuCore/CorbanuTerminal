@@ -50,9 +50,11 @@ Medium token, not a claim that every existing Windows installation fails.
 Open issue/PR searches for Medium/non-admin labeling and
 `CorbanuTerminalSandbox` found adjacent security follow-ups (#1542, #1896), but
 no matching fresh-registry startup failure. No production fix is made in this
-release-preparation PR. The coordinator has been notified through the worker
-request/result files. The original release merge gates are unchanged by this
-worker; repeat the case on the final branch and disclose its actual result.
+release-preparation PR. The coordinator filed [#2584](https://github.com/CorbanuCore/CorbanuTerminal/issues/2584),
+assigned the investigation to win-2584, and added its accepted fixing PR as a
+0.1.49 release gate on 2026-11-18. This PR remains the evidence home.
+After the fix merges, repeat the measured Medium-token case on the final
+release-candidate build and require successful tool execution.
 
 Raw result: [live-windows-medium-failure.json](preflight/live-windows-medium-failure.json).
 Raw TUI capture and rollout: `C:\CorbanuQA\astra-rel149\live-medium3\`;
