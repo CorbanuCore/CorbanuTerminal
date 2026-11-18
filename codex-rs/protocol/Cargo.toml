@@ -50,6 +50,7 @@ ts-rs = { workspace = true, features = [
     "serde-json-impl",
     "no-serde-warnings",
 ] }
+urlencoding = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v7", "v4"] }
 wildmatch = { workspace = true }
 

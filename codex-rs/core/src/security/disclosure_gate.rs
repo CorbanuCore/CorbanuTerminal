@@ -821,14 +821,15 @@ where
     I: IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
 {
     let mut values = Labeled::new();
+    let mut budget = secretless_launch::UrlPasswordBudget::default();
     for (name, value) in vars {
         let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
             continue;
         };
         values.extend(
-            secretless_launch::env_credential_values(name, value)
+            secretless_launch::env_credential_values(name, value, &mut budget)
                 .into_iter()
-                .map(|(label, secret)| (label, Zeroizing::new(secret.to_string()))),
+                .map(|(label, secret)| (label, Zeroizing::new(secret.into_owned()))),
         );
     }
     values
@@ -917,6 +918,10 @@ fn push_secret(label: &str, text: &str, out: &mut Labeled) {
         out.push((label.to_string(), Zeroizing::new(token.trim().to_string())));
     }
 }
+
+#[cfg(test)]
+#[path = "issue_2401_url_password_tests.rs"]
+mod issue_2401_url_password_tests;
 
 #[cfg(test)]
 #[path = "disclosure_gate_tests.rs"]

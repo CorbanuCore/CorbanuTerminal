@@ -138,13 +138,14 @@ impl<'g> SnapshotCredentialFilter<'g> {
             })
             .unwrap_or_default();
         let mut managed = Vec::new();
+        let mut budget = secretless_launch::UrlPasswordBudget::default();
         let mut protect = |name: &str, value: &str| {
             // The marker's credential-looking name must not register its
             // placeholders: every brokered replay script would then be refused.
             if name.eq_ignore_ascii_case(BROKERED_CREDENTIALS_ENV_KEY) {
                 return;
             }
-            push_env_values(name, value, &mut managed);
+            push_env_values(name, value, &mut budget, &mut managed);
             if !value.is_empty()
                 && (secret_names.iter().any(|pattern| pattern.matches(name))
                     || excluded
@@ -217,11 +218,16 @@ fn is_plain_env_name(name: &str) -> bool {
 
 /// Secret-looking environment values and passwords embedded in URLs, as for
 /// core's disclosure gate (`secretless_launch::env_credential_values`).
-fn push_env_values(name: &str, value: &str, values: &mut Vec<(String, Zeroizing<String>)>) {
+fn push_env_values(
+    name: &str,
+    value: &str,
+    budget: &mut secretless_launch::UrlPasswordBudget,
+    values: &mut Vec<(String, Zeroizing<String>)>,
+) {
     values.extend(
-        secretless_launch::env_credential_values(name, value)
+        secretless_launch::env_credential_values(name, value, budget)
             .into_iter()
-            .map(|(label, secret)| (label, Zeroizing::new(secret.to_string()))),
+            .map(|(label, secret)| (label, Zeroizing::new(secret.into_owned()))),
     );
 }
 
