@@ -187,6 +187,9 @@ pub(crate) fn everyone_writable_folders(
     flagged
 }
 
+/// Flagged folders by (working folder, `PATH`).
+type ScanCache = HashMap<(String, String), Vec<PathBuf>>;
+
 /// [`everyone_writable_folders`], scanned once per working folder and `PATH`
 /// in this process, as main scanned once at startup: a setup refresh runs
 /// before every elevated command.
@@ -195,7 +198,7 @@ pub(crate) fn cached_everyone_writable_folders(
     env: &HashMap<String, String>,
     logs_base_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
-    static CACHE: OnceLock<Mutex<HashMap<(String, String), Vec<PathBuf>>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<ScanCache>> = OnceLock::new();
     let key = (
         canonical_path_key(cwd),
         crate::env::get_ignoring_case(env, "PATH")
