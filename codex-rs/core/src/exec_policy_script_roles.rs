@@ -26,6 +26,11 @@ pub(super) enum Role {
     /// Code rules cannot read: a script from a pipe or file, a sourced
     /// file, a trap, an alias, arithmetic, an option that runs code.
     Unread,
+    /// A shell running a named script file (`sh build.sh`): what runs is its
+    /// argv, as running `./build.sh` would, so rules (an allow rule for it
+    /// too) match that argv; the file's commands are unread, so a prompt or
+    /// forbidden rule that could match one asks, as for [`Role::Unread`].
+    File,
 }
 
 /// The role of `program_and_args`, run after the launcher words `before`
@@ -43,7 +48,7 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
     let known: Vec<Option<String>> = args.iter().cloned().map(Some).collect();
     // `/usr/bin/read` and `JOBS` (macOS ships builtin wrappers, and names
     // compare without case there) run the builtin.
-    match policy_program_name(program).as_str() {
+    match builtin_lookup_name(program).as_str() {
         "eval" => {
             let args = args.strip_prefix(&["--".to_string()]).unwrap_or(args);
             if args.is_empty() {
@@ -74,10 +79,21 @@ pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> boo
     if runs_shell(program) {
         return true;
     }
-    match policy_program_name(program).as_str() {
+    match builtin_lookup_name(program).as_str() {
         "eval" | "exec" => true,
         name if builtin_runs_only_argv(name, args) => false,
         name => is_builtin_or_reserved(name),
+    }
+}
+
+/// The name builtins are looked up by: `program` as written where it names
+/// one itself (`.`, which Windows path normalization would trim to
+/// nothing), else its launcher name (`/usr/bin/read`, `JOBS`).
+fn builtin_lookup_name(program: &str) -> String {
+    if is_builtin_or_reserved(program) {
+        program.to_string()
+    } else {
+        policy_program_name(program)
     }
 }
 
@@ -120,6 +136,13 @@ fn shell_role(program: &str, args: &[String], stdin: &CommandStdin) -> Role {
     }
     if args.iter().any(command_flag) {
         return Role::Argv;
+    }
+    // `sh path …`: the first word is the script file (no option before it).
+    if args
+        .first()
+        .is_some_and(|arg| !arg.is_empty() && !arg.starts_with(['-', '+']))
+    {
+        return Role::File;
     }
     // `bash`, `bash -s`, `bash -s ARG…`, `bash -`: the script is stdin.
     let mut stdin_script = true;

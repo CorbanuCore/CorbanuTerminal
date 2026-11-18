@@ -76,21 +76,44 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
             };
             let wrappers = policy_wrapper_commands(&command);
             let start = wrappers.starts.last().copied().unwrap_or(0);
-            roles::role(&command[..start], &command[start..], stdin) != Role::Argv
+            !matches!(
+                roles::role(&command[..start], &command[start..], stdin),
+                Role::Argv | Role::File
+            )
         })
+}
+
+/// #2548: whether a command of `read` is a shell running a named script file
+/// ([`Role::File`]): split like argv, but its commands are unread.
+pub(super) fn runs_script_file(read: &ScriptRead) -> bool {
+    read.commands.iter().any(|read_command| {
+        let Some(command) = read_command
+            .words
+            .iter()
+            .cloned()
+            .collect::<Option<Vec<_>>>()
+        else {
+            return false;
+        };
+        let wrappers = policy_wrapper_commands(&command);
+        let start = wrappers.starts.last().copied().unwrap_or(0);
+        roles::role(&command[..start], &command[start..], &read_command.stdin) == Role::File
+    })
 }
 
 /// #2548: whether `command` is a shell script outside the minimal lexical
 /// set that its caller checks as argv (the one command of a here-document
-/// script), and a prompt or forbidden rule exists: it must ask, as a script
-/// read in part does.
+/// script), or one split into commands of which one runs a script file
+/// ([`Role::File`]), and a prompt or forbidden rule exists: it must ask, as
+/// a script read in part does.
 pub(super) fn asks_outside_minimal_set(
     policy: &Policy,
     command: &[String],
     options: &MatchOptions,
 ) -> bool {
     let respelled = policy_shell_script(command);
-    shell_lc_script_read(respelled.as_deref().unwrap_or(command)).is_some_and(|read| !read.minimal)
+    shell_lc_script_read(respelled.as_deref().unwrap_or(command))
+        .is_some_and(|read| !read.minimal || runs_script_file(&read))
         && any_strict_rule(policy, options)
 }
 
@@ -447,7 +470,7 @@ pub(crate) fn check(
             let reading_from = matches.len();
             let ask = match roles::role(&command[..start], inner, stdin) {
                 Role::Argv => false,
-                Role::Unread => any_strict_rule(),
+                Role::Unread | Role::File => any_strict_rule(),
                 Role::Script { text, single } => {
                     let past_bound = depth >= MAX_SCRIPT_DEPTH;
                     queue_script(

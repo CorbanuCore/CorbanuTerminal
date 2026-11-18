@@ -495,3 +495,33 @@ async fn builtin_wrappers_are_classified_as_argv_too() {
         assert!(asks(&result), "{command:?}: {result:?}");
     }
 }
+
+/// CI on #2613 (upstream's `allowed_escalated_shell_command_inherits_active_
+/// permission_profile`): a shell running a named script file runs its argv,
+/// as `./build.sh` would, so a person's allow rule for exactly that argv
+/// still applies to the script it is wrapped in; the file's commands are
+/// unread, so a prompt or forbidden rule that could match one still asks.
+#[tokio::test]
+async fn script_file_runs_keep_allow_rules_and_ask_with_strict_rules() {
+    const ALLOW: &str = r#"prefix_rule(pattern=["sh", "./build.sh"], decision="allow")"#;
+    for script in ["sh ./build.sh", "sh ./build.sh arg && echo done"] {
+        let scenario = |rules: String| ExecApprovalRequirementScenario {
+            policy_src: Some(rules),
+            command: vec!["bash".into(), "-lc".into(), script.into()],
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::RequireEscalated,
+            prefix_rule: None,
+        };
+        let allowed = exec_approval_requirement_for_command(scenario(ALLOW.to_string())).await;
+        if script == "sh ./build.sh" {
+            assert!(
+                matches!(allowed, ExecApprovalRequirement::Skip { .. }),
+                "{script:?}: {allowed:?}"
+            );
+        }
+        let strict =
+            exec_approval_requirement_for_command(scenario(format!("{ALLOW}\n{FORBID}"))).await;
+        assert!(asks(&strict), "{script:?}: {strict:?}");
+    }
+}
