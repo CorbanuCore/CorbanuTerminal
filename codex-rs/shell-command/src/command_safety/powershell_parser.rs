@@ -42,6 +42,7 @@ pub(crate) fn parse_with_powershell_ast(executable: &str, script: &str) -> Power
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PowershellParseOutcome {
     Commands(Vec<Vec<String>>),
+    Partial(Vec<Vec<String>>),
     Unsupported,
     /// The parser answered that it could not parse the script.
     Failed,
@@ -251,6 +252,11 @@ impl PowershellParserResponse {
                 })
                 .map(PowershellParseOutcome::Commands)
                 .unwrap_or(PowershellParseOutcome::Unsupported),
+            "partial" => self
+                .commands
+                .filter(|commands| commands.iter().all(|command| !command.is_empty()))
+                .map(PowershellParseOutcome::Partial)
+                .unwrap_or(PowershellParseOutcome::Unsupported),
             "unsupported" => PowershellParseOutcome::Unsupported,
             _ => PowershellParseOutcome::Failed,
         }
@@ -320,7 +326,13 @@ mod tests {
         let parsed = parser
             .parse("param([string]$path = (Get-Location)) Write-Output test")
             .unwrap();
-        assert_eq!(parsed, PowershellParseOutcome::Unsupported);
+        assert_eq!(
+            parsed,
+            PowershellParseOutcome::Partial(vec![
+                vec!["Get-Location".into()],
+                vec!["Write-Output".into(), "test".into()],
+            ])
+        );
     }
 
     #[test]
@@ -334,7 +346,13 @@ mod tests {
         let parsed = parser
             .parse("begin { Set-Content codex_poc.txt pwned } end { Get-Content Cargo.toml }")
             .unwrap();
-        assert_eq!(parsed, PowershellParseOutcome::Unsupported);
+        assert_eq!(
+            parsed,
+            PowershellParseOutcome::Partial(vec![
+                vec!["Set-Content".into(), "codex_poc.txt".into(), "pwned".into()],
+                vec!["Get-Content".into(), "Cargo.toml".into()],
+            ])
+        );
     }
 
     #[test]
@@ -348,7 +366,10 @@ mod tests {
         let parsed = parser
             .parse("using module ./codex_poc.psm1\nGet-Content Cargo.toml")
             .unwrap();
-        assert_eq!(parsed, PowershellParseOutcome::Unsupported);
+        assert_eq!(
+            parsed,
+            PowershellParseOutcome::Partial(vec![vec!["Get-Content".into(), "Cargo.toml".into()],])
+        );
     }
 
     #[test]
@@ -364,6 +385,17 @@ mod tests {
                 "trap { Set-Content codex_poc.txt pwned; continue } Get-Content missing -ErrorAction Stop",
             )
             .unwrap();
-        assert_eq!(parsed, PowershellParseOutcome::Unsupported);
+        assert_eq!(
+            parsed,
+            PowershellParseOutcome::Partial(vec![
+                vec!["Set-Content".into(), "codex_poc.txt".into(), "pwned".into()],
+                vec![
+                    "Get-Content".into(),
+                    "missing".into(),
+                    "-ErrorAction".into(),
+                    "Stop".into()
+                ],
+            ])
+        );
     }
 }

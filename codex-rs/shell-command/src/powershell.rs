@@ -102,6 +102,7 @@ pub fn parse_powershell_command_into_plain_commands(
     match read_powershell_command_script(command)? {
         PowershellScriptRead::Commands(commands) => Some(commands),
         PowershellScriptRead::NotPlain
+        | PowershellScriptRead::Partial(_)
         | PowershellScriptRead::File(_)
         | PowershellScriptRead::Unreadable => None,
     }
@@ -116,6 +117,9 @@ pub enum PowershellScriptRead {
     /// The parser read the script but cannot list its commands (constructs
     /// it does not read, syntax errors).
     NotPlain,
+    /// Literal commands recovered from an otherwise unread script. These
+    /// may only add restrictions; they never authorize the whole script.
+    Partial(Vec<Vec<String>>),
     /// `-File`: the script file and its arguments, which rules see as a
     /// command; the file's content is not read (#2568).
     File(Vec<String>),
@@ -128,8 +132,8 @@ pub enum PowershellScriptRead {
 }
 
 /// Read the script of a PowerShell invocation (see
-/// [`extract_powershell_command`]); `None` for any other command, and for an
-/// interactive PowerShell (`pwsh -NoProfile`), which has no script.
+/// [`extract_powershell_command`]); `None` for any other command. A shell
+/// with no script argument can read stdin, so its script is unreadable.
 ///
 /// #2546 (D553): the script is parsed by a PowerShell found on the system
 /// ([`trusted_powershell_parser`]), never by the invocation's own `argv[0]`:
@@ -142,7 +146,7 @@ pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellSc
         cli::Run::Encoded(script) => Some(read_script_with_trusted_parser(shell, &script)),
         cli::Run::File(words) => Some(PowershellScriptRead::File(words.to_vec())),
         cli::Run::Unreadable => Some(PowershellScriptRead::Unreadable),
-        cli::Run::Interactive => None,
+        cli::Run::Interactive => Some(PowershellScriptRead::Unreadable),
     }
 }
 
@@ -156,6 +160,7 @@ pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> Powe
     };
     match parse_with_powershell_ast(parser, script) {
         PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
+        PowershellParseOutcome::Partial(commands) => PowershellScriptRead::Partial(commands),
         PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => {
             PowershellScriptRead::NotPlain
         }
@@ -610,7 +615,7 @@ mod tests {
         );
         assert_eq!(
             read_powershell_command_script(&words(&["pwsh", "-nop"])),
-            None
+            Some(PowershellScriptRead::Unreadable)
         );
         assert_eq!(
             read_powershell_command_script(&words(&["git", "push"])),

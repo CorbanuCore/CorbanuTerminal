@@ -30,11 +30,19 @@ fn is_dangerous_powershell(command: &[String]) -> bool {
     // Parse the PowerShell invocation to get a flat token list we can scan for
     // dangerous cmdlets/COM calls plus any URL-looking arguments. This is a
     // best-effort shlex split of the script text, not a full PS parser.
-    let Some(parsed) = parse_powershell_invocation(rest) else {
-        return false;
-    };
-
-    is_dangerous_powershell_words(&parsed.tokens)
+    let mut normalized = vec![executable_basename(exe).unwrap_or_default()];
+    normalized.extend_from_slice(rest);
+    if let Some((_, script)) = crate::powershell::extract_powershell_command(&normalized) {
+        let tokens = shlex_split(&script)
+            .unwrap_or_else(|| script.split_whitespace().map(str::to_owned).collect());
+        if is_dangerous_powershell_words(&tokens) {
+            return true;
+        }
+    }
+    // Keep the previous heuristic for command lines the shared reader declines.
+    // An unsupported switch or unmatched quote must not erase an old warning.
+    parse_powershell_invocation(rest)
+        .is_some_and(|parsed| is_dangerous_powershell_words(&parsed.tokens))
 }
 
 pub(crate) fn is_dangerous_powershell_words(words: &[String]) -> bool {
@@ -377,11 +385,10 @@ fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell> {
         let lower = arg.to_ascii_lowercase();
         match lower.as_str() {
             "-command" | "/command" | "-c" => {
-                let script = args.get(idx + 1)?;
-                if idx + 2 != args.len() {
-                    return None;
-                }
-                let tokens = shlex_split(script)?;
+                args.get(idx + 1)?;
+                let script = args[idx + 1..].join(" ");
+                let tokens = shlex_split(&script)
+                    .unwrap_or_else(|| script.split_whitespace().map(str::to_owned).collect());
                 return Some(ParsedPowershell { tokens });
             }
             _ if lower.starts_with("-command:") || lower.starts_with("/command:") => {
@@ -407,6 +414,10 @@ fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell> {
 
     None
 }
+
+#[cfg(test)]
+#[path = "windows_powershell_dangerous_tests.rs"]
+mod powershell_regressions;
 
 #[cfg(test)]
 mod tests {

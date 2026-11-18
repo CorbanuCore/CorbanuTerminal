@@ -54,7 +54,7 @@ function Invoke-ParseRequest {
         $ast.UsingStatements.Count -gt 0 -or
         $ast.EndBlock.Traps.Count -gt 0
     ) {
-        return @{ id = $RequestId; status = 'unsupported' }
+        return Get-PartialCommands $RequestId $ast
     }
 
     # PowerShell's stop-parsing marker hands the remaining source text to native
@@ -100,10 +100,35 @@ function Invoke-ParseRequest {
     }
 
     if ($commands -eq $null) {
-        return @{ id = $RequestId; status = 'unsupported' }
+        return Get-PartialCommands $RequestId $ast
     }
 
     return @{ id = $RequestId; status = 'ok'; commands = $commands }
+}
+
+# Only literal command ASTs contribute restrictions. Never execute source, and
+# never treat these recovered commands as a complete reading of the script.
+function Get-PartialCommands {
+    param($RequestId, $Ast)
+
+    $commands = [System.Collections.ArrayList]::new()
+    foreach ($node in $Ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true)) {
+        # Stop-parsing changes the meaning of words beyond the marker.
+        if (@($node.CommandElements | Where-Object { $_.Extent.Text -eq '--%' }).Count -gt 0) {
+            continue
+        }
+        $words = Convert-PipelineElement $node
+        if ($null -ne $words -and @($words).Count -gt 0) {
+            $null = $commands.Add(@($words))
+        }
+    }
+    if ($commands.Count -eq 0) {
+        return @{ id = $RequestId; status = 'unsupported' }
+    }
+    return @{ id = $RequestId; status = 'partial'; commands = $commands }
 }
 
 function Write-Response {
