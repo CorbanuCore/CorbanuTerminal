@@ -47,11 +47,13 @@ mode = "full" # default when unset; use "limited" for read-only mode
 # Hostnames that resolve to local/private IPs are still blocked even if allowlisted.
 # Clients that always bypass proxies for loopback, such as Go's `net/http`, remain blocked by
 # the operating-system sandbox when local binding is disabled.
-# Omitted: true for MXC, false elsewhere. MXC rejects an effective false.
+# Omitted: true for local MXC, false elsewhere; a remote MXC executor needs an
+# explicit true (D616). MXC rejects an effective false.
 # allow_local_binding = false
 
-# DANGEROUS (macOS-only): bypasses unix socket allowlisting and permits any
-# absolute socket path from `x-unix-socket`.
+# DANGEROUS: bypasses unix socket allowlisting and permits any absolute socket
+# path from `x-unix-socket` (macOS-only); in the Linux sandbox's managed-proxy
+# mode it also lets commands create Unix sockets.
 dangerously_allow_all_unix_sockets = false
 
 # Hosts must match the allowlist (unless denied).
@@ -269,8 +271,10 @@ what it can reasonably guarantee.
     `dangerously_allow_non_loopback_proxy`
 - when unix socket proxying is enabled, all proxy listeners are forced to loopback to avoid turning the
   proxy into a remote bridge into local daemons.
-- `dangerously_allow_all_unix_sockets = true` bypasses the unix socket allowlist entirely (still
-  macOS-only and absolute-path-only). Use only in tightly controlled environments.
+- `dangerously_allow_all_unix_sockets = true` bypasses the unix socket allowlist entirely for
+  `x-unix-socket` proxying (still macOS-only and absolute-path-only), and in the Linux sandbox's
+  managed-proxy mode lets commands create standalone Unix sockets. Use only in tightly controlled
+  environments.
 - When an execution environment's owner supplies its own network policy (for example a remote
   exec-server), Unix socket access needs grants from both that owner and this controller (your
   config and managed requirements). A controller that sets neither `dangerously_allow_all_unix_sockets`
