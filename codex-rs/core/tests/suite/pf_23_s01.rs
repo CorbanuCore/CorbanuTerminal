@@ -940,8 +940,15 @@ async fn approve_reading_gate(
         // Counted at every level, so a prompt where none is expected fails.
         // Sync (D691): Aggressive's rules include forbidden ones, so the
         // reading prompt is a fresh human decision that names its reason.
+        // On Linux the prompt before the run carries the Aggressive notice
+        // for what the command touches (a protected path, a user namespace)
+        // as its reason instead; a sandbox retry carries neither.
         let gate = approval.reason.as_deref().is_none_or(|reason| {
             reason.ends_with("a prompt-user or forbidden rule could match the command it runs")
+                || reason.starts_with("Security level Aggressive blocked access to")
+                || reason.starts_with(
+                    "On Linux, security level Aggressive blocks creating user namespaces",
+                )
         });
         gate_prompts += usize::from(gate);
         let decision = if level == SecurityLevel::Aggressive && gate {
