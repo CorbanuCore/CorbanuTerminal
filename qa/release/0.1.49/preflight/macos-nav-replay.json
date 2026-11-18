@@ -1,4 +1,6 @@
 {
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "binary_sha256": "53f77726294ee6323aa565ae1400ce4cf53a0e15ab305be9bb10ca3bb812cb57",
   "status": true,
   "model": true,
   "providers": true,

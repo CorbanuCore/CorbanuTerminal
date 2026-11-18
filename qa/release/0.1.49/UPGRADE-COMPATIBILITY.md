@@ -86,7 +86,10 @@ than rewritten as a pass.
 
 The downgrade UI says the database “appears to be damaged,” then its technical
 detail identifies the actual foreign migration. All integrity checks passed;
-this is compatibility refusal, not observed corruption. Restore the complete
+this is compatibility refusal, not observed corruption. The raw refusal capture
+is `glitch:/home/ambient/corbanu-rtx/astra-rel149/evidence/downgrade-failure.txt`
+(the startup capture is `downgrade-startup.txt` in the same directory).
+Restore the complete
 matching backup and package to roll back; do not erase migrations or mix a new
 database with old vault/session files. Post-backup turns are absent from that
 backup.
