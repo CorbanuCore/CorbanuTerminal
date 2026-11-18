@@ -240,7 +240,9 @@ fn authority_password(rest: &str) -> Option<&str> {
     let host_end = authority
         .match_indices([',', ';'])
         .find_map(|(index, _)| {
-            let next = authority[index + 1..].split([',', ';']).next()?;
+            let next = rest[index + 1..]
+                .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+                .next()?;
             (index > at && schemeless_url_password(next).is_some()).then_some(index)
         })
         .unwrap_or(authority.len());
