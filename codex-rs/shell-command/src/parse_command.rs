@@ -5,6 +5,7 @@ use crate::powershell::extract_powershell_command;
 use codex_protocol::parse_command::ParsedCommand;
 use shlex::split as shlex_split;
 use shlex::try_join as shlex_try_join;
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 pub fn shlex_join(tokens: &[String]) -> String {
@@ -13,8 +14,10 @@ pub fn shlex_join(tokens: &[String]) -> String {
 }
 
 /// Extracts the shell and script from a command, regardless of platform
-pub fn extract_shell_command(command: &[String]) -> Option<(&str, &str)> {
-    extract_bash_command(command).or_else(|| extract_powershell_command(command))
+pub fn extract_shell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    extract_bash_command(command)
+        .map(|(shell, script)| (shell, Cow::Borrowed(script)))
+        .or_else(|| extract_powershell_command(command))
 }
 
 /// DO NOT REVIEW THIS CODE BY HAND

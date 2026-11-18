@@ -59,15 +59,21 @@ fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
         .is_some_and(|decision| decision > Decision::Allow)
 }
 
-/// #2546 (D553): whether `command` runs a PowerShell `-Command` script that
-/// no trusted PowerShell could read (none found, or it could not run), so
-/// rules cannot see its commands.
+/// #2546 (D553): whether `command` runs a PowerShell script that no trusted
+/// PowerShell could read (none found, or it could not run), so rules cannot
+/// see its commands. #2568: also a command line PowerShell reads in a way
+/// this reader cannot (unknown parameters, a script from stdin), and a
+/// `-File` script, whose content is not read.
 #[cfg(windows)]
 fn powershell_script_unreadable(command: &[String]) -> bool {
+    use codex_shell_command::powershell::PowershellScriptRead;
     let respelled = crate::security::tainted_action::policy_powershell_script(command);
-    codex_shell_command::powershell::read_powershell_command_script(
-        respelled.as_deref().unwrap_or(command),
-    ) == Some(codex_shell_command::powershell::PowershellScriptRead::Unreadable)
+    matches!(
+        codex_shell_command::powershell::read_powershell_command_script(
+            respelled.as_deref().unwrap_or(command),
+        ),
+        Some(PowershellScriptRead::Unreadable | PowershellScriptRead::File(_))
+    )
 }
 
 #[cfg(not(windows))]
@@ -240,7 +246,10 @@ fn check(
                             .map(|command| (command, depth + 1)),
                     );
                 }
-            } else if (always_read || depth > 0 || read_own_scripts)
+            }
+            // Not `else`: a `-File` script reads as its file and arguments
+            // above, and asks too (#2568).
+            if (always_read || depth > 0 || read_own_scripts)
                 && any_strict_rule(policy, options)
                 && powershell_script_unreadable(inner)
             {
