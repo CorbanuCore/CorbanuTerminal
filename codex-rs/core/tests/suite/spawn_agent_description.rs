@@ -196,7 +196,8 @@ fn test_model_info(
         auto_review_model_override: None,
         tool_mode: None,
         multi_agent_version: None,
-        priority: 1,
+        // Keep the synthetic visible model in the compact preview.
+        priority: -1,
         additional_speed_tiers: Vec::new(),
         service_tiers,
         default_service_tier: None,
@@ -318,7 +319,7 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         spawn_agent_description(&body).expect("spawn_agent description should be present");
 
     assert!(
-        description.contains("- `openai` / `gpt-5.6-terra`"),
+        description.contains("- `openai` / `gpt-6-astra`"),
         "expected an eligible exact provider route in spawn_agent description: {description:?}"
     );
     assert!(
@@ -465,9 +466,7 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
             let description = adapter["description"]
                 .as_str()
                 .expect("adapter description");
-            assert!(description.contains(
-                "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-            ));
+            assert!(description.contains("Call `list_models`"));
         }
         assert_eq!(
             adapter.get("type").and_then(Value::as_str),
@@ -504,9 +503,6 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
         // production. Bundled non-OpenAI models have no multi-agent version preference.
         .with_model_info_override("gpt-5.6-luna", |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
-            // Keep this probe inside the capped description as the catalog grows;
-            // this test checks provider policy, not display ordering.
-            model.priority = 0;
         })
         .with_model("gpt-5.4")
         .with_config(move |config| {
@@ -533,19 +529,25 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     // The reserved native tool cannot select overrides; the plaintext adapter owns
     // the actionable catalog and exact provider/model parameters on OpenAI.
     let description = plaintext["description"].as_str().unwrap();
+    assert!(description.contains("Call `list_models`"));
+    let preview = description
+        .lines()
+        .filter(|line| line.starts_with("- `"))
+        .collect::<Vec<_>>();
+    assert!(preview.len() <= 3);
     assert_eq!(
-        (
-            description.contains("`openai` / `gpt-5.6-luna`"),
-            description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
-            // The list is capped, so probe for any non-OpenAI row rather
-            // than one particular model that catalogue growth can push out.
-            description
-                .lines()
-                .any(|line| line.trim_start().starts_with("- `")
-                    && !line.trim_start().starts_with("- `openai`"))
-        ),
-        (expected_openai, expected_openai, expected_other_provider),
-        "provider policy, not engine preference or allocation economics, owns discovery: {description}"
+        preview.is_empty(),
+        !expected_openai && !expected_other_provider
+    );
+    if !expected_other_provider {
+        assert!(preview.iter().all(|line| line.starts_with("- `openai`")));
+    }
+    assert!(
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "list_models")
     );
     assert!(
         plaintext

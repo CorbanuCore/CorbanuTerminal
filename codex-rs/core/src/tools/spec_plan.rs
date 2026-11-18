@@ -1084,6 +1084,9 @@ fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool 
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
     if collab_tools_enabled(turn_context) {
+        registry.add(crate::tools::handlers::list_models::Handler {
+            supports_cross_provider_overrides: multi_agent_v2_enabled(turn_context),
+        });
         if multi_agent_v2_enabled(turn_context) {
             let exposure = if turn_context.config.multi_agent_v2.non_code_mode_only {
                 ToolExposure::DirectModelOnly
@@ -1325,7 +1328,7 @@ fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
     !namespace_tools_enabled(turn_context)
 }
 
-fn spawn_agent_available_models(
+pub(crate) fn spawn_agent_available_models(
     turn_context: &TurnContext,
     supports_cross_provider_overrides: bool,
 ) -> Vec<ModelPreset> {

@@ -1824,6 +1824,16 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
                 OPENAI_PROVIDER_ID.to_string(),
             ]);
         });
+        let catalog = crate::tools::spec_plan::spawn_agent_available_models(
+            turn, /*supports_cross_provider_overrides*/ true,
+        );
+        for slug in ["gpt-5.6-sol", "gpt-6-astra"] {
+            assert!(catalog.iter().any(|model| model.model == slug));
+        }
+        assert!(catalog.iter().all(|model| matches!(
+            model.provider_id.as_deref(),
+            Some(OPENAI_PROVIDER_ID | OPENROUTER_PROVIDER_ID)
+        )));
     })
     .await;
     let v2_description = match v2.visible_spec("spawn_agent") {
@@ -1831,15 +1841,10 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
         other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
     };
     assert!(
-        v2_description.contains("`openai` / `gpt-5.6-sol`"),
-        "v2 managers on third-party providers need the authorized cross-provider catalog"
+        v2_description.contains("Call `list_models`"),
+        "v2 managers on third-party providers need the authorized cross-provider lookup"
     );
-    assert!(
-        v2_description.contains(
-            "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-        ),
-        "explicit model discovery must not require automatic-allocation economics"
-    );
+    v2.assert_visible_contains(&["list_models"]);
 
     let v1 = probe(|turn| {
         use_openrouter_provider(turn);
