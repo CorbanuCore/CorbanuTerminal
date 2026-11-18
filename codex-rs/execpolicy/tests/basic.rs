@@ -1205,3 +1205,93 @@ fn strictest_rule_matching_more_args_folds_only_strict_rules() -> Result<()> {
     );
     Ok(())
 }
+
+fn ask_all(_: &[String]) -> Decision {
+    Decision::Prompt
+}
+
+/// D696: allow rules approve only the program as they spell it; Windows'
+/// host lookup (lower-cased, `.exe`/`.cmd`/`.bat`/`.com` dropped) now feeds
+/// only forbidden and prompt rules. Off Windows the lookup key is the file
+/// name itself, so every case below behaves the same there.
+#[test]
+fn allow_rules_need_the_exact_spelling() -> Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["rm"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="allow")
+prefix_rule(pattern=["git", "push", "--force"], decision="forbidden")"#,
+    )?;
+    let policy = parser.build();
+    for fold_program_case in [false, true] {
+        let options = MatchOptions {
+            resolve_host_executables: true,
+            fold_program_case,
+        };
+        let decision = |cmd: &[&str]| {
+            policy
+                .check_with_options(&tokens(cmd), &ask_all, &options)
+                .decision
+        };
+        let git = host_absolute_path(&["usr", "bin", "git"]);
+        // The exact spelling, bare or as a path (the control).
+        assert_eq!(decision(&["rm", "x"]), Decision::Allow);
+        assert_eq!(decision(&["git", "push"]), Decision::Allow);
+        assert_eq!(decision(&[git.as_str(), "push"]), Decision::Allow);
+        for program in [
+            "RM".to_string(),
+            "Rm".to_string(),
+            "rm.exe".to_string(),
+            "RM.EXE".to_string(),
+            host_absolute_path(&["usr", "bin", "RM"]),
+            host_absolute_path(&["usr", "bin", "rm.exe"]),
+        ] {
+            assert_eq!(
+                decision(&[program.as_str(), "x"]),
+                Decision::Prompt,
+                "{program}"
+            );
+        }
+        for program in [
+            "Git".to_string(),
+            "GIT.EXE".to_string(),
+            "git.exe".to_string(),
+            host_absolute_path(&["Program Files", "Git", "cmd", "git.exe"]),
+            host_absolute_path(&["usr", "bin", "GIT"]),
+        ] {
+            assert_eq!(
+                decision(&[program.as_str(), "push"]),
+                Decision::Prompt,
+                "{program}"
+            );
+            // Forbidden rules keep Windows' lookup.
+            let forbidden = if cfg!(windows) {
+                Decision::Forbidden
+            } else {
+                Decision::Prompt
+            };
+            assert_eq!(
+                decision(&[program.as_str(), "push", "--force"]),
+                forbidden,
+                "{program}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// D696: `match` and `not_match` examples keep reading programs as before,
+/// so a rules file that parsed still parses.
+#[test]
+fn allow_rule_examples_keep_the_host_lookup() -> Result<()> {
+    let mut parser = PolicyParser::new();
+    let parsed = parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["git", "push"], decision="allow", match=[["GIT.EXE", "push"]])"#,
+    );
+    // Windows reads `GIT.EXE` by its lookup key `git`; elsewhere it never
+    // matched.
+    assert_eq!(parsed.is_ok(), cfg!(windows), "{parsed:?}");
+    Ok(())
+}

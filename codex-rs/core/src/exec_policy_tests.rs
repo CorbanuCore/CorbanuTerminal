@@ -63,6 +63,10 @@ mod shell_case_tests;
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;
 
+#[cfg(windows)]
+#[path = "exec_policy_powershell_parser_tests.rs"]
+mod powershell_parser_tests;
+
 fn config_stack_for_dot_codex_folder(dot_codex_folder: &Path) -> ConfigLayerStack {
     let dot_codex_folder =
         AbsolutePathBuf::from_absolute_path(dot_codex_folder).expect("absolute dot_codex_folder");
@@ -1137,14 +1141,23 @@ prefix_rule(pattern=["git"], decision="prompt")
 
 #[tokio::test]
 async fn requested_prefix_rule_can_approve_absolute_path_commands() {
+    let command = vec![
+        host_program_path("cargo"),
+        "install".to_string(),
+        "cargo-insta".to_string(),
+    ];
+    // D696: on Windows the path's file name is `cargo.exe`, which an allow
+    // rule for `cargo` no longer approves, so the requested prefix is not
+    // offered; the whole command is.
+    let amendment = if cfg!(windows) {
+        command.clone()
+    } else {
+        vec!["cargo".to_string(), "install".to_string()]
+    };
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
             policy_src: None,
-            command: vec![
-                host_program_path("cargo"),
-                "install".to_string(),
-                "cargo-insta".to_string(),
-            ],
+            command,
             approval_policy: AskForApproval::UnlessTrusted,
             permission_profile: PermissionProfile::read_only(),
             sandbox_permissions: SandboxPermissions::UseDefault,
@@ -1152,10 +1165,7 @@ async fn requested_prefix_rule_can_approve_absolute_path_commands() {
         },
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
-                "cargo".to_string(),
-                "install".to_string(),
-            ])),
+            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(amendment)),
         },
     )
     .await;

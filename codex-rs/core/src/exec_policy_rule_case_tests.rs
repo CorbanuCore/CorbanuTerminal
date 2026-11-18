@@ -166,16 +166,166 @@ fn d692_exact_rule_matches_exclude_case_folded_ones() {
 #[tokio::test]
 async fn d692_allow_rules_keep_the_exact_name() {
     // UnlessTrusted asks for commands no rule allows.
+    // `bypass_sandbox` is true only when the allow rule approved the command.
     let result = requirement("ls x", AskForApproval::UnlessTrusted).await;
     assert!(
-        matches!(result, ExecApprovalRequirement::Skip { .. }),
+        matches!(
+            result,
+            ExecApprovalRequirement::Skip {
+                bypass_sandbox: true,
+                ..
+            }
+        ),
         "{result:?}"
     );
     for line in ["LS x", "Ls x"] {
         let result = requirement(line, AskForApproval::UnlessTrusted).await;
-        // Windows: unchanged from main, whose host-executable lookup already
-        // reads a bare name by its lower-cased basename (any rule kind).
-        let asks = matches!(result, ExecApprovalRequirement::NeedsApproval { .. });
-        assert_eq!(asks, !cfg!(windows), "{line}: {result:?}");
+        // D696: the allow rule never approves it, Windows included. Windows
+        // still runs it without asking, but inside the sandbox: its built-in
+        // read-only list reads `LS` as `ls`, which is the same program there.
+        let expected = if cfg!(windows) {
+            matches!(
+                result,
+                ExecApprovalRequirement::Skip {
+                    bypass_sandbox: false,
+                    ..
+                }
+            )
+        } else {
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. })
+        };
+        assert!(expected, "{line}: {result:?}");
     }
+}
+
+const ALLOW_RULES: &str = r#"prefix_rule(pattern=["rm"], decision="allow")
+prefix_rule(pattern=["git", "push"], decision="allow")"#;
+
+async fn allow_rules_requirement(command: &[&str]) -> ExecApprovalRequirement {
+    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+        policy_src: Some(ALLOW_RULES.to_string()),
+        command: command.iter().map(ToString::to_string).collect(),
+        // Asks for every command no rule allows.
+        approval_policy: AskForApproval::UnlessTrusted,
+        permission_profile: PermissionProfile::Disabled,
+        sandbox_permissions: SandboxPermissions::UseDefault,
+        prefix_rule: None,
+    })
+    .await
+}
+
+/// D696: allow rules approve only the program name as the rule spells it,
+/// on every platform. Windows used to read `RM`, `GIT.EXE` and
+/// `C:\…\git.exe` by their lower-cased, suffix-less basename, so an allow
+/// rule for `rm` or `git push` approved them.
+#[tokio::test]
+async fn d696_allow_rules_need_the_exact_spelling() {
+    // The exact spelling is still allowed (the control), bare or as a path.
+    let git = if cfg!(windows) {
+        r"C:\Program Files\Git\cmd\git"
+    } else {
+        "/usr/bin/git"
+    };
+    for command in [&["rm", "x"][..], &["git", "push"], &[git, "push"]] {
+        let result = allow_rules_requirement(command).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Skip { .. }),
+            "{command:?}: {result:?}"
+        );
+    }
+    for command in [
+        &["RM", "x"][..],
+        &["Rm", "x"],
+        &["rm.exe", "x"],
+        &["RM.EXE", "x"],
+        &["Git", "push"],
+        &["GIT", "push"],
+        &["git.exe", "push"],
+        &["GIT.EXE", "push"],
+        &[r"C:\Program Files\Git\cmd\git.exe", "push"],
+        &[r"C:\Program Files\Git\cmd\GIT.EXE", "push"],
+        &[r"c:\program files\git\cmd\Git", "push"],
+        &["/usr/bin/GIT", "push"],
+        &["./RM", "x"],
+    ] {
+        let result = allow_rules_requirement(command).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+            "{command:?}: {result:?}"
+        );
+    }
+}
+
+/// D696: a path listed by `host_executable` is allowed as listed; the same
+/// file spelled with another drive letter case or name case is not.
+#[tokio::test]
+async fn d696_listed_host_executable_needs_the_listed_spelling() {
+    let (listed, other_drive_case, other_name_case) = if cfg!(windows) {
+        (
+            r"C:\Git\cmd\git.exe",
+            r"c:\Git\cmd\git.exe",
+            r"C:\Git\cmd\GIT.EXE",
+        )
+    } else {
+        ("/usr/bin/git", "/usr/bin/git", "/usr/bin/GIT")
+    };
+    let policy_src = format!(
+        "prefix_rule(pattern=[\"git\", \"push\"], decision=\"allow\")\n\
+         host_executable(name=\"git\", paths=[\"{}\"])",
+        listed.replace('\\', "\\\\")
+    );
+    let requirement = |program: &str| {
+        exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(policy_src.clone()),
+            command: vec![program.to_string(), "push".to_string()],
+            approval_policy: AskForApproval::UnlessTrusted,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+    };
+    let result = requirement(listed).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::Skip { .. }),
+        "{result:?}"
+    );
+    // Off Windows `other_drive_case` is the listed path itself.
+    let result = requirement(other_drive_case).await;
+    assert_eq!(
+        matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+        cfg!(windows),
+        "{result:?}"
+    );
+    let result = requirement(other_name_case).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+        "{result:?}"
+    );
+}
+
+/// D696 keeps Windows' program-name normalisation for forbidden and prompt
+/// rules: `RM.EXE` and `C:\…\RM.exe` are refused by a forbidden `rm` rule,
+/// `GIT.EXE push` is asked about by a prompt `git push` rule.
+#[tokio::test]
+async fn d696_forbidden_and_prompt_rules_keep_windows_spellings() {
+    for line in ["RM.EXE -rf x", "rm.exe x"] {
+        let result = requirement(line, AskForApproval::OnRequest).await;
+        assert_eq!(
+            refused_by_rule(&result),
+            cfg!(windows),
+            "{line}: {result:?}"
+        );
+    }
+    let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+        policy_src: Some(RULES.to_string()),
+        command: vec![r"C:\Windows\RM.exe".to_string(), "x".to_string()],
+        approval_policy: AskForApproval::OnRequest,
+        permission_profile: PermissionProfile::Disabled,
+        sandbox_permissions: SandboxPermissions::UseDefault,
+        prefix_rule: None,
+    })
+    .await;
+    assert_eq!(refused_by_rule(&result), cfg!(windows), "{result:?}");
+    let result = requirement("GIT.EXE push", AskForApproval::OnRequest).await;
+    assert_eq!(asks_by_rule(&result), cfg!(windows), "{result:?}");
 }
