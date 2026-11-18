@@ -1974,4 +1974,4 @@ pub(crate) mod walk;
 
 #[cfg(test)]
 #[path = "acl_tests.rs"]
-mod tests;
+pub(crate) mod tests;
