@@ -19,15 +19,15 @@ enum UserMode {
     FullAccess,
 }
 
-#[test_case(Some(GuardianReviewMode::Adaptive), UserMode::Automatic, false, 1, 0, ReviewConstraint::Ordinary; "model enables async without legacy flag")]
+#[test_case(Some(GuardianReviewMode::Adaptive), UserMode::Automatic, false, 1, 0, ReviewConstraint::Ordinary => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "model enables async without legacy flag")]
 #[test_case(Some(GuardianReviewMode::Synchronous), UserMode::Automatic, true, 0, 1, ReviewConstraint::Ordinary; "model disables async despite legacy flag")]
 #[test_case(Some(GuardianReviewMode::Disabled), UserMode::Automatic, true, 0, 0, ReviewConstraint::Ordinary; "model disables ordinary cua review")]
 #[test_case(Some(GuardianReviewMode::Adaptive), UserMode::User, true, 0, 0, ReviewConstraint::Ordinary; "user mode never scores")]
 #[test_case(Some(GuardianReviewMode::Adaptive), UserMode::FullAccess, true, 0, 0, ReviewConstraint::Ordinary; "full access never scores")]
 #[test_case(Some(GuardianReviewMode::Adaptive), UserMode::FullAccess, true, 0, 0, ReviewConstraint::Sensitive; "full access skips sensitive action reviews")]
 #[test_case(None, UserMode::Automatic, false, 0, 1, ReviewConstraint::Ordinary; "legacy synchronous config")]
-#[test_case(None, UserMode::Automatic, true, 1, 0, ReviewConstraint::Ordinary; "legacy adaptive config")]
-#[test_case(Some(GuardianReviewMode::Adaptive), UserMode::Automatic, false, 1, 1, ReviewConstraint::Sensitive; "sensitive elicitation cannot use initial cua allowance")]
+#[test_case(None, UserMode::Automatic, true, 1, 0, ReviewConstraint::Ordinary => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "legacy adaptive config")]
+#[test_case(Some(GuardianReviewMode::Adaptive), UserMode::Automatic, false, 1, 1, ReviewConstraint::Sensitive => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "sensitive elicitation cannot use initial cua allowance")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_guardian_policy_controls_cua(
     mode: Option<GuardianReviewMode>,

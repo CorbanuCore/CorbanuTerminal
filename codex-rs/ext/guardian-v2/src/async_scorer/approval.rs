@@ -101,6 +101,9 @@ impl GuardianApprovalReviewer {
             return ApprovalDecision::AskUser;
         }
         let adaptive = mode == GuardianReviewMode::Adaptive && !input.require_fresh_review;
+        // D605: the serving model's own "no review needed" assessment is ignored; only its
+        // "review needed" answer is honoured, because that can only make review stricter.
+        let provider_requires_review = input.serving_assessment == Some(true);
         if adaptive && let Some(metrics) = input.metrics.as_deref() {
             metrics.counter("codex.guardian_v2.adaptive_review", /*inc*/ 1, &[]);
         }
@@ -108,10 +111,7 @@ impl GuardianApprovalReviewer {
             GuardianReviewReason::FreshRequired
         } else if !adaptive {
             GuardianReviewReason::Policy
-        } else if let Some(requires_review) = input.serving_assessment {
-            if !requires_review {
-                return ApprovalDecision::Allow;
-            }
+        } else if provider_requires_review {
             GuardianReviewReason::ElevatedRisk
         } else {
             match guardian_config.as_ref() {
@@ -162,7 +162,7 @@ impl GuardianApprovalReviewer {
                 &[
                     (
                         "route",
-                        if input.serving_assessment.is_some() {
+                        if provider_requires_review {
                             "serving_assessment"
                         } else if adaptive {
                             "async_fallback"
@@ -178,7 +178,7 @@ impl GuardianApprovalReviewer {
             .synchronous_reviewer
             .review(
                 reason,
-                if input.serving_assessment.is_some() {
+                if provider_requires_review {
                     None
                 } else {
                     Some(Box::pin(async_approval))
@@ -212,6 +212,12 @@ async fn cached_evidence(
         record_fast_decision(metrics, "deferred", "missing_score");
         return Err(GuardianReviewReason::MissingScore);
     };
+    // D604: neither a cached score nor the initial computer-use allowance can come from a
+    // scorer whose transport was never built.
+    if store.get::<LunaSampler>().is_none() {
+        record_fast_decision(metrics, "deferred", "missing_score");
+        return Err(GuardianReviewReason::MissingScore);
+    }
     // Elicitations and intercepted execs can expand beyond the original scored action.
     let action = codex_guardian_context::action_for_review(input.action.clone());
     let max_action_bytes = TruncationPolicy::Tokens(config.max_action_tokens).byte_budget();
