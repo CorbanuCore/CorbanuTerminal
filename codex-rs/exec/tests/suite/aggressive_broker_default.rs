@@ -1,6 +1,7 @@
 //! #391: under security level Aggressive, `corbanu exec` holds the provider
 //! key in the credential broker by default; an explicit setting still wins.
-//! The provider points at a closed local HTTPS port, so no model answers.
+//! The provider points at a closed local HTTPS port, so no model answers and
+//! each run must end on its own with the failed-turn exit status.
 
 use core_test_support::test_codex_exec::test_codex_exec;
 
@@ -9,7 +10,8 @@ const HANDED_OVER: &str = "provider keys handed to the credential broker and rem
 const NOT_STARTED: &str =
     "model requests are refused: the isolated credential broker did not start";
 
-/// One turn under Aggressive; returns stdout and stderr together.
+/// One turn under Aggressive; returns stdout and stderr together after checking
+/// that `codex-exec` exited by itself with status 1 (turn failed).
 fn run(extra: &[&str]) -> String {
     let test = test_codex_exec();
     std::fs::write(
@@ -29,20 +31,36 @@ fn run(extra: &[&str]) -> String {
             "model_providers.sec391={{name=\"sec391\",base_url=\"https://127.0.0.1:9/v1\",wire_api=\"responses\",env_key=\"{KEY_ENV}\",supports_websockets=false,request_max_retries=0,stream_max_retries=0}}"
         ))
         .arg("-c")
-        .arg("model_provider=\"sec391\"");
+        .arg("model_provider=\"sec391\"")
+        // Upstream's `unbounded_connection_retries` (stable, on by default) keeps
+        // retrying a refused connection forever ("waiting for network"), so the
+        // broker-off run never ended and was killed by the timeout below. The
+        // closed port must fail the turn here, as the zero retry limits intend.
+        .arg("-c")
+        .arg("features.unbounded_connection_retries=false");
     for config in extra {
         cmd.arg("-c").arg(config);
     }
     let output = cmd
         .arg("hi")
-        .timeout(std::time::Duration::from_secs(120))
+        // Each run takes a few seconds; two hung runs still fail here, with the
+        // status assertion below, inside nextest's 60 s limit.
+        .timeout(std::time::Duration::from_secs(25))
         .output()
         .expect("run codex-exec");
-    format!(
+    let text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
-    )
+    );
+    // A run killed by the timeout has no exit code, so this also rejects a hang.
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "codex-exec must exit by itself with the failed-turn status; got {:?}\n{text}",
+        output.status
+    );
+    text
 }
 
 #[test]
