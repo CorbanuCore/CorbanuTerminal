@@ -1,4 +1,5 @@
 use super::*;
+use crate::setup::gather_write_roots_for_permissions;
 use codex_protocol::models::PermissionProfile;
 use pretty_assertions::assert_eq;
 use std::os::windows::fs::FileTimesExt as _;
@@ -70,6 +71,113 @@ fn has_write_allow(path: &Path, sid: &str) -> bool {
         windows_sys::Win32::Foundation::LocalFree(psid as _);
         has
     }
+}
+
+// A child process gives the resolver a deterministic server environment without
+// changing the environment of concurrently running tests.
+#[test]
+fn command_temp_environment_is_authoritative() {
+    const CHILD: &str = "CODEX_TEST_COMMAND_TEMP_ENV_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let server_temp = TempDir::new().expect("server temp");
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "session_temp::tests::command_temp_environment_is_authoritative",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env("TEMP", server_temp.path())
+            .env("TMP", server_temp.path())
+            .output()
+            .expect("run isolated environment test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed; 0 failed;"),
+            "{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
+    let command_temp = TempDir::new().expect("command temp");
+    let command_tmp = TempDir::new().expect("command tmp");
+    let home = TempDir::new().expect("home");
+    let temp = command_temp.path().to_string_lossy().into_owned();
+    let tmp = command_tmp.path().to_string_lossy().into_owned();
+    let workspace_write =
+        ResolvedWindowsSandboxPermissions::try_from_permission_profile_for_workspace_roots(
+            &PermissionProfile::workspace_write(),
+            &[
+                codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(home.path())
+                    .expect("workspace root"),
+            ],
+        )
+        .expect("workspace permissions");
+
+    // Missing, empty and relative keys do not restore the server's temp.
+    for mut env in [
+        HashMap::new(),
+        HashMap::from([("TEMP".to_string(), String::new())]),
+        HashMap::from([("TMP".to_string(), "relative-temp".to_string())]),
+    ] {
+        let before = env.clone();
+        assert_eq!(configured_temp_folders(&env), Vec::<PathBuf>::new());
+        use_session_temp(&workspace_write, &mut env, home.path()).expect("no command temp");
+        assert_eq!(env, before);
+        assert_eq!(
+            gather_write_roots_for_permissions(&workspace_write, home.path(), &env),
+            vec![dunce::canonicalize(home.path()).expect("workspace root")]
+        );
+    }
+
+    for env in [
+        HashMap::from([("TEMP".to_string(), temp.clone())]),
+        HashMap::from([("tEmP".to_string(), temp.clone())]),
+        HashMap::from([
+            ("TEMP".to_string(), temp.clone()),
+            ("TMP".to_string(), String::new()),
+        ]),
+    ] {
+        assert_eq!(
+            configured_temp_folders(&env),
+            vec![command_temp.path().to_path_buf()]
+        );
+    }
+    let both = HashMap::from([("TEMP".to_string(), temp.clone()), ("tMp".to_string(), tmp)]);
+    assert_eq!(
+        configured_temp_folders(&both),
+        vec![
+            command_tmp.path().to_path_buf(),
+            command_temp.path().to_path_buf()
+        ]
+    );
+
+    // The selected base still gets D377's private child, never a whole-parent grant.
+    let mut env = HashMap::from([("tEmP".to_string(), temp)]);
+    use_session_temp(&workspace_write, &mut env, home.path()).expect("command session temp");
+    let dir = PathBuf::from(&env["TEMP"]);
+    assert_eq!(env["TMP"], env["TEMP"]);
+    assert_eq!(
+        dir.parent().map(canonical_path_key),
+        Some(canonical_path_key(command_temp.path()))
+    );
+    assert!(
+        dir.file_name()
+            .expect("name")
+            .to_string_lossy()
+            .starts_with(SESSION_TEMP_PREFIX)
+    );
+    assert!(dacl_is_protected(&dir));
+    let roots = gather_write_roots_for_permissions(&workspace_write, home.path(), &env);
+    assert!(roots.contains(&dunce::canonicalize(&dir).expect("session root")));
+    for parent in [
+        command_temp.path().to_path_buf(),
+        PathBuf::from(std::env::var_os("TMP").expect("server TMP")),
+    ] {
+        assert!(!roots.contains(&dunce::canonicalize(parent).expect("parent root")));
+    }
+    end_session_temp_in(command_temp.path());
 }
 
 #[test]

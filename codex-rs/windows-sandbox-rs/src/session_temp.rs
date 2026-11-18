@@ -198,15 +198,13 @@ fn same_path(a: &Path, b: &Path) -> bool {
     canonical_path_key(a) == canonical_path_key(b)
 }
 
-/// The temp folders a command would get (`TMP` first, as `GetTempPath`
-/// reads it), from `env_map` or this process; absolute ones only, no repeats.
+/// The resolved command environment's temp folders (`TMP` first, as
+/// `GetTempPath` reads it); absolute ones only, no repeats. Inheritance is
+/// resolved by the caller: an omitted key must not restore this process's temp.
 fn configured_temp_folders(env_map: &HashMap<String, String>) -> Vec<PathBuf> {
     let mut folders: Vec<PathBuf> = Vec::new();
     for key in TEMP_KEYS {
-        let Some(value) = env_value(env_map, key)
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os(key).map(PathBuf::from))
-        else {
+        let Some(value) = env_value(env_map, key).map(PathBuf::from) else {
             continue;
         };
         if value.is_absolute() && !folders.iter().any(|known| same_path(known, &value)) {
