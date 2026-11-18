@@ -49,6 +49,9 @@ mod more_launcher_tests;
 #[path = "exec_policy_xargs_su_tests.rs"]
 mod xargs_su_tests;
 
+#[path = "exec_policy_d696_tests.rs"]
+mod d696_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;
@@ -1232,14 +1235,23 @@ prefix_rule(pattern=["git"], decision="prompt")
 
 #[tokio::test]
 async fn requested_prefix_rule_can_approve_absolute_path_commands() {
+    let command = vec![
+        host_program_path("cargo"),
+        "install".to_string(),
+        "cargo-insta".to_string(),
+    ];
+    // D696: on Windows the path's file name is `cargo.exe`, which an allow
+    // rule for `cargo` no longer approves, so the requested prefix is not
+    // offered; the whole command is.
+    let amendment = if cfg!(windows) {
+        command.clone()
+    } else {
+        vec!["cargo".to_string(), "install".to_string()]
+    };
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
             policy_src: None,
-            command: vec![
-                host_program_path("cargo"),
-                "install".to_string(),
-                "cargo-insta".to_string(),
-            ],
+            command,
             approval_policy: AskForApproval::UnlessTrusted,
             permission_profile: PermissionProfile::read_only(),
             sandbox_permissions: SandboxPermissions::UseDefault,
@@ -1247,10 +1259,7 @@ async fn requested_prefix_rule_can_approve_absolute_path_commands() {
         },
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
-                "cargo".to_string(),
-                "install".to_string(),
-            ])),
+            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(amendment)),
         },
     )
     .await;

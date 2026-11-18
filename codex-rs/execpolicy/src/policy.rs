@@ -410,16 +410,8 @@ impl Policy {
         heuristics_fallback: HeuristicsFallback<'_>,
         options: &MatchOptions,
     ) -> Vec<RuleMatch> {
-        let matched_rules = self
-            .match_exact_rules(cmd)
-            .filter(|matched_rules| !matched_rules.is_empty())
-            .or_else(|| {
-                options
-                    .resolve_host_executables
-                    .then(|| self.match_host_executable_rules(cmd))
-                    .filter(|matched_rules| !matched_rules.is_empty())
-            })
-            .unwrap_or_default();
+        let matched_rules =
+            self.matched_rules(cmd, options, /*allow_needs_exact_spelling*/ true);
 
         if matched_rules.is_empty()
             && let Some(heuristics_fallback) = heuristics_fallback
@@ -494,6 +486,34 @@ impl Policy {
             .max()
     }
 
+    /// D696: the rules a `match`/`not_match` example of a rules file
+    /// matches. Allow rules here still match every spelling the host lookup
+    /// reaches (as before D696), so rules files that parsed keep parsing;
+    /// only command matching tightened.
+    pub(crate) fn example_matches(&self, example: &[String]) -> Vec<RuleMatch> {
+        let options = MatchOptions {
+            resolve_host_executables: true,
+        };
+        self.matched_rules(example, &options, /*allow_needs_exact_spelling*/ false)
+    }
+
+    fn matched_rules(
+        &self,
+        cmd: &[String],
+        options: &MatchOptions,
+        allow_needs_exact_spelling: bool,
+    ) -> Vec<RuleMatch> {
+        self.match_exact_rules(cmd)
+            .filter(|matched_rules| !matched_rules.is_empty())
+            .or_else(|| {
+                options
+                    .resolve_host_executables
+                    .then(|| self.match_host_executable_rules(cmd, allow_needs_exact_spelling))
+                    .filter(|matched_rules| !matched_rules.is_empty())
+            })
+            .unwrap_or_default()
+    }
+
     fn match_exact_rules(&self, cmd: &[String]) -> Option<Vec<RuleMatch>> {
         let first = cmd.first()?;
         Some(
@@ -523,7 +543,11 @@ impl Policy {
         candidates
     }
 
-    fn match_host_executable_rules(&self, cmd: &[String]) -> Vec<RuleMatch> {
+    fn match_host_executable_rules(
+        &self,
+        cmd: &[String],
+        allow_needs_exact_spelling: bool,
+    ) -> Vec<RuleMatch> {
         let Some(first) = cmd.first() else {
             return Vec::new();
         };
@@ -533,12 +557,21 @@ impl Policy {
         let Some((basename, rules)) = self.host_executable_rules(&program) else {
             return Vec::new();
         };
+        let listed = self
+            .host_executables_by_name
+            .get(&basename)
+            .map(|paths| &paths[..]);
 
         let basename_command = std::iter::once(basename)
             .chain(cmd.iter().skip(1).cloned())
             .collect::<Vec<_>>();
         rules
             .iter()
+            .filter(|rule| {
+                !allow_needs_exact_spelling
+                    || rule_decision(rule.as_ref()) != Decision::Allow
+                    || allow_spelled_exactly(rule.as_ref(), program.as_path(), listed)
+            })
             .filter_map(|rule| rule.matches(&basename_command))
             .map(|rule_match| rule_match.with_resolved_program(&program))
             .collect()
@@ -623,6 +656,46 @@ fn can_weaken_fallback(exact: &RuleRef, fallback: &RuleRef, path_rules: &[RuleRe
                 })
             })
     })
+}
+
+/// D696: whether allow rule `rule` may approve `program`, a path the host
+/// lookup reached through its basename. That lookup folds case and drops
+/// `.exe`, `.cmd`, `.bat` and `.com` on Windows, so `RM`, `GIT.EXE` and
+/// `C:\…\git.exe` all reach the rules for `rm` and `git`; forbidden and
+/// prompt rules keep matching them. Allow rules approve only the spelling the
+/// rules file wrote: a path listed by `host_executable` for the name exactly
+/// as listed (drive letter case included), or else a file name equal to the
+/// rule's program (compared caselessly only for a `canonical_matching` rule,
+/// which asks for that). Elsewhere the lookup key is the file name itself, so
+/// this changes nothing for exact rules.
+fn allow_spelled_exactly(
+    rule: &dyn crate::rule::Rule,
+    program: &std::path::Path,
+    listed: Option<&[AbsolutePathBuf]>,
+) -> bool {
+    match listed {
+        Some(paths) => paths
+            .iter()
+            .any(|path| same_spelling(path.as_path(), program)),
+        None => {
+            let Some(name) = program.file_name().and_then(std::ffi::OsStr::to_str) else {
+                return false;
+            };
+            rule.as_any()
+                .downcast_ref::<PrefixRule>()
+                .is_some_and(|rule| rule.pattern.tokens_equal(name, &rule.pattern.first))
+        }
+    }
+}
+
+/// Path equality on each component's text as written: unlike Windows `Path`
+/// equality it tells apart drive letter case (`c:` and `C:`) and prefix
+/// separators (`//server/share` and `\\server\share`), which only ever
+/// makes allow rules match less.
+fn same_spelling(a: &std::path::Path, b: &std::path::Path) -> bool {
+    a.components()
+        .map(std::path::Component::as_os_str)
+        .eq(b.components().map(std::path::Component::as_os_str))
 }
 
 /// A prefix rule's decision; other kinds count as forbidding (fail closed).
