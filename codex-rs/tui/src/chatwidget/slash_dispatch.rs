@@ -864,6 +864,16 @@ impl ChatWidget {
             SlashCommand::Ide => {
                 self.handle_ide_command_args(trimmed);
             }
+            SlashCommand::Model => {
+                if trimmed.eq_ignore_ascii_case("clear-cooldown") {
+                    self.app_event_tx.send(AppEvent::ClearProviderCooldown {
+                        config: Box::new(self.config.clone()),
+                        model: self.current_model().to_string(),
+                    });
+                } else {
+                    self.add_error_message("Usage: /model [clear-cooldown]".to_string());
+                }
+            }
             SlashCommand::Mcp => match trimmed.to_ascii_lowercase().as_str() {
                 "verbose" => self.add_mcp_output(McpServerStatusDetail::Full),
                 _ => self.add_error_message("Usage: /mcp [verbose]".to_string()),

@@ -187,6 +187,7 @@ impl SlashCommand {
         matches!(
             self,
             SlashCommand::Review
+                | SlashCommand::Model
                 | SlashCommand::Rename
                 | SlashCommand::New
                 | SlashCommand::Clear
@@ -220,6 +221,7 @@ impl SlashCommand {
     pub fn argument_hint(self) -> Option<&'static str> {
         match self {
             SlashCommand::Cost => Some(COST_ARGUMENT_HINT),
+            SlashCommand::Model => Some("[clear-cooldown]"),
             _ => None,
         }
     }

@@ -394,7 +394,21 @@ pub(crate) fn format_provider_request_block(
         ProviderRequestBlockReason::Cooldown => "cooldown",
         ProviderRequestBlockReason::Lease => "active request lease",
     };
-    let wait_seconds = (block.remaining_ms.max(0) + 999) / 1000;
+    let wait_seconds = block.remaining_ms.max(0).saturating_add(999) / 1000;
+    let reset_hint = if block.provider_reset_remaining_ms > block.remaining_ms {
+        let seconds = block.provider_reset_remaining_ms.saturating_add(999) / 1000;
+        format!(" Provider reset hint: about {seconds}s remaining (not enforced locally).")
+    } else {
+        String::new()
+    };
+    let recovery = match block.reason {
+        ProviderRequestBlockReason::Cooldown => {
+            "After this wait, the next request probes the provider. To retry now, use /model clear-cooldown or corbanu model clear-cooldown with the same provider/model settings."
+        }
+        ProviderRequestBlockReason::Lease => {
+            "Wait for the active request to finish, or switch provider/model."
+        }
+    };
     let status = block
         .last_status
         .map(|status| status.to_string())
@@ -413,7 +427,7 @@ pub(crate) fn format_provider_request_block(
         String::new()
     };
     format!(
-        "{BLOCK_MESSAGE_PREFIX}{reason} for {}/{} ({}) for about {wait_seconds}s. Last status: {status}{request_id}. Last preflight: input={} cached_input={} request_bytes={}.{provider_cache} Wait, compact, switch provider/model, or start a fresh thread before retrying.",
+        "{BLOCK_MESSAGE_PREFIX}{reason} for {}/{} ({}) for about {wait_seconds}s. Last status: {status}{request_id}. Last preflight: input={} cached_input={} request_bytes={}.{provider_cache}{reset_hint} {recovery}",
         key.provider_id,
         key.model,
         key.key_fingerprint,
