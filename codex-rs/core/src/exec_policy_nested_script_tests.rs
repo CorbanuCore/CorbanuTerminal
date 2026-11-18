@@ -174,6 +174,8 @@ async fn scripts_nested_beyond_the_bound_ask() {
                 "{inner}"
             );
         }
+        // Sync (D691): a command nested past the bound is not read, so where
+        // a forbidden rule could match it a person decides.
         assert!(
             matches!(
                 unread,
@@ -181,7 +183,8 @@ async fn scripts_nested_beyond_the_bound_ask() {
                     proposed_execpolicy_amendment: None,
                     ..
                 }
-            ),
+            ) || (rules == FORBID
+                && matches!(unread, ExecApprovalRequirement::NeedsHumanApproval { .. })),
             "{inner}: {unread:?}"
         );
     }
