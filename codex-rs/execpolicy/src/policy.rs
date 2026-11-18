@@ -487,10 +487,12 @@ impl Policy {
                 .filter_map(|rule| map(rule_decision(rule.as_ref())))
                 .max();
         };
-        let basename = options
+        let host_program = options
             .resolve_host_executables
             .then(|| AbsolutePathBuf::try_from(first.clone()).ok())
-            .flatten()
+            .flatten();
+        let basename = host_program
+            .as_ref()
             .and_then(|program| executable_path_lookup_key(program.as_path()));
         let rest = &known[1..];
         // D692: forbidden and prompt rules for the name in another case.
@@ -501,9 +503,24 @@ impl Policy {
             .filter_map(|program| self.rules_by_program.get_vec(program))
             .flatten()
             .filter(|rule| rule_decision(rule.as_ref()) > Decision::Allow);
-        std::iter::once(first)
-            .chain(basename.as_ref())
-            .flat_map(|program| self.candidates(program))
+        let host_candidates = basename
+            .as_ref()
+            .into_iter()
+            .flat_map(|name| self.candidates(name))
+            .filter(|rule| {
+                // D696 also applies before all command arguments are known.
+                rule_decision(rule.as_ref()) != Decision::Allow
+                    || host_program.as_ref().is_some_and(|program| {
+                        let listed = basename
+                            .as_ref()
+                            .and_then(|name| self.host_executables_by_name.get(name))
+                            .map(|paths| &paths[..]);
+                        allow_spelled_exactly(rule.as_ref(), program.as_path(), listed)
+                    })
+            });
+        self.candidates(first)
+            .into_iter()
+            .chain(host_candidates)
             .chain(folded)
             .filter(|rule| {
                 rule.as_any()
