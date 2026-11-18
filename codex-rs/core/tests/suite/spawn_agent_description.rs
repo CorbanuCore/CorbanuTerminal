@@ -44,14 +44,16 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
 
-#[test_case(false, "gpt-5.6-luna"; "Luna model-only selection")]
-#[test_case(true, "gpt-5.6-luna"; "Luna exact provider and model selection")]
-#[test_case(false, "gpt-6-astra"; "unpriced Astra model-only selection")]
-#[test_case(true, "gpt-6-astra"; "unpriced Astra exact provider and model selection")]
+#[test_case(false, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna model-only selection")]
+#[test_case(true, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna exact provider and model selection")]
+#[test_case(false, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra model-only selection")]
+#[test_case(true, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra exact provider and model selection")]
+#[test_case(true, "gpt-6.1-sol", MultiAgentVersion::Disabled; "disabled catalog preference exact provider and model selection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_preference(
     explicit_provider: bool,
     model: &'static str,
+    catalog_backend: MultiAgentVersion,
 ) -> Result<()> {
     let server = start_mock_server().await;
     let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": model, "reasoning_effort": "medium"});
@@ -99,8 +101,8 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     )
     .await;
     let test = test_codex()
-        .with_model_info_override(model, |model| {
-            model.multi_agent_version = Some(MultiAgentVersion::V1);
+        .with_model_info_override(model, move |model| {
+            model.multi_agent_version = Some(catalog_backend);
             model.tool_mode = None;
             model.use_responses_lite = false;
         })

@@ -28,6 +28,9 @@ async fn list_models_discovers_full_authorized_catalog(
             model.multi_agent_version = Some(MultiAgentVersion::V1);
         })
         .with_model_info_override("gpt-6.1-sol", move |model| {
+            // V2 exact provider/model selection remains usable regardless of this
+            // catalog preference; do not hide it from explicit runtime discovery.
+            model.multi_agent_version = Some(MultiAgentVersion::Disabled);
             if restrict_catalog {
                 model.visibility = codex_protocol::openai_models::ModelVisibility::Hide;
             }
