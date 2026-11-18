@@ -59,6 +59,9 @@ fn stdin_is_literal_only_for_a_commands_own_literal_input() {
             "bash <<EOF < file\necho safe\nEOF",
             CommandStdin::Redirected,
         ),
+        // Any redirection onto fd 0 replaces the literal input (review r1).
+        ("bash <<< 'echo hi' 0<&3", CommandStdin::Redirected),
+        ("bash <<< 'echo hi' {fd}<file", CommandStdin::Redirected),
         ("coproc bash", CommandStdin::Redirected),
         ("echo hi | (bash)", CommandStdin::Inherited),
         ("{ bash; } <<EOF\ngit push\nEOF", CommandStdin::Inherited),
@@ -130,13 +133,30 @@ fn shapes_not_fully_understood_are_unread() {
         "coproc NAME { git push; }",
         "repeat 2 git push",
         // Words after a here-document's start nest in it.
-        "cat <<EOF | bash\ngit push\nEOF",
         "bash <<'A' -c 'git push'\necho safe\nA",
         "git <<'A' push --force\nA",
         // Here-documents the grammar may end in the wrong place.
         "cat <<E\"O\"F\necho safe\nE\"O\"F",
         "cat <<EOF\nx\nEO\\\nF\ngit push\nEOF",
         "cat <<EOF\necho safe\nEOFX\necho later\nEOF",
+        // The grammar takes this `0` for an argument after the start marker.
+        "bash <<'EOF' 0>&3\necho hi\nEOF",
+        "echo \"a `git push` b\"",
+        // Backquotes the grammar leaves inside tokens (review r1).
+        "cat <<EOF\n`git push`\nEOF",
+        "cat <<EOF > notes.md\n`git push`\nEOF",
+        "[[ x =~ (`git push`) ]]",
+        "case x in ?a`{git,push}`) ;; esac",
+        // Integer specials evaluate what is assigned (review r1).
+        "OPTIND='a[$(git push)]'",
+        "for SECONDS in x; do :; done",
+        "export HISTCMD=1",
+        "echo ${OPTIND:=x}",
+        "coproc OPTIND='a[$(git push)]'",
+        "time BASH_ENV=./x.sh bash -c true",
+        // A comment where bash sees none.
+        "x=(a)#; git push",
+        "echo a\\\n#b; git push",
         // Does not parse.
         "git push (",
         "echo *(e:'git push':)",
@@ -164,6 +184,9 @@ fn understood_shapes_are_read() {
         "cmd & other; wait",
         "a=(x y \"$z\")",
         "set -euo pipefail",
+        "cat <<'EOF' > f.py && python3 f.py\nprint(1)\nEOF",
+        "cat <<'EOF' | python3\nprint(1)\nEOF",
+        "cat <<'EOF'\nuse `code` and $(this) literally\nEOF",
     ] {
         let read = read_script(script);
         assert!(!read.unread, "{script:?}: {read:?}");

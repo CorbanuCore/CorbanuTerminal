@@ -9,6 +9,8 @@ const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"
 const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
+/// How many constructs [`wrap`] chooses from.
+const CONSTRUCTS: u64 = 58;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -47,7 +49,8 @@ fn double_quoted(text: &str) -> String {
 fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
     let heredoc =
         |head: &str, tail: &str| format!("{head}<<'{delimiter}'\n{inner}\n{delimiter}{tail}");
-    match rng.below(46) {
+    let arithmetic = single_quoted(&format!("a[$({inner}\n)]"));
+    match rng.below(CONSTRUCTS) {
         0 => format!("time {inner}"),
         1 => format!("time -p {inner}"),
         2 => format!("! {inner}"),
@@ -96,6 +99,29 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         ),
         43 => format!("printf '%s\\n' {} | sh -s", single_quoted(inner)),
         44 => format!("x={}; eval \"$x\"", single_quoted(inner)),
+        // Review round 1: backquotes the grammar leaves in tokens, fd 0
+        // replaced after a literal input, arithmetic in assignments and
+        // builtins, ksh, and `hash` renaming a program.
+        46 if !inner.contains(['`', '\\']) => format!("cat <<{delimiter}\n`{inner}`\n{delimiter}"),
+        47 if !inner.contains(['`', '\\']) => format!("[[ x =~ (`{inner}`) ]]"),
+        48 if !inner.contains(['`', '\\']) => format!("case x in ?a`{inner}`) ;; esac"),
+        49 => format!(
+            "exec 3< <(echo {}); bash <<<'echo hi' 0>&3",
+            single_quoted(inner)
+        ),
+        50 => format!("echo {} > s; bash <<<'echo hi' 00<s", single_quoted(inner)),
+        // Grouped: `env A=1 OPTIND=…` alone only prints the environment.
+        51 => format!("{{ OPTIND={arithmetic}\n}}"),
+        52 => format!("ksh <<'{delimiter}'\nshift {arithmetic}\n{delimiter}"),
+        53 => format!("hash -p /bin/sh x; x -c {}", single_quoted(inner)),
+        54 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("printf '%d' {arithmetic}"))
+        ),
+        55 => format!("for SECONDS in {arithmetic}; do :; done"),
+        // Review round 2: comments the grammar sees where bash does not.
+        56 => format!("x=(a)#; {inner}"),
+        57 => format!("echo a\\\n#b; {inner}"),
         _ => format!("noglob {inner}"),
     }
 }

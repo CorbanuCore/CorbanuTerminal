@@ -118,12 +118,52 @@ pub const RESERVED_WORDS: &[&str] = &[
 
 /// Variables a shell or the commands it starts read as code or as a file
 /// of code (`BASH_ENV=./x.sh bash -c …`, `PS4='$(…)'` with xtrace,
-/// exported functions). Assigning one is not read.
+/// exported functions), or whose assigned value is arithmetic. Assigning
+/// one is not read.
 pub fn runs_code_from_variable(name: &str) -> bool {
     matches!(
         name,
         "BASH_ENV" | "ENV" | "PS4" | "SHELLOPTS" | "BASHOPTS" | "PROMPT_COMMAND" | "ZDOTDIR"
     ) || name.starts_with("BASH_FUNC_")
+        || INTEGER_SPECIALS.contains(&name)
+}
+
+/// Special variables of bash, zsh or ksh that evaluate a value assigned to
+/// them as arithmetic (`OPTIND='a[$(…)]'` runs the substitution); the same
+/// list as the post-taint classifier's (`tainted_action/arithmetic.rs`).
+const INTEGER_SPECIALS: &[&str] = &[
+    "EGID",
+    "EUID",
+    "FUNCNEST",
+    "GID",
+    "UID",
+    "BAUD",
+    "COLUMNS",
+    "DIRSTACKSIZE",
+    "ERRNO",
+    "HISTCMD",
+    "HISTSIZE",
+    "KEYTIMEOUT",
+    "LINENO",
+    "LINES",
+    "LISTMAX",
+    "MAILCHECK",
+    "OPTIND",
+    "RANDOM",
+    "SAVEHIST",
+    "SECONDS",
+    "SHLVL",
+    "TMOUT",
+    "TRY_BLOCK_ERROR",
+    "TRY_BLOCK_INTERRUPT",
+    "ZLE_RPROMPT_INDENT",
+];
+
+/// Whether a token's text holds an expansion the grammar left in it: a
+/// backquote (the scanner splits `$(`, `${` and `$[` from words, but not
+/// backquotes in patterns, regexes or here-document text).
+fn hides_expansion(text: &str) -> bool {
+    text.contains('`') || text.contains("$(") || text.contains("${") || text.contains("$[")
 }
 
 #[derive(Clone, Copy)]
@@ -168,6 +208,20 @@ impl<'a> Reader<'a> {
         }
     }
 
+    /// Bash starts a comment only at the start of a word, after removing
+    /// escaped newlines; the grammar also does after some closing tokens
+    /// (`x=(a)#; cmd` runs `cmd`) and after an escaped newline.
+    fn bash_comment(&self, node: Node<'_>) -> bool {
+        let mut before = &self.src[..node.start_byte()];
+        while let Some(joined) = before.strip_suffix("\\\n") {
+            before = joined;
+        }
+        before
+            .chars()
+            .next_back()
+            .is_none_or(|before| matches!(before, ' ' | '\t' | '\n'))
+    }
+
     fn deny<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         self.unread = true;
         stack.push((node, Visit::Collect));
@@ -175,7 +229,7 @@ impl<'a> Reader<'a> {
 
     fn statement<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         match node.kind() {
-            "comment" => {}
+            "comment" if self.bash_comment(node) => {}
             "program" | "list" | "compound_statement" | "subshell" | "negated_command"
             | "do_group" | "if_statement" | "elif_clause" | "else_clause" | "while_statement" => {
                 push_named_children(node, Visit::Statement, stack);
@@ -198,7 +252,9 @@ impl<'a> Reader<'a> {
                 // `for`/`select NAME in WORDS; do …; done`.
                 for (field, child) in fields(node, /*named_only*/ true) {
                     match field {
-                        Some("variable") if child.kind() == "variable_name" => {}
+                        Some("variable")
+                            if child.kind() == "variable_name"
+                                && !runs_code_from_variable(self.text(child)) => {}
                         Some("value") => stack.push((child, Visit::Word)),
                         Some("body") => stack.push((child, Visit::Statement)),
                         _ => self.deny(child, stack),
@@ -210,7 +266,7 @@ impl<'a> Reader<'a> {
                     match (field, child.kind()) {
                         (Some("value"), _) => stack.push((child, Visit::Word)),
                         (_, "case_item") => self.case_item(child, stack),
-                        (_, "comment") => {}
+                        (_, "comment") if self.bash_comment(child) => {}
                         _ => self.deny(child, stack),
                     }
                 }
@@ -249,7 +305,6 @@ impl<'a> Reader<'a> {
     fn case_item<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         for (field, child) in fields(node, /*named_only*/ true) {
             match (field, child.kind()) {
-                (Some("value"), "extglob_pattern") => {}
                 (Some("value"), _) => stack.push((child, Visit::Word)),
                 _ => stack.push((child, Visit::Statement)),
             }
@@ -274,7 +329,6 @@ impl<'a> Reader<'a> {
                         inner.push(child);
                     }
                     "test_operator" if !matches!(self.text(child), "-v" | "-R") => {}
-                    "regex" | "extglob_pattern" if !arithmetic => {}
                     _ if arithmetic && !numeric_operand(self.text(child)) => {
                         self.deny(node, stack);
                         return;
@@ -325,7 +379,7 @@ impl<'a> Reader<'a> {
                 "file_redirect" | "herestring_redirect" | "heredoc_redirect" => {
                     self.redirect(child, &mut inputs, stack);
                 }
-                "comment" => {}
+                "comment" if self.bash_comment(child) => {}
                 _ if field == Some("argument") => stack.push((child, Visit::Word)),
                 _ => self.deny(child, stack),
             }
@@ -364,7 +418,15 @@ impl<'a> Reader<'a> {
                 .first()
                 .is_some_and(|node| self.reserved(*node).is_some())
         };
-        if reserved_left {
+        // After a prefix bash reads `NAME=value` as an assignment, which the
+        // grammar took for a word (`coproc OPTIND='a[$(…)]'`).
+        let assignment_left = skip > 0
+            && nodes.first().is_some_and(|node| {
+                self.text(*node).split_once('=').is_some_and(|(name, _)| {
+                    name.starts_with(|ch: char| ch.is_ascii_alphabetic() || ch == '_')
+                })
+            });
+        if reserved_left || assignment_left {
             self.unread = true;
         }
         let stdin = match inputs.as_slice() {
@@ -414,10 +476,12 @@ impl<'a> Reader<'a> {
         inputs: &mut Vec<Option<String>>,
         stack: &mut Vec<(Node<'t>, Visit)>,
     ) {
+        // Any redirection onto fd 0 replaces the input (`0>&3`, `00<f`); a
+        // descriptor that is not a number may be 0.
         let descriptor = node
             .child_by_field_name("descriptor")
-            .map(|descriptor| self.text(descriptor));
-        let to_stdin = descriptor.is_none_or(|descriptor| descriptor == "0");
+            .map(|descriptor| self.text(descriptor).parse::<u32>().ok());
+        let to_stdin = descriptor.map(|fd| fd.is_none_or(|fd| fd == 0));
         match node.kind() {
             "file_redirect" => {
                 let mut operator = None;
@@ -429,7 +493,7 @@ impl<'a> Reader<'a> {
                         _ => operator = operator.or(Some(child.kind())),
                     }
                 }
-                if to_stdin && operator.is_some_and(|operator| operator.starts_with('<')) {
+                if to_stdin.unwrap_or_else(|| operator.is_some_and(|op| op.starts_with('<'))) {
                     inputs.push(None);
                 }
             }
@@ -442,34 +506,52 @@ impl<'a> Reader<'a> {
                     literal = script_word(child, self.src).map(|word| word + "\n");
                     stack.push((child, Visit::Word));
                 }
-                if to_stdin {
+                if to_stdin.unwrap_or(true) {
                     inputs.push(literal);
                 }
             }
             "heredoc_redirect" => {
-                // Words after the start marker (`cat <<EOF | bash`,
-                // `bash <<EOF -c …`) nest inside this node in the grammar.
+                // An unquoted here-document's text is expanded as it is read.
+                let expanded = node
+                    .child_by_field_name("start")
+                    .or_else(|| {
+                        fields(node, /*named_only*/ true)
+                            .into_iter()
+                            .map(|(_, child)| child)
+                            .find(|child| child.kind() == "heredoc_start")
+                    })
+                    .is_none_or(|start| !self.text(start).contains(['\'', '"', '\\']));
+                // The grammar nests what follows the start marker on its line
+                // here: `cat <<EOF > out`, `cat <<EOF && cmd`, `cat <<EOF | cmd`.
                 for (field, child) in fields(node, /*named_only*/ true) {
                     match child.kind() {
                         "heredoc_start" | "heredoc_end" => {}
+                        // A backquote in it may not be a node of its own.
+                        "heredoc_body" if expanded && self.text(child).contains('`') => {
+                            self.deny(child, stack);
+                        }
                         "heredoc_body" => {
                             for (_, part) in fields(child, /*named_only*/ true) {
                                 if part.kind() != "heredoc_content" {
-                                    // Expanded as the here-document is read.
                                     stack.push((part, Visit::Word));
+                                } else if expanded && hides_expansion(self.text(part)) {
+                                    self.deny(part, stack);
                                 }
                             }
                         }
                         _ if field == Some("descriptor") => {}
-                        // `cat <<EOF > out`: the grammar nests the command's
-                        // later redirections here.
                         "file_redirect" if field == Some("redirect") => {
                             self.redirect(child, inputs, stack);
                         }
+                        // Not piped from this command's input: a pipe's
+                        // receiver reads the pipe, and a shell given any
+                        // input but its own literal text is not read.
+                        "pipeline" => stack.push((child, Visit::Statement)),
+                        _ if field == Some("right") => stack.push((child, Visit::Statement)),
                         _ => self.deny(child, stack),
                     }
                 }
-                if to_stdin {
+                if to_stdin.unwrap_or(true) {
                     inputs.push(literal_heredoc(node, self.src));
                 }
             }
@@ -479,6 +561,11 @@ impl<'a> Reader<'a> {
 
     fn word<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         match node.kind() {
+            "word" | "number" | "string_content" | "regex" | "extglob_pattern"
+                if hides_expansion(self.text(node)) =>
+            {
+                self.deny(node, stack);
+            }
             "word"
             | "number"
             | "raw_string"
@@ -488,6 +575,11 @@ impl<'a> Reader<'a> {
             | "special_variable_name"
             | "regex"
             | "extglob_pattern" => {}
+            // A backquote in a double-quoted string runs a command; the
+            // grammar may leave it outside any node.
+            "string" | "concatenation" if self.text(node).contains('`') => {
+                self.deny(node, stack);
+            }
             "string" | "concatenation" | "brace_expression" => {
                 push_named_children(node, Visit::Word, stack);
             }
@@ -655,6 +747,12 @@ fn simple_expansion_text(text: &str) -> bool {
         return false;
     };
     let rest = &inner[name_end..];
+    // `${OPTIND:=…}` assigns.
+    if (rest.starts_with(":=") || rest.starts_with('='))
+        && runs_code_from_variable(&inner[..name_end])
+    {
+        return false;
+    }
     rest.is_empty()
         || [
             ":-", ":=", ":+", ":?", "-", "=", "+", "?", "#", "%", "/", "^", ",",

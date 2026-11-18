@@ -142,7 +142,9 @@ fn shell_role(program: &str, args: &[String], stdin: &CommandStdin) -> Role {
     }
 }
 
-/// Shells whose stdin script reads as bash's: not fish, csh or tcsh.
+/// Shells whose stdin script reads as bash's. Not fish or csh, and not the
+/// ksh family, whose builtins (`shift`, `ulimit`, `printf %d`) evaluate
+/// their arguments as arithmetic.
 fn shell_name_is_posix(program: &str) -> bool {
     let name = program
         .rsplit(['/', '\\'])
@@ -150,37 +152,30 @@ fn shell_name_is_posix(program: &str) -> bool {
         .unwrap_or(program)
         .to_ascii_lowercase();
     let name = name.strip_suffix(".exe").unwrap_or(&name);
-    matches!(
-        name,
-        "sh" | "bash"
-            | "zsh"
-            | "dash"
-            | "ksh"
-            | "ash"
-            | "mksh"
-            | "yash"
-            | "rbash"
-            | "posh"
-            | "lksh"
-            | "oksh"
-            | "hush"
-            | "osh"
-    )
+    matches!(name, "sh" | "bash" | "zsh" | "dash" | "ash")
 }
 
-/// Builtins of bash, zsh and dash that run nothing but their argv.
+/// Builtins of bash, zsh and dash that run nothing but their argv whatever
+/// it holds.
 const ARGV_ONLY_BUILTINS: &[&str] = &[
     // Launchers that found no command of their own (`command -v git`).
     "command", "builtin", "noglob", "-", ":", "true", "false", "echo", "pwd", "cd", "chdir",
-    "pushd", "popd", "dirs", "exit", "return", "break", "continue", "shift", "type", "which",
-    "whence", "where", "hash", "rehash", "unhash", "jobs", "umask", "ulimit", "limit", "unlimit",
-    "times", "kill", "help", "logout", "bye", "suspend", "disown", "bg", "fg", "caller", "unalias",
-    "log",
+    "pushd", "popd", "dirs", "type", "which", "whence", "where", "rehash", "unhash", "times",
+    "help", "suspend", "unalias", "log",
+];
+
+/// Builtins whose arguments are numbers, which zsh and ksh evaluate as
+/// arithmetic (`shift 'a[$(…)]'` runs the substitution): read only where
+/// every argument is an option or a number.
+const NUMERIC_BUILTINS: &[&str] = &[
+    "exit", "return", "break", "continue", "shift", "logout", "bye", "caller", "ulimit", "kill",
+    "wait", "jobs", "disown", "bg", "fg", "umask",
 ];
 
 /// Every other builtin of bash, zsh (with its code-running module builtins)
 /// and dash. Besides those checked in [`builtin_runs_only_argv`], they
-/// source, define, load or run code, or evaluate arithmetic, which can.
+/// source, define, load, rename or run code, or evaluate arithmetic, which
+/// can.
 const OTHER_BUILTINS: &[&str] = &[
     ".",
     "source",
@@ -214,7 +209,9 @@ const OTHER_BUILTINS: &[&str] = &[
     "shopt",
     "getopts",
     "unset",
-    "wait",
+    "hash",
+    "limit",
+    "unlimit",
     "autoload",
     "bindkey",
     "emulate",
@@ -248,22 +245,61 @@ const OTHER_BUILTINS: &[&str] = &[
 
 fn is_builtin_or_reserved(name: &str) -> bool {
     ARGV_ONLY_BUILTINS.contains(&name)
+        || NUMERIC_BUILTINS.contains(&name)
         || OTHER_BUILTINS.contains(&name)
         || RESERVED_WORDS.contains(&name)
+}
+
+/// A number as a builtin reads one: digits (a sign, a fraction for
+/// timeouts), a job (`%1`), or `$?`-like specials.
+fn is_number(word: &str) -> bool {
+    let digits = word.strip_prefix(['-', '+', '%']).unwrap_or(word);
+    (!digits.is_empty()
+        && digits
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.'))
+        || numeric_operand(word)
 }
 
 /// Whether builtin `name` with `args` (`None` where known only at run time)
 /// runs nothing but its argv.
 fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
     let known = || args.iter().all(Option::is_some);
-    // A variable name with a subscript evaluates it (`read 'a[$(…)]'`).
-    let no_subscripts = || known() && args.iter().flatten().all(|arg| !arg.contains('['));
+    let words = || args.iter().flatten();
+    // A variable name with a subscript evaluates it (`read 'a[$(…)]'`), and
+    // so does assigning to an integer special (`read OPTIND`).
+    let plain_names =
+        || known() && words().all(|arg| !arg.contains('[') && !runs_code_from_variable(arg));
     match name {
         _ if ARGV_ONLY_BUILTINS.contains(&name) => true,
-        // `-v NAME` assigns; options end at the format.
-        "printf" | "print" => args
-            .first()
-            .is_none_or(|first| first.as_ref().is_some_and(|first| !first.starts_with('-'))),
+        // Options are letters; everything else a number. `jobs -x` runs a
+        // command; `umask` takes an octal or symbolic mode.
+        _ if NUMERIC_BUILTINS.contains(&name) => {
+            known()
+                && words().all(|arg| {
+                    is_number(arg)
+                        || (arg.starts_with('-')
+                            && arg[1..].bytes().all(|byte| byte.is_ascii_alphabetic())
+                            && !(name == "jobs" && arg.contains('x')))
+                        || (name == "umask"
+                            && arg.bytes().all(|byte| b"ugoa=+-,rwxXst".contains(&byte)))
+                        || (name == "ulimit" && arg == "unlimited")
+                        || (name == "kill" && arg.bytes().all(|byte| byte.is_ascii_uppercase()))
+                })
+        }
+        // `-v NAME` assigns; options end at the format. A numeric
+        // conversion (`%d`, `%*s`) reads its argument as arithmetic in zsh
+        // and ksh.
+        "printf" | "print" => {
+            let Some(Some(format)) = args.first() else {
+                return args.is_empty();
+            };
+            !format.starts_with('-')
+                && (!numeric_conversion(format)
+                    || args[1..]
+                        .iter()
+                        .all(|arg| arg.as_deref().is_some_and(is_number)))
+        }
         "test" | "[" => {
             known()
                 && args.iter().enumerate().all(|(index, arg)| {
@@ -280,11 +316,14 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
                         })
                 })
         }
-        "read" | "getopts" | "unset" | "wait" => no_subscripts(),
-        "set" => known() && set_runs_only_argv(args.iter().flatten()),
+        "read" => plain_names() && read_option_values_are_numbers(words()),
+        "getopts" | "unset" => plain_names(),
+        // No arguments: forget every remembered path.
+        "hash" => words().all(|arg| arg == "-r") && known(),
+        "set" => known() && set_runs_only_argv(words()),
         "shopt" => {
             known()
-                && args.iter().flatten().all(|arg| {
+                && words().all(|arg| {
                     matches!(
                         arg.as_str(),
                         "-s" | "-u"
@@ -305,6 +344,56 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
         }
         _ => false,
     }
+}
+
+/// A `printf` format with a conversion that reads a number.
+fn numeric_conversion(format: &str) -> bool {
+    let mut chars = format.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            continue;
+        }
+        for spec in chars.by_ref() {
+            match spec {
+                '%' => break,
+                '*' => return true,
+                'd' | 'i' | 'o' | 'u' | 'x' | 'X' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'a'
+                | 'A' | 'c' => return true,
+                _ if spec.is_ascii_alphabetic() => break,
+                _ => {}
+            }
+        }
+    }
+    false
+}
+
+/// `read`'s timeout, count and file descriptor options (`-t`, `-n`, `-N`,
+/// `-k`, `-u`) take numbers, which ksh evaluates as arithmetic.
+fn read_option_values_are_numbers<'a>(mut words: impl Iterator<Item = &'a String>) -> bool {
+    while let Some(word) = words.next() {
+        let Some(letters) = word.strip_prefix('-') else {
+            continue;
+        };
+        for (at, letter) in letters.char_indices() {
+            let numeric = "tnNku".contains(letter);
+            if !(numeric || "adpiAeEr".contains(letter)) {
+                return false;
+            }
+            if numeric || "adpiA".contains(letter) {
+                let rest = &letters[at + letter.len_utf8()..];
+                let value = if rest.is_empty() {
+                    words.next().map(String::as_str)
+                } else {
+                    Some(rest)
+                };
+                if numeric && !value.is_some_and(is_number) {
+                    return false;
+                }
+                break;
+            }
+        }
+    }
+    true
 }
 
 /// `set` with options that run no code: not xtrace (`PS4` is expanded),
