@@ -271,6 +271,13 @@ what it can reasonably guarantee.
   proxy into a remote bridge into local daemons.
 - `dangerously_allow_all_unix_sockets = true` bypasses the unix socket allowlist entirely (still
   macOS-only and absolute-path-only). Use only in tightly controlled environments.
+- When an execution environment's owner supplies its own network policy (for example a remote
+  exec-server), Unix socket access needs grants from both that owner and this controller (your
+  config and managed requirements). A controller that sets neither `dangerously_allow_all_unix_sockets`
+  nor `unix_sockets` counts as granting: the owner's `dangerously_allow_all_unix_sockets = true`
+  then applies, including to the Linux sandbox's managed-proxy mode. An explicit `false`, any
+  `unix_sockets` map (even an empty one), a managed requirement of `false` or a `deny` entry on
+  either side withholds "allow all" (D714).
 - `enabled` is enforced at runtime; when false the proxy no-ops and does not bind listeners.
   Limitations:
 

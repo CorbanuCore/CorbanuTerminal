@@ -216,7 +216,10 @@ commands that would enter the bubblewrap path.
 - In managed proxy mode, after the bridge is live, seccomp allows IP sockets
   inside the isolated network namespace and blocks new standalone `AF_UNIX`
   sockets unless `dangerously_allow_all_unix_sockets` is granted. Unix socket
-  pairs remain allowed for communication between related processes.
+  pairs remain allowed for communication between related processes. For an
+  execution environment with its own network policy, an unset controller
+  setting inherits that environment owner's grant (D714; see the
+  network-proxy README).
 - When bubblewrap is active, it mounts a fresh `/proc` via `--proc /proc` by default.
   If that mount is denied, it retains the inherited `/proc` and still creates a
   PID namespace, preserving the existing fallback. `--no-proc` also retains the
