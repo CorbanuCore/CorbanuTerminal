@@ -223,10 +223,10 @@ fn d263_delete_deny_that_cannot_be_written_is_an_error() {
 /// Impersonates this process's own token with every privilege disabled on
 /// the current thread until dropped, so an elevated runner's privileges
 /// (such as restore) can't write a DACL the test made unwritable.
-struct WithoutPrivileges;
+pub(crate) struct WithoutPrivileges;
 
 impl WithoutPrivileges {
-    fn start() -> Self {
+    pub(crate) fn start() -> Self {
         // SAFETY: plain Win32 calls on the current thread; the token handle is
         // closed here and the impersonation ends in `drop`, also when an
         // assertion below fails.
