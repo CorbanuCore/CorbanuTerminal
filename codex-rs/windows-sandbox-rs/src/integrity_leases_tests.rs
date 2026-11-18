@@ -71,7 +71,11 @@ fn sec_win_2584_records_folder_without_write_owner_names_the_cause() {
     let _local = use_test_local_app_data(&local);
     let parent = registry_parent_dir().expect("parent");
 
+    // An elevated runner's take-ownership or restore privilege would grant
+    // WRITE_OWNER anyway; a normal session's token has neither.
+    let without_privileges = crate::acl::tests::WithoutPrivileges::start();
     let err = ensure_registry().expect_err("a folder that can't be labelled is refused");
+    drop(without_privileges);
 
     let message = err.to_string();
     for needed in [
