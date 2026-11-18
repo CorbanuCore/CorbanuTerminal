@@ -3,6 +3,7 @@ use super::gather_candidates;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
+use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
 /// Grants Everyone modify on `path` and its children (`icacls`, the user's
@@ -87,4 +88,97 @@ fn d607_everyone_writable_folders_are_flagged() {
         "the link is not followed and the PATH entry is flagged once"
     );
     fs::remove_dir(&link).expect("remove junction");
+}
+
+/// Whether a write-restricted sandbox token holding capability `sid` (with
+/// the logon SID and Everyone as the other restricting SIDs, the shape of
+/// every sandbox token) may add a file to `folder`, by `AccessCheck` against
+/// the folder's real security descriptor.
+pub(crate) fn sandbox_token_may_add_files(sid: &str, folder: &Path) -> bool {
+    use crate::LocalSid;
+    use crate::token::create_workspace_write_token_with_caps_from;
+    use crate::token::get_current_token_for_restriction;
+    use std::os::windows::io::AsRawHandle;
+    use std::os::windows::io::FromRawHandle;
+    use std::os::windows::io::OwnedHandle;
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::Foundation::HLOCAL;
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::AccessCheck;
+    use windows_sys::Win32::Security::Authorization::GetNamedSecurityInfoW;
+    use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::DuplicateToken;
+    use windows_sys::Win32::Security::GENERIC_MAPPING;
+    use windows_sys::Win32::Security::GROUP_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::OWNER_SECURITY_INFORMATION;
+    use windows_sys::Win32::Security::SecurityImpersonation;
+    use windows_sys::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
+    use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_EXECUTE;
+    use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
+    use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_WRITE;
+    use windows_sys::Win32::Storage::FileSystem::FILE_WRITE_DATA;
+
+    unsafe {
+        let base = OwnedHandle::from_raw_handle(
+            get_current_token_for_restriction().expect("base token") as _,
+        );
+        let capability = LocalSid::from_string(sid).expect("capability SID");
+        let token = OwnedHandle::from_raw_handle(
+            create_workspace_write_token_with_caps_from(
+                base.as_raw_handle() as HANDLE,
+                &[capability.as_ptr()],
+            )
+            .expect("sandbox token") as _,
+        );
+        let mut impersonation = std::ptr::null_mut();
+        assert!(
+            DuplicateToken(
+                token.as_raw_handle() as HANDLE,
+                SecurityImpersonation,
+                &mut impersonation
+            ) != 0,
+            "DuplicateToken failed"
+        );
+        let impersonation = OwnedHandle::from_raw_handle(impersonation as _);
+        let wide: Vec<u16> = folder
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let mut descriptor = std::ptr::null_mut();
+        let code = GetNamedSecurityInfoW(
+            wide.as_ptr(),
+            /*SE_FILE_OBJECT*/ 1,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut descriptor,
+        );
+        assert_eq!(code, 0, "GetNamedSecurityInfoW failed");
+        let mapping = GENERIC_MAPPING {
+            GenericRead: FILE_GENERIC_READ,
+            GenericWrite: FILE_GENERIC_WRITE,
+            GenericExecute: FILE_GENERIC_EXECUTE,
+            GenericAll: FILE_ALL_ACCESS,
+        };
+        let mut privileges = [0u64; 128];
+        let mut privilege_bytes = std::mem::size_of_val(&privileges) as u32;
+        let mut granted = 0;
+        let mut allowed = 0;
+        let ok = AccessCheck(
+            descriptor,
+            impersonation.as_raw_handle() as HANDLE,
+            FILE_WRITE_DATA,
+            &mapping,
+            privileges.as_mut_ptr().cast(),
+            &mut privilege_bytes,
+            &mut granted,
+            &mut allowed,
+        );
+        LocalFree(descriptor as HLOCAL);
+        assert!(ok != 0, "AccessCheck failed");
+        allowed != 0
+    }
 }

@@ -231,7 +231,8 @@ fn apply_world_writable_denies(payload: &Payload, log: &mut dyn Write) -> Result
         }
         let folder = match open_directory_no_reparse(
             path,
-            READ_CONTROL | WRITE_DAC,
+            // The deny reads the folder's attributes first.
+            READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             DirectoryOpenDisposition::OpenExisting,
         ) {
@@ -1565,12 +1566,25 @@ mod tests {
         json["world_writable_paths"] = json!([outside, inside]);
         let payload: Payload = serde_json::from_value(json).expect("payload");
 
-        let mut log = Vec::new();
-        super::apply_world_writable_denies(&payload, &mut log).expect("apply denies");
-
         let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
         let workspace_sid = workspace_write_cap_sid_for_root(&codex_home, &workspace, &workspace)
             .expect("workspace SID");
+        let may_add = crate::world_writable::tests::sandbox_token_may_add_files;
+        for sid in [&caps.readonly, &workspace_sid] {
+            assert!(
+                may_add(sid, &outside),
+                "control: a sandbox token writes to an Everyone-writable folder"
+            );
+        }
+
+        let mut log = Vec::new();
+        super::apply_world_writable_denies(&payload, &mut log).expect("apply denies");
+        for sid in [&caps.readonly, &workspace_sid] {
+            assert!(
+                !may_add(sid, &outside),
+                "a sandbox token still writes there"
+            );
+        }
         let has_deny = |path: &std::path::Path, sid: &str| {
             let sid = crate::LocalSid::from_string(sid).expect("SID");
             let (dacl, sd) = unsafe { crate::fetch_dacl_handle(path) }.expect("read DACL");
@@ -1583,7 +1597,8 @@ mod tests {
         for sid in [&caps.readonly, &workspace_sid] {
             assert!(
                 has_deny(&outside, sid),
-                "outside folder lacks the deny for {sid}"
+                "outside folder lacks the deny for {sid}; log: {}",
+                String::from_utf8_lossy(&log)
             );
             assert!(
                 !has_deny(&inside, sid),
