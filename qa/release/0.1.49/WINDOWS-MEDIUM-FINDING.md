@@ -60,7 +60,12 @@ DACL grants inheritable Full control only to the current user, SYSTEM and
 Administrators; AppData and workspace inherit it. Owner and parent/child ACL
 captures are preserved at `$W/astra-rel149-windows-{acl-profile,child-acls}.json`.
 The original failure remains intact. The temporary private SSH forward was
-closed after the run. Final candidate replay is still required after #2586 merges. No host-wide ACL, default sandbox or operator profile is changed. This
+closed after the run. A further fresh replay makes AppData/Local and workspace
+ACLs individually protected, as the coordinator specified, and again passes
+all four checks in 17.12 seconds. Its result includes owner, ACL and protected
+flags: `$W/astra-rel149-windows-medium-protected-acl-result.json`. Its SSH
+command-owned forward closes automatically. Final candidate replay is still
+required after #2586 merges. No host-wide ACL, default sandbox or operator profile is changed. This
 is a fixture-permission problem exposed by the newer label registry, not evidence
 that normal Windows user profiles cannot run commands.
 
