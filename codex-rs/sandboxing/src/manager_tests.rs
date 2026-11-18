@@ -789,6 +789,49 @@ fn transform_for_direct_spawn_windows_materializes_inner_helper() {
 /// Main's case: under the elevated backend a denied path reaches the
 /// wrapper as `--deny-read-json` (DenyReadTargets, #304).
 fn transform_for_direct_spawn_windows_elevated_passes_deny_read_rules() {
+    // Elevated desktop preparation locates real setup companions beside the
+    // current executable. Stage a private child instead of modifying Bazel outputs.
+    const CHILD_ENV: &str = "CODEX_SANDBOXING_ELEVATED_FIXTURE_CHILD";
+    if std::env::var_os(CHILD_ENV).is_none() {
+        let fixture = tempfile::tempdir().expect("fixture binaries");
+        let child = fixture.path().join("sandboxing-fixture.exe");
+        std::fs::copy(std::env::current_exe().expect("test executable"), &child)
+            .expect("copy test executable");
+        for name in [
+            "codex-command-runner",
+            "codex-conpty-launcher",
+            "codex-windows-sandbox-setup",
+        ] {
+            let source = codex_utils_cargo_bin::cargo_bin(name).expect("sandbox companion");
+            std::fs::copy(source, fixture.path().join(format!("{name}.exe")))
+                .expect("copy sandbox companion");
+        }
+        let current_thread = std::thread::current();
+        let output = std::process::Command::new(child)
+            .args([
+                "--exact",
+                current_thread.name().expect("test name"),
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("run elevated fixture child");
+        assert!(
+            output.status.success(),
+            "elevated fixture failed: {}{} (status {})",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+            output.status,
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed;"),
+            "the child must execute the exact elevated fixture test"
+        );
+        return;
+    }
+    let _account_guard =
+        codex_windows_sandbox_test_support::WindowsSandboxAccountTestGuard::acquire()
+            .expect("Windows sandbox test account lock");
     let codex_home = tempfile::TempDir::new().expect("codex home");
     let helper_dir = tempfile::TempDir::new().expect("helper dir");
     let configured_helper = helper_dir.path().join("configured-codex-helper.exe");
