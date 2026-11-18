@@ -484,6 +484,129 @@ async fn rejects_lagged_recovery_gap_when_the_exit_was_already_seen() {
     assert!(transport.closed);
 }
 
+/// Builds a retained read with one stdout line per sequence number in `seqs`.
+fn retained_stdout_read(seqs: &[u64], next_seq: u64, exited: bool, closed: bool) -> ReadResponse {
+    let mut response = retained_read_response(
+        seqs.iter()
+            .map(|seq| recovered_output(*seq, ExecOutputStream::Stdout, b"x\n"))
+            .collect(),
+        next_seq,
+    );
+    response.exited = exited;
+    response.exit_code = exited.then_some(0);
+    response.closed = closed;
+    response
+}
+
+fn lagged_transport(response: ReadResponse, last_seq: u64) -> ExecutorProcessTransport {
+    let process = Arc::new(RetainedReadProcess {
+        process_id: ProcessId::from("mcp-stdio-lagged"),
+        response,
+    });
+    let mut transport = ExecutorProcessTransport::new(process, "mcp-stdio-lagged".to_string());
+    transport.last_seq = last_seq;
+    transport
+}
+
+/// The unseen exit can account for one middle gap only. A trailing evicted
+/// chunk is still lost output.
+#[tokio::test]
+async fn rejects_trailing_gap_after_the_unseen_exit_covered_a_middle_gap() {
+    // Chunks 1 and 3 (exit = 2), seq 4 evicted, closed = 5.
+    let mut transport = lagged_transport(
+        retained_stdout_read(
+            &[1, 3],
+            /*next_seq*/ 6,
+            /*exited*/ true,
+            /*closed*/ true,
+        ),
+        /*last_seq*/ 0,
+    );
+
+    let error = transport
+        .recover_lagged_events()
+        .await
+        .expect_err("the evicted chunk at seq 4 must close the transport");
+
+    assert_eq!(
+        error.to_string(),
+        "remote MCP server output stream lost process events: expected sequence 4, received 5"
+    );
+    assert_eq!(transport.stdout, LineBuffer::default());
+    assert!(transport.closed);
+}
+
+/// An exit found by one lagged recovery cannot cover a gap in a later one.
+#[tokio::test]
+async fn exit_recovered_in_an_earlier_lag_does_not_cover_a_later_gap() {
+    // First lag: exit = 1, chunk 2, process still open.
+    let mut transport = lagged_transport(
+        retained_stdout_read(
+            &[2],
+            /*next_seq*/ 3,
+            /*exited*/ true,
+            /*closed*/ false,
+        ),
+        /*last_seq*/ 0,
+    );
+    transport
+        .recover_lagged_events()
+        .await
+        .expect("the first recovery accounts for the exit");
+    assert!(transport.exit_seen);
+    assert!(!transport.closed);
+    assert_eq!(transport.last_seq, 2);
+
+    // Second lag: seq 3 evicted, chunk 4, closed = 5.
+    transport.process = Arc::new(RetainedReadProcess {
+        process_id: ProcessId::from("mcp-stdio-second-lag"),
+        response: retained_stdout_read(
+            &[4],
+            /*next_seq*/ 6,
+            /*exited*/ true,
+            /*closed*/ true,
+        ),
+    });
+    let error = transport
+        .recover_lagged_events()
+        .await
+        .expect_err("the evicted chunk at seq 3 must close the transport");
+
+    assert_eq!(
+        error.to_string(),
+        "remote MCP server output stream lost process events: expected sequence 3, received 4"
+    );
+    assert!(transport.closed);
+}
+
+/// An exit seen before the lag is not subtracted again at the end of the
+/// range, so an evicted trailing chunk is still lost output.
+#[tokio::test]
+async fn rejects_trailing_gap_when_the_exit_was_already_seen() {
+    // Exit = 1 already seen, chunk 2, seq 3 evicted, closed = 4.
+    let mut transport = lagged_transport(
+        retained_stdout_read(
+            &[2],
+            /*next_seq*/ 5,
+            /*exited*/ true,
+            /*closed*/ true,
+        ),
+        /*last_seq*/ 1,
+    );
+    transport.exit_seen = true;
+
+    let error = transport
+        .recover_lagged_events()
+        .await
+        .expect_err("the evicted chunk at seq 3 must close the transport");
+
+    assert_eq!(
+        error.to_string(),
+        "remote MCP server output stream lost process events: expected sequence 3, received 4"
+    );
+    assert!(transport.closed);
+}
+
 #[test]
 fn searches_only_new_bytes_after_partial_line() {
     let mut buffer = LineBuffer::default();
