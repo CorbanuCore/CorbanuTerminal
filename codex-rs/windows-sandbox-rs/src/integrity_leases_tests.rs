@@ -114,6 +114,6 @@ fn sec_win_2584_records_folder_with_full_control_is_labelled_medium() {
     for dir in [&parent, &registry] {
         // SAFETY: reads the label of a folder this test made.
         let labels = unsafe { read_explicit_labels(dir) }.expect("labels");
-        assert_eq!(labels, [private.clone()], "{}", dir.display());
+        assert_eq!(labels, std::slice::from_ref(&private), "{}", dir.display());
     }
 }
