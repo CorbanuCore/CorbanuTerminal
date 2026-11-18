@@ -934,7 +934,7 @@ async fn approve_reading_gate(
     test: &TestCodex,
     level: SecurityLevel,
     script: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<usize> {
     use codex_protocol::protocol::ReviewDecision;
     let mut gate_prompts = 0;
     while let Some(approval) = next_exec_approval(test).await {
@@ -963,7 +963,7 @@ async fn approve_reading_gate(
         usize::from(expected),
         "{level:?}: the script-reading prompt"
     );
-    Ok(())
+    Ok(gate_prompts)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -2293,7 +2293,16 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             },
         )
         .await?;
-        approve_reading_gate(&test, level, &command).await?;
+        let prompts = approve_reading_gate(&test, level, &command).await?;
+        // Pinned fixture, independent of the reader the helper consults: a
+        // script building its paths with `$(…)` must raise the reading
+        // prompt under Aggressive, so a reader that stopped failing closed
+        // cannot pass silently.
+        assert_eq!(
+            prompts,
+            usize::from(level == SecurityLevel::Aggressive),
+            "{level:?}: `$(…)` must raise the script-reading prompt"
+        );
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = [
