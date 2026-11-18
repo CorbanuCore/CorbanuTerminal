@@ -204,13 +204,12 @@ fn apply_world_writable_denies(payload: &Payload, log: &mut dyn Write) -> Result
     if payload.world_writable_paths.is_empty() {
         return Ok(());
     }
+    // The SIDs a command's token can hold: the read-only one, and each write
+    // root's. A refresh without write roots (read-only, or extra read roots
+    // only) denies the read-only SID alone, so it never denies a SID that
+    // writes inside a folder it does not know is a write root.
     let mut sid_strs = vec![load_or_create_cap_sids(&payload.codex_home)?.readonly];
-    let roots: Vec<&Path> = if payload.write_roots.is_empty() {
-        vec![payload.command_cwd.as_path()]
-    } else {
-        payload.write_roots.iter().map(PathBuf::as_path).collect()
-    };
-    for root in &roots {
+    for root in &payload.write_roots {
         sid_strs.push(workspace_write_cap_sid_for_root(
             &payload.codex_home,
             &payload.command_cwd,
@@ -1612,6 +1611,44 @@ mod tests {
             !String::from_utf8_lossy(&again).contains("applied world-writable deny"),
             "{}",
             String::from_utf8_lossy(&again)
+        );
+    }
+
+    /// D607 review r1: a refresh without write roots (read-only, or extra read
+    /// roots only) denies only the read-only SID, so a workspace token keeps
+    /// writing to an Everyone-writable folder inside its working folder.
+    #[test]
+    fn d607_refresh_without_write_roots_denies_only_the_read_only_sid() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let codex_home = temp.path().join("codex-home");
+        let workspace = temp.path().join("workspace");
+        let shared = workspace.join("shared");
+        for dir in [&codex_home, &shared] {
+            fs::create_dir_all(dir).expect("create dir");
+        }
+        crate::world_writable::tests::grant_everyone_modify(&shared);
+        let mut json = payload_json();
+        json["codex_home"] = json!(codex_home);
+        json["command_cwd"] = json!(workspace);
+        json["write_roots"] = json!([]);
+        json["world_writable_paths"] = json!([shared]);
+        let payload: Payload = serde_json::from_value(json).expect("payload");
+
+        let mut log = Vec::new();
+        super::apply_world_writable_denies(&payload, &mut log).expect("apply denies");
+
+        let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
+        let workspace_sid = workspace_write_cap_sid_for_root(&codex_home, &workspace, &workspace)
+            .expect("workspace SID");
+        let may_add = crate::world_writable::tests::sandbox_token_may_add_files;
+        assert!(
+            !may_add(&caps.readonly, &shared),
+            "read-only token writes there"
+        );
+        assert!(
+            may_add(&workspace_sid, &shared),
+            "the workspace token lost its folder: {}",
+            String::from_utf8_lossy(&log)
         );
     }
 
