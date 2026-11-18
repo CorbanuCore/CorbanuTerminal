@@ -3285,7 +3285,8 @@ async fn escalated_owner_network_terminal_requires_stdin_approval(
         "launch a terminal and send input",
         vec![remote],
         ApprovalsReviewer::User,
-        AskForApproval::UnlessTrusted,
+        // D618: asking to run outside the sandbox is only offered under OnRequest.
+        AskForApproval::OnRequest,
     )
     .await?;
     let mut approvals = Vec::new();

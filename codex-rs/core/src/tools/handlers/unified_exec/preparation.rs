@@ -7,7 +7,6 @@ use super::ResolvedCommand;
 use super::get_command;
 use crate::exec::DEFAULT_EXEC_COMMAND_TIMEOUT_MS;
 use crate::exec_policy::ExecApprovalRequest;
-use crate::exec_policy::prompt_is_rejected_by_policy;
 use crate::function_tool::FunctionCallError;
 use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
@@ -25,6 +24,7 @@ use crate::tools::sandboxing::ApprovalAction;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use crate::windows_sandbox::windows_sandbox_level_for_legacy_checks;
 use codex_features::Feature;
+use codex_protocol::protocol::AskForApproval;
 use codex_sandboxing::SandboxManager;
 use codex_sandboxing::SandboxType;
 use codex_sandboxing::SandboxablePreference;
@@ -297,10 +297,12 @@ impl<'a> ParsedExecCommand<'a> {
 
         // Sticky turn permissions have already been approved, so they should
         // continue through the normal exec approval flow for the command.
+        // D618: asking to run outside the sandbox is only offered under OnRequest, as on
+        // main; UnlessTrusted and Granular policies refuse it before any prompt.
         let approval_policy = step.settings.approval_policy();
         if permissions.sandbox_permissions.requests_sandbox_override()
             && !permissions.permissions_preapproved
-            && prompt_is_rejected_by_policy(approval_policy, /*prompt_is_rule*/ false).is_some()
+            && !matches!(approval_policy, AskForApproval::OnRequest)
         {
             return Err(FunctionCallError::RespondToModel(format!(
                 "approval policy is {approval_policy:?}; reject command — you cannot ask for escalated permissions if the approval policy is {approval_policy:?}"

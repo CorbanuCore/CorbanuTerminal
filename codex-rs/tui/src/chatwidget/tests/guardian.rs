@@ -325,7 +325,7 @@ async fn guardian_denied_exec_renders_warning_and_denied_request() {
 }
 
 #[tokio::test]
-async fn guardian_approved_exec_is_hidden_from_history() {
+async fn guardian_approved_exec_renders_approved_request() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;
 
@@ -367,7 +367,11 @@ async fn guardian_approved_exec_is_hidden_from_history() {
     let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
     term.set_viewport_area(viewport);
 
-    assert!(drain_insert_history(&mut rx).is_empty());
+    // D617: the approval stays in history, as on main.
+    for lines in drain_insert_history(&mut rx) {
+        crate::insert_history::insert_history_lines(&mut term, lines)
+            .expect("Failed to insert history lines in test");
+    }
 
     term.draw(|f| {
         chat.render(f.area(), f.buffer_mut());
@@ -375,13 +379,13 @@ async fn guardian_approved_exec_is_hidden_from_history() {
     .expect("draw guardian approval history");
 
     assert_chatwidget_snapshot!(
-        "guardian_approved_exec_is_hidden_from_history",
+        "guardian_approved_exec_renders_approved_request",
         normalize_snapshot_paths(term.backend().vt100().screen().contents())
     );
 }
 
 #[tokio::test]
-async fn guardian_approved_request_permissions_clears_status_without_history() {
+async fn guardian_approved_request_permissions_renders_request_summary() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;
     let action = GuardianAssessmentAction::RequestPermissions {
@@ -453,7 +457,11 @@ async fn guardian_approved_request_permissions_clears_status_without_history() {
     let mut term = crate::custom_terminal::Terminal::with_options(backend).expect("terminal");
     term.set_viewport_area(viewport);
 
-    assert!(drain_insert_history(&mut rx).is_empty());
+    // D617: the approval stays in history.
+    for lines in drain_insert_history(&mut rx) {
+        crate::insert_history::insert_history_lines(&mut term, lines)
+            .expect("Failed to insert history lines in test");
+    }
 
     term.draw(|f| {
         chat.render(f.area(), f.buffer_mut());
@@ -461,9 +469,71 @@ async fn guardian_approved_request_permissions_clears_status_without_history() {
     .expect("draw guardian request permissions approval history");
 
     assert_chatwidget_snapshot!(
-        "guardian_approved_request_permissions_clears_status_without_history",
+        "guardian_approved_request_permissions_renders_request_summary",
         normalize_snapshot_paths(term.backend().vt100().screen().contents())
     );
+}
+
+#[tokio::test]
+async fn guardian_approved_requests_stay_in_history() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.show_welcome_banner = false;
+    for (action, expected) in [
+        (
+            GuardianAssessmentAction::NetworkAccess {
+                target: "https://example.com:443".to_string(),
+                host: "example.com".to_string(),
+                protocol: codex_protocol::approvals::NetworkApprovalProtocol::Https,
+                port: 443,
+            },
+            "✔ Request approved for network access to https://example.com:443",
+        ),
+        (
+            GuardianAssessmentAction::McpToolCall {
+                server: "docs".to_string(),
+                tool_name: "search".to_string(),
+                connector_id: None,
+                connector_name: Some("Docs".to_string()),
+                tool_title: None,
+            },
+            "✔ Request approved for MCP search on Docs",
+        ),
+        (
+            GuardianAssessmentAction::ApplyPatch {
+                cwd: test_path_buf("/tmp/project").abs().into(),
+                files: vec![test_path_buf("/tmp/project/report.md").abs().into()],
+            },
+            "✔ Request approved for apply_patch touching /tmp/project/report.md",
+        ),
+        (
+            GuardianAssessmentAction::RequestPermissions {
+                reason: Some("Need to write the report".to_string()),
+                permissions: RequestPermissionProfile::default(),
+            },
+            "✔ Request approved for permission request: Need to write the report",
+        ),
+    ] {
+        chat.on_guardian_assessment(GuardianAssessmentEvent {
+            review_reason: None,
+            model_context: None,
+            id: "guardian-approved-non-command".into(),
+            target_item_id: None,
+            plugin_id: None,
+            script_path: None,
+            turn_id: "turn-1".into(),
+            started_at_ms: 0,
+            completed_at_ms: Some(1),
+            status: GuardianAssessmentStatus::Approved,
+            risk_level: Some(GuardianRiskLevel::Low),
+            user_authorization: Some(GuardianUserAuthorization::High),
+            rationale: Some("Scoped to the task.".into()),
+            decision_source: Some(GuardianAssessmentDecisionSource::Agent),
+            action,
+        });
+        let cells = drain_insert_history(&mut rx);
+        assert_eq!(cells.len(), 1, "{expected}");
+        assert_eq!(lines_to_single_string(&cells[0]).trim_end(), expected);
+    }
 }
 
 #[tokio::test]

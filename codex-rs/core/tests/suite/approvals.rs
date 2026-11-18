@@ -1071,7 +1071,7 @@ fn scenarios() -> Vec<ScenarioSpec> {
             },
         },
         ScenarioSpec {
-            name: "simple_command_escalation_granular_sandbox_enabled_requires_approval",
+            name: "simple_command_escalation_granular_sandbox_enabled_rejects",
             approval_policy: Granular(GranularApprovalConfig {
                 sandbox_approval: true,
                 rules: true,
@@ -1085,16 +1085,11 @@ fn scenarios() -> Vec<ScenarioSpec> {
             },
             sandbox_permissions: SandboxPermissions::RequireEscalated,
             features: vec![],
-            outcome: Outcome::ExecApprovalWithAmendment {
-                decision: ReviewDecision::denied("rejected by user"),
-                expected_reason: None,
-                expected_execpolicy_amendment: Some(ExpectedExecPolicyAmendment::Prefix(&[
-                    "echo",
-                    "known-safe-escalation",
-                ])),
-            },
+            // D618: escalation is only offered under OnRequest, even when Granular
+            // would allow sandbox prompts.
+            outcome: Outcome::Auto,
             expectation: Expectation::CommandFailure {
-                output_contains: "rejected by user",
+                output_contains: "you cannot ask for escalated permissions",
             },
         },
         ScenarioSpec {

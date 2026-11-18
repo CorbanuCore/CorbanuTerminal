@@ -32,7 +32,7 @@ impl ChatWidget {
     /// user can see what is being reviewed, including parallel review
     /// aggregation. Terminal assessments clear or update that footer state and
     /// render denied or timed-out decisions in history. Approved assessments
-    /// silently complete after updating the footer.
+    /// other than terminal input leave an approval record (D617).
     pub(super) fn on_guardian_assessment(&mut self, ev: GuardianAssessmentEvent) {
         let permission_request_summary = |subject: &str, reason: &Option<String>| {
             reason
@@ -151,6 +151,23 @@ impl ChatWidget {
         }
 
         if ev.status == GuardianAssessmentStatus::Approved {
+            // D617: keep a history record of what the automatic reviewer approved, as
+            // main does. Terminal input keeps upstream's display (main had none).
+            let cell = if let Some(command) = guardian_command(&ev.action) {
+                Some(history_cell::new_approval_decision_cell(
+                    history_cell::ApprovalDecisionSubject::Command(command),
+                    crate::history_cell::ReviewDecision::Approved,
+                    history_cell::ApprovalDecisionActor::Guardian,
+                ))
+            } else if matches!(ev.action, GuardianAssessmentAction::WriteStdin { .. }) {
+                None
+            } else {
+                guardian_action_summary(&ev.action)
+                    .map(history_cell::new_guardian_approved_action_request)
+            };
+            if let Some(cell) = cell {
+                self.add_boxed_history(cell);
+            }
             self.request_redraw();
             return;
         }

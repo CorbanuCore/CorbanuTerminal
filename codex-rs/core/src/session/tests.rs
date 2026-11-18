@@ -353,6 +353,8 @@ impl StepContext {
     }
 }
 
+#[path = "tests/d618_escalation_policy_tests.rs"]
+mod d618_escalation_policy_tests;
 #[path = "dynamic_tools_tests.rs"]
 mod dynamic_tools_tests;
 #[path = "tests/failed_deferred_input_carry_tests.rs"]
