@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 73;
+const CONSTRUCTS: u64 = 82;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -174,6 +174,37 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         71 => format!("cat <<'{delimiter}' && echo $(\n{inner}\n)\n{delimiter}"),
         // `[` across a newline (review round 4 log).
         72 => format!("[\n! sh -c {} ]", single_quoted(inner)),
+        // Review round 4: process substitution in pattern tokens, same-name
+        // here-documents, zsh `|=` and `$#a[x]`, printf length modifiers,
+        // dash, and a `case` arm inside a substitution.
+        73 => format!("[ x != ab<({inner}\n) ]"),
+        74 => format!("case x in ab<({inner}\n)) ;; esac"),
+        75 => format!(
+            "cat <<'{delimiter}' && bash <<'{delimiter}'\necho hi\n{delimiter}\n{inner}\n{delimiter}"
+        ),
+        76 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("[ x |=sh -c {} ]", single_quoted(inner)))
+        ),
+        77 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("x={arithmetic}; a=(1); cat <<Q\nz $#a[x]\nQ"))
+        ),
+        78 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("printf '%ld' {arithmetic}"))
+        ),
+        79 => format!(
+            "sh -c {}",
+            single_quoted(&format!("echo $'\\' ; {inner} ; echo ' #'"))
+        ),
+        80 => format!(
+            "sh -c {}",
+            single_quoted(&format!("[[ -z x || sh -c {} ]]", single_quoted(inner)))
+        ),
+        81 => format!(
+            "cat <<'{delimiter}' && echo $(case x in x) cat <<'{delimiter}'\n{delimiter}\n{inner}\nesac)\n{delimiter}"
+        ),
         _ => format!("noglob {inner}"),
     }
 }

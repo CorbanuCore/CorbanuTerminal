@@ -26,12 +26,13 @@
 /// Where each here-document's delimiter line starts (after `<<-` tabs),
 /// sorted, if `script` lies within the safe set (see the module docs). The
 /// caller checks these against the syntax tree's.
-pub(super) fn lexically_safe(script: &str) -> Option<Vec<usize>> {
+pub(super) fn lexically_safe(script: &str, dialect: Dialect) -> Option<Vec<usize>> {
     let mut lexer = Lexer {
         bytes: script.as_bytes(),
         at: 0,
         heredocs: Vec::new(),
         heredoc_ends: Vec::new(),
+        posix: dialect == Dialect::Posix,
     };
     (lexer.script(/*closing*/ None) && lexer.at == lexer.bytes.len() && lexer.heredocs.is_empty())
         .then(|| {
@@ -39,6 +40,8 @@ pub(super) fn lexically_safe(script: &str) -> Option<Vec<usize>> {
             lexer.heredoc_ends
         })
 }
+
+use super::script_read::Dialect;
 
 struct Heredoc {
     delimiter: Vec<u8>,
@@ -54,6 +57,9 @@ struct Lexer<'a> {
     /// holding the whole substitution).
     heredocs: Vec<Heredoc>,
     heredoc_ends: Vec<usize>,
+    /// `sh` may be dash, which lacks `$'…'`, `[[`, `&>`, `|&`, `<<<` and
+    /// `<(…)`: there they mean something else.
+    posix: bool,
 }
 
 const WORD_BYTES: &[u8] = b"_-./,:@%+=~*?!^]#";
@@ -145,11 +151,32 @@ impl Lexer<'_> {
                         self.at += 1;
                     }
                 }
+                b'&' | b'|'
+                    if self.posix
+                        && (self.rest().starts_with(b"|&") || self.rest().starts_with(b"&>")) =>
+                {
+                    return false;
+                }
                 b';' | b'&' | b'|' => self.at += 1,
                 b'<' | b'>' => {
                     if !self.redirect() {
                         return false;
                     }
+                }
+                // A `case` arm's `)` would end the substitution or subshell
+                // here as bash does not.
+                b'c' if closing.is_some()
+                    && self.at_word_start()
+                    && self.rest().starts_with(b"case")
+                    && self.word_ends_after(/*len*/ 4) =>
+                {
+                    return false;
+                }
+                b'[' | b']'
+                    if self.posix
+                        && (self.rest().starts_with(b"[[") || self.rest().starts_with(b"]]")) =>
+                {
+                    return false;
                 }
                 b'{' | b'}' | b'[' | b']' if self.at_word_start() => {
                     let standalone = [&b"{"[..], b"}", b"{}", b"[", b"]", b"[[", b"]]"]
@@ -262,7 +289,7 @@ impl Lexer<'_> {
                 self.at += 2;
                 self.substitution()
             }
-            Some(b'\'') if !quoted => {
+            Some(b'\'') if !quoted && !self.posix => {
                 self.at += 1;
                 self.ansi_c_quoted()
             }
@@ -278,9 +305,12 @@ impl Lexer<'_> {
                 // zsh reads `$name[…]` as a subscript.
                 self.current() != Some(b'[')
             }
+            // zsh reads `$#a` as a length and `$#a[x]` evaluates `x`.
             Some(byte) if byte.is_ascii_digit() || b"?#$!@*-".contains(&byte) => {
                 self.at += 2;
-                self.current() != Some(b'[')
+                !self.current().is_some_and(|byte| {
+                    byte == b'[' || byte.is_ascii_alphanumeric() || byte == b'_'
+                })
             }
             // A `$` alone is a literal dollar.
             Some(b' ' | b'\t' | b'\n' | b'"') | None => {
@@ -376,6 +406,9 @@ impl Lexer<'_> {
         let Some(operator) = operators.into_iter().find(|op| self.rest().starts_with(op)) else {
             return false;
         };
+        if self.posix && matches!(operator, b"<<<" | b"&>" | b"&>>") {
+            return false;
+        }
         self.at += operator.len();
         match operator {
             b"<<" | b"<<-" => return self.heredoc_start(operator == b"<<-"),
@@ -395,7 +428,7 @@ impl Lexer<'_> {
             _ => {}
         }
         // Process substitutions `<(…)` and `>(…)`.
-        if self.current() == Some(b'(') && matches!(operator, b">" | b"<") {
+        if self.current() == Some(b'(') && matches!(operator, b">" | b"<") && !self.posix {
             self.at += 1;
             return self.substitution();
         }
@@ -434,6 +467,11 @@ impl Lexer<'_> {
                 return false;
             }
             self.at += 1;
+        }
+        // Shells pair bodies with same-line here-documents first in, first
+        // out; the grammar does not always: allow one per line.
+        if !self.heredocs.is_empty() {
+            return false;
         }
         self.heredocs.push(Heredoc {
             delimiter,
@@ -544,8 +582,10 @@ fn plain_heredoc_line(line: &[u8]) -> bool {
                         return false;
                     }
                 }
-                Some(b'(' | b'[') => return false,
-                _ => {}
+                // Only `$name`, `${name}` or a lone `$`: zsh reads `$#a[x]`,
+                // `$=a`, `$+a` and the like.
+                Some(b' ' | b'\t') | None => {}
+                _ => return false,
             },
             _ => {}
         }

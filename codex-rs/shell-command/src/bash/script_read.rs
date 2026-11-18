@@ -62,12 +62,32 @@ pub struct ScriptRead {
     pub plain: bool,
     /// Text other than whitespace (a comment too) follows the last command.
     pub text_after_commands: bool,
+    /// The language it was read in; text its commands run as scripts
+    /// (`eval`) is read in it too.
+    pub dialect: Dialect,
+}
+
+/// Which shell language a script is read in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Dialect {
+    /// bash or zsh (read as bash).
+    #[default]
+    Bash,
+    /// `sh`, which may be dash: bash's own syntax (`$'…'`, `[[`, `&>`,
+    /// `|&`, `<<<`, `<(…)`) means something else there, so it is unread.
+    Posix,
 }
 
 /// Reads `script` as bash would run it; see the module documentation.
 pub fn read_script(script: &str) -> ScriptRead {
+    read_script_in(script, Dialect::Bash)
+}
+
+/// [`read_script`] in `dialect`.
+pub fn read_script_in(script: &str, dialect: Dialect) -> ScriptRead {
     let unread = ScriptRead {
         unread: true,
+        dialect,
         ..ScriptRead::default()
     };
     let Some(tree) = try_parse_shell(script) else {
@@ -96,7 +116,7 @@ pub fn read_script(script: &str) -> ScriptRead {
     // The lexical pre-filter: a script outside the safe set is unread
     // whatever the syntax tree says, and so is one whose here-documents end
     // elsewhere than the tree ends them (`cat <<Q &&⏎Q⏎git push⏎Q`).
-    reader.unread |= lexically_safe(script) != Some(heredoc_ends(root));
+    reader.unread |= lexically_safe(script, dialect) != Some(heredoc_ends(root));
     let plain = !reader.unread
         && word_only_command_nodes(&tree).is_some()
         && commands
@@ -113,6 +133,7 @@ pub fn read_script(script: &str) -> ScriptRead {
         unread: reader.unread,
         plain,
         text_after_commands: !script[end..].trim().is_empty(),
+        dialect,
     }
 }
 
@@ -122,6 +143,19 @@ fn has_token(node: Node<'_>, tokens: &[&str]) -> bool {
     while let Some(node) = stack.pop() {
         if !node.is_named() && tokens.contains(&node.kind()) {
             return true;
+        }
+        // Their own parentheses and operators are not the test's.
+        if matches!(
+            node.kind(),
+            "command_substitution"
+                | "process_substitution"
+                | "string"
+                | "raw_string"
+                | "ansi_c_string"
+                | "expansion"
+                | "simple_expansion"
+        ) {
+            continue;
         }
         stack.extend(
             fields(node, /*named_only*/ false)
@@ -243,7 +277,16 @@ pub fn runs_code_from_variable(name: &str) -> bool {
                 | "BASH_CMDS"
                 | "BASH_ALIASES"
         )
-        || name.starts_with("dis_")
+        || matches!(
+            name,
+            "dis_functions"
+                | "dis_aliases"
+                | "dis_galiases"
+                | "dis_saliases"
+                | "dis_builtins"
+                | "dis_reswords"
+                | "dis_patchars"
+        )
         || INTEGER_SPECIALS.contains(&name)
 }
 
@@ -447,11 +490,14 @@ impl<'a> Reader<'a> {
         while let Some(part) = inner.pop() {
             // In `[ … ]` the grammar takes `|`, `&`, `&&` and `||` for test
             // operators; bash ends the command there (`[ x | sh … ]`).
+            // zsh splits `|=`, `&=` and the like there too, and `>=` or `>>`
+            // write a file.
             let operators = fields(part, /*named_only*/ false);
             if operators.iter().any(|(_, child)| {
+                let token = child.kind();
                 !child.is_named()
-                    && (matches!(child.kind(), "|" | "&")
-                        || (single && matches!(child.kind(), "&&" | "||")))
+                    && token.contains(['<', '>', '|', '&'])
+                    && (single || !matches!(token, "&&" | "||" | "<" | ">"))
             }) {
                 self.deny(node, stack);
                 return;
@@ -771,27 +817,20 @@ impl<'a> Reader<'a> {
 
     /// Whether a `regex` or `extglob_pattern` token is where bash reads a
     /// pattern as the grammar does.
+    /// The scanner keeps quotes, `<(…)` and operators inside these tokens
+    /// where bash reads them as code, so only plain glob text is read.
     fn pattern_in_place(&self, node: Node<'_>) -> bool {
-        let text = self.text(node);
-        match node.parent().map(|parent| parent.kind()) {
-            Some("binary_expression") => {
-                let mut test = node.parent();
-                while let Some(parent) = test
-                    && parent.kind() != "test_command"
-                {
-                    test = parent.parent();
-                }
-                let single = test.is_none_or(|test| !self.text(test).starts_with("[["));
-                !(text.contains(';')
-                    || text.contains('\n')
-                    || text.contains("&&")
-                    || text.contains("||")
-                    || (single && text.contains(['|', '&'])))
+        let plain = self
+            .text(node)
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_-./*?+,:@%^!=~".contains(&byte));
+        plain
+            && match node.parent().map(|parent| parent.kind()) {
+                Some("binary_expression") => true,
+                Some("expansion") => node.kind() == "regex",
+                Some("case_item") => node.kind() == "extglob_pattern",
+                _ => false,
             }
-            Some("case_item") => node.kind() == "extglob_pattern",
-            Some("expansion") => node.kind() == "regex" && !text.contains(['{', '}']),
-            _ => false,
-        }
     }
 
     fn word<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {

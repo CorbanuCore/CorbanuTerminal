@@ -12,9 +12,11 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::Policy;
 use codex_execpolicy::RuleMatch;
 use codex_shell_command::bash::CommandStdin;
+use codex_shell_command::bash::Dialect;
 use codex_shell_command::bash::ReadCommand;
 use codex_shell_command::bash::ScriptRead;
-use codex_shell_command::bash::read_script;
+use codex_shell_command::bash::read_script_in;
+use codex_shell_command::bash::script_dialect;
 use codex_shell_command::bash::shell_lc_script_read;
 use roles::Role;
 
@@ -72,7 +74,7 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
             };
             let wrappers = policy_wrapper_commands(&command);
             let start = wrappers.starts.last().copied().unwrap_or(0);
-            roles::role(&command[..start], &command[start..], stdin) != Role::Argv
+            roles::role(&command[..start], &command[start..], stdin, read.dialect) != Role::Argv
         })
 }
 
@@ -214,6 +216,8 @@ struct Pending {
     restrict_only: bool,
     /// #2548: where its input comes from, for a command from a script.
     stdin: CommandStdin,
+    /// #2548: the language of the script it comes from.
+    dialect: Dialect,
 }
 
 /// Where a word is known only at run time (#2543), launchers read this.
@@ -241,10 +245,16 @@ pub(crate) fn check(
     let mut next = commands.iter();
     loop {
         let owned = pending.pop();
-        let (command, depth, restrict_only, stdin) = match &owned {
-            Some(item) => (&item.command, item.depth, item.restrict_only, &item.stdin),
+        let (command, depth, restrict_only, stdin, dialect) = match &owned {
+            Some(item) => (
+                &item.command,
+                item.depth,
+                item.restrict_only,
+                &item.stdin,
+                item.dialect,
+            ),
             None => match next.next() {
-                Some(command) => (command, 0, false, &CommandStdin::Inherited),
+                Some(command) => (command, 0, false, &CommandStdin::Inherited, Dialect::Bash),
                 None => break,
             },
         };
@@ -326,11 +336,15 @@ pub(crate) fn check(
                 // Past the bound, still read what is always read, so a
                 // command a rule refuses stays refused, not only asked.
                 if depth < MAX_SCRIPT_DEPTH || always_read {
+                    let dialect = parsed_as
+                        .first()
+                        .map_or(Dialect::Bash, |shell| script_dialect(shell));
                     pending.extend(parsed.commands.into_iter().map(|command| Pending {
                         command,
                         depth: depth + 1,
                         restrict_only,
                         stdin: CommandStdin::Inherited,
+                        dialect,
                     }));
                 }
             } else if reads_script && let Some(read) = shell_lc_script_read(parsed_as) {
@@ -392,13 +406,17 @@ pub(crate) fn check(
         {
             let inner = &command[start..];
             let reading_from = matches.len();
-            let ask = match roles::role(&command[..start], inner, stdin) {
+            let ask = match roles::role(&command[..start], inner, stdin, dialect) {
                 Role::Argv => false,
                 Role::Unread => any_strict_rule(),
-                Role::Script { text, single } => {
+                Role::Script {
+                    text,
+                    single,
+                    dialect,
+                } => {
                     let past_bound = depth >= MAX_SCRIPT_DEPTH;
                     queue_script(
-                        read_script(&text),
+                        read_script_in(&text, dialect),
                         single,
                         depth,
                         past_bound,
@@ -466,6 +484,7 @@ fn queue_script(
     if read.unread || (single && (read.commands.len() > 1 || read.text_after_commands)) {
         ask |= any_strict_rule();
     }
+    let dialect = read.dialect;
     for read_command in read.commands {
         let role_words = role_words(&read_command);
         let ReadCommand { words, stdin, .. } = read_command;
@@ -478,6 +497,7 @@ fn queue_script(
                     depth: depth + 1,
                     restrict_only: true,
                     stdin,
+                    dialect,
                 });
             }
         } else {

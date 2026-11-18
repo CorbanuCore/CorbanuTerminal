@@ -9,9 +9,11 @@ use crate::security::tainted_action::policy_runs_powershell;
 use crate::security::tainted_action::policy_runs_shell;
 use codex_shell_command::bash::ARITHMETIC_TESTS;
 use codex_shell_command::bash::CommandStdin;
+use codex_shell_command::bash::Dialect;
 use codex_shell_command::bash::RESERVED_WORDS;
 use codex_shell_command::bash::numeric_operand;
 use codex_shell_command::bash::runs_code_from_variable;
+use codex_shell_command::bash::script_dialect;
 
 /// What a command runs besides its argv.
 #[derive(Debug, PartialEq, Eq)]
@@ -21,7 +23,11 @@ pub(super) enum Role {
     /// This bash script text (`eval`'s words, a shell's here-document).
     /// `single`: the shell reads its script from the same input its
     /// commands read, so only a single command is read precisely.
-    Script { text: String, single: bool },
+    Script {
+        text: String,
+        single: bool,
+        dialect: Dialect,
+    },
     /// Code rules cannot read: a script from a pipe or file, a sourced
     /// file, a trap, an alias, arithmetic, an option that runs code.
     Unread,
@@ -29,7 +35,12 @@ pub(super) enum Role {
 
 /// The role of `program_and_args`, run after the launcher words `before`
 /// (`env A=1`, `sudo`) with input `stdin`.
-pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &CommandStdin) -> Role {
+pub(super) fn role(
+    before: &[String],
+    program_and_args: &[String],
+    stdin: &CommandStdin,
+    dialect: Dialect,
+) -> Role {
     if before.iter().any(|word| assigns_code_variable(word)) {
         return Role::Unread;
     }
@@ -52,6 +63,7 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
                 Role::Script {
                     text: args.join(" "),
                     single: false,
+                    dialect,
                 }
             }
         }
@@ -137,6 +149,7 @@ fn shell_role(program: &str, args: &[String], stdin: &CommandStdin) -> Role {
         CommandStdin::Literal(text) if stdin_script && posix => Role::Script {
             text: text.clone(),
             single: true,
+            dialect: script_dialect(program),
         },
         _ => Role::Unread,
     }
@@ -359,31 +372,32 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
 }
 
 /// Per argument a `printf` format reads (it repeats for more arguments):
-/// whether it reads a number (`%d`, a `*` width), which zsh and ksh evaluate
-/// as arithmetic.
+/// whether it may read a number, which zsh and ksh evaluate as arithmetic.
+/// Only `%s`, `%b`, `%c` and `%q` read text; any other conversion, length
+/// modifier (`%ld`) or `*` width reads a number.
 fn numeric_slots(format: &str) -> Vec<bool> {
     let mut slots = Vec::new();
-    let mut chars = format.chars();
+    let mut chars = format.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch != '%' {
             continue;
         }
-        for spec in chars.by_ref() {
+        if chars.next_if_eq(&'%').is_some() {
+            continue;
+        }
+        while let Some(&spec) = chars.peek() {
             match spec {
-                '%' => break,
-                '*' => slots.push(true),
-                'd' | 'i' | 'o' | 'u' | 'x' | 'X' | 'e' | 'E' | 'f' | 'F' | 'g' | 'G' | 'a'
-                | 'A' => {
+                '*' => {
                     slots.push(true);
-                    break;
+                    chars.next();
                 }
-                _ if spec.is_ascii_alphabetic() => {
-                    slots.push(false);
-                    break;
+                '-' | '+' | ' ' | '#' | '0'..='9' | '.' | '$' => {
+                    chars.next();
                 }
-                _ => {}
+                _ => break,
             }
         }
+        slots.push(!matches!(chars.next(), Some('s' | 'b' | 'c' | 'q')));
     }
     slots
 }

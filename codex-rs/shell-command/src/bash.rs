@@ -14,11 +14,13 @@ mod script_lexical;
 mod script_read;
 pub use script_read::ARITHMETIC_TESTS;
 pub use script_read::CommandStdin;
+pub use script_read::Dialect;
 pub use script_read::RESERVED_WORDS;
 pub use script_read::ReadCommand;
 pub use script_read::ScriptRead;
 pub use script_read::numeric_operand;
 pub use script_read::read_script;
+pub use script_read::read_script_in;
 pub use script_read::runs_code_from_variable;
 
 /// Parse the provided bash source using tree-sitter-bash, returning a Tree on
@@ -248,8 +250,16 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
 /// [`read_script`] for a `bash -lc "..."`, `sh -c "..."` or `zsh -lc "..."`
 /// invocation; `None` for any other command.
 pub fn shell_lc_script_read(command: &[String]) -> Option<ScriptRead> {
-    let (_, script) = extract_bash_command(command)?;
-    Some(read_script(script))
+    let (shell, script) = extract_bash_command(command)?;
+    Some(read_script_in(script, script_dialect(shell)))
+}
+
+/// The dialect a shell named `shell` reads scripts in: `sh` may be dash.
+pub fn script_dialect(shell: &str) -> Dialect {
+    match detect_shell_type(PathBuf::from(shell)) {
+        Some(ShellType::Bash | ShellType::Zsh) => Dialect::Bash,
+        _ => Dialect::Posix,
+    }
 }
 
 /// The argv words of a command node; assignments, redirections and

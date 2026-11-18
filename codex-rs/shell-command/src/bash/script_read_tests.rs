@@ -181,6 +181,15 @@ fn shapes_not_fully_understood_are_unread() {
         "[\n! sh -c 'git push' ]",
         "[ x < y ]",
         "[ ( x ) ]",
+        // Review round 4.
+        "[ x != ab<(git$IFS'push') ]",
+        "case x in ab<(git$IFS'push')) ;; esac",
+        "cat <<'A' && bash <<'A'\necho hi\nA\ngit push\nA",
+        "[ x |=sh -c 'git push' ]",
+        "[[ x |= y ]]",
+        "cat <<Q\nz $#a[x]\nQ",
+        "echo \"$#a[x]\"",
+        "echo $(case x in x) echo;; esac)",
         "coproc nocorrect X=1 git push",
         "echo /(e:'git push':)",
         "X==(git push)",
@@ -217,6 +226,8 @@ fn understood_shapes_are_read() {
         "cat <<'EOF'\nuse `code` and $(this) literally\nEOF",
         "true;#note",
         "a+=(c); f() { :; }; [[ -n $x || -z $y ]]",
+        "[ -n \"$(git status --porcelain)\" ] && [ -d \"$(dirname \"$f\")\" ]",
+        "case $x in a|b*) echo;; esac",
         "[ -t 1 ] && [[ -t 0 ]]",
     ] {
         let read = read_script(script);
@@ -273,4 +284,23 @@ fn lexically_unsafe_scripts_are_unread() {
     ] {
         assert!(read_script(script).unread, "{script:?}");
     }
+}
+
+/// `sh` may be dash: bash's own syntax there is unread.
+#[test]
+fn posix_dialect_refuses_bash_only_syntax() {
+    use super::Dialect;
+    use super::read_script_in;
+    for script in [
+        "echo $'\\' ; git push ; echo ' #'",
+        "[[ -z x || sh -c 'git push' ]]",
+        "echo hi &> log",
+        "echo hi |& cat",
+        "cat <<< hi",
+        "cat <(echo hi)",
+    ] {
+        assert!(read_script_in(script, Dialect::Posix).unread, "{script:?}");
+        assert!(!read_script(script).unread, "bash reads {script:?}");
+    }
+    assert!(!read_script_in("git status && echo ok", Dialect::Posix).unread);
 }

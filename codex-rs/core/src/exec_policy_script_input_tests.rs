@@ -236,6 +236,18 @@ async fn unknown_scripts_table() {
         "zsh -c \"echo /(e:'git push':)\"",
         "[\n! sh -c 'git push' ]",
         "[ -n x\n] && git push",
+        // Review round 4 (#2613).
+        "[ x != ab<(git$IFS'push') ]",
+        "[[ x != ab<(git$IFS'push') ]]",
+        "case x in ab<(git$IFS'push')) ;; esac",
+        "cat <<'A' && bash <<'A'\necho hi\nA\ngit push\nA",
+        "zsh -c \"[ x |=sh -c 'git push' ]\"",
+        "zsh -c \"x='a[\\$(git push)]'; a=(1); cat <<Q\nz \\$#a[x]\nQ\"",
+        "zsh -c \"echo \\\"\\$#a[x]\\\"\"",
+        "zsh -c \"printf '%ld' 'path[\\$(git push)]'\"",
+        "sh -c \"echo \\$'\\\\' ; git push ; echo ' #'\"",
+        "sh -c \"[[ -z x || sh -c 'git push' ]]\"",
+        "cat <<'Q' && echo $(case x in x) cat <<'Q'\nQ\ngit push\nesac)\nQ",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",
         "xargs sh -c 'source ./x.sh'",
@@ -285,6 +297,8 @@ async fn negative_controls_and_no_rule() {
         "printf '%s: %d\\n' \"$name\" 3",
         "true;#note",
         "printf '%1$s %2$s\\n' a b; a+=(c); f() { :; }",
+        // Review round 4: substitutions inside a test are not its operators.
+        "[ -n \"$(git status --porcelain)\" ] || [ \"$(uname)\" = Darwin ]",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(
