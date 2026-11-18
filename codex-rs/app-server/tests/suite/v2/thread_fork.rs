@@ -662,6 +662,15 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
     }
     mcp.clear_message_buffer();
 
+    // Stop the source server before installing the goal so no in-flight idle
+    // hook can observe the new active goal. The fork still uses the persisted
+    // source thread through the normal app-server path.
+    let shutdown_status = timeout(DEFAULT_READ_TIMEOUT, mcp.shutdown_gracefully()).await??;
+    anyhow::ensure!(
+        shutdown_status.success(),
+        "source app-server exited unsuccessfully: {shutdown_status}"
+    );
+
     let state_db = StateRuntime::init(
         codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
         "mock_provider".into(),
@@ -691,6 +700,12 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
         .get_thread_goal(source_thread_id)
         .await?
         .expect("source goal");
+
+    mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_managed_config()
+        .build_initialized()
+        .await?;
 
     let ordinary_fork_id = mcp
         .send_thread_fork_request(ThreadForkParams {
@@ -755,6 +770,13 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
             .get_thread_goal(source_thread_id)
             .await?,
         Some(source_goal.clone())
+    );
+    assert!(
+        !state_db
+            .thread_goals()
+            .has_thread_goal_continuation_deferral(source_thread_id)
+            .await?,
+        "the fork must install its own deferral instead of copying one from the source"
     );
     assert!(
         !mcp.pending_notification_methods()
