@@ -933,12 +933,16 @@ async fn approve_reading_gate(
     test: &TestCodex,
     level: SecurityLevel,
     script: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<usize> {
     use codex_protocol::protocol::ReviewDecision;
     let mut gate_prompts = 0;
     while let Some(approval) = next_exec_approval(test).await {
         // Counted at every level, so a prompt where none is expected fails.
-        let gate = approval.reason.is_none();
+        // Sync (D691): Aggressive's rules include forbidden ones, so the
+        // reading prompt is a fresh human decision that names its reason.
+        let gate = approval.reason.as_deref().is_none_or(|reason| {
+            reason.ends_with("a prompt-user or forbidden rule could match the command it runs")
+        });
         gate_prompts += usize::from(gate);
         let decision = if level == SecurityLevel::Aggressive && gate {
             ReviewDecision::Approved
@@ -962,7 +966,7 @@ async fn approve_reading_gate(
         usize::from(expected),
         "{level:?}: the script-reading prompt"
     );
-    Ok(())
+    Ok(gate_prompts)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -2288,7 +2292,16 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             },
         )
         .await?;
-        approve_reading_gate(&test, level, &command).await?;
+        let prompts = approve_reading_gate(&test, level, &command).await?;
+        // Pinned fixture, independent of the reader the helper consults: a
+        // script building its paths with `$(…)` must raise the reading
+        // prompt under Aggressive, so a reader that stopped failing closed
+        // cannot pass silently.
+        assert_eq!(
+            prompts,
+            usize::from(level == SecurityLevel::Aggressive),
+            "{level:?}: `$(…)` must raise the script-reading prompt"
+        );
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = [

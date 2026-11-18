@@ -695,8 +695,12 @@ async fn execpolicy_blocks_shell_invocation() -> Result<()> {
         .single_request()
         .function_call_output_text(call_id)
         .expect("forbidden command should produce a tool response");
+    // #2548: `bAſh` with no script argument is a shell that reads its
+    // script from stdin, so its command line is checked whole, and the
+    // reason may name the wrapper's canonical `bash`; refused either way.
     assert!(
-        output.contains("policy forbids commands starting with `'bAſh'`"),
+        output.contains("policy forbids commands starting with `'bAſh'`")
+            || output.contains("policy forbids commands starting with `bash`"),
         "unexpected output: {output}"
     );
 

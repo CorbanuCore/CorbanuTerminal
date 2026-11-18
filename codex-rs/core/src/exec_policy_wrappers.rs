@@ -587,7 +587,9 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
 }
 
 fn inner_runs_shell(command: &[String]) -> bool {
-    command.first().is_some_and(|program| roles::runs_shell(program))
+    command
+        .first()
+        .is_some_and(|program| roles::runs_shell(program))
 }
 
 /// #2548: `command`'s words for deciding what its program runs: a word

@@ -570,7 +570,15 @@ mod tests {
         // Shells with other syntax are not read as sh.
         // #2548: nor the ksh family and the like, whose builtins run code
         // where sh's do not.
-        for shell in ["fish", "csh", "tcsh", "ksh", "/usr/bin/mksh", "yash", "hush"] {
+        for shell in [
+            "fish",
+            "csh",
+            "tcsh",
+            "ksh",
+            "/usr/bin/mksh",
+            "yash",
+            "hush",
+        ] {
             let words = [shell, "-c", "git push"].map(str::to_string);
             assert_eq!(
                 super::super::policy_shell_script_for(&words, NameCase::Sensitive),
