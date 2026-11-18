@@ -266,6 +266,10 @@ async fn unknown_scripts_table() {
         "echo x | /usr/bin/read 'a[$(git push)]'",
         "command gi#t push",
         "git pu#sh",
+        // Review round 8 (#2613).
+        "echo \\ #; git push",
+        "echo x\\\t#; git push",
+        "eval 'echo \\ #; git push'",
         "LC_ALL=zh_TW.Big5\necho \"\u{4e01}\\\"\ngit push\necho \"",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",

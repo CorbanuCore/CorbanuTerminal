@@ -947,9 +947,10 @@ async fn approve_reading_gate(test: &TestCodex, level: SecurityLevel) -> anyhow:
             })
             .await?;
     }
+    // Exactly the one prompt for the script under Aggressive, none otherwise.
     assert_eq!(
-        gate_prompts > 0,
-        level == SecurityLevel::Aggressive,
+        gate_prompts,
+        usize::from(level == SecurityLevel::Aggressive),
         "{level:?}: the script-reading prompt"
     );
     Ok(())

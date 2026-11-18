@@ -325,7 +325,11 @@ fn minimal_set_refuses_more_than_the_tree() {
         "for f in *.rs; do wc -l \"$f\"; done",
         "sleep 1 & wait",
         "\"\"=git push",
-        "echo \"caf\u{e9}\"",
+        // Review round 8: an escaped blank, then `#`.
+        "echo \\ #; git push",
+        "echo x\\\t#; git push",
+        "true \\ #&& git push",
+        "echo \"na\u{ef}ve\"",
     ] {
         assert!(read_script(script).fails_closed(), "{script:?}");
     }
@@ -336,7 +340,7 @@ fn minimal_set_refuses_more_than_the_tree() {
         "find . -name '*.rs' -exec wc -l {} \\;",
         "if test -f x; then echo a; else echo b; fi # done",
         "for f in a b; do wc -l f; done",
-        "echo 'caf\u{e9} $HOME $(x)' a\\ b",
+        "echo 'na\u{ef}ve $HOME $(x)' a\\b",
     ] {
         assert!(!read_script(script).fails_closed(), "{script:?}");
     }

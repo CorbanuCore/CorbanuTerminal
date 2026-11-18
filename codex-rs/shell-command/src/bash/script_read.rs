@@ -362,10 +362,16 @@ impl<'a> Reader<'a> {
         while let Some(joined) = before.strip_suffix("\\\n") {
             before = joined;
         }
-        before
+        let Some(blank) = before.chars().next_back() else {
+            return true;
+        };
+        // An escaped blank is part of the word before it (`echo \ #x`).
+        let backslashes = before[..before.len() - blank.len_utf8()]
             .chars()
-            .next_back()
-            .is_none_or(|before| matches!(before, ' ' | '\t' | '\n' | ';' | '&' | '|'))
+            .rev()
+            .take_while(|ch| *ch == '\\')
+            .count();
+        matches!(blank, ' ' | '\t' | '\n' | ';' | '&' | '|') && backslashes % 2 == 0
     }
 
     fn deny<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {

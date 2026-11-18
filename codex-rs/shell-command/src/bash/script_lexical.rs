@@ -10,7 +10,7 @@
 //!
 //! The minimal set: words of ASCII letters, digits and `_-./,:@%+=~*?!^]`
 //! (and `#` inside a word); the standalone word `{}`; spaces, tabs and
-//! newlines; `\` escaping one character other than a newline; `;` `&&` `|`
+//! newlines; `\` escaping one visible ASCII character; `;` `&&` `|`
 //! `||`; `'…'`; `"…"` holding ASCII text and `\` escapes; the special
 //! parameters `$?`, `$#`, `$$`, `$!`, `$@`, `$*`, `$-`, `$0`–`$9` (not
 //! followed by `(`, `{`, `'`, `[` or a name character); at most one
@@ -167,9 +167,12 @@ impl Lexer<'_> {
                         return false;
                     }
                 }
+                // Only before a visible character: the grammar takes `\`
+                // with a blank for whitespace (`echo \ #; cmd`), and before a
+                // newline for a continuation.
                 b'\\' => match self.following() {
-                    Some(b'\n' | b'\r') | None => return false,
-                    Some(_) => self.at += 2,
+                    Some(0x21..=0x7e) => self.at += 2,
+                    _ => return false,
                 },
                 _ if byte.is_ascii_alphanumeric() || WORD_BYTES.contains(&byte) => self.at += 1,
                 _ => return false,
@@ -227,9 +230,12 @@ impl Lexer<'_> {
                 // A multibyte locale (Big5, SJIS) can make the byte before a
                 // `\` its lead byte.
                 b'`' | b'\r' | 0x80.. => return false,
+                // Only before a visible character: the grammar takes `\`
+                // with a blank for whitespace (`echo \ #; cmd`), and before a
+                // newline for a continuation.
                 b'\\' => match self.following() {
-                    Some(b'\n' | b'\r') | None => return false,
-                    Some(_) => self.at += 2,
+                    Some(0x21..=0x7e) => self.at += 2,
+                    _ => return false,
                 },
                 b'$' => {
                     if !self.dollar() {

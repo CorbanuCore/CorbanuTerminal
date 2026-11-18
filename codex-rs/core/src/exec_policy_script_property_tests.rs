@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 91;
+const CONSTRUCTS: u64 = 93;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -215,6 +215,9 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         88 => format!("sh -c {}", single_quoted(&format!("time '-l' {inner}"))),
         89 => format!("zsh -c {}", single_quoted(&format!("\"\"={inner}"))),
         90 => format!("/usr/bin/jobs -x sh -c {}", single_quoted(inner)),
+        // Review round 8: an escaped blank before `#`.
+        91 => format!("echo \\ #; {inner}"),
+        92 => format!("echo x\\\t#; {inner}"),
         81 => format!(
             "cat <<'{delimiter}' && echo $(case x in x) cat <<'{delimiter}'\n{delimiter}\n{inner}\nesac)\n{delimiter}"
         ),
