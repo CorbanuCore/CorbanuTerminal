@@ -51,6 +51,10 @@ jobs:
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
 
+  rust-ci-macos:
+    name: macOS changed crate tests
+    uses: ./.github/workflows/rust-ci-changed-crate-tests-macos.yml
+
   sdk:
     name: sdk
     if: ${{ !startsWith(github.base_ref, 'sync/') }} # sync-ci-mode
@@ -71,6 +75,7 @@ jobs:
       - codespell
       - repo-checks
       - rust-ci
+      - rust-ci-macos
       - sdk
     runs-on: ubuntu-24.04
     steps:

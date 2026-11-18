@@ -72,6 +72,7 @@ fn cyber_policy_filters_allow_prefixes_but_preserves_restrictive_and_network_rul
                 &|_| Decision::Allow,
                 &MatchOptions {
                     resolve_host_executables: true,
+                    fold_program_case: false,
                 },
             )
             .decision,

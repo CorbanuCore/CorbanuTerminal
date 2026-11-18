@@ -1242,6 +1242,66 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 
+#[tokio::test]
+async fn project_role_warns_when_skill_settings_are_ignored() {
+    use tracing::instrument::WithSubscriber;
+
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    register_user_role(
+        &home,
+        &mut config,
+        r#"developer_instructions = "Stay focused"
+[skills]
+include_instructions = false
+[skills.bundled]
+enabled = false
+[[skills.config]]
+name = "demo-skill"
+enabled = false
+"#,
+    )
+    .await;
+    config.agent_roles.get_mut("custom").expect("role").source = AgentRoleSource::Project;
+    let parent_instructions = config.include_skill_instructions;
+    let parent_bundled =
+        codex_config::bundled_skills_enabled_from_stack(&config.config_layer_stack);
+    let parent_rules = codex_config::skill_config_rules_from_stack(&config.config_layer_stack);
+
+    let buffer: &'static std::sync::Mutex<Vec<u8>> =
+        Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(tracing_test::internal::MockWriter::new(buffer))
+        .finish();
+    apply_role_to_config(&mut config, Some("custom"))
+        .with_subscriber(subscriber)
+        .await
+        .expect("project role applies its supported settings");
+
+    let logs = String::from_utf8(
+        buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone(),
+    )
+    .expect("role warning should be valid UTF-8");
+    assert!(logs.contains("sets skills, which an agent spawned with this role does not apply"));
+    assert_eq!(
+        config.developer_instructions.as_deref(),
+        Some("Stay focused")
+    );
+    assert_eq!(config.include_skill_instructions, parent_instructions);
+    assert_eq!(
+        codex_config::bundled_skills_enabled_from_stack(&config.config_layer_stack),
+        parent_bundled
+    );
+    assert_eq!(
+        codex_config::skill_config_rules_from_stack(&config.config_layer_stack),
+        parent_rules
+    );
+}
+
 #[cfg_attr(windows, ignore)]
 #[tokio::test]
 async fn apply_role_skills_config_disables_skill_for_spawned_agent() {

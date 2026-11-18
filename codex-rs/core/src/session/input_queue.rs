@@ -707,51 +707,24 @@ impl InputQueue {
         input
     }
 
-    #[cfg(test)]
-    pub(crate) async fn get_pending_input(
-        &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
-    ) -> (Vec<TurnInput>, TurnStartOptions) {
-        self.get_pending_input_inner(
-            active_turn,
-            /*allow_untracked_mailbox*/ true,
-            /*owner_turn_id*/ None,
-        )
-        .await
-    }
-
     /// Takes input for the running task of turn `owner_turn_id`. Mail the agent controller holds
     /// is admitted at the session's task boundary first. A task detached by any stop path must
     /// not drain mailbox mail: it no longer has a turn state that can record its outcome (#2010).
     /// Nor may it take input or mail from a newer turn that started while the stop was still
     /// waiting for it (guardian stops turns in the background, #2046): only the slot's own task
     /// takes from it.
+    #[allow(
+        clippy::await_holding_invalid_type,
+        reason = "taking mail off the queue and noting it in the turn state must remain atomic"
+    )]
     pub(crate) async fn get_pending_input_for_running_task(
         &self,
         session: &Session,
         owner_turn_id: &str,
     ) -> (Vec<TurnInput>, TurnStartOptions) {
         self.admit_controller_mailbox(session).await;
-        self.get_pending_input_inner(
-            &session.active_turn,
-            /*allow_untracked_mailbox*/ false,
-            Some(owner_turn_id),
-        )
-        .await
-    }
-
-    #[allow(
-        clippy::await_holding_invalid_type,
-        reason = "taking mail off the queue and noting it in the turn state must remain atomic"
-    )]
-    async fn get_pending_input_inner(
-        &self,
-        active_turn: &Mutex<Option<ActiveTurn>>,
-        allow_untracked_mailbox: bool,
-        owner_turn_id: Option<&str>,
-    ) -> (Vec<TurnInput>, TurnStartOptions) {
         let (pending_input, accepts_mailbox_delivery, turn_id, turn_state) =
-            Self::take_turn_pending_input(active_turn, owner_turn_id).await;
+            Self::take_turn_pending_input(&session.active_turn, Some(owner_turn_id)).await;
         if !accepts_mailbox_delivery {
             return (pending_input, TurnStartOptions::default());
         }
@@ -765,11 +738,7 @@ impl InputQueue {
                 turn_state.track_taken_mailbox_messages(&mailbox_items);
                 (mailbox_items, start_options)
             }
-            // Test-only: older tests poll an empty slot to inspect queued mail. Executing tasks
-            // use the fail-closed path above.
-            None if allow_untracked_mailbox => {
-                self.drain_mailbox_input_for_turn(turn_id.as_deref()).await
-            }
+            // No turn state can record taking the mail, so it stays queued for the next turn.
             None => (Vec::new(), TurnStartOptions::default()),
         };
         if pending_input.is_empty() {
@@ -984,8 +953,14 @@ impl TurnInputQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::tests::make_session_and_context_with_rx;
+    use crate::session::turn_context::TurnContext;
+    use crate::state::TaskKind;
+    use crate::tasks::SessionTask;
+    use crate::tasks::SessionTaskResult;
     use codex_history::CodexHarnessMetadata;
     use codex_protocol::AgentPath;
+    use codex_protocol::protocol::TurnAbortReason;
     use codex_protocol::user_input::UserInput;
     use pretty_assertions::assert_eq;
 
@@ -1433,20 +1408,49 @@ mod tests {
         (mail, message_id)
     }
 
+    struct PendingMailboxTask;
+
+    impl SessionTask for PendingMailboxTask {
+        fn kind(&self) -> TaskKind {
+            TaskKind::Regular
+        }
+
+        fn span_name(&self) -> &'static str {
+            "session_task.pending_mailbox"
+        }
+
+        async fn run(
+            self: Arc<Self>,
+            _session: Arc<Session>,
+            _context: Arc<TurnContext>,
+            _input: Vec<TurnInput>,
+            cancellation_token: CancellationToken,
+        ) -> SessionTaskResult {
+            cancellation_token.cancelled().await;
+            Ok(None)
+        }
+    }
+
     #[tokio::test]
     async fn running_turn_notes_the_mail_it_takes() {
-        let input_queue = InputQueue::new();
-        let active_turn = Mutex::new(Some(ActiveTurn::default()));
+        let (session, context, _events) = make_session_and_context_with_rx().await;
+        session
+            .spawn_task(Arc::clone(&context), Vec::new(), PendingMailboxTask)
+            .await;
+        let input_queue = &session.input_queue;
         let (mail, message_id) = mail_with_id("taken mid-turn");
         input_queue
             .enqueue_mailbox_communication(mail.clone().into(), Default::default())
             .await;
 
-        let (input, _) = input_queue.get_pending_input(&active_turn).await;
+        let (input, _) = input_queue
+            .get_pending_input_for_running_task(&session, &context.sub_id)
+            .await;
 
         assert_eq!(input, vec![TurnInput::InterAgentCommunication(mail.into())]);
         let turn_state = Arc::clone(
-            &active_turn
+            &session
+                .active_turn
                 .lock()
                 .await
                 .as_ref()
@@ -1460,12 +1464,18 @@ mod tests {
                 .take_unrecorded_mailbox_message_ids(&[]),
             vec![message_id]
         );
+        session.abort_all_tasks(TurnAbortReason::Replaced).await;
     }
 
     #[tokio::test]
     async fn stopped_turn_keeps_mailbox_items_for_the_next_turn() {
-        let input_queue = InputQueue::new();
-        let stopped_turn = Mutex::new(None);
+        let (session, context, _events) = make_session_and_context_with_rx().await;
+        session
+            .spawn_task(Arc::clone(&context), Vec::new(), PendingMailboxTask)
+            .await;
+        session.abort_all_tasks(TurnAbortReason::Replaced).await;
+        assert!(session.active_turn.lock().await.is_none());
+        let input_queue = &session.input_queue;
         let (mail, _) = mail_with_id("arrived while stopping");
         input_queue
             .enqueue_mailbox_communication(mail.clone().into(), Default::default())
@@ -1475,21 +1485,16 @@ mod tests {
         // reaching its next input poll must leave mail queued rather than silently taking it.
         assert_eq!(
             input_queue
-                .get_pending_input_inner(
-                    &stopped_turn,
-                    /*allow_untracked_mailbox*/ false,
-                    Some("stopped-turn"),
-                )
+                .get_pending_input_for_running_task(&session, &context.sub_id)
                 .await
                 .0,
             Vec::new()
         );
         assert!(input_queue.has_pending_mailbox_items().await);
 
-        // A subsequently admitted turn receives the preserved item normally.
-        let next_turn = Mutex::new(Some(ActiveTurn::default()));
+        // Inspect the preserved item explicitly; an idle slot is not a running task.
         assert_eq!(
-            input_queue.get_pending_input(&next_turn).await.0,
+            input_queue.drain_mailbox_input_items().await.0,
             vec![TurnInput::InterAgentCommunication(mail.into())]
         );
         assert!(!input_queue.has_pending_mailbox_items().await);

@@ -242,7 +242,7 @@ async fn start_only_rejects_active_turn_without_injecting() {
         Vec::<TurnInput>::new(),
         session
             .input_queue
-            .get_pending_input(&session.active_turn)
+            .get_pending_input_for_running_task(&session, &turn_context.sub_id)
             .await
             .0
     );
@@ -300,7 +300,7 @@ async fn recovery_rejects_active_turn_without_injecting_or_applying_settings() {
     assert_eq!(
         session
             .input_queue
-            .get_pending_input(&session.active_turn)
+            .get_pending_input_for_running_task(&session, &turn_context.sub_id)
             .await
             .0,
         Vec::<TurnInput>::new()
@@ -378,11 +378,7 @@ async fn start_only_rejects_current_plan_before_validating_settings() {
     assert!(session.active_turn.lock().await.is_none());
     assert_eq!(
         Vec::<TurnInput>::new(),
-        session
-            .input_queue
-            .get_pending_input(&session.active_turn)
-            .await
-            .0
+        session.input_queue.drain_mailbox_input_items().await.0
     );
 }
 
@@ -646,11 +642,7 @@ async fn automatic_admission_rechecks_plan_mode_without_committing_sparse_settin
     }
 
     assert_eq!(
-        session
-            .input_queue
-            .get_pending_input(&session.active_turn)
-            .await
-            .0,
+        session.input_queue.drain_mailbox_input_items().await.0,
         Vec::<TurnInput>::new()
     );
 
@@ -739,11 +731,7 @@ async fn admission_revalidates_constraints_before_committing(kind: TurnStartKind
     assert_eq!(session.thread_settings_snapshot().await, desired_settings);
     assert!(session.active_turn.lock().await.is_none());
     assert_eq!(
-        session
-            .input_queue
-            .get_pending_input(&session.active_turn)
-            .await
-            .0,
+        session.input_queue.drain_mailbox_input_items().await.0,
         Vec::<TurnInput>::new()
     );
 }
@@ -1122,7 +1110,7 @@ async fn steer_preserves_request_origin(
     .unwrap();
     let pending = session
         .input_queue
-        .get_pending_input(&session.active_turn)
+        .get_pending_input_for_running_task(&session, &turn_context.sub_id)
         .await
         .0;
     assert_eq!(
@@ -1178,7 +1166,7 @@ async fn scored_prompt_keeps_its_submission_item_id() {
     }
     let (pending, _) = session
         .input_queue
-        .get_pending_input(&session.active_turn)
+        .get_pending_input_for_running_task(&session, &turn.sub_id)
         .await;
     for input in pending {
         let TurnInput::UserInput {

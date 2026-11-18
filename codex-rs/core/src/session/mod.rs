@@ -7441,6 +7441,10 @@ mod pending_mailbox_wake_tests;
 mod stale_poll_mail_tests;
 
 #[cfg(test)]
+#[path = "windows_sandbox_settings_tests.rs"]
+mod windows_sandbox_settings_tests;
+
+#[cfg(test)]
 #[path = "account_switch_tests.rs"]
 mod account_switch_tests;
 

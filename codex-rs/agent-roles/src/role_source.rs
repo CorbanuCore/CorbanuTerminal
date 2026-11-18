@@ -206,7 +206,12 @@ pub fn push_role_file_warnings(
     if !ignored_keys.is_empty() {
         startup_warnings.push(project_role_ignored_keys_warning(role_file, &ignored_keys));
     }
-    let unapplied_keys = unapplied_role_keys(&config, /*parent_provider*/ None);
+    let mut unapplied_keys = unapplied_role_keys(&config, /*parent_provider*/ None);
+    // Project roles retain the parent's skill settings at spawn time (D525).
+    if source == AgentRoleSource::Project && config.get("skills").is_some() {
+        unapplied_keys.push("skills".to_string());
+        unapplied_keys.sort();
+    }
     if !unapplied_keys.is_empty() {
         startup_warnings.push(unapplied_role_keys_warning(role_file, &unapplied_keys));
     }

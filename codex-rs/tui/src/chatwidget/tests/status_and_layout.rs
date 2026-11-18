@@ -6207,6 +6207,11 @@ async fn chatwidget_exec_and_status_layout_vt100_snapshot() {
         Vec::new(),
         Vec::new(),
     );
+    // Keep the animated status spinner in its first 600 ms frame even when a
+    // slow host takes longer to reach this draw. A future timer origin makes
+    // the elapsed and blink calculations saturate to zero.
+    chat.bottom_pane
+        .reset_status_indicator_timer_for_tests(Instant::now() + Duration::from_secs(60));
 
     let width: u16 = 80;
     let ui_height: u16 = chat.desired_height(width);

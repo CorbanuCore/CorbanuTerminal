@@ -137,7 +137,6 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use std::time::Instant;
 use test_case::test_case;
 use tokio::sync::oneshot;
 use wiremock::Mock;
@@ -4303,7 +4302,6 @@ async fn code_mode_nested_tool_calls_can_run_in_parallel() -> Result<()> {
 
     let warmup_code = r#"
 const args = {
-  sleep_after_ms: 10,
   barrier: {
     id: "code-mode-parallel-tools-warmup",
     participants: 2,
@@ -4318,7 +4316,6 @@ await Promise.all([
 "#;
     let code = r#"
 const args = {
-  sleep_after_ms: 300,
   barrier: {
     id: "code-mode-parallel-tools",
     participants: 2,
@@ -4361,20 +4358,15 @@ text(JSON.stringify(results));
 
     test.submit_turn("warm up nested tools in parallel").await?;
 
-    let start = Instant::now();
     test.submit_turn("run nested tools in parallel").await?;
-    let duration = start.elapsed();
-
-    assert!(
-        duration < Duration::from_millis(1_600),
-        "expected nested tools to finish in parallel, got {duration:?}",
-    );
 
     let req = response_mock
         .last_request()
         .expect("parallel code mode run should send a completion request");
     let items = custom_tool_output_items(&req, "call-1");
     assert_eq!(items.len(), 2);
+    // Both calls must reach the shared two-participant barrier before either
+    // can return, so this output proves the nested tool calls overlapped.
     assert_eq!(text_item(&items, /*index*/ 1), "[\"ok\",\"ok\"]");
 
     Ok(())
