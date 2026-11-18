@@ -541,10 +541,11 @@ impl Session {
             },
         );
         // D491/D510 also apply when a protected level has a full-disk profile.
-        // Keep a context for discovery and subsequent skill resource reads.
+        // Keep a context for discovery (model-directed skill reads build their own).
         let level = self.services.model_client().live_level();
         let protected_level = level != codex_security_policy::SecurityLevel::Permissive;
-        // The session's Windows sandbox level, as commands and file tools judge it.
+        // The session's Windows sandbox level, as commands judge it (file tools may
+        // judge a Windows-path environment's backend more leniently; this is stricter).
         let session_windows_level = self
             .state
             .lock()
@@ -636,7 +637,8 @@ impl Session {
         cache.ensure_capacity(remote_environment_count);
         let mut snapshots = Vec::new();
         let mut skipped_incompatible_executor = false;
-        // The session's Windows sandbox level, as commands and file tools judge it.
+        // The session's Windows sandbox level, as commands judge it (file tools may
+        // judge a Windows-path environment's backend more leniently; this is stricter).
         let session_windows_level = self
             .state
             .lock()

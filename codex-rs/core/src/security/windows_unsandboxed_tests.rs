@@ -431,8 +431,8 @@ async fn issue_2050_file_refusal_follows_where_the_tool_runs() {
     }
 }
 
-/// #2562 (D491, D522 (a)): commands, file tools and capability discovery are
-/// judged on the weaker of the environment's sandbox and the session's: an
+/// #2562 (D491, D522 (a)): commands and capability discovery are judged on
+/// the weaker of the environment's sandbox and the session's: an
 /// environment configured with the elevated sandbox in a session without one,
 /// or one launching with MXC, counts as unsandboxed, so protected levels refuse.
 #[test]
@@ -525,25 +525,45 @@ async fn issue_2562_v2_discovery_skips_unconfined_executors_under_protected_leve
         "shell": { "name": "bash", "path": "/bin/bash" },
         "hostSandbox": { "os": "linux" },
     });
-    for (info, level, discovered) in [
+    use WindowsSandboxLevel::Disabled;
+    use WindowsSandboxLevel::Elevated;
+    use codex_sandboxing::SandboxType;
+    // (executor report, the environment's own sandbox, level, discovered)
+    for (info, environment_level, level, discovered) in [
+        // The environment's elevated sandbox, set up on the executor, does not
+        // stand in for the session's missing one.
+        (
+            v2(windows_info(/*set_up*/ true)),
+            Elevated,
+            SecurityLevel::Moderate,
+            false,
+        ),
         (
             v2(windows_info(/*set_up*/ false)),
+            Disabled,
             SecurityLevel::Moderate,
             false,
         ),
         (
             v2(windows_info(/*set_up*/ true)),
+            Disabled,
             SecurityLevel::Aggressive,
             false,
         ),
-        (v2(unreported.clone()), SecurityLevel::Moderate, false),
-        (v2(linux), SecurityLevel::Aggressive, true),
+        (
+            v2(unreported.clone()),
+            Disabled,
+            SecurityLevel::Moderate,
+            false,
+        ),
+        (v2(linux), Disabled, SecurityLevel::Aggressive, true),
         (
             v2(windows_info(/*set_up*/ false)),
+            Disabled,
             SecurityLevel::Permissive,
             true,
         ),
-        (v2(unreported), SecurityLevel::Permissive, true),
+        (v2(unreported), Disabled, SecurityLevel::Permissive, true),
     ] {
         let home = tempfile::tempdir().expect("home");
         let cwd = tempfile::tempdir().expect("cwd");
@@ -560,9 +580,15 @@ async fn issue_2562_v2_discovery_skips_unconfined_executors_under_protected_leve
                 .with_ingress_level(level),
         );
         let environments = TurnEnvironmentSnapshot {
-            environments: vec![TurnEnvironmentState::Ready(turn_environment(Some(
-                fake_executor(Some(info.clone())).await,
-            )))],
+            environments: vec![TurnEnvironmentState::Ready(configured_environment(
+                Some(fake_executor(Some(info.clone())).await),
+                environment_level,
+                if environment_level == Disabled {
+                    SandboxType::None
+                } else {
+                    SandboxType::WindowsRestrictedToken
+                },
+            ))],
         };
         let (snapshots, _) = session
             .executor_capability_discovery_for_step_v2(&turn.config, &environments)
@@ -571,8 +597,56 @@ async fn issue_2562_v2_discovery_skips_unconfined_executors_under_protected_leve
             .unwrap_or_default()
             .iter()
             .any(|snapshot| snapshot.environment_id == "far");
-        assert_eq!(attempted, discovered, "{level:?} {info}");
+        assert_eq!(
+            attempted, discovered,
+            "{environment_level:?} environment at {level:?}: {info}"
+        );
     }
+}
+
+/// An environment whose own config carries `level` and `sandbox_type`
+/// (`turn_environment` hardcodes `Disabled`); remote when `url` is set.
+fn configured_environment(
+    url: Option<String>,
+    level: WindowsSandboxLevel,
+    sandbox_type: codex_sandboxing::SandboxType,
+) -> crate::session::turn_context::TurnEnvironment {
+    use crate::config::PermissionProfileSnapshot;
+    use crate::environment_selection::EnvironmentConfigOrigin;
+    use codex_protocol::models::PermissionProfile;
+    use codex_protocol::protocol::EnvironmentConfig;
+    use codex_protocol::protocol::EnvironmentConfigState;
+    use codex_protocol::protocol::TurnEnvironmentSelection;
+
+    crate::session::turn_context::TurnEnvironment::new(
+        TurnEnvironmentSelection {
+            selected_capability_roots: Default::default(),
+            environment_id: "far".to_string(),
+            cwd: codex_utils_path_uri::PathUri::parse("file:///C:/work").expect("cwd"),
+            workspace_roots: Vec::new(),
+            config: EnvironmentConfigState::Ready(EnvironmentConfig {
+                environment_hooks: Default::default(),
+                allow_login_shell: true,
+                workspace_roots: Vec::new(),
+                windows_sandbox_level: level,
+                windows_sandbox_type: sandbox_type,
+                use_legacy_landlock: false,
+                permission_profile: PermissionProfileSnapshot::legacy(
+                    PermissionProfile::read_only(),
+                ),
+                shell_environment_policy: Default::default(),
+                exec_policy: None,
+                mcp_policy: None,
+                network_policy: None,
+                selected_capability_roots: Vec::new(),
+            }),
+        },
+        EnvironmentConfigOrigin::Thread,
+        std::sync::Arc::new(
+            codex_exec_server::Environment::create_for_tests(url).expect("environment"),
+        ),
+        /*shell*/ None,
+    )
 }
 
 /// #2562 (main-merges-2 ledger row 614): V1 discovery in a session without a
@@ -581,16 +655,10 @@ async fn issue_2562_v2_discovery_skips_unconfined_executors_under_protected_leve
 /// refusal). Unlike `turn_environment`, this environment carries its level.
 #[tokio::test]
 async fn issue_2562_discovery_judges_an_elevated_environment_in_an_unsandboxed_session() {
-    use crate::config::PermissionProfileSnapshot;
-    use crate::environment_selection::EnvironmentConfigOrigin;
     use crate::environment_selection::TurnEnvironmentSnapshot;
     use crate::environment_selection::TurnEnvironmentState;
     use crate::session::tests::build_test_config;
     use crate::session::tests::make_session_and_context_for_config;
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::protocol::EnvironmentConfig;
-    use codex_protocol::protocol::EnvironmentConfigState;
-    use codex_protocol::protocol::TurnEnvironmentSelection;
     use codex_sandboxing::SandboxType;
 
     for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
@@ -605,35 +673,10 @@ async fn issue_2562_discovery_judges_an_elevated_environment_in_an_unsandboxed_s
                 .clone()
                 .with_ingress_level(level),
         );
-        let elevated = crate::session::turn_context::TurnEnvironment::new(
-            TurnEnvironmentSelection {
-                selected_capability_roots: Default::default(),
-                environment_id: "elevated".to_string(),
-                cwd: codex_utils_path_uri::PathUri::from_abs_path(
-                    &codex_utils_absolute_path::AbsolutePathBuf::try_from(cwd.path().to_path_buf())
-                        .expect("absolute cwd"),
-                ),
-                workspace_roots: Vec::new(),
-                config: EnvironmentConfigState::Ready(EnvironmentConfig {
-                    environment_hooks: Default::default(),
-                    allow_login_shell: true,
-                    workspace_roots: Vec::new(),
-                    windows_sandbox_level: WindowsSandboxLevel::Elevated,
-                    windows_sandbox_type: SandboxType::WindowsRestrictedToken,
-                    use_legacy_landlock: false,
-                    permission_profile: PermissionProfileSnapshot::legacy(
-                        PermissionProfile::read_only(),
-                    ),
-                    shell_environment_policy: Default::default(),
-                    exec_policy: None,
-                    mcp_policy: None,
-                    network_policy: None,
-                    selected_capability_roots: Vec::new(),
-                }),
-            },
-            EnvironmentConfigOrigin::Thread,
-            std::sync::Arc::new(codex_exec_server::Environment::default_for_tests()),
-            /*shell*/ None,
+        let elevated = configured_environment(
+            /*url*/ None,
+            WindowsSandboxLevel::Elevated,
+            SandboxType::WindowsRestrictedToken,
         );
         let environments = TurnEnvironmentSnapshot {
             environments: vec![TurnEnvironmentState::Ready(elevated)],
@@ -649,7 +692,7 @@ async fn issue_2562_discovery_judges_an_elevated_environment_in_an_unsandboxed_s
         let snapshot = snapshot.expect("protected levels keep a discovery context");
         let context = snapshot
             .sandbox_contexts()
-            .get("elevated")
+            .get("far")
             .expect("environment context");
         assert_eq!(
             context.unsandboxed_refusal,
