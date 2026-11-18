@@ -68,7 +68,11 @@ async fn multi_day_retry_is_capped_and_successful_probe_clears() {
     assert_eq!(stored_deadline, start + MAX_PROVIDER_COOLDOWN_MS);
     // Another in-flight refusal without a hint must retain the longer hint.
     runtime
-        .record_provider_request_unleased_result_once(&key(), &refusal(None), start)
+        .record_provider_request_unleased_result_once(
+            &key(),
+            &refusal(/*retry_after_ms*/ None),
+            start,
+        )
         .await
         .unwrap();
     let block = runtime
@@ -136,7 +140,7 @@ async fn refused_probe_rearms_and_consecutive_backoff_stays_bounded() {
             cooldown_until_ms: 0,
             provider_reset_at_ms: 0,
         }
-        .apply(&refusal(None), expiry)
+        .apply(&refusal(/*retry_after_ms*/ None), expiry)
         .unwrap();
         assert!(update.cooldown_until_ms - expiry <= MAX_PROVIDER_COOLDOWN_MS);
     }
