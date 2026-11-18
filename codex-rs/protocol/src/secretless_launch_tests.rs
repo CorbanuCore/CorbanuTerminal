@@ -323,7 +323,7 @@ const ISSUE_2401_FORMS: &[(&str, &[&str])] = &[
 #[test]
 fn issue_2401_every_reviewed_form_is_a_candidate_and_launch_filtered() {
     for (value, passwords) in ISSUE_2401_FORMS {
-        let candidates = url_password_candidates(value, 8);
+        let candidates = url_password_candidates(value, /*min_bytes*/ 8);
         for password in *passwords {
             assert!(
                 candidates.contains(password),
@@ -342,7 +342,10 @@ fn issue_2401_empty_passwords_stay_flagged_by_the_original_rule() {
     // Stricter-only: the original `://` rule still drops these.
     for value in ["http://user:@proxy:3128", "http://user:   @host"] {
         assert!(value_has_url_password(value), "{value}");
-        assert_eq!(url_password_candidates(value, 1), Vec::<&str>::new());
+        assert_eq!(
+            url_password_candidates(value, /*min_bytes*/ 1),
+            Vec::<&str>::new()
+        );
     }
 }
 
@@ -361,7 +364,7 @@ fn issue_2401_ordinary_prose_registers_nothing_long() {
     ] {
         assert!(!value_has_url_password(value), "{value}");
         assert_eq!(
-            url_password_candidates(value, 1),
+            url_password_candidates(value, /*min_bytes*/ 1),
             Vec::<&str>::new(),
             "{value}"
         );
@@ -374,9 +377,13 @@ fn issue_2401_ordinary_prose_registers_nothing_long() {
         ("meet at 10:30@home", vec!["30"]),
     ] {
         assert!(value_has_url_password(value), "{value}");
-        assert_eq!(url_password_candidates(value, 1), short, "{value}");
         assert_eq!(
-            url_password_candidates(value, 8),
+            url_password_candidates(value, /*min_bytes*/ 1),
+            short,
+            "{value}"
+        );
+        assert_eq!(
+            url_password_candidates(value, /*min_bytes*/ 8),
             Vec::<&str>::new(),
             "{value}"
         );
@@ -384,13 +391,13 @@ fn issue_2401_ordinary_prose_registers_nothing_long() {
     // Once a value is flagged, every reading that ends at an `@` in the same
     // word is a candidate; prose around a credential stays short.
     assert_eq!(
-        url_password_candidates("meet at 10:30@home, then a:b@c", 1),
+        url_password_candidates("meet at 10:30@home, then a:b@c", /*min_bytes*/ 1),
         vec!["30", "b"],
     );
     assert_eq!(
         url_password_candidates(
             "note: call at 10:30@office, ann:Secret-2401@corp.example",
-            8
+            /*min_bytes*/ 8
         ),
         vec!["Secret-2401"],
     );
@@ -398,7 +405,10 @@ fn issue_2401_ordinary_prose_registers_nothing_long() {
     // `@`), but no `:` there follows a user name.
     let value = "http://user@host user@[::1]:3128 mailto:alice@example.com";
     assert!(value_has_url_password(value));
-    assert_eq!(url_password_candidates(value, 1), Vec::<&str>::new());
+    assert_eq!(
+        url_password_candidates(value, /*min_bytes*/ 1),
+        Vec::<&str>::new()
+    );
     // Drive paths are not `user:password@host`.
     assert!(!value_has_url_password("C:/Users/a@b.com/x"));
 }
@@ -411,7 +421,7 @@ fn issue_2401_credential_lists_and_compact_json_stay_small() {
         .map(|index| format!("http://u{index}:Pw-{index}-Synth@h{index}.example"))
         .collect();
     let list = urls.join(",");
-    let candidates = url_password_candidates(&list, 8);
+    let candidates = url_password_candidates(&list, /*min_bytes*/ 8);
     assert_eq!(candidates.len(), MAX_URL_PASSWORD_CANDIDATES);
     for (index, candidate) in candidates.iter().take(40).enumerate() {
         assert_eq!(*candidate, format!("Pw-{index}-Synth"));
@@ -426,7 +436,7 @@ fn issue_2401_credential_lists_and_compact_json_stay_small() {
         fields.join(",")
     );
     assert_eq!(
-        url_password_candidates(&json, 8),
+        url_password_candidates(&json, /*min_bytes*/ 8),
         vec![
             "Synth-Pw-2401",
             "Synth-Pw-2401@db.internal:5432/app\",\"admin\":\"ops",
@@ -438,11 +448,11 @@ fn issue_2401_credential_lists_and_compact_json_stay_small() {
 fn issue_2401_candidate_work_is_bounded() {
     let value = ",user:Secret-2401@proxy".repeat(20_000);
     assert!(value_has_url_password(&value));
-    let candidates = url_password_candidates(&value, 8);
+    let candidates = url_password_candidates(&value, /*min_bytes*/ 8);
     assert!(candidates.contains(&"Secret-2401"));
     assert!(candidates.len() <= MAX_URL_PASSWORD_CANDIDATES);
     let colons = "u:x@".repeat(50_000);
-    assert!(url_password_candidates(&colons, 8).len() <= MAX_URL_PASSWORD_CANDIDATES);
+    assert!(url_password_candidates(&colons, /*min_bytes*/ 8).len() <= MAX_URL_PASSWORD_CANDIDATES);
 }
 
 #[test]

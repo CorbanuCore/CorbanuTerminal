@@ -287,9 +287,9 @@ fn random_password(rng: &mut Rng) -> String {
         "%40", "%3A", "%2F", "%25", "%2C", "%22", "@proxy", ",u:", "//", "]", "-",
     ];
     let mut password = String::from(rng.pick(&["Pw7", "kQ2", "zZ9"]));
-    for _ in 0..5 + rng.below(12) {
+    for _ in 0..5 + rng.below(/*bound*/ 12) {
         let piece = rng.pick(PIECES);
-        let at = rng.below(2) * password.len();
+        let at = rng.below(/*bound*/ 2) * password.len();
         password.insert_str(at, piece);
     }
     password
@@ -329,7 +329,7 @@ fn issue_2401_random_url_passwords_are_registered_and_launch_filtered() {
     let mut rng = Rng(0x2401_2604_5eed_0001);
     for case in 0..400 {
         let mut password = random_password(&mut rng);
-        let schemeless = rng.below(2) == 0;
+        let schemeless = rng.below(/*bound*/ 2) == 0;
         if schemeless {
             // `user://password@host` is also a valid URL with no password.
             password.insert(0, 'P');
@@ -349,10 +349,10 @@ fn issue_2401_random_url_passwords_are_registered_and_launch_filtered() {
         };
         let (open, close) = WRAPPERS[rng.below(WRAPPERS.len())];
         let mut value = format!("{open}{url}{close}");
-        for _ in 0..rng.below(3) {
+        for _ in 0..rng.below(/*bound*/ 3) {
             value = format!("{}{}{value}", rng.pick(NOISE), rng.pick(SEPARATORS));
         }
-        for _ in 0..rng.below(3) {
+        for _ in 0..rng.below(/*bound*/ 3) {
             value = format!("{value}{}{}", rng.pick(SEPARATORS), rng.pick(NOISE));
         }
 
