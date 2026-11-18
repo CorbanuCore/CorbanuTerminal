@@ -2749,7 +2749,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
             },
         )
         .await?;
-        approve_reading_gate(&test, level, &command).await?;
+        approve_reading_gate(&test, level, command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-1472");
         drop(test);
@@ -4173,7 +4173,7 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
                 .expect("full access");
         })
         .await?;
-        approve_reading_gate(&test, level, &write).await?;
+        approve_reading_gate(&test, level, write).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-write");
         assert_eq!(
