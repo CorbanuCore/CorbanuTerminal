@@ -99,6 +99,24 @@ async fn pf_23_s01_every_builtin_tool_route_is_classified() {
     assert_eq!(unclassified, Vec::<String>::new());
 }
 
+#[test]
+fn model_lookup_is_read_only_only_as_a_builtin() {
+    for name in [
+        ToolName::plain("list_models"),
+        ToolName::namespaced("functions", "list_models"),
+    ] {
+        assert_eq!(
+            coverage(ToolOrigin::Builtin, &name),
+            Coverage::NoProtectedEffect,
+        );
+        assert_eq!(coverage(ToolOrigin::Dynamic, &name), Coverage::Unclassified);
+        assert_eq!(
+            coverage(ToolOrigin::Extension, &name),
+            Coverage::Unclassified
+        );
+    }
+}
+
 /// D320 (#1653), D334 (#1702): on a provider without namespace tools (Z.AI,
 /// Chat Completions and Claude-style), every `_v1` agent-tool alias is
 /// classified like the Responses name it stands for.

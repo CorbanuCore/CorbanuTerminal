@@ -19,9 +19,6 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::protocol::MultiAgentVersion;
 
-// Corbanu: more of the catalogue is listed when a requested model is unknown.
-pub(crate) const MAX_SPAWN_AGENT_MODEL_OVERRIDES: usize = 32;
-
 pub(crate) fn model_supports_multi_agent_backend(
     model: &ModelPreset,
     multi_agent_version: MultiAgentVersion,
@@ -600,16 +597,8 @@ fn find_spawn_agent_model_name(
         })
         .map(|model| model.model.clone())
         .ok_or_else(|| {
-            let available = available_models
-                .iter()
-                .filter(|model| model.show_in_picker)
-                .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
-                .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
-                .map(|model| model.model.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
             format!(
-                "Unknown model `{requested_model}` for spawn_agent. Available models: {available}"
+                "Unknown model `{requested_model}` for spawn_agent. Call `list_models` to discover authorized picker-visible models; follow `next_offset` for every page."
             )
         })
 }

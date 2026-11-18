@@ -47,6 +47,33 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
 }
 
 #[test]
+fn model_lookup_and_compact_spawn_schema() {
+    use crate::tools::registry::ToolExecutor;
+    let spawn = create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            available_models: crate::test_support::all_model_presets().clone(),
+            expose_spawn_agent_model_overrides: true,
+            ..Default::default()
+        },
+        /*description_override*/ None,
+    );
+    let lookup = super::super::list_models::Handler {
+        supports_cross_provider_overrides: true,
+        expose_service_tiers: true,
+    }
+    .spec();
+    let mut schemas = json!([spawn, lookup]);
+    let serialized = serde_json::to_string(&schemas).unwrap();
+    assert!(codex_utils_string::approx_token_count(&serialized) < 1_500);
+    // Sort only the snapshot: Bazel enables serde_json/preserve_order, unlike Cargo.
+    schemas.sort_all_objects();
+    insta::assert_snapshot!(
+        "model_lookup_and_compact_spawn",
+        serde_json::to_string_pretty(&schemas).unwrap()
+    );
+}
+
+#[test]
 fn scheduled_billing_renders_weekday_and_legacy_daily_contracts() {
     let scheduled = |peak_weekdays| ModelBilling::PlanSchedule {
         off_peak_relative_burn_millis: 1_000,

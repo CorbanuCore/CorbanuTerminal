@@ -3034,13 +3034,38 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         });
     })
     .await;
-    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
+    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE, "list_models"]);
+    assert_eq!(
+        direct_model_only.exposure("list_models"),
+        ToolExposure::DirectModelOnly
+    );
     direct_model_only.assert_visible_lacks(&["spawn_agent", "send_message", "wait_agent"]);
     assert_eq!(
         direct_model_only
             .exposure(&ToolName::namespaced(MULTI_AGENT_V2_NAMESPACE, "spawn_agent").to_string()),
         ToolExposure::DirectModelOnly
     );
+}
+
+#[tokio::test]
+async fn model_lookup_respects_override_visibility() {
+    let disabled = probe(|turn| {
+        set_feature(turn, Feature::Collab, /*enabled*/ false);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    disabled.assert_visible_lacks(&["list_models"]);
+    disabled.assert_registered_lacks(&["list_models"]);
+
+    let hidden = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = false;
+        });
+    })
+    .await;
+    hidden.assert_visible_lacks(&["list_models"]);
+    hidden.assert_registered_lacks(&["list_models"]);
 }
 
 #[tokio::test]
@@ -3055,6 +3080,16 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
                 OPENAI_PROVIDER_ID.to_string(),
             ]);
         });
+        let catalog = crate::tools::spec_plan::spawn_agent_available_models(
+            turn, /*supports_cross_provider_overrides*/ true,
+        );
+        for slug in ["gpt-5.6-sol", "gpt-6-astra"] {
+            assert!(catalog.iter().any(|model| model.model == slug));
+        }
+        assert!(catalog.iter().all(|model| matches!(
+            model.provider_id.as_deref(),
+            Some(OPENAI_PROVIDER_ID | OPENROUTER_PROVIDER_ID)
+        )));
     })
     .await;
     let v2_description = match v2.visible_spec("spawn_agent") {
@@ -3062,15 +3097,10 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
         other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
     };
     assert!(
-        v2_description.contains("`openai` / `gpt-5.6-sol`"),
-        "v2 managers on third-party providers need the authorized cross-provider catalog"
+        v2_description.contains("Call `list_models`"),
+        "v2 managers on third-party providers need the authorized cross-provider lookup"
     );
-    assert!(
-        v2_description.contains(
-            "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-        ),
-        "explicit model discovery must not require automatic-allocation economics"
-    );
+    v2.assert_visible_contains(&["list_models"]);
 
     let v1 = probe(|turn| {
         use_openrouter_provider(turn);
@@ -3322,7 +3352,10 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     .await;
 
     plan.assert_visible_contains(&["tool_search"]);
+    plan.assert_registered_contains(&["list_models"]);
+    assert_eq!(plan.exposure("list_models"), ToolExposure::Deferred);
     plan.assert_visible_lacks(&[
+        "list_models",
         "spawn_agent",
         "send_input",
         "resume_agent",
@@ -3945,6 +3978,7 @@ async fn code_mode_only_can_expose_namespaced_multi_agent_v2_as_normal_tools() {
             "exec",
             "wait",
             "request_user_input",
+            "list_models",
             "agents",
             "spawn_agent_plaintext",
             "send_message_plaintext",
@@ -4229,6 +4263,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
             // Multi-agent v2 tools.
+            "list_models",
             MULTI_AGENT_V2_NAMESPACE,
             "spawn_agent_plaintext",
             "send_message_plaintext",

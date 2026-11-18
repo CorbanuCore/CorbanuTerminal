@@ -458,7 +458,10 @@ impl Session {
                     .enabled(Feature::ModelCatalogInContext)
             {
                 ModelCatalogState::new(
-                    &turn_context.available_models,
+                    &crate::tools::spec_plan::spawn_agent_available_models(
+                        turn_context,
+                        turn_context.multi_agent_version == MultiAgentVersion::V2,
+                    ),
                     turn_context.multi_agent_version,
                 )
             } else {

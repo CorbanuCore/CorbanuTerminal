@@ -44,14 +44,16 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
 
-#[test_case(false, "gpt-5.6-luna"; "Luna model-only selection")]
-#[test_case(true, "gpt-5.6-luna"; "Luna exact provider and model selection")]
-#[test_case(false, "gpt-6-astra"; "unpriced Astra model-only selection")]
-#[test_case(true, "gpt-6-astra"; "unpriced Astra exact provider and model selection")]
+#[test_case(false, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna model-only selection")]
+#[test_case(true, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna exact provider and model selection")]
+#[test_case(false, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra model-only selection")]
+#[test_case(true, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra exact provider and model selection")]
+#[test_case(true, "gpt-6.1-sol", MultiAgentVersion::Disabled; "disabled catalog preference exact provider and model selection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_preference(
     explicit_provider: bool,
     model: &'static str,
+    catalog_backend: MultiAgentVersion,
 ) -> Result<()> {
     let server = start_mock_server().await;
     let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": model, "reasoning_effort": "medium"});
@@ -99,8 +101,8 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     )
     .await;
     let test = test_codex()
-        .with_model_info_override(model, |model| {
-            model.multi_agent_version = Some(MultiAgentVersion::V1);
+        .with_model_info_override(model, move |model| {
+            model.multi_agent_version = Some(catalog_backend);
             model.tool_mode = None;
             model.use_responses_lite = false;
         })
@@ -223,7 +225,8 @@ fn test_model_info(
         tool_mode: None,
         multi_agent_version: None,
         multi_agent_reasoning_effort: None,
-        priority: 1,
+        // Keep the synthetic visible model in the compact preview.
+        priority: -1,
         additional_speed_tiers: Vec::new(),
         service_tiers,
         default_service_tier: None,
@@ -455,7 +458,7 @@ pub(super) async fn model_catalog_refresh_requests(
         );
     }
     assert_eq!(
-        description.contains("Pick model overrides from the latest <model_catalog> listing."),
+        description.contains("The latest <model_catalog> is a short preview."),
         model_catalog_in_context
     );
     assert_eq!(
@@ -656,9 +659,7 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
             let description = adapter["description"]
                 .as_str()
                 .expect("adapter description");
-            assert!(description.contains(
-                "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-            ));
+            assert!(description.contains("Call `list_models`"));
         }
         assert_eq!(
             adapter.get("type").and_then(Value::as_str),
@@ -695,9 +696,6 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
         // production. Bundled non-OpenAI models have no multi-agent version preference.
         .with_model_info_override("gpt-5.6-luna", |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
-            // Keep this probe inside the capped description as the catalog grows;
-            // this test checks provider policy, not display ordering.
-            model.priority = 0;
         })
         .with_model("gpt-5.4")
         .with_config(move |config| {
@@ -737,19 +735,25 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     // The reserved native tool cannot select overrides; the plaintext adapter owns
     // the actionable catalog and exact provider/model parameters on OpenAI.
     let description = plaintext["description"].as_str().unwrap();
+    assert!(description.contains("Call `list_models`"));
+    let preview = description
+        .lines()
+        .filter(|line| line.starts_with("- `"))
+        .collect::<Vec<_>>();
+    assert!(preview.len() <= 3);
     assert_eq!(
-        (
-            description.contains("`openai` / `gpt-5.6-luna`"),
-            description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
-            // The list is capped, so probe for any non-OpenAI row rather
-            // than one particular model that catalogue growth can push out.
-            description
-                .lines()
-                .any(|line| line.trim_start().starts_with("- `")
-                    && !line.trim_start().starts_with("- `openai`"))
-        ),
-        (expected_openai, expected_openai, expected_other_provider),
-        "provider policy, not engine preference or allocation economics, owns discovery: {description}"
+        preview.is_empty(),
+        !expected_openai && !expected_other_provider
+    );
+    if !expected_other_provider {
+        assert!(preview.iter().all(|line| line.starts_with("- `openai`")));
+    }
+    assert!(
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "list_models")
     );
     assert!(
         plaintext
