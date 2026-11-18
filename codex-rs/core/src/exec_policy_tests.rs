@@ -63,6 +63,10 @@ mod shell_case_tests;
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;
 
+#[cfg(windows)]
+#[path = "exec_policy_powershell_parser_tests.rs"]
+mod powershell_parser_tests;
+
 fn config_stack_for_dot_codex_folder(dot_codex_folder: &Path) -> ConfigLayerStack {
     let dot_codex_folder =
         AbsolutePathBuf::from_absolute_path(dot_codex_folder).expect("absolute dot_codex_folder");

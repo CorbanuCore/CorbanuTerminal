@@ -37,6 +37,44 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         || script_commands(command).is_some()
 }
 
+/// #2546: whether [`check`] asks for a PowerShell script in `commands` that
+/// no trusted parser read; an amendment for its literal argv cannot approve
+/// the commands inside. With no prompt or forbidden rule it does not ask.
+pub(super) fn asks_for_unread_powershell(
+    policy: &Policy,
+    commands: &[Vec<String>],
+    options: &MatchOptions,
+) -> bool {
+    any_strict_rule(policy, options)
+        && commands
+            .iter()
+            .any(|command| powershell_script_unreadable(command))
+}
+
+/// Whether any prompt or forbidden rule exists, which could match a command
+/// rules cannot see.
+fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
+    policy
+        .strictest_rule_matching_more_args(&[], options)
+        .is_some_and(|decision| decision > Decision::Allow)
+}
+
+/// #2546 (D553): whether `command` runs a PowerShell `-Command` script that
+/// no trusted PowerShell could read (none found, or it could not run), so
+/// rules cannot see its commands.
+#[cfg(windows)]
+fn powershell_script_unreadable(command: &[String]) -> bool {
+    let respelled = crate::security::tainted_action::policy_powershell_script(command);
+    codex_shell_command::powershell::read_powershell_command_script(
+        respelled.as_deref().unwrap_or(command),
+    ) == Some(codex_shell_command::powershell::PowershellScriptRead::Unreadable)
+}
+
+#[cfg(not(windows))]
+fn powershell_script_unreadable(_command: &[String]) -> bool {
+    false
+}
+
 pub(crate) fn check_with_wrappers(
     policy: &Policy,
     commands: &[Vec<String>],
@@ -202,6 +240,17 @@ fn check(
                             .map(|command| (command, depth + 1)),
                     );
                 }
+            } else if (always_read || depth > 0 || read_own_scripts)
+                && any_strict_rule(policy, options)
+                && powershell_script_unreadable(inner)
+            {
+                // #2546 (D553): a PowerShell script no trusted parser read.
+                // Any prompt or forbidden rule could match a command in it;
+                // the literal argv above keeps its own match and fallback.
+                matches.push(RuleMatch::HeuristicsRuleMatch {
+                    command: inner.to_vec(),
+                    decision: Decision::Prompt,
+                });
             }
         }
     }

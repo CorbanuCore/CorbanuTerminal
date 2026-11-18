@@ -24,7 +24,12 @@ const POWERSHELL_PARSER_SCRIPT: &str = include_str!("powershell_parser.ps1");
 /// We keep the cache behind one mutex because each child process speaks a simple
 /// request/response protocol over a single stdin/stdout pair, so callers targeting the same
 /// executable must serialize access anyway.
-pub(super) fn parse_with_powershell_ast(executable: &str, script: &str) -> PowershellParseOutcome {
+///
+/// #2546 (D553): `executable` is started to parse, before any approval and
+/// outside the sandbox; callers pass a trusted PowerShell
+/// ([`crate::powershell::trusted_powershell_parser`]), never a command's own
+/// `argv[0]`.
+pub(crate) fn parse_with_powershell_ast(executable: &str, script: &str) -> PowershellParseOutcome {
     static PARSER_PROCESSES: LazyLock<Mutex<HashMap<String, PowershellParserProcess>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -34,21 +39,14 @@ pub(super) fn parse_with_powershell_ast(executable: &str, script: &str) -> Power
     parse_with_cached_process(&mut parser_processes, executable, script)
 }
 
-pub(crate) fn try_parse_powershell_ast_commands(
-    executable: &str,
-    script: &str,
-) -> Option<Vec<Vec<String>>> {
-    match parse_with_powershell_ast(executable, script) {
-        PowershellParseOutcome::Commands(commands) => Some(commands),
-        PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => None,
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum PowershellParseOutcome {
+pub(crate) enum PowershellParseOutcome {
     Commands(Vec<Vec<String>>),
     Unsupported,
+    /// The parser answered that it could not parse the script.
     Failed,
+    /// #2546: the parser could not be started or did not answer.
+    Unavailable,
 }
 
 fn parse_with_cached_process(
@@ -65,12 +63,12 @@ fn parse_with_cached_process(
                 Ok(process) => {
                     parser_processes.insert(parser_key.clone(), process);
                 }
-                Err(_) => return PowershellParseOutcome::Failed,
+                Err(_) => return PowershellParseOutcome::Unavailable,
             }
         }
 
         let Some(parser_process) = parser_processes.get_mut(&parser_key) else {
-            return PowershellParseOutcome::Failed;
+            return PowershellParseOutcome::Unavailable;
         };
         let parse_result = parser_process.parse(script);
         match parse_result {
@@ -81,11 +79,11 @@ fn parse_with_cached_process(
                 // with a fresh child before giving up.
                 parser_processes.remove(&parser_key);
             }
-            Err(_) => return PowershellParseOutcome::Failed,
+            Err(_) => return PowershellParseOutcome::Unavailable,
         }
     }
 
-    PowershellParseOutcome::Failed
+    PowershellParseOutcome::Unavailable
 }
 
 fn encode_powershell_base64(script: &str) -> String {
