@@ -45,7 +45,11 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || script_commands(command).is_some()
-        // #2548: nor can one for a script rules read only in part.
+        // #2548: nor can one for a script rules read only in part. (One
+        // outside the minimal lexical set may get an amendment when nothing
+        // asked: it is the exact script, and once a prompt or forbidden rule
+        // exists the script is still read and asks, which an allow rule for
+        // its argv cannot override.)
         || shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read))
 }
 

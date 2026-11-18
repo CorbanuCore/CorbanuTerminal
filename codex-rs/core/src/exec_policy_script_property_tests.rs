@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 82;
+const CONSTRUCTS: u64 = 87;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -202,6 +202,13 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
             "sh -c {}",
             single_quoted(&format!("[[ -z x || sh -c {} ]]", single_quoted(inner)))
         ),
+        // Review round 6: bash 3.2's `$(…)` scan, dash's `time`, multibyte
+        // locales.
+        82 => format!("echo \"$$(\" '\")\"\n{inner}\n'"),
+        83 => format!("echo $(echo x\\ #'\n)\n{inner}\n')"),
+        84 => format!("sh -c {}", single_quoted(&format!("time -l {inner}"))),
+        85 => format!("LC_ALL=zh_TW.Big5\necho \"\u{4e01}\\\"\n{inner}\necho \""),
+        86 => format!("echo \"$${{\" '\"}}\"\n{inner}\n'"),
         81 => format!(
             "cat <<'{delimiter}' && echo $(case x in x) cat <<'{delimiter}'\n{delimiter}\n{inner}\nesac)\n{delimiter}"
         ),

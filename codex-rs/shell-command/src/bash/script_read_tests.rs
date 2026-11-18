@@ -322,6 +322,13 @@ fn minimal_set_refuses_more_than_the_tree() {
         "cmd > \"$out\"",
         "echo \"$(echo ${x:- #'}'} )\"",
         "x=$(cat <<'E'\n)\ngit push\nE\n)",
+        // Review round 6.
+        "echo \"$$(\" '\")\"\ngit push\n'",
+        "echo \"$${\" '\"}\"\ngit push\n'",
+        "echo $$'\\' ';git push;' $$'\\'",
+        "echo $(echo x\\ #'\n)\ngit push\n')",
+        "echo $(echo a\\b)",
+        "echo \"\u{4e01}\\\"\ngit push\necho \"",
     ] {
         assert!(read_script(script).fails_closed(), "{script:?}");
     }
@@ -333,7 +340,25 @@ fn minimal_set_refuses_more_than_the_tree() {
         "ls > /dev/null; echo \"${HOME}\" $1 $?",
         "find . -name '*.rs' -exec wc -l {} \\;",
         "if test -f x; then echo a; else echo b; fi # done",
+        "echo \"$$\" \"$?\" $(git rev-parse HEAD) a\\ b",
     ] {
         assert!(!read_script(script).fails_closed(), "{script:?}");
     }
+}
+
+/// Where `time` is not a keyword (dash) it is `/usr/bin/time`: one followed
+/// by its own options stays a word for the launcher reading (review r6).
+#[test]
+fn time_with_options_stays_a_program() {
+    assert_eq!(
+        words("time -l git push"),
+        vec![known(&["time", "-l", "git", "push"])]
+    );
+    assert_eq!(words("time -p git push"), vec![known(&["git", "push"])]);
+    // zsh's extended_glob makes `#` and `^` glob characters in a name.
+    assert_eq!(
+        words("gi^t push"),
+        vec![vec![None, Some("push".to_string())]]
+    );
+    assert!(read_script("gi#t push").fails_closed());
 }

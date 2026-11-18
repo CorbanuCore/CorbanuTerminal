@@ -570,6 +570,19 @@ impl<'a> Reader<'a> {
                     skip += 1;
                 }
                 Some("!") => skip += 1,
+                // Where `time` is not a keyword (dash) it is a program whose
+                // options may be followed by the command (`time -l git push`):
+                // leave it, and its launcher reading, to the caller.
+                Some("time")
+                    if nodes
+                        .get(skip + 1)
+                        .and_then(|node| self.unquoted(*node))
+                        .is_some_and(|next| {
+                            next.starts_with('-') && !matches!(next, "-p" | "--")
+                        }) =>
+                {
+                    break;
+                }
                 Some("time") => {
                     skip += 1;
                     for option in ["-p", "--"] {
@@ -583,6 +596,15 @@ impl<'a> Reader<'a> {
         }
         nodes.drain(..skip.min(nodes.len()));
         words.drain(..skip.min(words.len()));
+        // zsh's extended_glob (a user may set it) makes `#` and `^` glob
+        // characters: such a command name is not known.
+        if let (Some(node), Some(word)) = (nodes.first(), words.first_mut())
+            && self
+                .unquoted(*node)
+                .is_some_and(|text| text.contains(['#', '^']))
+        {
+            *word = None;
+        }
         // `coproc NAME { …; }` and any other reserved word left at the start
         // (or after `coproc`) are shapes this reader does not read.
         let reserved_left = if coproc {
