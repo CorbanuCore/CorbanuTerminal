@@ -577,8 +577,30 @@ pub(super) async fn readmit_interrupted_input(
                     None => items,
                 };
                 let context = sess.new_default_turn().await;
-                sess.record_annotated_conversation_items(&context, context.model_info(), items)
-                    .await;
+                // D523 (a): readmitted background hook output keeps its hook origin.
+                for item in items {
+                    match crate::hook_runtime::take_hook_output(item) {
+                        (item, true) => {
+                            sess.record_annotated_conversation_items_from(
+                                &context,
+                                context.model_info(),
+                                vec![item],
+                                Some(crate::security::ingress::MessageOrigin::External(
+                                    codex_protocol::provenance::SourceKind::Hook,
+                                )),
+                            )
+                            .await;
+                        }
+                        (item, false) => {
+                            sess.record_annotated_conversation_items(
+                                &context,
+                                context.model_info(),
+                                vec![item],
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
         TurnInput::InterAgentCommunication(communication) => {

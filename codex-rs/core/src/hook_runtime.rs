@@ -749,7 +749,7 @@ pub(crate) async fn inspect_pending_input(
 }
 
 /// Clears D523's host-only hook marker, so it is never persisted, and reports it.
-fn take_hook_output(
+pub(crate) fn take_hook_output(
     mut item: codex_history::ResponseItemEnvelope,
 ) -> (codex_history::ResponseItemEnvelope, bool) {
     let Some(metadata) = item.metadata.as_mut() else {

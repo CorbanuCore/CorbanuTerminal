@@ -144,4 +144,55 @@ async fn queued_hook_context_is_recorded_as_hook_output() {
         sess.services.model_client().message_origin(&recorded),
         Some(MessageOrigin::External(SourceKind::Hook))
     );
+    assert_no_persisted_marker(&sess).await;
+}
+
+/// The host-only marker never reaches recorded history (or the rollout written from it).
+async fn assert_no_persisted_marker(sess: &Session) {
+    let history = sess.clone_history().await;
+    assert!(
+        history.annotated_items().iter().all(|envelope| envelope
+            .metadata
+            .as_ref()
+            .is_none_or(|metadata| !metadata.hook_output)),
+        "a hook_output marker was recorded"
+    );
+}
+
+#[tokio::test]
+async fn interrupted_hook_context_readmitted_without_a_turn_keeps_its_hook_origin() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    let _ = (*sess.services.model_client())
+        .clone()
+        .with_source_envelopes(true);
+    spawn_never_ending(&sess, &tc).await;
+    sess.update_settings(SessionSettingsUpdate {
+        step_settings: StepSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+    .await
+    .expect("update approval policy");
+    sess.inject_hook_context_if_running(vec![hook_message("hook says: interrupted")])
+        .await
+        .expect("a running turn takes the hook context");
+    // The interrupt hands deferred input back to submission admission.
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+    let (input, schema) = sess.input_queue.next_interrupted_deferred_input().await;
+    assert!(is_hook_output(&input), "{input:?}");
+    crate::session::handlers::readmit_interrupted_input(&sess, input, schema).await;
+    let recorded = sess
+        .clone_history()
+        .await
+        .raw_items()
+        .last()
+        .cloned()
+        .expect("recorded item");
+    assert_eq!(
+        sess.services.model_client().message_origin(&recorded),
+        Some(MessageOrigin::External(SourceKind::Hook))
+    );
+    assert_no_persisted_marker(&sess).await;
 }
