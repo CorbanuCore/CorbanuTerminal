@@ -48,26 +48,6 @@ pub(crate) struct OpenArgv {
     pub(crate) known_end: usize,
 }
 
-/// #2543: whether `program` runs a shell, which runs any command its words
-/// give it.
-pub(crate) fn policy_runs_shell(program: &str) -> bool {
-    SHELLS.contains(&basename(program))
-}
-
-/// #2543: `[shell, -c|-lc, script]` for a POSIX shell the shell parser does
-/// not know (`dash -c`, `ksh -c`): the argv with the shell spelled `sh`, so
-/// rules see the script's commands; their quoting is sh's.
-pub(crate) fn policy_posix_shell_script(words: &[String]) -> Option<Vec<String>> {
-    const POSIX_SHELLS: &[&str] = &[
-        "dash", "ksh", "ash", "mksh", "yash", "rbash", "posh", "lksh", "oksh", "hush", "osh",
-    ];
-    let [shell, flag, script] = words else {
-        return None;
-    };
-    (matches!(flag.as_str(), "-c" | "-lc") && POSIX_SHELLS.contains(&basename(shell)))
-        .then(|| vec!["sh".to_string(), flag.clone(), script.clone()])
-}
-
 pub(crate) fn policy_wrapper_commands(words: &[String]) -> PolicyWrapperCommands {
     policy_wrapper_commands_for(words, names::PLATFORM)
 }
@@ -275,9 +255,10 @@ fn policy_wrapper_commands_for(words: &[String], case: names::NameCase) -> Polic
 
 /// #2510 (D688): `[shell, -c|-lc, script]` whose `shell` runs bash, zsh or
 /// sh on this platform (see [`names`]) under a spelling the shell parser
-/// does not read (`BASH -lc`, `/bin/Sh -c`, `Bash.exe -c`): the argv with
-/// the shell spelled as that parser reads it, so rules see the script's
-/// commands. `None` where the parser reads `words` already.
+/// does not read (`BASH -lc`, `/bin/Sh -c`, `Bash.exe -c`), or (#2543)
+/// another POSIX shell (`dash -c`): the argv with the shell spelled as that
+/// parser reads it, so rules see the script's commands. `None` where the
+/// parser reads `words` already.
 pub(crate) fn policy_shell_script(words: &[String]) -> Option<Vec<String>> {
     policy_shell_script_for(words, names::PLATFORM)
 }
@@ -286,16 +267,35 @@ fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Ve
     let [shell, flag, script] = words else {
         return None;
     };
-    if case == names::NameCase::Sensitive
-        || !matches!(flag.as_str(), "-c" | "-lc")
+    if !matches!(flag.as_str(), "-c" | "-lc")
         || names::unsure(shell, case)
         || codex_shell_command::bash::extract_bash_command(words).is_some()
     {
         return None;
     }
     let name = names::launcher_name_for(shell, case);
-    matches!(name.as_ref(), "bash" | "zsh" | "sh")
-        .then(|| vec![name.into_owned(), flag.clone(), script.clone()])
+    let read_as = match name.as_ref() {
+        "bash" | "zsh" | "sh" if case != names::NameCase::Sensitive => name.into_owned(),
+        // #2543: on every platform, POSIX shells the parser does not know
+        // (`dash -c`, `ksh -c`) read like `sh -c`; their quoting is sh's.
+        other if POSIX_SHELLS.contains(&other) => "sh".to_string(),
+        _ => return None,
+    };
+    Some(vec![read_as, flag.clone(), script.clone()])
+}
+
+/// Shells in [`SHELLS`] besides bash, zsh and sh that read a `-c` script
+/// with sh's syntax and quoting.
+const POSIX_SHELLS: &[&str] = &[
+    "dash", "ksh", "ash", "mksh", "yash", "rbash", "posh", "lksh", "oksh", "hush", "osh",
+];
+
+/// #2543: whether `program` may run a shell on this platform (see
+/// [`names`]), which runs any command its words give it.
+pub(crate) fn policy_runs_shell(program: &str) -> bool {
+    let case = names::PLATFORM;
+    names::unsure(program, case)
+        || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may

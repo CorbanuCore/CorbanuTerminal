@@ -312,11 +312,7 @@ pub(super) fn check(
                     // #2531: nested too deep to read; D691: a fresh human
                     // decision where a forbidden or prompt-user rule could
                     // match a command in it.
-                    raise_match(
-                        &mut matches,
-                        inner,
-                        Some(Decision::Prompt).max(any_rule()),
-                    );
+                    raise_match(&mut matches, inner, Some(Decision::Prompt).max(any_rule()));
                 } else {
                     if depth >= MAX_SCRIPT_DEPTH {
                         // Past the bound, still read what is always read, so
