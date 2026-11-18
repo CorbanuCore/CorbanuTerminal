@@ -504,6 +504,9 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
         // production. Bundled non-OpenAI models have no multi-agent version preference.
         .with_model_info_override("gpt-5.6-luna", |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
+            // Keep this probe inside the capped description as the catalog grows;
+            // this test checks provider policy, not display ordering.
+            model.priority = 0;
         })
         .with_model("gpt-5.4")
         .with_config(move |config| {
