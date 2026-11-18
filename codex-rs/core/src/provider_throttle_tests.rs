@@ -161,6 +161,37 @@ async fn blocked_in(state_db: &StateDbHandle, key: &ProviderRequestKey) -> bool 
         .is_some()
 }
 
+#[test]
+fn cooldown_error_text_exposes_bounded_wait_and_longer_provider_hint() {
+    let key = ProviderRequestKey {
+        provider_id: "claude-plan".into(),
+        model: "claude-opus-5-5-plan".into(),
+        key_fingerprint: "config:auth-command".into(),
+    };
+    let block = ProviderRequestBlock {
+        reason: ProviderRequestBlockReason::Cooldown,
+        until_ms: 3_601_000,
+        remaining_ms: 3_600_000,
+        provider_reset_remaining_ms: 308_374_000,
+        lease_owner: None,
+        last_status: Some(429),
+        last_request_id: Some("fixture-request".into()),
+        last_input_tokens: 10,
+        last_cached_input_tokens: 0,
+        last_request_bytes: 100,
+        last_provider_input_tokens: 0,
+        last_provider_cached_input_tokens: 0,
+    };
+    let message = format_provider_request_block(&key, &block);
+    assert_eq!(
+        message,
+        "provider request blocked by local cooldown for claude-plan/claude-opus-5-5-plan (config:auth-command) for about 3600s. Last status: 429, request id: fixture-request. Last preflight: input=10 cached_input=0 request_bytes=100. Provider reset hint: about 308374s remaining (not enforced locally). After this wait, the next request probes the provider. To retry now, use /model clear-cooldown or corbanu model clear-cooldown with the same provider/model settings."
+    );
+    assert!(is_provider_request_block(&CodexErr::InvalidRequest(
+        message
+    )));
+}
+
 fn rate_limited() -> ProviderRequestResult {
     ProviderRequestResult::Failed {
         status: Some(429),

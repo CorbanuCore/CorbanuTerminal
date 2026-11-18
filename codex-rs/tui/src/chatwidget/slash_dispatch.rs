@@ -945,6 +945,16 @@ impl ChatWidget {
             return;
         }
         match cmd {
+            SlashCommand::Model if trimmed.split_whitespace().next() == Some("clear-cooldown") => {
+                if trimmed == "clear-cooldown" {
+                    self.app_event_tx.send(AppEvent::ClearProviderCooldown {
+                        config: Box::new(self.config.clone()),
+                        model: self.current_model().to_string(),
+                    });
+                } else {
+                    self.add_error_message("Usage: /model clear-cooldown".to_string());
+                }
+            }
             SlashCommand::Model if !trimmed.is_empty() => {
                 self.handle_model_command_args(trimmed);
                 self.app_event_tx.send(AppEvent::SettingsSelectionClosed);

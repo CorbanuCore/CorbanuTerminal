@@ -265,6 +265,7 @@ mod pets;
 mod platform_actions;
 mod plugin_mentions;
 mod provider_accounts;
+mod provider_cooldown;
 mod provider_management;
 mod provider_management_auth;
 mod provider_management_status;
