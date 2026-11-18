@@ -17,6 +17,10 @@ workflows. Use the command picker in the TUI for the complete active list.
 | `/review`               | Review current workspace changes                                    |
 | `/diff`                 | Show the workspace diff, including untracked files                  |
 
+For [command rules](execpolicy.md), use `.rules` files and the documented
+`corbanu execpolicy check` diagnostic. There is no `/rules` slash command in
+this version; `/permissions` controls session permissions.
+
 ## Credentials, wallet, and compute
 
 | Command                 | Purpose                                                          |
