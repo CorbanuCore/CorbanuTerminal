@@ -43,17 +43,34 @@ Fetched main at inspection was
 `codex-rs/windows-sandbox-rs/src/` between the tested baseline and that main.
 The displayed failure comes from `integrity_leases.rs::ensure_registry`, which
 calls `integrity.rs::label_private_dir_medium` for the private records folders.
-The underlying Win32 cause has not been established; the TUI reports the outer
-labeling context. This is a reproduction through the repository's CI-style
-Medium token, not a claim that every existing Windows installation fails.
+At initial capture the TUI exposed only the outer labeling context. The
+[win-2584 investigation, PR #2586](https://github.com/CorbanuCore/CorbanuTerminal/pull/2586)
+subsequently measured `ERROR_ACCESS_DENIED` (5): `C:\CorbanuQA` inherits a DACL
+that gives the Medium user Modify but not `WRITE_OWNER`, which labeling needs.
+A normal user profile gives that user Full control. The worker's live TUI
+controls pass on both main and the PR with private AppData and workspace
+permissions matching a user profile; the inherited-permission negative case
+still fails closed. The PR makes that refusal report its cause and requirements.
+
+Our own [corrected Medium replay](preflight/live-windows-medium-profile-acl.json)
+now passes all four live read/write assertions in **17.12 seconds**, using the
+same `5fd571822b` binary and existing local model. It measures Medium integrity
+and deny-only administrator groups again. A fresh, protected fixture-parent
+DACL grants inheritable Full control only to the current user, SYSTEM and
+Administrators; AppData and workspace inherit it. Owner and parent/child ACL
+captures are preserved at `$W/astra-rel149-windows-{acl-profile,child-acls}.json`.
+The original failure remains intact. The temporary private SSH forward was
+closed after the run. Final candidate replay is still required after #2586 merges. No host-wide ACL, default sandbox or operator profile is changed. This
+is a fixture-permission problem exposed by the newer label registry, not evidence
+that normal Windows user profiles cannot run commands.
 
 Open issue/PR searches for Medium/non-admin labeling and
 `CorbanuTerminalSandbox` found adjacent security follow-ups (#1542, #1896), but
 no matching fresh-registry startup failure. No production fix is made in this
 release-preparation PR. The coordinator filed [#2584](https://github.com/CorbanuCore/CorbanuTerminal/issues/2584),
 assigned the investigation to win-2584, and added its accepted fixing PR as a
-0.1.49 release gate on 2026-11-18. This PR remains the evidence home.
-After the fix merges, repeat the measured Medium-token case on the final
+0.1.49 release gate on 2026-11-18. The resulting PR is #2586; this preparation
+PR remains the evidence home. After #2586 merges, repeat the measured Medium-token case on the final
 release-candidate build and require successful tool execution.
 
 Raw result: [live-windows-medium-failure.json](preflight/live-windows-medium-failure.json).
