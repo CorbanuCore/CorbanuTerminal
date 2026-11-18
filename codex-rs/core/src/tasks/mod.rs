@@ -1197,7 +1197,10 @@ impl Session {
             // The parent can request another review as soon as it receives this event.
             self.send_event(turn_context.as_ref(), event).await;
         }
-        if cleared_active_turn {
+        // Follow-up submission returns below without running the pending-work idle check.
+        // Keep its notification here; the no-follow-up path emits only after checking for
+        // pending work, so a completed turn never reports the same idle boundary twice.
+        if cleared_active_turn && !follow_up_input.is_empty() {
             self.emit_thread_idle_lifecycle_if_idle(idle_cause).await;
         }
         // Private reviewers already flushed the terminal event before delivering it.
@@ -1772,3 +1775,7 @@ fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "idle_lifecycle_tests.rs"]
+mod idle_lifecycle_tests;
