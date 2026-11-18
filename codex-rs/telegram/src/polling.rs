@@ -187,7 +187,9 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
                         delay = Duration::ZERO;
                     }
                     let mut request = polling.bot.get_updates().offset(offset).timeout(10);
-                    if let Some(allowed) = polling.allowed_updates.take() {
+                    // Keep the hint until a poll succeeds: a failed first poll must not
+                    // leave the token on the list Telegram stored for it last time.
+                    if let Some(allowed) = polling.allowed_updates.clone() {
                         request = request.allowed_updates(allowed);
                     }
                     let result = tokio::select! {
@@ -197,6 +199,7 @@ impl<'a> AsUpdateStream<'a> for GuardedPolling {
                     match result {
                         Ok(updates) => {
                             polling.failures.record_success();
+                            polling.allowed_updates = None;
                             if let Some(update) = updates.last() {
                                 offset = update.id.as_offset();
                             }
