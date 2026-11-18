@@ -453,17 +453,12 @@ impl ExecPolicyManager {
             used_complex_parsing,
             command_origin,
         } = commands_for_exec_policy(command);
-        // #2524: a respelled PowerShell (`PWSH -c`) keeps its literal argv
-        // too, as a respelled bash does (#2510), so reading its script only
-        // adds checks.
         #[cfg(windows)]
         let commands = {
             let mut commands = commands;
-            // #2568: so does a `-File` invocation, whose script asks.
-            if (command_origin == ExecPolicyCommandOrigin::PowerShell
-                && crate::security::tainted_action::policy_powershell_script(command).is_some())
-                || command_origin == ExecPolicyCommandOrigin::PowerShellFile
-            {
+            // #2568: a file's literal argv also triggers the unread-script
+            // check. Readable PowerShell keeps literal restrictions below.
+            if command_origin == ExecPolicyCommandOrigin::PowerShellFile {
                 commands.push(command.to_vec());
             }
             commands
@@ -496,11 +491,7 @@ impl ExecPolicyManager {
             && !commands
                 .iter()
                 .any(|command| wrappers::has_wrappers(command))
-            && !wrappers::asks_for_unread_powershell(
-                exec_policy.as_ref(),
-                &commands,
-                &match_options,
-            );
+            && !wrappers::has_unread_powershell(&commands);
         let wrappers::Checked {
             mut evaluation,
             folded: case_folded,
@@ -512,6 +503,30 @@ impl ExecPolicyManager {
             &exec_policy_fallback,
             &match_options,
         );
+        #[cfg(windows)]
+        let mut case_folded = case_folded;
+        // #2599: reading non-plain PowerShell must not discard rules on its
+        // own flags. Match only restrictions here; do not recurse through the
+        // script again or let an outer allow rule authorize its contents.
+        #[cfg(windows)]
+        if command_origin == ExecPolicyCommandOrigin::PowerShell
+            && (used_complex_parsing
+                || crate::security::tainted_action::policy_powershell_script(command).is_some())
+        {
+            let mut literal = exec_policy.matches_for_command_with_options(
+                command,
+                /*heuristics_fallback*/ None,
+                &match_options,
+            );
+            literal.retain(|rule_match| rule_match.decision() > Decision::Allow);
+            let folded = exec_policy.case_folded_matches(command, &match_options);
+            literal.extend(folded.iter().cloned());
+            case_folded.extend(folded);
+            for rule_match in &literal {
+                evaluation.decision = evaluation.decision.max(rule_match.decision());
+            }
+            evaluation.matched_rules.extend(literal);
+        }
         // #2543: an amendment for the script's literal argv cannot approve
         // the commands in it that need approval.
         let auto_amendment_allowed = auto_amendment_allowed && !unread_script_prompts;

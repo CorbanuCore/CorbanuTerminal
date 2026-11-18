@@ -213,10 +213,9 @@ async fn unreadable_powershell_script_asks_when_a_rule_could_match() {
 }
 
 #[tokio::test]
-async fn unreadable_powershell_script_changes_nothing_without_strict_rules() {
-    // The literal argv decides, as for any command rules cannot read, and
-    // its amendment stays available: a later prompt or forbidden rule still
-    // asks for the unread script, since the strictest match wins.
+async fn unreadable_powershell_script_adds_no_prompt_without_strict_rules() {
+    // No strict rule means no extra prompt, but unread contents must never
+    // produce an always-allow amendment (#2556, #2583).
     let _hidden = hide_trusted_powershell_on_this_thread();
     let command = words(&["powershell.exe", "-Command", "git push"]);
     for rules in [
@@ -228,12 +227,12 @@ async fn unreadable_powershell_script_changes_nothing_without_strict_rules() {
             unread,
             ExecApprovalRequirement::Skip {
                 bypass_sandbox: false,
-                proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(command.clone())),
+                proposed_execpolicy_amendment: None,
             },
             "{rules:?}"
         );
     }
-    // Once remembered, that amendment cannot outrank a strict rule.
+    // An existing literal allow rule still cannot outrank a strict rule.
     let rules = format!(
         "prefix_rule(pattern=[\"powershell.exe\", \"-Command\", \"git push\"], decision=\"allow\")\n{FORBID_GIT_PUSH}"
     );

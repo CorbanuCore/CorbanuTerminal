@@ -51,6 +51,7 @@ fn parse_powershell_script(executable: &str, script: &str) -> Option<Vec<Vec<Str
     match read_script_with_trusted_parser(executable, script) {
         PowershellScriptRead::Commands(commands) => Some(commands),
         PowershellScriptRead::NotPlain
+        | PowershellScriptRead::Partial(_)
         | PowershellScriptRead::File(_)
         | PowershellScriptRead::Unreadable => None,
     }

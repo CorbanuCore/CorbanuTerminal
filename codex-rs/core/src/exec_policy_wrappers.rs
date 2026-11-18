@@ -40,18 +40,12 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         || script_commands(command).is_some()
 }
 
-/// #2546: whether [`check`] asks for a PowerShell script in `commands` that
-/// no trusted parser read; an amendment for its literal argv cannot approve
-/// the commands inside. With no prompt or forbidden rule it does not ask.
-pub(super) fn asks_for_unread_powershell(
-    policy: &Policy,
-    commands: &[Vec<String>],
-    options: &MatchOptions,
-) -> bool {
-    any_strict_rule(policy, options)
-        && commands
-            .iter()
-            .any(|command| powershell_script_unreadable(command))
+/// An amendment for literal argv cannot approve the unread commands inside,
+/// even when approval is required by the dangerous-command heuristic alone.
+pub(super) fn has_unread_powershell(commands: &[Vec<String>]) -> bool {
+    commands
+        .iter()
+        .any(|command| powershell_script_unreadable(command))
 }
 
 /// Whether any prompt or forbidden rule exists, which could match a command
@@ -66,7 +60,8 @@ fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
 /// PowerShell could read (none found, or it could not run), so rules cannot
 /// see its commands. #2568: also a command line PowerShell reads in a way
 /// this reader cannot (unknown parameters, a script from stdin), and a
-/// `-File` script, whose content is not read.
+/// `-File` script, whose content is not read. A parser-declined or partially
+/// read script has the same unknown remainder (#2556, #2583).
 #[cfg(windows)]
 fn powershell_script_unreadable(command: &[String]) -> bool {
     use codex_shell_command::powershell::PowershellScriptRead;
@@ -75,7 +70,12 @@ fn powershell_script_unreadable(command: &[String]) -> bool {
         codex_shell_command::powershell::read_powershell_command_script(
             respelled.as_deref().unwrap_or(command),
         ),
-        Some(PowershellScriptRead::Unreadable | PowershellScriptRead::File(_))
+        Some(
+            PowershellScriptRead::Unreadable
+                | PowershellScriptRead::NotPlain
+                | PowershellScriptRead::Partial(_)
+                | PowershellScriptRead::File(_)
+        )
     )
 }
 
@@ -334,6 +334,25 @@ pub(crate) fn check(
                     decision: Decision::Prompt,
                 });
                 unread_script_prompts = true;
+            }
+            // Read known literal commands of a declined script for restrictions
+            // only. Its unknown remainder still asks through the shared helper.
+            #[cfg(windows)]
+            if reads_script && any_strict_rule() {
+                use codex_shell_command::powershell::PowershellScriptRead;
+                let respelled = crate::security::tainted_action::policy_powershell_script(inner);
+                if let Some(PowershellScriptRead::Partial(commands)) =
+                    codex_shell_command::powershell::read_powershell_command_script(
+                        respelled.as_deref().unwrap_or(inner),
+                    )
+                    && (depth < MAX_SCRIPT_DEPTH || always_read)
+                {
+                    pending.extend(commands.into_iter().map(|command| Pending {
+                        command,
+                        depth: depth + 1,
+                        restrict_only: true,
+                    }));
+                }
             }
             // Not `else`: a `-File` script reads as its file and arguments
             // above, and asks too (#2568).

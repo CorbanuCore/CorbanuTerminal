@@ -33,6 +33,10 @@ use std::fs;
 #[path = "exec_policy_wrappers.rs"]
 mod wrapper_tests;
 
+#[cfg(windows)]
+#[path = "exec_policy_powershell_unread.rs"]
+mod powershell_unread_tests;
+
 const COMPLEX_FORCED_RM_COMMAND: &str = "for target in \"\"; do rm -rf \"$target\"; done";
 
 fn collaboration_mode_for_model(model: String) -> CollaborationMode {
