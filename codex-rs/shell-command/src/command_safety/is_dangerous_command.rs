@@ -182,6 +182,41 @@ pub(crate) fn find_git_subcommand<'a>(
     None
 }
 
+/// The name a program word runs as, for the dangerous-command check only
+/// (D692: stricter only, so never for the safe-command list). Where this
+/// platform finds programs without regard to case (macOS APFS, Windows
+/// NTFS), `RM`, `/bin/Rm` and `ſudo` run `rm` and `sudo`, so they compare
+/// case-folded; Windows also ignores trailing dots and spaces.
+fn dangerous_name_key(raw: &str) -> Option<String> {
+    let name = executable_name_lookup_key(raw)?;
+    if !cfg!(any(windows, target_os = "macos")) {
+        return Some(name);
+    }
+    let name = if cfg!(windows) {
+        name.trim_end_matches(['.', ' '])
+    } else {
+        &name
+    };
+    let mut folded = String::with_capacity(name.len());
+    for ch in name.chars() {
+        match ch {
+            // Non-ASCII letters whose case folding is ASCII.
+            '\u{17f}' => folded.push('s'),
+            '\u{212a}' => folded.push('k'),
+            '\u{131}' if cfg!(windows) => folded.push('i'),
+            _ => folded.push(ch.to_ascii_lowercase()),
+        }
+    }
+    if cfg!(windows) {
+        for suffix in [".exe", ".cmd", ".bat", ".com"] {
+            if let Some(stripped) = folded.strip_suffix(suffix) {
+                return Some(stripped.to_string());
+            }
+        }
+    }
+    Some(folded)
+}
+
 fn dangerous_command_match_for_exec(
     command: &[String],
     wrapper_depth: usize,
@@ -189,7 +224,7 @@ fn dangerous_command_match_for_exec(
 ) -> Option<DangerousCommandMatch> {
     let cmd0 = command
         .first()
-        .and_then(|command| executable_name_lookup_key(command));
+        .and_then(|command| dangerous_name_key(command));
 
     match cmd0.as_deref() {
         Some("rm") if rm_args_include_force_option(&command[1..]) => {
@@ -360,6 +395,48 @@ mod tests {
             );
         } else {
             assert_eq!(dangerous_powershell_words_match(&command), None);
+        }
+    }
+    #[test]
+    fn program_names_fold_case_where_the_platform_does() {
+        // D692 (stricter only): macOS and Windows run `RM`, `/bin/Rm` and
+        // `ſudo` as `rm` and `sudo`; Linux runs other programs.
+        let folds = cfg!(any(windows, target_os = "macos"));
+        for command in [
+            vec_str(&["RM", "-rf", "x"]),
+            vec_str(&["Rm", "-f", "x"]),
+            vec_str(&["/bin/RM", "-rf", "x"]),
+            vec_str(&["SUDO", "rm", "-rf", "x"]),
+            vec_str(&["\u{17f}\u{75}do", "RM", "-rf", "x"]),
+            vec_str(&["Env", "A=1", "rM", "-rf", "x"]),
+            vec_str(&["bash", "-lc", "RM -rf x"]),
+            vec_str(&["bash", "-lc", "echo hi && TRAP 'RM -rf x' EXIT"]),
+        ] {
+            let expected = folds.then_some(DangerousCommandMatch::ForcedRm);
+            assert_eq!(dangerous_command_match(&command), expected, "{command:?}");
+        }
+        if cfg!(windows) {
+            for program in ["RM.EXE", "rm.exe.", "Rm.Exe . "] {
+                let command = vec_str(&[program, "-rf", "x"]);
+                assert_eq!(
+                    dangerous_command_match(&command),
+                    Some(DangerousCommandMatch::ForcedRm),
+                    "{command:?}"
+                );
+            }
+        }
+        // Folding is for the dangerous check only; still not dangerous:
+        for command in [vec_str(&["RM", "-r", "x"]), vec_str(&["RMX", "-rf", "x"])] {
+            assert_eq!(dangerous_command_match(&command), None, "{command:?}");
+        }
+    }
+
+    #[test]
+    fn safe_commands_do_not_fold_case() {
+        // D692: folding never widens the safe list (Windows has its own).
+        if !cfg!(windows) {
+            let command = vec_str(&["LS", "-la"]);
+            assert!(!crate::is_safe_command::is_known_safe_command(&command));
         }
     }
 }
