@@ -48,6 +48,39 @@ fn model_clear_cooldown_preserves_provider_model_and_profile_selection() {
     ));
 }
 
+#[tokio::test]
+async fn model_clear_cooldown_never_falls_back_from_an_explicit_account() {
+    let cwd = tempfile::tempdir().expect("fixture cwd");
+    let cli = MultitoolCli::try_parse_from([
+        "corbanu",
+        "--account",
+        "openai:cooldown-fixture",
+        "-m",
+        "gpt-6-astra",
+        "-C",
+        cwd.path().to_str().expect("UTF-8 fixture path"),
+        "-c",
+        "model_provider=\"openai\"",
+        "-c",
+        "features.named_accounts=false",
+        "model",
+        "clear-cooldown",
+    ])
+    .expect("parse explicit account");
+    let Some(Subcommand::Model(command)) = cli.subcommand else {
+        panic!("expected model command");
+    };
+    let error = super::run(command, cli.config_overrides, cli.interactive)
+        .await
+        .expect_err("disabled named account must not clear the default account");
+    let message = error.to_string();
+    assert!(
+        message.contains("--account openai:cooldown-fixture"),
+        "{message}"
+    );
+    assert!(message.contains("named_accounts"), "{message}");
+}
+
 #[test]
 fn model_clear_cooldown_rejects_remote_local_state_confusion() {
     for remote_args in [

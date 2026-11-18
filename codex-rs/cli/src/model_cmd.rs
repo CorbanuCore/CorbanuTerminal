@@ -35,6 +35,7 @@ pub(crate) async fn run(
         .harness_overrides(ConfigOverrides {
             model: shared.model,
             cwd: shared.cwd,
+            provider_account: interactive.account,
             ..Default::default()
         })
         .loader_overrides(loader_overrides)
