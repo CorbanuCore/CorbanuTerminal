@@ -408,7 +408,8 @@ fn is_powershellish_executable_available(powershell_or_pwsh_exe: &std::path::Pat
         .unwrap_or(false)
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
+#[cfg(windows)]
 #[path = "powershell/trusted_path_tests.rs"]
 mod trusted_path_tests;
 
