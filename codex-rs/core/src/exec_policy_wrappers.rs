@@ -70,7 +70,7 @@ fn partial_script_interprets_text(command: &[String]) -> bool {
 }
 
 /// A shell receiving stdin must retain that input through argv lowering.
-/// Unknown receiver words are already handled by partial-command matching.
+/// Unknown receivers also retain an unread-script floor.
 pub(super) fn has_script_input(command: &[String]) -> bool {
     shell_input_scripts(command).next().is_some()
 }
@@ -79,82 +79,84 @@ pub(super) fn has_script_input(command: &[String]) -> bool {
 /// depth bound apply. Unsupported shells/options and producers remain unknown.
 fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<String>>> {
     let eval = eval_script(command).map(|script| vec!["sh".to_string(), "-c".to_string(), script]);
-    shell_lc_script_inputs(eval.as_deref().unwrap_or(command))
-        .into_iter()
-        .filter_map(|input| {
-            let words = input.words.into_iter().collect::<Option<Vec<_>>>()?;
-            let wrappers = policy_wrapper_commands(&words);
-            let start = *wrappers.starts.last()?;
-            let inner = &words[start..];
-            // Eval may start a shell; command-less exec may redirect the
-            // surrounding shell's stdin, including across an eval boundary.
-            // Their input is not script text we can attribute to a receiver.
-            if script_builtin(inner)
-                .first()
-                .is_some_and(|program| matches!(program.as_str(), "eval" | "exec"))
+    shell_lc_script_inputs(
+        eval.as_deref().unwrap_or(command),
+        eval.is_some(),
+        policy_runs_shell,
+    )
+    .into_iter()
+    .filter_map(|input| {
+        let Some(words) = input.words.into_iter().collect::<Option<Vec<_>>>() else {
+            return Some(vec![None]);
+        };
+        let wrappers = policy_wrapper_commands(&words);
+        let start = *wrappers.starts.last()?;
+        let inner = &words[start..];
+        // Eval may start a shell; command-less exec may redirect the
+        // surrounding shell's stdin, including across an eval boundary.
+        // Their input is not script text we can attribute to a receiver.
+        if script_builtin(inner)
+            .first()
+            .is_some_and(|program| matches!(program.as_str(), "eval" | "exec"))
+        {
+            return Some(vec![None]);
+        }
+        if !inner
+            .first()
+            .is_some_and(|program| policy_runs_shell(program))
+        {
+            return None;
+        }
+        if runs_unread_script(inner) {
+            // A -c script may pass its stdin on to another shell
+            // (`echo text | bash -c bash`). Only discard that input
+            // when every plain command is known not to interpret it.
+            let respelled = policy_shell_script(inner);
+            let independent = match shell_lc_script_commands(respelled.as_deref().unwrap_or(inner))
             {
-                return Some(vec![None]);
-            }
-            if !inner
-                .first()
-                .is_some_and(|program| policy_runs_shell(program))
-            {
-                return None;
-            }
-            if runs_unread_script(inner) {
-                // A -c script may pass its stdin on to another shell
-                // (`echo text | bash -c bash`). Only discard that input
-                // when every plain command is known not to interpret it.
-                let respelled = policy_shell_script(inner);
-                let independent =
-                    match shell_lc_script_commands(respelled.as_deref().unwrap_or(inner)) {
-                        Some(ScriptCommands::Plain(commands)) => commands.iter().all(|command| {
-                            let wrappers = policy_wrapper_commands(command);
-                            let target =
-                                wrappers.starts.last().and_then(|start| command.get(*start));
-                            !wrappers.uncertain
-                                && wrappers.open.is_none()
-                                && target.is_some_and(|program| {
-                                    !policy_runs_shell(program)
-                                        && !matches!(
-                                            program.as_str(),
-                                            "eval" | "." | "source" | "builtin"
-                                        )
-                                })
-                        }),
-                        _ => false,
-                    };
-                return (!independent).then_some(vec![None]);
-            }
-            let script = input
-                .literal
-                .filter(|_| {
+                Some(ScriptCommands::Plain(commands)) => commands.iter().all(|command| {
+                    let wrappers = policy_wrapper_commands(command);
+                    let target = wrappers.starts.last().and_then(|start| command.get(*start));
                     !wrappers.uncertain
                         && wrappers.open.is_none()
-                        && inner[1..]
-                            .iter()
-                            .all(|arg| matches!(arg.as_str(), "-s" | "--"))
-                })
-                .and_then(|script| {
-                    let argv = vec![inner[0].clone(), "-c".to_string(), script];
-                    let respelled = policy_shell_script(&argv).unwrap_or(argv);
-                    let reading = shell_lc_script_commands(&respelled)?;
-                    // Stdin scripts are read incrementally. An earlier command
-                    // can consume later lines (even part of a quoted word).
-                    // A single plain command consumes its whole syntax first.
-                    let single =
-                        matches!(reading, ScriptCommands::Plain(commands) if commands.len() <= 1);
-                    Some((respelled, single))
-                });
-            Some(match script {
-                Some((command, true)) => vec![Some(command)],
-                // Still inspect the literal text for refusals, but do not
-                // assume it is the text the shell will actually parse.
-                Some((command, false)) => vec![Some(command), None],
-                None => vec![None],
+                        && target.is_some_and(|program| {
+                            !policy_runs_shell(program)
+                                && !matches!(program.as_str(), "eval" | "." | "source" | "builtin")
+                        })
+                }),
+                _ => false,
+            };
+            return (!independent).then_some(vec![None]);
+        }
+        let script = input
+            .literal
+            .filter(|_| {
+                !wrappers.uncertain
+                    && wrappers.open.is_none()
+                    && inner[1..]
+                        .iter()
+                        .all(|arg| matches!(arg.as_str(), "-s" | "--"))
             })
+            .and_then(|script| {
+                let argv = vec![inner[0].clone(), "-c".to_string(), script];
+                let respelled = policy_shell_script(&argv).unwrap_or(argv);
+                let reading = shell_lc_script_commands(&respelled)?;
+                // Stdin scripts are read incrementally. An earlier command
+                // can consume later lines (even part of a quoted word).
+                // A single plain command consumes its whole syntax first.
+                let single =
+                    matches!(reading, ScriptCommands::Plain(commands) if commands.len() <= 1);
+                Some((respelled, single))
+            });
+        Some(match script {
+            Some((command, true)) => vec![Some(command)],
+            // Still inspect the literal text for refusals, but do not
+            // assume it is the text the shell will actually parse.
+            Some((command, false)) => vec![Some(command), None],
+            None => vec![None],
         })
-        .flatten()
+    })
+    .flatten()
 }
 
 // Only used for restrict-only script checks, never to grant an allow rule.

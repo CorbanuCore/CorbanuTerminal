@@ -15,8 +15,13 @@ pub struct ScriptInput {
 }
 
 /// Find stdin supplied by a pipeline or redirection, including input inherited
-/// by a command in a group. A syntax error is handled by the script reader.
-pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
+/// by a command in a group. `eval_context` preserves the execution-text boundary
+/// while reading an eval body. A syntax error is handled by the script reader.
+pub fn shell_lc_script_inputs(
+    command: &[String],
+    eval_context: bool,
+    is_shell: impl Fn(&str) -> bool,
+) -> Vec<ScriptInput> {
     let Some((_, script)) = extract_bash_command(command) else {
         return Vec::new();
     };
@@ -28,16 +33,45 @@ pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
     }
     let mut inputs = Vec::new();
     let mut commands = Vec::new();
-    let mut functions = Vec::new();
+    let mut precise = true;
+    let mut interprets = eval_context;
+    let mut function = false;
+    let mut heredoc = false;
     let mut stack = vec![tree.root_node()];
     while let Some(node) = stack.pop() {
-        if node.kind() == "function_definition"
-            && let Some(name) = node.child_by_field_name("name")
-            && let Ok(name) = name.utf8_text(script.as_bytes())
-        {
-            functions.push(name);
-        }
+        precise &= precise_input_node(node);
+        function |= node.kind() == "function_definition";
+        heredoc |= node.kind() == "heredoc_redirect";
         if node.kind() == "command" {
+            let words = script_command_words(node, script);
+            interprets |= words
+                .iter()
+                .flatten()
+                .any(|word| matches!(word.as_str(), "eval" | "exec" | "coproc" | "." | "source"));
+            // Only these direct commands have understood stdin semantics here.
+            // Launchers and all other prefixes retain an unknown-script floor.
+            precise &= words
+                .first()
+                .and_then(Option::as_deref)
+                .is_some_and(|word| {
+                    matches!(
+                        word.rsplit('/').next(),
+                        Some(
+                            "bash"
+                                | "sh"
+                                | "dash"
+                                | "ash"
+                                | "ksh"
+                                | "zsh"
+                                | "eval"
+                                | "exec"
+                                | "echo"
+                                | "printf"
+                                | "cat"
+                                | "git"
+                        )
+                    )
+                });
             commands.push(node);
             let mut input = None;
             let mut child = node;
@@ -92,42 +126,69 @@ pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
             }
         }
         let mut cursor = node.walk();
-        stack.extend(node.named_children(&mut cursor));
+        stack.extend(node.children(&mut cursor));
     }
-    // An exec redirect can change the outer shell's stdin for later
-    // commands. A function call forwards its input to commands in its body.
-    // Without executing the script, conservatively taint all its commands.
-    let inherited = inputs.iter().any(|input| {
-        input_target(&input.words)
-            .is_some_and(|program| program == "exec" || functions.contains(&program))
-    }) || (!inputs.is_empty()
-        && commands.iter().any(|node| {
-            // Eval can define a function used by a later input recipient.
-            input_target(&script_command_words(*node, script)) == Some("eval")
-        }));
-    if inherited {
-        inputs.extend(commands.into_iter().map(|node| ScriptInput {
-            words: script_command_words(node, script),
+    // Precise handling is opt-in. Unsupported syntax or prefixes in a script
+    // with execution text cannot silently erase a possible stdin recipient.
+    // Eval/exec may also change how later commands receive even literal input.
+    let shell_input = inputs
+        .iter()
+        .any(|input| input.words.iter().flatten().any(|word| is_shell(word)));
+    if ((heredoc || shell_input || interprets || function) && !precise)
+        || (!inputs.is_empty() && interprets)
+    {
+        // Prefixes can forward stdin without an identifiable receiver node.
+        inputs.push(ScriptInput {
+            words: vec![None],
             literal: None,
-        }));
+        });
+        for node in commands {
+            let input = ScriptInput {
+                words: script_command_words(node, script),
+                literal: None,
+            };
+            if !inputs.contains(&input) {
+                inputs.push(input);
+            }
+        }
     }
     inputs
 }
 
-fn input_target(mut words: &[Option<String>]) -> Option<&str> {
-    while words
-        .first()
-        .is_some_and(|word| matches!(word.as_deref(), Some("command" | "builtin" | "time")))
-    {
-        words = &words[1..];
-        while words
-            .first()
-            .is_some_and(|word| matches!(word.as_deref(), Some("--" | "-p")))
-        {
-            words = &words[1..];
-        }
+/// Static argv, simple lists/pipes and direct redirects only. In particular,
+/// functions, loops, substitutions, assignments and reserved prefixes are not
+/// precise, even if the grammar exposes their descendants as plain commands.
+fn precise_input_node(node: Node<'_>) -> bool {
+    const KINDS: &[&str] = &[
+        "program",
+        "list",
+        "pipeline",
+        "command",
+        "command_name",
+        "word",
+        "string",
+        "string_content",
+        "raw_string",
+        "number",
+        "concatenation",
+        "redirected_statement",
+        "file_redirect",
+        "herestring_redirect",
+        "heredoc_redirect",
+        "heredoc_start",
+        "heredoc_body",
+        "heredoc_content",
+        "heredoc_end",
+        "comment",
+    ];
+    const TOKENS: &[&str] = &[
+        "&&", "||", ";", "|", "\"", "'", "<", ">", "<<", "<<-", "<<<", ">>",
+    ];
+    if node.is_named() {
+        KINDS.contains(&node.kind())
+    } else {
+        TOKENS.contains(&node.kind())
     }
-    words.first().and_then(Option::as_deref)
 }
 
 /// The scanner only removes quotes reliably for simple whole-word quoting.

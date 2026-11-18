@@ -82,12 +82,28 @@ async fn literal_scripts_table() {
     }
 }
 
+// Deterministic exhaustive prefix pairs provide a wider net than random samples.
+fn forwarding_variants() -> impl Iterator<Item = String> {
+    const PREFIXES: [&str; 4] = ["time", "time -p", "!", "coproc"];
+    PREFIXES.into_iter().flat_map(|first| {
+        PREFIXES.into_iter().flat_map(move |second| {
+            [
+                format!("f() {{ bash; }}; {first} {second} f <<'EOF'\ngit push\nEOF"),
+                format!("{first} {second} eval 'f() {{ bash; }}'; f <<'EOF'\ngit push\nEOF"),
+                format!("{first} {second} exec <<'EOF'\ngit push\nEOF\nbash"),
+            ]
+        })
+    })
+}
+
 #[tokio::test]
 async fn unknown_scripts_table() {
     let mut failures = Vec::new();
     for script in [
         "eval \"$script\"",
         "eval echo \"$arg\"",
+        "eval 'time ! git push'",
+        "eval 'unrecognized-prefix git push'",
         "eval 'echo git push | bash'",
         "echo 'git push' | eval bash",
         "echo 'git push' | bash -c bash",
@@ -121,6 +137,16 @@ async fn unknown_scripts_table() {
         "f() { bash; }; time -p -- f <<'EOF'\ngit push\nEOF",
         "time eval 'f() { bash; }'; f <<'EOF'\ngit push\nEOF",
         "time -p eval 'exec <<EOF\ngit push\nEOF'; bash",
+        "function time { bash; }; 'time' <<'EOF'\ngit push\nEOF",
+        "function command { bash; }; command <<'EOF'\ngit push\nEOF",
+        "function builtin { bash; }; builtin <<'EOF'\ngit push\nEOF",
+        "f() { bash; }; time ! f <<'EOF'\ngit push\nEOF",
+        "f() { bash; }; time -p ! f <<'EOF'\ngit push\nEOF",
+        "time ! eval 'f() { bash; }'; f <<'EOF'\ngit push\nEOF",
+        "time ! exec <<'EOF'\ngit push\nEOF\nbash",
+        "f() { bash; }; ! ! f <<'EOF'\ngit push\nEOF",
+        "f() { bash; }; coproc f <<'EOF'\ngit push\nEOF",
+        "coproc bash <<'EOF'\ngit push\nEOF",
         "f() { eval bash; }; f <<'EOF'\ngit push\nEOF",
         "eval 'f() { bash; }'; f <<EOF\ngit push\nEOF",
         "eval 'exec <<EOF\ngit push\nEOF'; bash",
@@ -145,8 +171,13 @@ async fn unknown_scripts_table() {
         "xargs -I{} bash <<EOF\ngit push\nEOF",
         "eval \"source ./x.sh\"",
         "bash <<'EOF'\nsource ./x.sh\nEOF",
-    ] {
-        for script in [script.to_string(), nested(script)] {
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .chain(forwarding_variants())
+    {
+        let inner = nested(&script);
+        for script in [script, inner] {
             for rules in [FORBID, PROMPT] {
                 for mode in 0..3 {
                     let result = check(&script, rules, mode).await;

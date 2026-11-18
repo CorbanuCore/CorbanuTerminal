@@ -24,7 +24,8 @@ fn stdin_syntax_keeps_literal_bodies_and_unknown_producers_distinct() {
         ("bash <<EOF < file\necho safe\nEOF", None),
     ] {
         let argv = vec!["bash".into(), "-c".into(), script.into()];
-        let inputs = shell_lc_script_inputs(&argv);
+        let inputs =
+            shell_lc_script_inputs(&argv, /*eval_context*/ false, |word| word == "bash");
         let shell_inputs: Vec<_> = inputs
             .into_iter()
             .filter(|input| input.words.first() == Some(&Some("bash".to_string())))
@@ -76,7 +77,7 @@ fn output_redirections_and_first_pipeline_command_do_not_supply_stdin() {
     for script in ["bash > log", "bash 2> log", "bash | cat", "bash"] {
         let argv = vec!["sh".into(), "-c".into(), script.into()];
         assert!(
-            shell_lc_script_inputs(&argv)
+            shell_lc_script_inputs(&argv, /*eval_context*/ false, |word| word == "bash")
                 .into_iter()
                 .all(|input| input.words.first() != Some(&Some("bash".to_string()))),
             "{script:?}"

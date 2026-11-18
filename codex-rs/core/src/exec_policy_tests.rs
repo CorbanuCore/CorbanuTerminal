@@ -860,7 +860,8 @@ async fn evaluates_heredoc_script_against_prefix_rules() {
             prefix_rule: None,
         },
         ExecApprovalRequirement::Skip {
-            bypass_sandbox: true,
+            // Unrecognized heredoc recipients keep the sandbox boundary.
+            bypass_sandbox: false,
             proposed_execpolicy_amendment: None,
         },
     )
@@ -958,11 +959,8 @@ async fn heredoc_with_variable_assignment_is_not_reduced_to_allowed_prefix() {
         },
         ExecApprovalRequirement::Skip {
             bypass_sandbox: false,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
-                "bash".to_string(),
-                "-lc".to_string(),
-                "PATH=/tmp/evil:$PATH cat <<'EOF'\nhello\nEOF".to_string(),
-            ])),
+            // An assignment mixed with a heredoc is outside the precise shapes.
+            proposed_execpolicy_amendment: None,
         },
     )
     .await;
