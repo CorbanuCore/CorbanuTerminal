@@ -52,7 +52,7 @@ expression: "serde_json::to_string_pretty(&schemas).unwrap()"
     "type": "function"
   },
   {
-    "description": "List authorized picker-visible models available to spawn_agent, with exact provider/model names, display names, context windows, reasoning efforts and allocation hints. Returns a bounded page; call again with next_offset until it is null to discover the full catalog. Omit offset to start. Hidden/custom exact runtime selection remains supported by spawn_agent.",
+    "description": "List authorized picker-visible models available to spawn_agent, with exact provider/model names, display names, catalog context windows (operator overrides may differ), reasoning efforts and allocation hints. Returns a bounded page; call again with next_offset until null. Restart without offset if the catalog changes. Oversized metadata is shortened or reported by offset so later entries remain reachable. Hidden/custom exact runtime selection remains supported by spawn_agent.",
     "name": "list_models",
     "parameters": {
       "additionalProperties": false,

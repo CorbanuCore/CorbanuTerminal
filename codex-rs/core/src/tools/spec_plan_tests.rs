@@ -1803,13 +1803,30 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         });
     })
     .await;
-    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
+    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE, "list_models"]);
+    assert_eq!(
+        direct_model_only.exposure("list_models"),
+        ToolExposure::DirectModelOnly
+    );
     direct_model_only.assert_visible_lacks(&["spawn_agent", "send_message", "wait_agent"]);
     assert_eq!(
         direct_model_only
             .exposure(&ToolName::namespaced(MULTI_AGENT_V2_NAMESPACE, "spawn_agent").to_string()),
         ToolExposure::DirectModelOnly
     );
+}
+
+#[tokio::test]
+async fn model_lookup_respects_override_visibility() {
+    let hidden = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = false;
+        });
+    })
+    .await;
+    hidden.assert_visible_lacks(&["list_models"]);
+    hidden.assert_registered_lacks(&["list_models"]);
 }
 
 #[tokio::test]
@@ -2083,7 +2100,10 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     .await;
 
     plan.assert_visible_contains(&["tool_search"]);
+    plan.assert_registered_contains(&["list_models"]);
+    assert_eq!(plan.exposure("list_models"), ToolExposure::Deferred);
     plan.assert_visible_lacks(&[
+        "list_models",
         "spawn_agent",
         "send_input",
         "resume_agent",
@@ -2627,6 +2647,7 @@ async fn code_mode_only_can_expose_namespaced_multi_agent_v2_as_normal_tools() {
             "exec",
             "wait",
             "request_user_input",
+            "list_models",
             "agents",
             "spawn_agent_plaintext",
             "send_message_plaintext",
@@ -2876,6 +2897,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
             // Multi-agent v2 tools.
+            "list_models",
             MULTI_AGENT_V2_NAMESPACE,
             "spawn_agent_plaintext",
             "send_message_plaintext",

@@ -39,6 +39,7 @@ async fn list_models_discovers_full_authorized_catalog(
             config.features.enable(Feature::MultiAgentV2).unwrap();
             config.agent_provider_allowlist = policy;
             config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
+            config.multi_agent_v2.hide_spawn_agent_metadata = restrict_catalog;
         })
         .build_with_auto_env(&server)
         .await?;
@@ -67,33 +68,8 @@ async fn list_models_discovers_full_authorized_catalog(
     let mut actual = Vec::new();
     let mut offset = 0;
     loop {
-        let call_id = format!("catalog-page-{offset}");
-        let args = if offset == 0 {
-            json!({})
-        } else {
-            json!({"offset": offset})
-        };
-        mount_sse_once(
-            &server,
-            sse(vec![
-                ev_response_created("lookup"),
-                ev_function_call(&call_id, "list_models", &args.to_string()),
-                ev_completed("lookup"),
-            ]),
-        )
-        .await;
-        let result = mount_sse_once(
-            &server,
-            sse(vec![ev_response_created("done"), ev_completed("done")]),
-        )
-        .await;
-        test.submit_turn("List the next page of authorized models.")
-            .await?;
-        let request = result.single_request();
-        let output = request.function_call_output(&call_id);
-        let text = output["output"].as_str().expect("JSON text output");
-        assert!(text.len() <= 3_400, "bounded context item");
-        let page: Value = serde_json::from_str(text)?;
+        let page = lookup_page(&test, &server, (offset > 0).then_some(offset)).await?;
+        assert!(page.get("oversized_entries").is_none());
         assert_eq!(page["total"], json!(expected.len()));
         let rows = page["models"].as_array().expect("model rows");
         assert!(rows.len() <= 5);
@@ -145,6 +121,21 @@ async fn list_models_discovers_full_authorized_catalog(
         );
     }
     for (row, model) in actual.iter().zip(&expected) {
+        assert_eq!(row["display_name_truncated"], false);
+        if restrict_catalog || model.service_tiers.is_empty() {
+            assert!(row.get("service_tiers").is_none());
+        } else {
+            assert_eq!(
+                row["service_tiers"],
+                json!(
+                    model
+                        .service_tiers
+                        .iter()
+                        .map(|tier| &tier.id)
+                        .collect::<Vec<_>>()
+                )
+            );
+        }
         let mut config = test.config.clone();
         config.model = Some(model.model.clone());
         config.model_provider_id = model.provider_id.clone().unwrap();
@@ -162,5 +153,71 @@ async fn list_models_discovers_full_authorized_catalog(
             )
         );
     }
+    Ok(())
+}
+
+async fn lookup_page(
+    test: &core_test_support::test_codex::TestCodex,
+    server: &wiremock::MockServer,
+    offset: Option<usize>,
+) -> Result<Value> {
+    let call_id = format!("catalog-page-{}", offset.unwrap_or_default());
+    let args = offset.map_or_else(|| json!({}), |offset| json!({"offset": offset}));
+    mount_sse_once(
+        server,
+        sse(vec![
+            ev_response_created("lookup"),
+            ev_function_call(&call_id, "list_models", &args.to_string()),
+            ev_completed("lookup"),
+        ]),
+    )
+    .await;
+    let result = mount_sse_once(
+        server,
+        sse(vec![ev_response_created("done"), ev_completed("done")]),
+    )
+    .await;
+    test.submit_turn("List the next page of authorized models.")
+        .await?;
+    let output = result.single_request().function_call_output(&call_id);
+    let text = output["output"].as_str().expect("JSON text output");
+    assert!(text.len() <= 3_400, "bounded context item");
+    Ok(serde_json::from_str(text)?)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn list_models_oversized_metadata_does_not_block_later_entries() -> Result<()> {
+    use codex_protocol::openai_models::ReasoningEffort;
+    use codex_protocol::openai_models::ReasoningEffortPreset;
+    let server = start_mock_server().await;
+    let test = test_codex()
+        .with_model("gpt-5.4")
+        .with_model_info_override("gpt-6-astra", |model| {
+            model.priority = -2;
+            model.display_name = "🧪".repeat(4096);
+        })
+        .with_model_info_override("gpt-6-sol", |model| {
+            model.priority = -1;
+            model.supported_reasoning_levels = vec![ReasoningEffortPreset {
+                effort: ReasoningEffort::Custom("x".repeat(4096)),
+                description: String::new(),
+            }];
+        })
+        .with_config(|config| {
+            config.features.enable(Feature::MultiAgentV2).unwrap();
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    let first = lookup_page(&test, &server, /*offset*/ None).await?;
+    assert_eq!(first["models"][0]["model"], "gpt-6-astra");
+    assert_eq!(first["models"][0]["display_name"], "🧪".repeat(128));
+    assert_eq!(first["models"][0]["display_name_truncated"], true);
+    assert_eq!(first["oversized_entries"], json!([1]));
+    let offset = first["next_offset"].as_u64().unwrap() as usize;
+    assert!(offset > 1);
+    let second = lookup_page(&test, &server, Some(offset)).await?;
+    assert!(!second["models"].as_array().unwrap().is_empty());
+    assert!(second["next_offset"].as_u64().unwrap() as usize > offset);
     Ok(())
 }

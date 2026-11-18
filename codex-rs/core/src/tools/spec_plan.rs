@@ -1084,9 +1084,6 @@ fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool 
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
     if collab_tools_enabled(turn_context) {
-        registry.add(crate::tools::handlers::list_models::Handler {
-            supports_cross_provider_overrides: multi_agent_v2_enabled(turn_context),
-        });
         if multi_agent_v2_enabled(turn_context) {
             let exposure = if turn_context.config.multi_agent_v2.non_code_mode_only {
                 ToolExposure::DirectModelOnly
@@ -1100,6 +1097,19 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =
                 turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
+            if turn_context
+                .config
+                .multi_agent_v2
+                .expose_spawn_agent_model_overrides
+            {
+                registry.add_with_exposure(
+                    crate::tools::handlers::list_models::Handler {
+                        supports_cross_provider_overrides: true,
+                        expose_service_tiers: !hide_spawn_agent_metadata,
+                    },
+                    exposure,
+                );
+            }
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
@@ -1192,6 +1202,13 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
+            registry.add_with_exposure(
+                crate::tools::handlers::list_models::Handler {
+                    supports_cross_provider_overrides: false,
+                    expose_service_tiers: true,
+                },
+                exposure,
+            );
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
             registry.add_with_exposure(SendInputHandler, exposure);
             registry.add_with_exposure(ResumeAgentHandler, exposure);

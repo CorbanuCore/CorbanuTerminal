@@ -54,6 +54,7 @@ fn model_lookup_and_compact_spawn_schema() {
     });
     let lookup = super::super::list_models::Handler {
         supports_cross_provider_overrides: true,
+        expose_service_tiers: true,
     }
     .spec();
     let schemas = json!([spawn, lookup]);
