@@ -193,13 +193,13 @@ impl McpEnterpriseManagedAuthConfig {
                 layer
                     .config
                     .get("mcp_enterprise_managed_auth")
-                    .map(|section| (&layer.name, section))
+                    .map(|section| (layer, section))
             })
         };
         let selected = sections()
-            .find(|(source, _)| {
+            .find(|(layer, _)| {
                 matches!(
-                    source,
+                    layer.name,
                     ConfigLayerSource::Mdm { .. }
                         | ConfigLayerSource::System { .. }
                         | ConfigLayerSource::EnterpriseManaged { .. }
@@ -208,7 +208,8 @@ impl McpEnterpriseManagedAuthConfig {
                 )
             })
             .or_else(|| {
-                sections().find(|(source, _)| !matches!(source, ConfigLayerSource::Project { .. }))
+                // D525 (a): a project-declared agent role is project configuration too.
+                sections().find(|(layer, _)| !layer.is_project_scoped())
             });
         selected
             .map(|(_, section)| {
@@ -314,7 +315,7 @@ fn has_trusted_atomic_registration(
     matches(non_project)
         && stack
             .layers_high_to_low()
-            .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+            .filter(|layer| !layer.is_project_scoped())
             .any(|layer| matches(&layer.config))
 }
 
@@ -340,7 +341,7 @@ fn validate_ema_auth_sources(
     let mut non_project = toml::Value::Table(Default::default());
     for layer in stack
         .layers_low_to_high()
-        .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .filter(|layer| !layer.is_project_scoped())
     {
         crate::merge_toml_values(&mut non_project, &layer.config);
     }
@@ -402,7 +403,7 @@ fn validate_xaa_opt_in_source(stack: &ConfigLayerStack, xaa_enabled: bool) -> io
         .copied();
     let configured = stack
         .layers_high_to_low()
-        .filter(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+        .filter(|layer| !layer.is_project_scoped())
         .find_map(|layer| {
             layer
                 .config

@@ -4613,14 +4613,6 @@ impl Config {
             &mut constrained_windows_sandbox_mode,
             &mut startup_warnings,
         )?;
-        // #1976 (D491): say at start why agent commands and file tools will
-        // be refused. MXC reports no restricted-token/elevated level, so it
-        // counts as unsandboxed here until S3b qualifies it.
-        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
-            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
-                security_level,
-            ));
-        }
         let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
             use std::env;
 
@@ -4753,6 +4745,18 @@ impl Config {
             && codex_sandboxing::windows_mxc_available();
         let local_windows_sandbox_type =
             resolve_windows_sandbox_type(windows_sandbox_type, prefer_mxc);
+        // #1976 (D491): say at start why agent commands and file tools will be
+        // refused. D522 (a): judged on the backend actually selected, so MXC
+        // counts as no sandbox however it was chosen (including `prefer_mxc`
+        // over a configured elevated or restricted-token sandbox).
+        if crate::security::windows_unsandboxed::applies(
+            security_level,
+            startup_notice_sandbox_level(local_windows_sandbox_type, windows_sandbox_level),
+        ) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let legacy_windows_sandbox_level = windows_sandbox_level_for_legacy_checks(
             local_windows_sandbox_type,
             windows_sandbox_level,
@@ -6874,6 +6878,20 @@ fn narrow_project_provider_allowlist(
         allowed.retain(|provider| narrower.contains(provider));
     }
     Some(allowed)
+}
+
+/// #1976 (D491), D522 (a): the Windows sandbox level the start-up notice is
+/// judged on. MXC counts as no sandbox however it was selected, as it does
+/// for the refusals themselves (`tools::orchestrator::unsandboxed_check_level`).
+fn startup_notice_sandbox_level(
+    local_windows_sandbox_type: SandboxType,
+    windows_sandbox_level: WindowsSandboxLevel,
+) -> WindowsSandboxLevel {
+    if local_windows_sandbox_type == SandboxType::WindowsMxc {
+        WindowsSandboxLevel::Disabled
+    } else {
+        windows_sandbox_level
+    }
 }
 
 /// PF-23-S03: the strictest security level any enabled config layer sets.

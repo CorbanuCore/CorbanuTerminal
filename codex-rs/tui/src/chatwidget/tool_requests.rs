@@ -31,8 +31,8 @@ impl ChatWidget {
     /// In-progress assessments temporarily own the live status footer so the
     /// user can see what is being reviewed, including parallel review
     /// aggregation. Terminal assessments clear or update that footer state and
-    /// render denied or timed-out decisions in history. Approved assessments
-    /// silently complete after updating the footer.
+    /// render denied or timed-out decisions in history. Approved non-command
+    /// assessments leave a "Request approved" record (D617).
     pub(super) fn on_guardian_assessment(&mut self, ev: GuardianAssessmentEvent) {
         let permission_request_summary = |subject: &str, reason: &Option<String>| {
             reason
@@ -151,6 +151,18 @@ impl ChatWidget {
         }
 
         if ev.status == GuardianAssessmentStatus::Approved {
+            // D617: keep a history record of what the automatic reviewer approved for
+            // network, MCP, permission and patch requests. Command and terminal-input
+            // approvals stay as upstream shows them.
+            if !matches!(
+                ev.action,
+                GuardianAssessmentAction::Command { .. }
+                    | GuardianAssessmentAction::Execve { .. }
+                    | GuardianAssessmentAction::WriteStdin { .. }
+            ) && let Some(summary) = guardian_action_summary(&ev.action)
+            {
+                self.add_boxed_history(history_cell::new_guardian_approved_action_request(summary));
+            }
             self.request_redraw();
             return;
         }
