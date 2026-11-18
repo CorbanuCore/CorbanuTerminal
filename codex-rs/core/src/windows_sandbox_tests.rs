@@ -198,3 +198,49 @@ async fn issue_2000_raise_windows_sandbox_only_raises() {
         assert_eq!(level(&kept), WindowsSandboxLevel::Elevated);
     }
 }
+
+/// D616 (#2562): a remote Windows MXC executor needs `allow_local_binding = true`
+/// configured explicitly; local MXC and every other executor keep their rule.
+#[test]
+fn d616_remote_mxc_executors_need_explicit_local_binding() {
+    use codex_network_proxy::LocalBindingPolicy;
+    use codex_sandboxing::SandboxType;
+
+    for (sandbox_type, platform_os, remote, local) in [
+        (
+            SandboxType::WindowsMxc,
+            Some("windows"),
+            LocalBindingPolicy::ExplicitTrue,
+            LocalBindingPolicy::RequireTrue,
+        ),
+        (
+            SandboxType::WindowsMxc,
+            Some("linux"),
+            LocalBindingPolicy::DefaultFalse,
+            LocalBindingPolicy::DefaultFalse,
+        ),
+        (
+            SandboxType::WindowsRestrictedToken,
+            Some("windows"),
+            LocalBindingPolicy::DefaultFalse,
+            LocalBindingPolicy::DefaultFalse,
+        ),
+        (
+            SandboxType::None,
+            None,
+            LocalBindingPolicy::DefaultFalse,
+            LocalBindingPolicy::DefaultFalse,
+        ),
+    ] {
+        assert_eq!(
+            super::remote_local_binding_policy_for_sandbox(sandbox_type, platform_os),
+            remote,
+            "{sandbox_type:?} {platform_os:?}"
+        );
+        assert_eq!(
+            super::local_binding_policy_for_sandbox(sandbox_type, platform_os),
+            local,
+            "{sandbox_type:?} {platform_os:?}"
+        );
+    }
+}

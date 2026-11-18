@@ -264,6 +264,9 @@ where
     }
 }
 
+/// D616: why a remote MXC launch without `allow_local_binding = true` is refused.
+pub const MXC_EXPLICIT_LOCAL_BINDING_REQUIRED: &str = "MXC needs network allow_local_binding = true set explicitly: Corbanu keeps host-loopback access off by default and MXC cannot block it; set it to true or use a different sandbox backend";
+
 /// How the executor resolves and validates local binding when managed networking is enabled.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LocalBindingPolicy {
@@ -272,6 +275,9 @@ pub enum LocalBindingPolicy {
     DefaultFalse,
     /// Omission defaults to true; explicit false is rejected.
     RequireTrue,
+    /// Corbanu D616 (remote Windows MXC executors): binding must be configured as
+    /// true; omission and explicit false are both rejected at launch.
+    ExplicitTrue,
 }
 
 impl LocalBindingPolicy {
@@ -280,6 +286,11 @@ impl LocalBindingPolicy {
         config
             .allow_local_binding
             .unwrap_or(config.enabled && self == Self::RequireTrue)
+    }
+
+    /// Whether an enabled launch must end up with local binding on.
+    pub(crate) fn requires_true(self) -> bool {
+        matches!(self, Self::RequireTrue | Self::ExplicitTrue)
     }
 
     pub(crate) fn resolved_config(self, config: &NetworkProxyConfig) -> NetworkProxyConfig {

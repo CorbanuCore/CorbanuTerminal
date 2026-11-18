@@ -312,7 +312,14 @@ impl NetworkProxySpec {
                     enabled: true,
                     // Without a controller, the owner supplies the entire permission ceiling.
                     dangerously_allow_all_unix_sockets: Some(true),
-                    allow_local_binding: Some(policy.allow_local_binding.unwrap_or(false)),
+                    // D616: an unset owner value stays unset under ExplicitTrue, so it is
+                    // refused below with the reason instead of becoming false.
+                    allow_local_binding: if local_binding_policy == LocalBindingPolicy::ExplicitTrue
+                    {
+                        policy.allow_local_binding
+                    } else {
+                        Some(policy.allow_local_binding.unwrap_or(false))
+                    },
                     ..NetworkProxyConfig::default()
                 },
                 /*requirements*/ None,
@@ -320,6 +327,16 @@ impl NetworkProxySpec {
             )?,
         };
         policy.apply_to(&mut spec.config);
+        // D616: neither controller nor owner configured binding for a remote MXC executor.
+        if local_binding_policy == LocalBindingPolicy::ExplicitTrue
+            && spec.config.enabled
+            && spec.config.allow_local_binding.is_none()
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                codex_network_proxy::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED,
+            ));
+        }
         spec.config.allow_local_binding = Some(local_binding_policy.resolve(&spec.config));
         let protected_denials = spec.config.denied_domains().unwrap_or_default();
 
