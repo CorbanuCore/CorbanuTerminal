@@ -130,6 +130,7 @@ fn lock_sandbox_dir_blocks_inherited_write_for_runner_files() {
             deny_read_paths: Vec::new(),
             deny_read_sessions: crate::DenyReadSessions::default(),
             deny_write_paths: Vec::new(),
+            world_writable_paths: Vec::new(),
             proxy_ports: Vec::new(),
             allow_local_binding: false,
             otel: None,
