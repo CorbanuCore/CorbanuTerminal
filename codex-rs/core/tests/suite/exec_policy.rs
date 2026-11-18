@@ -45,6 +45,10 @@ use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
+#[cfg(windows)]
+#[path = "exec_policy_powershell_unread.rs"]
+mod powershell_unread;
+
 use std::fs;
 
 #[path = "exec_policy_wrappers.rs"]

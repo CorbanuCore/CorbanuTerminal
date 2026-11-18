@@ -62,21 +62,32 @@ pub(super) fn has_wrappers(
         || unread_powershell_line(command).is_some()
 }
 
-/// #2568 (D553): how `command`, a PowerShell command line, runs a script
-/// rules cannot read: `Some(Some(file and arguments))` for `-File`,
-/// `Some(None)` for a command line read otherwise than PowerShell reads it,
-/// `None` for any other command. #2524 (D688): a PowerShell spelled as
-/// Windows runs it (`PWSH`, `PowerShell.EXE`) is read as the reader knows
-/// it, as main's `powershell_script_unreadable` does (#2582 review r3).
-fn unread_powershell_line(command: &[String]) -> Option<Option<Vec<String>>> {
+struct UnreadPowershellCommands {
+    commands: Vec<Vec<String>>,
+    restrict_only: bool,
+}
+
+/// D553: retain restrictions on readable prefixes and ask for the unknown
+/// remainder. D688: recognize Windows executable spelling as on main.
+fn unread_powershell_line(command: &[String]) -> Option<UnreadPowershellCommands> {
     #[cfg(windows)]
     let respelled = crate::security::tainted_action::policy_powershell_script(command);
     #[cfg(not(windows))]
     let respelled: Option<Vec<String>> = None;
     unread_powershell_command_line(respelled.as_deref().unwrap_or(command)).map(|unread| {
         match unread {
-            UnreadPowershell::File(file) => Some(file.to_vec()),
-            UnreadPowershell::Unreadable => None,
+            UnreadPowershell::File(file) => UnreadPowershellCommands {
+                commands: vec![file.to_vec()],
+                restrict_only: false,
+            },
+            UnreadPowershell::Partial(commands) => UnreadPowershellCommands {
+                commands,
+                restrict_only: true,
+            },
+            UnreadPowershell::Unreadable => UnreadPowershellCommands {
+                commands: Vec::new(),
+                restrict_only: true,
+            },
         }
     })
 }
@@ -305,15 +316,26 @@ pub(super) fn check(
             // `-File`): every rule counts. A `-File` script's file and
             // arguments are checked as a command too.
             if platform == DangerousCommandPlatform::Windows
-                && let Some(file) = unread_powershell_line(candidate)
+                && let Some(unread) = unread_powershell_line(candidate)
             {
                 raise(&mut heuristic, candidate, could_complete(&[]));
-                if let Some(file) = file {
-                    pending.push(Pending {
-                        command: file,
+                if !unread.restrict_only {
+                    // `-File`: its file and arguments, checked as before.
+                    pending.extend(unread.commands.into_iter().map(|command| Pending {
+                        command,
                         restrict_only,
                         depth,
-                    });
+                    }));
+                } else if depth < MAX_SCRIPT_DEPTH || start > 0 {
+                    // #2556, #2583 (D553): known literal prefixes of a script
+                    // read only in part add prompts and refusals only; the
+                    // unknown remainder asks above. Behind a launcher they
+                    // are read at any depth, as main's `always_read`.
+                    pending.extend(unread.commands.into_iter().map(|command| Pending {
+                        command,
+                        restrict_only: true,
+                        depth: depth + 1,
+                    }));
                 }
             }
         }

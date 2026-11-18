@@ -14,6 +14,47 @@ pub(crate) fn try_parse_powershell_commands(script: &str) -> Option<Vec<Vec<Stri
     lower_with_tree_sitter(script).ok()
 }
 
+/// Literal prefixes recovered from an otherwise opaque script. These may only
+/// add restrictions; neither their presence nor an empty result authorizes it.
+pub(crate) fn powershell_restrictive_prefixes(script: &str) -> Vec<Vec<String>> {
+    if script
+        .chars()
+        .any(|ch| matches!(ch, '‘' | '’' | '“' | '”' | '–' | '—' | '―'))
+    {
+        return Vec::new();
+    }
+    let mut parser = Parser::new();
+    if parser
+        .set_language(&tree_sitter_powershell::LANGUAGE.into())
+        .is_err()
+    {
+        return Vec::new();
+    }
+    let mut source = script.as_bytes().to_vec();
+    for equals in inline_double_dash_parameter_equals(script) {
+        source[equals] = b' ';
+    }
+    let Some(tree) = parser.parse(&source, None) else {
+        return Vec::new();
+    };
+    if tree.root_node().has_error() {
+        return Vec::new();
+    }
+    let mut nodes = Vec::new();
+    collect_command_nodes(tree.root_node(), &mut nodes);
+    nodes
+        .into_iter()
+        .filter_map(|node| {
+            let text = node.utf8_text(script.as_bytes()).ok()?;
+            // The invocation operator executes the following literal name; a
+            // dynamic name still fails before any prefix can be recovered.
+            let text = text.trim_start();
+            let text = text.strip_prefix('&').map_or(text, str::trim_start);
+            lower_command_text_with_prefix(text, true).ok()
+        })
+        .collect()
+}
+
 fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<String>>, String> {
     // PowerShell treats these Unicode characters as syntax aliases even when tree-sitter leaves
     // them inside generic tokens. Keep that whole spelling family opaque rather than guessing at
@@ -307,6 +348,13 @@ fn source_is_covered_by_commands(script: &str, command_ranges: &[std::ops::Range
 }
 
 fn lower_command_text(command_text: &str) -> Result<Vec<String>, String> {
+    lower_command_text_with_prefix(command_text, false)
+}
+
+fn lower_command_text_with_prefix(
+    command_text: &str,
+    partial: bool,
+) -> Result<Vec<String>, String> {
     // This is literal argv lowering, not safe/dangerous classification. Quoting and escapes are
     // decoded only for forms whose runtime value is statically known.
     let mut words = Vec::new();
@@ -319,27 +367,34 @@ fn lower_command_text(command_text: &str) -> Result<Vec<String>, String> {
         if index == chars.len() || chars[index] == '#' {
             break;
         }
-        let (word, next, is_bare) = if chars[index] == '\'' {
-            let (word, next) = parse_single_quoted(&chars, index)?;
-            (word, next, false)
-        } else if chars[index] == '"' {
-            let (word, next) = parse_double_quoted(&chars, index)?;
-            (word, next, false)
-        } else {
-            let (word, next) = parse_bare_word(&chars, index)?;
-            (word, next, true)
-        };
-        index = next;
-        if index < chars.len() && !chars[index].is_whitespace() && chars[index] != '#' {
-            return Err("adjacent/concatenated command elements".to_string());
+        let lowered = (|| {
+            let (word, next, is_bare) = if chars[index] == '\'' {
+                let (word, next) = parse_single_quoted(&chars, index)?;
+                (word, next, false)
+            } else if chars[index] == '"' {
+                let (word, next) = parse_double_quoted(&chars, index)?;
+                (word, next, false)
+            } else {
+                let (word, next) = parse_bare_word(&chars, index)?;
+                (word, next, true)
+            };
+            index = next;
+            if index < chars.len() && !chars[index].is_whitespace() && chars[index] != '#' {
+                return Err("adjacent/concatenated command elements".to_string());
+            }
+            if word.is_empty() {
+                return Err("empty word".to_string());
+            }
+            if is_bare {
+                reject_unsupported_bare_word(&word)?;
+            }
+            Ok(word)
+        })();
+        match lowered {
+            Ok(word) => words.push(word),
+            Err(_) if partial && !words.is_empty() => break,
+            Err(error) => return Err(error),
         }
-        if word.is_empty() {
-            return Err("empty word".to_string());
-        }
-        if is_bare {
-            reject_unsupported_bare_word(&word)?;
-        }
-        words.push(word);
     }
 
     if words.is_empty() {
