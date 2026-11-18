@@ -1,5 +1,6 @@
 //! #2548 / D553: text passed to eval or a shell's stdin is executable.
 use super::*;
+use pretty_assertions::assert_eq;
 
 const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
 const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
