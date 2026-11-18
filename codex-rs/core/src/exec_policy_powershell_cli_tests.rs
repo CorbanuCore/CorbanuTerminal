@@ -70,8 +70,13 @@ async fn trailing_arguments_are_part_of_the_script() {
             "git",
             "push",
         ]),
-        // Sync: a PowerShell nested in a bash script is not read here
-        // (main's #2531 nested-script reading is not on this branch).
+        // Nested in a bash script, which passes the words apart (#2531,
+        // now on this branch too).
+        words(&[
+            "bash",
+            "-lc",
+            "powershell.exe -Command 'git status' '; git push'",
+        ]),
     ] {
         assert_forbidden(command).await;
     }

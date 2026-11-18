@@ -4,8 +4,9 @@ name: rust-ci Windows native tests
 # breaking nightly (#636, owner decision 2026-10-15): codex-tui, codex-core,
 # codex-state and codex-login; since #1813 also windows-sandbox-rs,
 # network-proxy, process-hardening, sandboxing and exec-server; since #1839
-# also utils/pty and app-server. rust-ci.yml runs this on pull requests that
-# change one of those crates, passing only the changed groups' targets;
+# also utils/pty and app-server; since #2568 also shell-command. rust-ci.yml
+# runs this on pull requests that change one of those crates, passing only
+# the changed groups' targets;
 # nightly-ci.yml still runs every crate's native Windows tests (bazel.yml,
 # test-windows-native-main).
 #
