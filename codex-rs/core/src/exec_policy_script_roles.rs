@@ -5,6 +5,7 @@
 //! builtin and reserved word of bash, zsh and dash that is not known to run
 //! nothing but its argv is [`Role::Unread`].
 
+use crate::security::tainted_action::policy_program_name;
 use crate::security::tainted_action::policy_runs_powershell;
 use crate::security::tainted_action::policy_runs_shell;
 use codex_shell_command::bash::ARITHMETIC_TESTS;
@@ -40,7 +41,9 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
         return shell_role(program, args, stdin);
     }
     let known: Vec<Option<String>> = args.iter().cloned().map(Some).collect();
-    match program.as_str() {
+    // `/usr/bin/read` and `JOBS` (macOS ships builtin wrappers, and names
+    // compare without case there) run the builtin.
+    match policy_program_name(program).as_str() {
         "eval" => {
             let args = args.strip_prefix(&["--".to_string()]).unwrap_or(args);
             if args.is_empty() {
@@ -71,7 +74,7 @@ pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> boo
     if runs_shell(program) {
         return true;
     }
-    match program {
+    match policy_program_name(program).as_str() {
         "eval" | "exec" => true,
         name if builtin_runs_only_argv(name, args) => false,
         name => is_builtin_or_reserved(name),
@@ -79,7 +82,7 @@ pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> boo
 }
 
 /// #2585: a POSIX shell, fish, csh, or PowerShell.
-fn runs_shell(program: &str) -> bool {
+pub(super) fn runs_shell(program: &str) -> bool {
     policy_runs_shell(program) || policy_runs_powershell(program)
 }
 
@@ -158,8 +161,9 @@ fn shell_name_is_posix(program: &str) -> bool {
 /// Builtins of bash, zsh and dash that run nothing but their argv whatever
 /// it holds.
 const ARGV_ONLY_BUILTINS: &[&str] = &[
-    // Launchers that found no command of their own (`command -v git`).
-    "command", "builtin", "noglob", "-", ":", "true", "false", "echo", "pwd", "cd", "chdir",
+    // Launchers that found no command of their own (`command -v git`,
+    // `time` alone).
+    "command", "builtin", "noglob", "-", "time", ":", "true", "false", "echo", "pwd", "cd", "chdir",
     "pushd", "popd", "dirs", "type", "which", "whence", "where", "rehash", "unhash", "times",
     "help", "suspend", "unalias", "log",
     // Jobs, processes and the file mode: no shell evaluates these.

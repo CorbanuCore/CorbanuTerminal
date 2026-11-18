@@ -301,7 +301,7 @@ fn lexically_unsafe_scripts_are_unread() {
 #[test]
 fn minimal_set_refuses_more_than_the_tree() {
     for script in [
-        "echo $'\\' ; git push ; echo ' #'",
+        "echo $'\\\\' ; git push ; echo ' #'",
         "echo hi &> log",
         "echo hi |& cat",
         "cat <<< hi",
@@ -309,38 +309,34 @@ fn minimal_set_refuses_more_than_the_tree() {
         "cat <<'EOF'\nhi\nEOF",
         "bash <<EOF\necho safe\nEOF",
         "if [ -f x ]; then echo a; fi",
-        "[[ -n $x ]]",
-        "case $x in a) echo;; esac",
+        "[[ -n x ]]",
+        "case x in a) echo;; esac",
         "f() { echo; }",
         "( cd x && make )",
         "{ echo; }",
         "a=(x y)",
         "echo ${x:-default}",
         "true;#note",
-        "echo $(true #x\n)",
         "cmd >/dev/null 2>&1",
-        "cmd > \"$out\"",
-        "echo \"$(echo ${x:- #'}'} )\"",
-        "x=$(cat <<'E'\n)\ngit push\nE\n)",
-        // Review round 6.
-        "echo \"$$(\" '\")\"\ngit push\n'",
-        "echo \"$${\" '\"}\"\ngit push\n'",
-        "echo $$'\\' ';git push;' $$'\\'",
-        "echo $(echo x\\ #'\n)\ngit push\n')",
-        "echo $(echo a\\b)",
-        "echo \"\u{4e01}\\\"\ngit push\necho \"",
+        "cmd > \"out\"",
+        // The literal list (review round 7): no `$name`, `${…}` or `$(…)`.
+        "x=$(git log -1); echo \"$x\"",
+        "echo \"$HOME\" \"${HOME}\"",
+        "for f in *.rs; do wc -l \"$f\"; done",
+        "sleep 1 & wait",
+        "\"\"=git push",
+        "echo \"caf\u{e9}\"",
     ] {
         assert!(read_script(script).fails_closed(), "{script:?}");
     }
     for script in [
         "git status && echo ok",
-        "x=$(git log -1); echo \"$x\"",
-        "for f in *.rs; do wc -l \"$f\"; done",
         "cargo build 2>&1 | tail -n 5",
-        "ls > /dev/null; echo \"${HOME}\" $1 $?",
+        "ls > /dev/null; echo \"exit=$?\" $1 \"$$\"",
         "find . -name '*.rs' -exec wc -l {} \\;",
         "if test -f x; then echo a; else echo b; fi # done",
-        "echo \"$$\" \"$?\" $(git rev-parse HEAD) a\\ b",
+        "for f in a b; do wc -l f; done",
+        "echo 'caf\u{e9} $HOME $(x)' a\\ b",
     ] {
         assert!(!read_script(script).fails_closed(), "{script:?}");
     }

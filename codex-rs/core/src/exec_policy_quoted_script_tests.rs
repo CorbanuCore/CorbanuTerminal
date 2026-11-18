@@ -264,12 +264,9 @@ async fn unread_shell_scripts_ask_when_rules_exist() {
 async fn scripts_no_rule_could_match_keep_their_decision() {
     for script in [
         "ls > /dev/null",
-        "echo \"$HOME\"",
         "cargo build 2>&1 | tail -n 5",
-        "for f in *.rs; do wc -l \"$f\"; done",
         "'echo' hi; \"ls\" -la",
         "git status > /dev/null",
-        "x=$(git log -1); echo \"$x\"",
         "git log --format='%H' | head -n 1",
         "echo 'git push'",
         "printf '%s\\n' \"git\" push",
@@ -279,6 +276,25 @@ async fn scripts_no_rule_could_match_keep_their_decision() {
                 let result = requirement(&command, rules).await;
                 assert!(runs(&result), "{command:?} {rules}: {result:?}");
             }
+        }
+    }
+    // #2548 (coordinator, review round 7): `$name`, `${…}` and `$(…)` lie
+    // outside the minimal lexical set, where shells (bash 3.2's scan of
+    // `$(…)`, zsh) and the parser have disagreed on what is code. Such a
+    // script asks wherever a prompt or forbidden rule exists, and runs as
+    // before where none does.
+    for script in [
+        "echo \"$HOME\"",
+        "for f in *.rs; do wc -l \"$f\"; done",
+        "x=$(git log -1); echo \"$x\"",
+    ] {
+        for command in shells(script) {
+            for rules in [FORBID, PROMPT] {
+                let result = requirement(&command, rules).await;
+                assert!(asks(&result), "{command:?} {rules}: {result:?}");
+            }
+            let result = requirement(&command, "").await;
+            assert!(runs(&result), "{command:?}: {result:?}");
         }
     }
     // A command built at run time asks only where a prompt or forbidden

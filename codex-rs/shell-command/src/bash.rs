@@ -322,7 +322,8 @@ fn unquoted_word(text: &str) -> Option<String> {
                 Some(escaped) => word.push(escaped),
                 None => word.push('\\'),
             },
-            '*' | '?' | '~' => return None,
+            // zsh's extended_glob (a user may set it) adds `#` and `^`.
+            '*' | '?' | '~' | '#' | '^' => return None,
             // An expansion the grammar left in a word (zsh's `$=x`).
             '$' => return None,
             // zsh's `=cmd` is the program's path.

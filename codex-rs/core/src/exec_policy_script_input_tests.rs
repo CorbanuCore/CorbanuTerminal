@@ -255,6 +255,17 @@ async fn unknown_scripts_table() {
         "echo $(echo $$'\\' ')\ngit push\n')",
         "echo $(echo x\\ #'\n)\ngit push\n')",
         "sh -c 'time -l git push'",
+        // Review round 7 (#2613).
+        "sh -c 'time -p -l git push'",
+        "sh -c \"time '-l' git push\"",
+        "sh -c 'time \\-l git push'",
+        "zsh -c '\"\"=git push'",
+        "zsh -c \"''=git push\"",
+        "zsh -c 'nohup \"\"=git push'",
+        "/usr/bin/jobs -x git push",
+        "echo x | /usr/bin/read 'a[$(git push)]'",
+        "command gi#t push",
+        "git pu#sh",
         "LC_ALL=zh_TW.Big5\necho \"\u{4e01}\\\"\ngit push\necho \"",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",
@@ -292,11 +303,8 @@ async fn negative_controls_and_no_rule() {
         "eval",
         "echo 'git push' | cat",
         "echo 'git push' | bash -c 'echo safe'",
-        "printf '%s\\n' \"$x\" | sort",
         "shift 2; exit 0",
         // Review round 2: everyday job control, status and formats stay read.
-        "sleep 1 & pid=$!; kill $pid; wait $!",
-        "printf '%s: %d\\n' \"$name\" 3",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(
@@ -373,6 +381,10 @@ async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
         "true;#note",
         "[ -n \"$(git status --porcelain)\" ] || [ \"$(uname)\" = Darwin ]",
         "cmd >/dev/null 2>&1",
+        // The literal list (review round 7): no `$name`, `$(…)` or `&`.
+        "printf '%s\\n' \"$x\" | sort",
+        "sleep 1 & pid=$!; kill $pid; wait $!",
+        "printf '%s: %d\\n' \"$name\" 3",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(asks(&result), "{script:?}: {result:?}");
@@ -455,4 +467,27 @@ async fn eval_and_stdin_depth_bound() {
     }
     let result = check(&script, FORBID, /*mode*/ 0).await;
     assert!(asks(&result), "{result:?}");
+}
+
+/// Review round 7: a builtin run through a wrapper program (macOS ships
+/// `/usr/bin/jobs` and the like as `builtin jobs "$@"` scripts) is
+/// classified even as the argv given, not only inside a script.
+#[tokio::test]
+async fn builtin_wrappers_are_classified_as_argv_too() {
+    for command in [
+        vec!["/usr/bin/jobs", "-x", "git", "push"],
+        vec!["env", "jobs", "-x", "git", "push"],
+    ] {
+        let command: Vec<String> = command.into_iter().map(str::to_string).collect();
+        let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(FORBID.to_string()),
+            command: command.clone(),
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        assert!(asks(&result), "{command:?}: {result:?}");
+    }
 }

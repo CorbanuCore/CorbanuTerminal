@@ -1,26 +1,26 @@
 //! #2548 (D553): a lexical pre-filter before the syntax tree. tree-sitter-bash
 //! and the shells (bash 3.2 to 5, dash, zsh, ksh) split some text
 //! differently: line continuations, carriage returns, here-documents,
-//! pattern and regex tokens, `case` arms, `[ … ]`, `${…}` operators,
-//! comments inside substitutions, subscripts, zsh's and ksh's own syntax.
-//! Rather than chase each difference, a script is read precisely only if it
-//! is built from a minimal POSIX set every one of them reads alike; any other
-//! script is unread, so it asks whenever a prompt or forbidden rule exists.
+//! pattern and regex tokens, `case` arms, `[ … ]`, expansions and the scans
+//! bash 3.2 makes of `$(…)`, comments, subscripts, multibyte locales, zsh's
+//! and ksh's own syntax. Rather than chase each difference, a script is read
+//! precisely only if it is built from a minimal POSIX set every one of them
+//! reads alike (the coordinator's literal list); any other script fails
+//! closed: it asks whenever a prompt or forbidden rule exists.
 //!
 //! The minimal set: words of ASCII letters, digits and `_-./,:@%+=~*?!^]`
 //! (and `#` inside a word); the standalone word `{}`; spaces, tabs and
-//! newlines; `\` escaping one character other than a newline; `;` `&` `&&`
-//! `|` `||`; `$name`, `$1`, `$?`-style specials (not followed by `(`, `{`,
-//! `'`, `[` or a name character) and `${name}`; `$(…)` holding a minimal
-//! script with no `#` and no `\` (bash 3.2 finds its end with a scan of its
-//! own); `'…'`; `"…"` holding ASCII text, `\` escapes and the same `$`
-//! forms; at most one redirection per simple command (`<` `>` `>>` `N>`
-//! `N>>` `N>&M` `>&M`) to a plain word or descriptor; comments after
-//! whitespace outside substitutions. Nothing else: no here-documents or
-//! here-strings, no `( … )`, `{ … }`, `[ … ]`, `[[ … ]]` or `case`, no
-//! `$'…'`, backquotes, `$((`, `${x…}` operators, process substitution, `==`
-//! or `=~`, no control characters, and no bytes above ASCII outside single
-//! quotes (a multibyte locale can make one swallow a `\`).
+//! newlines; `\` escaping one character other than a newline; `;` `&&` `|`
+//! `||`; `'…'`; `"…"` holding ASCII text and `\` escapes; the special
+//! parameters `$?`, `$#`, `$$`, `$!`, `$@`, `$*`, `$-`, `$0`–`$9` (not
+//! followed by `(`, `{`, `'`, `[` or a name character); at most one
+//! redirection per simple command (`<` `>` `>>` `N>` `N>>` `N>&M` `>&M`) to
+//! a plain word or descriptor; comments after whitespace. Nothing else: no
+//! `$name`, `${…}`, `$(…)` or backquotes, no here-documents or here-strings,
+//! no `&` alone, no `( … )`, `{ … }`, `[ … ]`, `[[ … ]]` or `case`, no
+//! `$'…'`, process substitution, `==` or `=~`, no `=` right after a quote
+//! (zsh's `""=cmd`), no control characters, and no bytes above ASCII outside
+//! single quotes (a multibyte locale can make one swallow a `\`).
 
 /// Whether `script` lies within the minimal set (see the module docs).
 pub(super) fn lexically_safe(script: &str) -> bool {
@@ -29,9 +29,8 @@ pub(super) fn lexically_safe(script: &str) -> bool {
         at: 0,
         redirects: 0,
         command_start: true,
-        in_substitution: 0,
     };
-    lexer.script(/*substitution*/ false) && lexer.at == lexer.bytes.len()
+    lexer.script()
 }
 
 struct Lexer<'a> {
@@ -41,10 +40,6 @@ struct Lexer<'a> {
     redirects: usize,
     /// The next word is in command position.
     command_start: bool,
-    /// Inside `$(…)`, where bash 3.2 finds the end with its own scan: it
-    /// takes `#` after an escaped space for a comment, and reads `$$(` and
-    /// `$$'` as substitution and `$'…'`.
-    in_substitution: usize,
 }
 
 const WORD_BYTES: &[u8] = b"_-./,:@%+=~*?!^]#";
@@ -77,31 +72,36 @@ impl Lexer<'_> {
     /// Whether a word of `len` bytes starting here ends there.
     fn word_ends_after(&self, len: usize) -> bool {
         self.peek(len)
-            .is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b';' | b'&' | b'|' | b')'))
+            .is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b';' | b'&' | b'|'))
     }
 
-    /// Reads a script to its end, or a substitution's to its `)`.
-    fn script(&mut self, substitution: bool) -> bool {
+    fn script(&mut self) -> bool {
         while let Some(byte) = self.current() {
             match byte {
                 b' ' | b'\t' => self.at += 1,
-                b'\n' | b';' | b'&' | b'|' => {
-                    // `|&`, `&>` and `;;` are not in the set; `&&` and `||`
-                    // are.
+                b'\n' | b';' | b'|' => {
+                    // `|&` and `;;` are not in the set; `||` is.
                     if (byte == b'|' && self.following() == Some(b'&'))
-                        || (byte == b'&' && self.following() == Some(b'>'))
                         || (byte == b';' && self.following() == Some(b';'))
                     {
                         return false;
                     }
                     self.redirects = 0;
                     self.command_start = true;
-                    self.at += 1;
+                    self.at += if byte == b'|' && self.following() == Some(b'|') {
+                        2
+                    } else {
+                        1
+                    };
                 }
-                b')' if substitution => return true,
-                b')' => return false,
-                // bash 3.2 ends a comment inside `$(…)` differently.
-                b'#' if self.after_whitespace() && !substitution => {
+                b'&' if self.following() == Some(b'&') => {
+                    self.redirects = 0;
+                    self.command_start = true;
+                    self.at += 2;
+                }
+                // Background jobs (and bash's `&>`) are not in the set.
+                b'&' => return false,
+                b'#' if self.after_whitespace() => {
                     while self.current().is_some_and(|byte| byte != b'\n') {
                         if self.current() == Some(b'\r') {
                             return false;
@@ -118,10 +118,9 @@ impl Lexer<'_> {
                     && self.rest().starts_with(b"{}")
                     && self.word_ends_after(/*len*/ 2) =>
                 {
+                    self.command_start = false;
                     self.at += 2;
                 }
-                // `case` arms, `[[`, `==` and the like never get here: their
-                // bytes are not word bytes, or the word is refused below.
                 _ => {
                     if !self.word() {
                         return false;
@@ -129,27 +128,29 @@ impl Lexer<'_> {
                 }
             }
         }
-        !substitution
+        true
     }
 
-    /// One word: unquoted bytes, quotes and expansions. A digit-only word
-    /// glued to `<` or `>` is that redirection's descriptor.
+    /// One word: unquoted bytes, quotes and special parameters. A
+    /// digit-only word glued to `<` or `>` is that redirection's descriptor.
     fn word(&mut self) -> bool {
         let start = self.at;
         while let Some(byte) = self.current() {
             match byte {
-                b' ' | b'\t' | b'\n' | b';' | b'&' | b'|' | b')' => break,
-                // A `#` starting a word anywhere but after whitespace at the
-                // top level, or any `#` or escape inside `$(…)`: shells
-                // disagree on whether it starts a comment.
-                b'#' if self.at == start || self.in_substitution > 0 => return false,
-                b'\\' if self.in_substitution > 0 => return false,
+                b' ' | b'\t' | b'\n' | b';' | b'&' | b'|' => break,
+                // Not after whitespace: shells disagree on whether it starts
+                // a comment.
+                b'#' if self.at == start => return false,
                 b'<' | b'>' => {
                     let descriptor = self.bytes[start..self.at].iter().all(u8::is_ascii_digit);
                     if !descriptor || self.at == start {
                         return false;
                     }
                     break;
+                }
+                // zsh expands `""=git` to git's path.
+                b'=' if self.at > start && matches!(self.bytes[self.at - 1], b'\'' | b'"') => {
+                    return false;
                 }
                 b'\'' => {
                     if !self.single_quoted() {
@@ -198,7 +199,7 @@ impl Lexer<'_> {
             && !(command_word
                 && matches!(
                     word,
-                    b"case" | b"esac" | b"select" | b"function" | b"coproc" | b"[" | b"[["
+                    b"case" | b"esac" | b"select" | b"function" | b"coproc"
                 ))
     }
 
@@ -226,7 +227,6 @@ impl Lexer<'_> {
                 // A multibyte locale (Big5, SJIS) can make the byte before a
                 // `\` its lead byte.
                 b'`' | b'\r' | 0x80.. => return false,
-                b'\\' if self.in_substitution > 0 => return false,
                 b'\\' => match self.following() {
                     Some(b'\n' | b'\r') | None => return false,
                     Some(_) => self.at += 2,
@@ -243,51 +243,17 @@ impl Lexer<'_> {
         false
     }
 
-    /// `$name`, `$1`, `$?`-style specials, `${name}`, `$(…)`, a lone `$`.
+    /// A special parameter (`$?`, `$1`) or a lone `$`; nothing else.
     fn dollar(&mut self) -> bool {
-        let name_byte = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
         match self.following() {
-            Some(b'(') if self.peek(/*offset*/ 2) == Some(b'(') => false,
-            Some(b'(') => {
-                self.at += 2;
-                let outer = (self.redirects, self.command_start);
-                self.redirects = 0;
-                self.command_start = true;
-                self.in_substitution += 1;
-                let read = self.script(/*substitution*/ true) && self.current() == Some(b')');
-                self.in_substitution -= 1;
-                (self.redirects, self.command_start) = outer;
-                self.at += 1;
-                read
-            }
-            Some(b'{') => {
-                self.at += 2;
-                let start = self.at;
-                while self.current().is_some_and(name_byte) {
-                    self.at += 1;
-                }
-                if self.at == start || self.current() != Some(b'}') {
-                    return false;
-                }
-                self.at += 1;
-                // zsh reads `${name}[…]` as a subscript.
-                self.current() != Some(b'[')
-            }
-            Some(byte) if byte.is_ascii_alphabetic() || byte == b'_' => {
-                self.at += 1;
-                while self.current().is_some_and(name_byte) {
-                    self.at += 1;
-                }
-                self.current() != Some(b'[')
-            }
             // zsh reads `$#a` as a length and `$#a[x]` evaluates `x`; bash
             // 3.2 reads `$$(`, `$${` and `$$'` as if the second `$` began
             // an expansion.
             Some(byte) if byte.is_ascii_digit() || b"?#$!@*-".contains(&byte) => {
                 self.at += 2;
-                !self
-                    .current()
-                    .is_some_and(|byte| b"[({'".contains(&byte) || name_byte(byte))
+                !self.current().is_some_and(|byte| {
+                    b"[({'".contains(&byte) || byte.is_ascii_alphanumeric() || byte == b'_'
+                })
             }
             Some(b' ' | b'\t' | b'\n' | b'"') | None => {
                 self.at += 1;
@@ -310,7 +276,10 @@ impl Lexer<'_> {
             b">&"
         } else if self.rest().starts_with(b"<&") {
             b"<&"
-        } else if self.rest().starts_with(b"<<") || self.rest().starts_with(b"<>") {
+        } else if self.rest().starts_with(b"<<")
+            || self.rest().starts_with(b"<>")
+            || self.rest().starts_with(b">|")
+        {
             return false;
         } else if self.current() == Some(b'<') {
             b"<"

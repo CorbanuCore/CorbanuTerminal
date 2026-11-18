@@ -65,6 +65,7 @@ mod work;
 
 #[cfg(windows)]
 pub(crate) use indirect::indirect_exec_policy::policy_powershell_script;
+pub(crate) use indirect::indirect_exec_policy::policy_program_name;
 pub(crate) use indirect::indirect_exec_policy::policy_runs_powershell;
 pub(crate) use indirect::indirect_exec_policy::policy_runs_shell;
 pub(crate) use indirect::indirect_exec_policy::policy_shell_script;

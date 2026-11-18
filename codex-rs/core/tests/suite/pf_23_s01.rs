@@ -909,6 +909,52 @@ fn shell_step(call_id: &str, command: &str) -> Step {
     call(call_id, "shell_command", json!({ "command": command }))
 }
 
+/// #2548 (coordinator decision, 2026-11-18): Aggressive always has prompt
+/// and forbidden rules, so a script outside the minimal lexical set (these
+/// build paths at run time with `$(…)` and variables) asks before it runs,
+/// and with approvals off it would be refused before the sandbox is
+/// exercised. Under Aggressive these runs therefore allow approvals and
+/// approve that prompt; the sandbox assertions are unchanged.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn reading_gate_approval(level: SecurityLevel) -> AskForApproval {
+    if level == SecurityLevel::Aggressive {
+        AskForApproval::OnRequest
+    } else {
+        AskForApproval::Never
+    }
+}
+
+/// Approves the script-reading prompt [`reading_gate_approval`] expects
+/// under Aggressive, asserting it was raised (and that no other level
+/// asks); any other approval request (a sandbox retry) is denied, so the
+/// sandbox still decides.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn approve_reading_gate(test: &TestCodex, level: SecurityLevel) -> anyhow::Result<()> {
+    use codex_protocol::protocol::ReviewDecision;
+    let mut gate_prompts = 0;
+    while let Some(approval) = next_exec_approval(test).await {
+        let decision = if level == SecurityLevel::Aggressive && approval.reason.is_none() {
+            gate_prompts += 1;
+            ReviewDecision::Approved
+        } else {
+            ReviewDecision::denied("a sandbox retry")
+        };
+        test.codex
+            .submit(Op::ExecApproval {
+                id: approval.effective_approval_id(),
+                turn_id: None,
+                decision,
+            })
+            .await?;
+    }
+    assert_eq!(
+        gate_prompts > 0,
+        level == SecurityLevel::Aggressive,
+        "{level:?}: the script-reading prompt"
+    );
+    Ok(())
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn next_exec_approval(
     test: &TestCodex,
@@ -947,9 +993,15 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
         if tainted {
             steps.insert(0, injected_step());
         }
-        let (test, captured) =
-            start_turn_in(Some(home), level, AskForApproval::Never, steps, |_| {}).await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        let (test, captured) = start_turn_in(
+            Some(home),
+            level,
+            reading_gate_approval(level),
+            steps,
+            |_| {},
+        )
+        .await?;
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-read");
         assert_eq!(
@@ -1148,12 +1200,12 @@ async fn pf_23_s02_aggressive_denies_home_reads_before_untrusted_content() -> an
     let (test, captured) = start_turn_in(
         Some(home),
         SecurityLevel::Aggressive,
-        AskForApproval::Never,
+        reading_gate_approval(SecurityLevel::Aggressive),
         vec![shell_step("call-read", &evading), done_step()],
         |_| {},
     )
     .await?;
-    assert!(next_exec_approval(&test).await.is_none());
+    approve_reading_gate(&test, SecurityLevel::Aggressive).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -2213,7 +2265,7 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call(
                     "call-create",
@@ -2230,7 +2282,7 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = [
@@ -2294,7 +2346,7 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-move", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -2312,7 +2364,7 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-move");
         let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap_or_default();
@@ -2494,7 +2546,7 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call(
                     "call-replace",
@@ -2509,7 +2561,7 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-replace");
         drop(test);
@@ -2650,7 +2702,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-1472", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -2686,7 +2738,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-1472");
         drop(test);
@@ -2745,7 +2797,7 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call(
                     "call-create",
@@ -2762,7 +2814,7 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = ["rules/x.rules", "new-entry"];
@@ -2917,7 +2969,7 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
             let (test, captured) = start_turn_in(
                 Some(home.clone()),
                 level,
-                AskForApproval::Never,
+                reading_gate_approval(level),
                 vec![
                     call(
                         "call-create",
@@ -2935,7 +2987,7 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
                 },
             )
             .await?;
-            assert!(next_exec_approval(&test).await.is_none());
+            approve_reading_gate(&test, level).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-create");
             let mut entries = vec!["rules/x.rules", "hooks.json", "agents/x"];
@@ -3020,7 +3072,7 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
             let (test, captured) = start_turn_after(
                 Some(home.clone()),
                 level,
-                AskForApproval::Never,
+                reading_gate_approval(level),
                 vec![
                     call("call-lock", "shell_command", json!({ "command": command })),
                     done_step(),
@@ -3045,7 +3097,7 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
                 },
             )
             .await?;
-            assert!(next_exec_approval(&test).await.is_none());
+            approve_reading_gate(&test, level).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-lock");
             let ok = if missing {
@@ -3108,7 +3160,7 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-db", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3130,7 +3182,7 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-db");
         let achieved = [
@@ -3203,7 +3255,7 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-650", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3217,7 +3269,7 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-650");
         // Where the folder is now (Permissive moves it).
@@ -3298,7 +3350,7 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-675", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3312,7 +3364,7 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-675");
         let changed = std::fs::read_to_string(x.join("other/.git")).unwrap_or_default() != original;
@@ -3563,7 +3615,7 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-651m", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3581,7 +3633,7 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-651m");
         let achieved = [
@@ -3688,7 +3740,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-651s", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3726,7 +3778,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
             },
         )
         .await?;
-        let approval = next_exec_approval(&test).await;
+        let approved = approve_reading_gate(&test, level).await;
         // SAFETY: as above.
         unsafe {
             match &original_tmpdir {
@@ -3734,7 +3786,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
                 None => std::env::remove_var("TMPDIR"),
             }
         }
-        assert!(approval.is_none());
+        approved?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-651s");
         let ordinary = output.contains("ordinary-651")
@@ -4065,12 +4117,12 @@ async fn pf_23_s03_stored_level_survives_restart_over_a_lower_config() -> anyhow
     let (test, captured) = start_turn_in(
         Some(home),
         SecurityLevel::Permissive,
-        AskForApproval::Never,
+        reading_gate_approval(SecurityLevel::Aggressive),
         vec![shell_step("call-read", &evading), done_step()],
         |_| {},
     )
     .await?;
-    assert!(next_exec_approval(&test).await.is_none());
+    approve_reading_gate(&test, SecurityLevel::Aggressive).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -4103,14 +4155,14 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
         if tainted {
             steps.insert(0, injected_step());
         }
-        let (test, captured) = start_turn(level, AskForApproval::Never, steps, |config| {
+        let (test, captured) = start_turn(level, reading_gate_approval(level), steps, |config| {
             config
                 .permissions
                 .set_permission_profile(PermissionProfile::Disabled)
                 .expect("full access");
         })
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-write");
         assert_eq!(

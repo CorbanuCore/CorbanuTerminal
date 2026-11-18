@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 87;
+const CONSTRUCTS: u64 = 91;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -209,6 +209,12 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         84 => format!("sh -c {}", single_quoted(&format!("time -l {inner}"))),
         85 => format!("LC_ALL=zh_TW.Big5\necho \"\u{4e01}\\\"\n{inner}\necho \""),
         86 => format!("echo \"$${{\" '\"}}\"\n{inner}\n'"),
+        // Review round 7: dash's `time` options, zsh's `""=cmd`, builtin
+        // wrapper programs.
+        87 => format!("sh -c {}", single_quoted(&format!("time -p -l {inner}"))),
+        88 => format!("sh -c {}", single_quoted(&format!("time '-l' {inner}"))),
+        89 => format!("zsh -c {}", single_quoted(&format!("\"\"={inner}"))),
+        90 => format!("/usr/bin/jobs -x sh -c {}", single_quoted(inner)),
         81 => format!(
             "cat <<'{delimiter}' && echo $(case x in x) cat <<'{delimiter}'\n{delimiter}\n{inner}\nesac)\n{delimiter}"
         ),

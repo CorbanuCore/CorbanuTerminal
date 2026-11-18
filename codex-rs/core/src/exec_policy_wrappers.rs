@@ -94,6 +94,12 @@ pub(super) fn asks_outside_minimal_set(
         && any_strict_rule(policy, options)
 }
 
+fn inner_runs_shell(command: &[String]) -> bool {
+    command
+        .first()
+        .is_some_and(|program| roles::runs_shell(program))
+}
+
 /// #2548: `command`'s words for deciding what its program runs: a word
 /// known only at run time that is always a number (`$?`) reads as one.
 fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
@@ -411,9 +417,11 @@ pub(crate) fn check(
         // #2548 (D553): a command from a script whose program runs more than
         // its argv: `eval`'s words, a shell's here-document are read as
         // scripts; code rules cannot read asks where a rule could match it.
-        // The argv as given never reaches a shell, so this needs no check.
-        if depth > 0
-            && let Some(&start) = wrappers.starts.last()
+        // At the top (depth 0) a command is argv as given: a shell there
+        // reads the caller's input, as before; any other program (a builtin
+        // wrapper such as `/usr/bin/jobs -x`) is still classified.
+        if let Some(&start) = wrappers.starts.last()
+            && (depth > 0 || !inner_runs_shell(&command[start..]))
         {
             let inner = &command[start..];
             let reading_from = matches.len();
