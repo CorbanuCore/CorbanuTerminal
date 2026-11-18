@@ -416,8 +416,9 @@ unsafe fn apply_label_acl(path: &Path, acl: &mut LabelAcl) -> Result<()> {
     );
     if code != ERROR_SUCCESS {
         return Err(anyhow!(
-            "SetNamedSecurityInfoW(label) failed for {}: {code}",
-            path.display()
+            "SetNamedSecurityInfoW(label) failed for {}: {code} ({})",
+            path.display(),
+            std::io::Error::from_raw_os_error(code as i32)
         ));
     }
     Ok(())

@@ -1534,12 +1534,25 @@ fn ensure_registry() -> Result<PathBuf> {
                     "a Low integrity label means a sandboxed command may have made it",
                 ));
             }
-            label_private_dir_medium(dir)
-                .with_context(|| format!("label {} Medium", dir.display()))?;
+            label_private_dir_medium(dir).map_err(|err| private_label_error(dir, &err))?;
         }
     }
     crate::integrity_registry::check_entries(&registry)?;
     Ok(registry)
+}
+
+/// #2584: one self-contained message (callers may print only the outermost
+/// one) with the Win32 cause and what the folder needs. The usual cause is a
+/// LocalAppData whose permissions give the user Modify but not Full control:
+/// the label needs WRITE_OWNER, which a user's own profile grants.
+fn private_label_error(dir: &Path, err: &anyhow::Error) -> anyhow::Error {
+    anyhow::anyhow!(
+        "label {} Medium: {err:#}. The non-admin sandbox keeps its records in this \
+         folder and must give it a Medium integrity label first, which needs \
+         Full control of the folder (WRITE_OWNER, as in your own AppData\\Local) \
+         and a file system that holds integrity labels",
+        dir.display()
+    )
 }
 
 fn lock(registry: &Path) -> Result<File> {
@@ -1688,3 +1701,7 @@ pub(crate) fn recorded_roots() -> Result<Vec<PathBuf>> {
     drop(lock);
     Ok(labels.roots.into_keys().collect())
 }
+
+#[cfg(test)]
+#[path = "integrity_leases_tests.rs"]
+mod tests;
