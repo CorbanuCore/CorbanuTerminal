@@ -113,11 +113,9 @@ const QUOTED_SCRIPTS: &[&str] = &[
     "nice -n 5 g'i't push > log",
 ];
 
-/// `script` run by each shell and launcher chain. Sync: scripts nested in a
-/// plain script with no launcher before them (#2531) are not read on this
-/// branch yet.
+/// `script` run by each shell and launcher chain.
 fn shells(script: &str) -> Vec<Vec<String>> {
-    [
+    let mut commands: Vec<Vec<String>> = [
         &["bash", "-lc"][..],
         &["bash", "-c"],
         &["sh", "-c"],
@@ -135,7 +133,11 @@ fn shells(script: &str) -> Vec<Vec<String>> {
         command.push(script.to_string());
         command
     })
-    .collect()
+    .collect();
+    // A script nested in a script.
+    let nested = format!("bash -c '{}'", script.replace('\'', r#"'"'"'"#));
+    commands.push(words(&["sh", "-c", &nested]));
+    commands
 }
 
 #[tokio::test]
@@ -246,6 +248,7 @@ async fn unread_shell_scripts_ask_when_rules_exist() {
         words(&["bash", "-ec", "git push"]),
         words(&["bash", "--norc", "-c", "git push"]),
         words(&["fish", "-c", "git push"]),
+        words(&["bash", "-lc", "bash -c 'git push' name"]),
         words(&["bash", "-lc", "fish -c 'git push' > log"]),
     ] {
         let result = requirement(&command, FORBID).await;
@@ -253,8 +256,8 @@ async fn unread_shell_scripts_ask_when_rules_exist() {
         // Without a prompt or forbidden rule, nothing changes.
         let result = requirement(&command, ALLOW_GIT).await;
         assert!(runs(&result), "{command:?}: {result:?}");
-        // Sync review r1: where the fallback already asks for the same
-        // argv, still no amendment for it is offered.
+        // Sync review r1 (#2575): where the fallback already asks for the
+        // same argv, still no amendment for it is offered.
         let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
             policy_src: Some(PROMPT.to_string()),
             command: command.clone(),
@@ -304,47 +307,6 @@ async fn scripts_no_rule_could_match_keep_their_decision() {
     }
 }
 
-/// D696 holds through quoted script words: an allow rule approves only the
-/// exact spelling (`'GIT' push` is not `git`), on every platform. Sync: the
-/// rules' D692 case folding (#2510) is not on this branch, so forbidden
-/// rules are not checked for other spellings here.
-#[tokio::test]
-async fn quoted_words_keep_rule_case_handling() {
-    let unless_trusted = async |command: &[String]| {
-        exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
-            policy_src: Some(ALLOW_GIT.to_string()),
-            command: command.to_vec(),
-            // Asks for every command no rule allows.
-            approval_policy: AskForApproval::UnlessTrusted,
-            permission_profile: PermissionProfile::Disabled,
-            sandbox_permissions: SandboxPermissions::UseDefault,
-            prefix_rule: None,
-        })
-        .await
-    };
-    // The control: the exact spelling is allowed.
-    let command = words(&["bash", "-lc", "'git' push"]);
-    let result = unless_trusted(&command).await;
-    assert!(runs(&result), "{command:?}: {result:?}");
-    for script in [
-        "'GIT' push",
-        "\"Git\" push",
-        "G'I'T push",
-        "echo hi; 'GIT' push",
-    ] {
-        let command = words(&["bash", "-lc", script]);
-        let result = unless_trusted(&command).await;
-        assert!(
-            matches!(
-                result,
-                ExecApprovalRequirement::NeedsApproval { .. }
-                    | ExecApprovalRequirement::NeedsHumanApproval { .. }
-            ),
-            "{command:?}: {result:?}"
-        );
-    }
-}
-
 /// Allow rules never approve a script read only for prompts and refusals.
 #[tokio::test]
 async fn allow_rules_do_not_approve_scripts_read_in_part() {
@@ -358,4 +320,65 @@ async fn allow_rules_do_not_approve_scripts_read_in_part() {
     let command = words(&["bash", "-lc", "'git' status"]);
     let result = requirement_in(Mode::RequireEscalated, &command, ALLOW_GIT).await;
     assert!(runs(&result), "{result:?}");
+}
+
+/// D696 and D692 hold through quoted script words: an allow rule approves
+/// only the exact spelling (`'GIT' push` is not `git`), on every platform;
+/// where programs are found without regard to case (macOS, Windows), a
+/// forbidden rule refuses it.
+#[tokio::test]
+async fn quoted_words_keep_rule_case_handling() {
+    let unless_trusted = async |command: &[String], rules: &str| {
+        exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(rules.to_string()),
+            command: command.to_vec(),
+            // Asks for every command no rule allows.
+            approval_policy: AskForApproval::UnlessTrusted,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await
+    };
+    // The control: the exact spelling is allowed.
+    let command = words(&["bash", "-lc", "'git' push"]);
+    let result = unless_trusted(&command, ALLOW_GIT).await;
+    assert!(runs(&result), "{command:?}: {result:?}");
+    for script in [
+        "'GIT' push",
+        "\"Git\" push",
+        "G'I'T push",
+        "echo hi; 'GIT' push",
+    ] {
+        let command = words(&["bash", "-lc", script]);
+        let result = unless_trusted(&command, ALLOW_GIT).await;
+        assert!(
+            matches!(
+                result,
+                ExecApprovalRequirement::NeedsApproval { .. }
+                    | ExecApprovalRequirement::NeedsHumanApproval { .. }
+            ),
+            "{command:?}: {result:?}"
+        );
+        let result = requirement(&command, FORBID).await;
+        if codex_execpolicy::PROGRAM_NAMES_FOLD_CASE {
+            assert!(forbidden(&result), "{command:?}: {result:?}");
+        } else {
+            assert!(runs(&result), "{command:?}: {result:?}");
+        }
+    }
+}
+
+/// #2510: a quoted drive path names the shell Windows runs.
+#[cfg(windows)]
+#[tokio::test]
+async fn quoted_windows_shell_paths_are_read() {
+    for script in [
+        r"'C:\Tools\Zsh.exe' -c 'git push'",
+        r#""C:\Program Files\Git\bin\BASH.EXE" -lc "'git' push""#,
+    ] {
+        let command = words(&["bash", "-lc", script]);
+        let result = requirement(&command, FORBID).await;
+        assert!(forbidden(&result), "{command:?}: {result:?}");
+    }
 }

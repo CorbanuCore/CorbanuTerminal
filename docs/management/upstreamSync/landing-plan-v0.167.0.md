@@ -12,27 +12,28 @@ Main merge #9, [#2457](https://github.com/CorbanuCore/CorbanuTerminal/pull/2457)
 
 ### Measured test baselines
 
-These are the latest located worker measurements, with their actual revisions. **There is no full-workspace, all-platform pass on the inspected head.** Older runs are evidence to carry forward, not passes relabelled onto that head. No new full run was needed for this planning task.
+The fresh astra-synccore7 Linux measurements below began on **November 17, 2026**, at sync head `51dc00e7067b3e32d167e0fcb681cd9249209f22`, using Rust 1.99.1, an 8 MiB test stack and isolated test homes on glitch. Follow-up runs are labelled separately with their actual revisions. **There is no full-workspace, all-platform pass.** CLI exclusions, ignored tests and interrupted cases are not passes.
 
 | Suite / platform | Passed | Failed | Ignored / excluded | Revision and dated source |
 | --- | ---: | ---: | --- | --- |
-| Core `all`, Linux | 3,109 | 81 occurrences, 80 names | 24 ignored; 24 CLI exclusions also recorded, not passes | `880997572351e8d018d39f8aafe2c1e004785a21`, astra-synccore6 round 3, November 17 |
-| Core library, Linux | 4,843 | 4 | 10 ignored | Same round 3 |
-| App-server suite, Linux | 1,714 | 12 | 2 ignored; 13 CLI exclusions | Same round 3 |
-| App-server library, Linux | 464 | 0 | 0 ignored | Same round 3 |
-| TUI library, Linux | 7,492 | 0 | 9 ignored | #2440 head `a4dcdbb84672c78aa60400abe653b2bd5baf4ac7`, astra-syncapp2, November 16 20:39 UTC |
+| Core `all`, Linux | 3,169 | 24 | 24 ignored; 24 CLI exclusions | `101e9ff5845f67b419edcf1e28658768f1d0b99e`, astra-synccore7 round 4, November 17 |
+| Core library, Linux | 4,876 | 0 | 10 ignored | `51dc00e7067b3e32d167e0fcb681cd9249209f22`, astra-synccore7 round 1, November 17 |
+| App-server suite, Linux | 1,725 | 1 | 2 ignored; 13 CLI exclusions | Same round 1; remaining selected-capability-stack case depends on #2274 |
+| App-server library, Linux | 464 | 0 | 0 ignored | Same round 1 |
+| TUI library, Linux | 7,490 | 2 | 9 ignored | Same round 1; long-path snapshot and Unix-socket fixture failures |
 | TUI `tests/all.rs`, Linux | 65 | 58 | All 58 failures need the CLI | #2367 head `98068acce3`, sync-compile14, November 16 |
-| Exec suite, Linux | 124 | 0 | Not reported in worker summary | #2354, sync-compile10, November 15 |
+| Exec integration / library / binary, Linux | 127 / 83 / 1 | 0 / 0 / 0 | 0 ignored; event-processor tests are included in integration | `51dc00e7067b3e32d167e0fcb681cd9249209f22`, astra-synccore7 round 1, November 17 |
+| Execpolicy library / integration, Linux | 8 / 33 | 0 / 0 | 0 ignored; binary target has no tests | Same round 1 |
 | Exec seatbelt subset, macOS | 15 | 0 | Not reported in worker summary | #2367, sync-compile14, November 16 |
 | Exec-server library / `exec_process`, macOS | 486 / 67 | 0 / 0 | 17 integration cases ignored | #2397 head `1ec71a03830b2431a261b8871cb0aa53f81e5395`, sec-2397b, November 16 20:02 UTC |
 | HTTP client, Linux | 159 | 0 | 0 skipped | #2449, astra-2446, November 16 21:51 UTC |
 | Sandboxing / Linux-sandbox library + integration, Linux | 117 / 255 + 119 | 0 | 3 Linux-sandbox cases ignored; separate suite counts | #2450, sync-main8, November 16 23:00 UTC |
 
-The [astra-synccore6 handoff](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939867211) records the full baseline and subsequent **failure-only** rerun: core **49 pass / 32 fail**, core library **2 / 2**, app suite **5 / 7**. That is **56 / 41** of the original 97 failed occurrences, with no hangs or missing cases. Two additional passing fork-compaction cases are outside that total. Its tested tree `e6411e30f9af03b4d7de2fccac63020a86a49b49` matched sync at `db663c985f156d041a480c708e5455a5963096ba`.
+The [dated astra-synccore7 measurement record](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6949219793) records the exact revisions and root causes. The initial core run on `51dc00e7067b3e32d167e0fcb681cd9249209f22` aborted after **316 passes**, leaving **2,901 unfinished**, when a network-approval future overflowed the standard 8 MiB stack. The complete core result above uses [#2532](https://github.com/CorbanuCore/CorbanuTerminal/pull/2532)'s repair and has no unfinished cases. Its **24 failures** comprise **21 CLI-dependent cases**, two D634 metadata fixtures ([#2530](https://github.com/CorbanuCore/CorbanuTerminal/pull/2530), final-head focused replay **2/0**) and a shared permission-hook marker ([#2535](https://github.com/CorbanuCore/CorbanuTerminal/pull/2535)).
 
-[#2471 then merged](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6940024857) at 05:54 UTC: its two enterprise-login cases pass separately, as do 14 keyring cases. Thus **39 previously failing occurrences remain unresolved by the recorded repairs: 22 CLI-dependent plus 17 decision-dependent**. This is a remaining-work count, not a fresh 58/39 run or a reconstructed full-suite result. Exclusions and the separate TUI/MCP suites must still be restored and run.
+Together with the app-server case, **22 measured failures remain in the #2274 CLI group**; the 24 core and 13 app exclusions are additional unexecuted coverage. The TUI startup snapshot needs normalization before a long path is truncated ([#2533](https://github.com/CorbanuCore/CorbanuTerminal/pull/2533)); its socket fixture passes unchanged when the harness uses a shorter temporary-path alias. These focused follow-ups do not reconstruct a passing full-suite count. No new owner decision emerged from this measurement campaign. The earlier [astra-synccore6 handoff](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939867211) and its 17 decision-dependent failures describe the earlier evidence cut, not this fresh failure inventory.
 
-Supporting records: `$W/astra-synccore6.result.md` (full report), `$HOME/.corbanu-workers/astra-synccore6.result.md` (short handoff), `$HOME/.corbanu-workers/sync-main9.result.md`, `$W/astra-syncapp2.result.md`, and the dated comments linked above. Here `$W` means the coordinator's `workers-20261002` directory. The detailed failure map and raw summaries are archived with astra-synccore6; use them when assigning cases.
+Supporting records: `$HOME/.corbanu-workers/astra-synccore7.result.md`, `$W/astra-synccore7-measurements.json`, and the dated comment linked above. Here `$W` means the coordinator's `workers-20261002` directory. Per-run summaries preserve source SHAs, exclusions, failure names and raw artifact locations. TUI counts were reconciled with libtest's final suite record to account for terminal output preceding JSON events without a newline.
 
 ## Remaining blockers
 
@@ -52,7 +53,7 @@ Only **two open PRs target sync** at the cut: [#2274](https://github.com/Corbanu
 
 ### Owner decisions
 
-[The current queue](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939945244) maps `$W/astra-synccore6-decisions.md` SC6-1…7 to D679…D685. **Travis decides; the coordinator assigns implementation afterwards.** No option below is approved by this plan.
+[The current queue](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6939945244) maps `$W/astra-synccore6-decisions.md` SC6-1…7 to D679…D685. **Travis accepted D679–D685 as recommended on November 17 at 06:31Z** ([owner record](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532#issuecomment-6940669510)). The table preserves the original choices; implementation/evidence links are reconciled in [#2565](https://github.com/CorbanuCore/CorbanuTerminal/pull/2565), without claiming final qualification.
 
 | Decision | Failing occurrences | Choice needed; recommendation |
 | --- | ---: | --- |
@@ -64,7 +65,7 @@ Only **two open PRs target sync** at the cut: [#2274](https://github.com/Corbanu
 | D684 / SC6-6 | 1 core | Send a full current skill catalog on reconnect, or preserve full catalog plus availability history in section-replacing adapters. Recommend the full current catalog; test both provider styles through compaction/resume. |
 | D685 / SC6-7 | 1 core library | Keep the copied-token gap when its source is unset, or filter using broker-known credentials with bounded matching and refusal when protection is unavailable. Recommend filtering, with independent security review and Travis's sign-off. |
 
-These are the **17 decision-dependent failures**, grouped by root cause. The remaining **22 CLI failures** are remote executor/plugin/hook/MCP/credential-history startup failures (21 core, one app), not evidence that those security cases passed. D685 is a real protection gap shared with main, not just an upstream expectation mismatch.
+These were the **17 decision-dependent failures** at the original cut, grouped by root cause; their choices are now accepted and the implementations are linked in #2565. They are not a current pending-decision count. The remaining **22 CLI failures** are remote executor/plugin/hook/MCP/credential-history startup failures (21 core, one app), not evidence that those security cases passed. D685 is a real protection gap shared with main, not just an upstream expectation mismatch.
 
 Other owner actions: schedule the Windows desktop checklist; sign SG2 and the final SG3/merge. **D676–D678 were accepted at 05:45 UTC** and are being implemented in #2493; the handoff's older pending labels are stale. D659–D674 are accepted; D675 was superseded. D628 deliberately leaves the Windows provisioning service **off**; activation is a separate future decision, not permission to enable it for landing. Deferred named-account flag removal #1080 is likewise outside this sync. No additional undecided D-row was found in the latest coordinator record.
 
@@ -88,22 +89,22 @@ Revert `sync-ci-mode` using the program tooling: `blocking-ci` currently skips B
 
 ### Ledger and release-note completeness
 
-At the sync cut the eight live ledgers contain **3,679 rows: 3,583 resolved and 96 open**. Preview ledgers are excluded. These are row counts, not unique defects; several old rows describe fixes that have since merged.
+The November 17 reconciliation in [#2565](https://github.com/CorbanuCore/CorbanuTerminal/pull/2565), against sync source `5b5c85143884c903cdcceecca276c06f6f9eee94`, records **3,749 rows: 3,670 resolved and 79 open** after audit. Preview ledgers are excluded. These are row counts, not unique defects. The earlier cut had 3,679 rows; 70 resolved entries were added subsequently, then this audit resolved 17 of the 96 previously open rows. Each remaining row has a dated disposition and owner: 10 are held by #2274 and 69 are tracked in [#2562](https://github.com/CorbanuCore/CorbanuTerminal/issues/2562), [#2563](https://github.com/CorbanuCore/CorbanuTerminal/issues/2563) and [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564). These counts do not establish SG2/SG3 or sprint completion.
 
 | Ledger suffix after `ledger-rust-v0.167.0` | Resolved | Open |
 | --- | ---: | ---: |
-| `.tsv` | 1 | 29 |
+| `.tsv` | 5 | 25 |
 | `-resolved.tsv` | 1,006 | 0 |
 | `-s1c.tsv` | 202 | 0 |
 | `-s3b.tsv` | 547 | 27 |
 | `-s4a.tsv` | 136 | 0 |
-| `-compile.tsv` | 183 | 12 |
-| `-main-merges.tsv` | 636 | 18 |
-| `-main-merges-2.tsv` | 872 | 10 |
+| `-compile.tsv` | 192 | 7 |
+| `-main-merges.tsv` | 643 | 11 |
+| `-main-merges-2.tsv` | 939 | 9 |
 
-The integrator and security owner must give **every open row** a current disposition, linked implementation and test/review evidence. Work includes the CLI/MXC row and obsolete MCP-server remnants; S3b guardian/disclosure, sandbox/credential and Windows audit/ACL rows; old core/session/test ports; Telegram notification handling; D525 EMA/config/role documentation; remote MCP discovery coverage; and the 28 main-carry rows. A later passing suite alone does not resolve a documented boundary-review obligation. Audit migration renumbering and preserved released checksums too. Preserve split ledgers and the blob-size limit.
+The integrator and security owner must finish the **79 dispositioned open rows**, linking implementation and current-head test/review evidence before closure. Work includes the CLI/MXC row and obsolete MCP-server remnants; S3b guardian/disclosure, sandbox/credential and Windows audit/ACL rows; old core/session/test ports; Telegram notification handling; D525 EMA/config/role documentation; remote MCP discovery coverage; and the 20 remaining main-carry rows. A later passing suite alone does not resolve a documented boundary-review obligation. Audit migration renumbering and preserved released checksums too. Preserve split ledgers and the blob-size limit.
 
-There are **139 Markdown release-note fragments** (plus `.gitkeep`) on the inspected sync head. Presence is not completeness. Audit user-visible removals, provider/auth behavior, security changes, doctor/CLI changes and D679–D685 outcomes against fragments, then run `release_notes.py check` and `preview`. Never recreate `RELEASE_NOTES.md`. Main merge #9 deliberately omitted the duplicate #2443 fragment because sync's D659–D664 fragment already covers it; preserve that explanation. Finish app-server/config guidance, the upgrade/compatibility record, footprint dispositions and sprint evidence. Do not mark S3/S4/S5 complete from ledger counts alone.
+There are **152 Markdown release-note fragments** (plus `.gitkeep`) on the reconciled sync source. Check and preview pass; [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564) records the coverage, sprint-record and migration/rollback gaps. Presence is not completeness. Audit user-visible removals, provider/auth behavior, security changes, doctor/CLI changes and D679–D685 outcomes against fragments, then run `release_notes.py check` and `preview`. Never recreate `RELEASE_NOTES.md`. Main merge #9 deliberately omitted the duplicate #2443 fragment because sync's D659–D664 fragment already covers it; preserve that explanation. Finish app-server/config guidance, the upgrade/compatibility record, footprint dispositions and sprint evidence. Do not mark S3/S4/S5 complete from ledger counts alone.
 
 **Sprint records also block handoff; owner: the integrator.** At the cut, main's PF-85-S01–S05 records are `draft` with no implementation worktree assigned. On sync, S01 is `in_progress`, while S02–S05 remain `draft` and unassigned. Reconcile each record with its actual authorized worktree, completed work and final-tree evidence; do not relabel them complete merely because code merged. S03 must record Travis's exact-head SG2 sign-off on the dedicated **“needs security sign-off”** PR. Complete and archive S01–S04 when their gates are met. S05 must accurately separate pre-merge gates from its later merge/canary tasks; complete and archive it only after those tasks finish. Run `python3 docs/sprints/check.py` on the reconciled records.
 

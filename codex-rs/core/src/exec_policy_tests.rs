@@ -37,8 +37,12 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use toml::Value as TomlValue;
 
+#[path = "exec_policy_nested_script_tests.rs"]
+mod nested_script_tests;
+
 #[path = "exec_policy_quoted_script_tests.rs"]
 mod quoted_script_tests;
+
 #[path = "exec_policy_wrapper_tests.rs"]
 mod wrapper_tests;
 
@@ -53,6 +57,15 @@ mod xargs_su_tests;
 
 #[path = "exec_policy_d696_tests.rs"]
 mod d696_tests;
+
+#[path = "exec_policy_rule_case_tests.rs"]
+mod rule_case_tests;
+
+#[path = "exec_policy_launcher_case_tests.rs"]
+mod launcher_case_tests;
+
+#[path = "exec_policy_shell_case_tests.rs"]
+mod shell_case_tests;
 
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]

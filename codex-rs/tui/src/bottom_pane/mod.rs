@@ -1614,6 +1614,15 @@ impl BottomPane {
     }
 
     #[cfg(test)]
+    pub(crate) fn reset_status_indicator_timer_for_tests(&mut self, now: Instant) {
+        self.status_timer.reset_for_tests(now);
+        self.status
+            .as_mut()
+            .expect("status indicator should be visible")
+            .reset_header_timer_for_tests(now);
+    }
+
+    #[cfg(test)]
     pub(crate) fn status_line_content(&self) -> Option<&footer_content::FooterContent> {
         self.composer.status_line_content()
     }

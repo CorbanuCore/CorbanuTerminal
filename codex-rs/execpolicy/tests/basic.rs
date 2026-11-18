@@ -793,6 +793,7 @@ host_executable(name = "git", paths = ["{git_path_literal}"])
         &allow_all,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         },
     );
     assert_eq!(
@@ -939,6 +940,7 @@ host_executable(name = "git", paths = [])
         &allow_all,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         },
     );
     assert_eq!(
@@ -974,6 +976,7 @@ host_executable(name = "git", paths = ["{allowed_git_literal}"])
         &allow_all,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         },
     );
     assert_eq!(
@@ -1004,6 +1007,7 @@ prefix_rule(pattern = ["git"], decision = "prompt")
         &allow_all,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         },
     );
     assert_eq!(
@@ -1041,6 +1045,7 @@ host_executable(name = "git", paths = ["{git_path_literal}"])
         &allow_all,
         &MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         },
     );
     assert_eq!(
@@ -1095,6 +1100,7 @@ fn strictest_rule_matching_more_args_by_maps_each_rule() -> Result<()> {
     policy.add_prefix_rule(&tokens(&["git", "status", "-s"]), Decision::Allow)?;
     let options = MatchOptions {
         resolve_host_executables: false,
+        fold_program_case: false,
     };
     let weaken_forbidden = |decision| match decision {
         Decision::Allow => None,
@@ -1137,6 +1143,7 @@ prefix_rule(pattern=["ls"], decision="allow")"#,
     let policy = parser.build();
     let options = MatchOptions {
         resolve_host_executables: true,
+        fold_program_case: false,
     };
     let git = host_absolute_path(&["usr", "bin", "git"]);
     for (known, expected) in [
@@ -1197,6 +1204,228 @@ prefix_rule(pattern=["tool", "status"], decision="allow")"#,
     Ok(())
 }
 
+/// D696: a `canonical_matching` allow rule asks for caseless names, so it
+/// still approves `RM`, but not the `.exe` spellings Windows' host lookup
+/// also reaches.
+#[test]
+fn canonical_allow_rules_fold_case_but_keep_the_suffix() -> Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "test.rules",
+        r#"prefix_rule(pattern=["rm"], decision="allow", canonical_matching=True)"#,
+    )?;
+    let policy = parser.build();
+    let options = MatchOptions {
+        resolve_host_executables: true,
+        fold_program_case: false,
+    };
+    let decision = |cmd: &[&str]| {
+        policy
+            .check_with_options(&tokens(cmd), &ask_all, &options)
+            .decision
+    };
+    assert_eq!(decision(&["rm", "x"]), Decision::Allow);
+    assert_eq!(decision(&["RM", "x"]), Decision::Allow);
+    for program in [
+        "RM.EXE".to_string(),
+        "rm.exe".to_string(),
+        host_absolute_path(&["Windows", "RM.exe"]),
+    ] {
+        assert_eq!(
+            decision(&[program.as_str(), "x"]),
+            Decision::Prompt,
+            "{program}"
+        );
+    }
+    Ok(())
+}
+
+const FOLD: MatchOptions = MatchOptions {
+    resolve_host_executables: true,
+    fold_program_case: true,
+};
+
+fn folded_decisions(policy: &Policy, cmd: &[&str], options: &MatchOptions) -> Vec<Decision> {
+    policy
+        .case_folded_matches(&tokens(cmd), options)
+        .iter()
+        .map(RuleMatch::decision)
+        .collect()
+}
+
+/// D692: forbidden and prompt rules match the program name in any case;
+/// allow rules and arguments stay exact.
+#[test]
+fn case_folded_matches_only_strict_rules() -> Result<()> {
+    let mut policy = Policy::empty();
+    policy.add_prefix_rule(&tokens(&["rm"]), Decision::Forbidden)?;
+    policy.add_prefix_rule(&tokens(&["git", "push"]), Decision::Prompt)?;
+    policy.add_prefix_rule(&tokens(&["ls"]), Decision::Allow)?;
+    policy.add_prefix_rule(&tokens(&["Rscript"]), Decision::Forbidden)?;
+    policy.add_prefix_rule(&tokens(&["/bin/sudo"]), Decision::Prompt)?;
+    policy.add_prefix_rule(&tokens(&["sudo"]), Decision::Allow)?;
+    for (cmd, expected) in [
+        (&["RM", "-rf", "x"][..], vec![Decision::Forbidden]),
+        (&["Rm"], vec![Decision::Forbidden]),
+        (&["GIT", "push"], vec![Decision::Prompt]),
+        (&["rscript", "x"], vec![Decision::Forbidden]),
+        (&["RSCRIPT"], vec![Decision::Forbidden]),
+        (&["/BIN/SUDO", "ls"], vec![Decision::Prompt]),
+        (&["\u{17f}\u{75}do"], vec![]),
+        // The exact name is left to the exact lookup.
+        (&["rm", "x"], vec![]),
+        // Arguments stay exact.
+        (&["GIT", "PUSH"], vec![]),
+        // Allow rules never match another case.
+        (&["LS"], vec![]),
+        (&["SUDO"], vec![]),
+        (&["RMX"], vec![]),
+    ] {
+        assert_eq!(folded_decisions(&policy, cmd, &FOLD), expected, "{cmd:?}");
+        assert_eq!(
+            folded_decisions(&policy, cmd, &MatchOptions::default()),
+            Vec::<Decision>::new(),
+            "{cmd:?}"
+        );
+        // The exact lookup is unchanged by the option.
+        assert_eq!(
+            policy.matches_for_command_with_options(
+                &tokens(cmd),
+                /*heuristics_fallback*/ None,
+                &FOLD
+            ),
+            policy.matches_for_command_with_options(
+                &tokens(cmd),
+                /*heuristics_fallback*/ None,
+                &MatchOptions {
+                    resolve_host_executables: true,
+                    fold_program_case: false,
+                }
+            ),
+            "{cmd:?}"
+        );
+    }
+    let rule_match = policy.case_folded_matches(&tokens(&["RM", "-rf"]), &FOLD);
+    assert_eq!(
+        rule_match,
+        vec![RuleMatch::PrefixRuleMatch {
+            matched_prefix: tokens(&["rm"]),
+            decision: Decision::Forbidden,
+            resolved_program: None,
+            justification: None,
+        }]
+    );
+    // Unicode folds that lowercasing misses.
+    let mut policy = Policy::empty();
+    policy.add_prefix_rule(&tokens(&["sudo"]), Decision::Forbidden)?;
+    policy.add_prefix_rule(&tokens(&["timeout"]), Decision::Forbidden)?;
+    for cmd in ["\u{17f}\u{75}do", "SUDO", "t\u{131}meout"] {
+        assert_eq!(
+            folded_decisions(&policy, &[cmd], &FOLD),
+            vec![Decision::Forbidden],
+            "{cmd}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn case_folded_matches_resolve_host_executables() -> Result<()> {
+    let rm = host_executable_name("rm");
+    let listed = host_absolute_path(&["usr", "bin", &rm]);
+    let listed_upper = host_absolute_path(&["USR", "BIN", &rm.to_ascii_uppercase()]);
+    let other_upper = host_absolute_path(&["opt", "bin", &rm.to_ascii_uppercase()]);
+    let mut policy = Policy::empty();
+    policy.add_prefix_rule(&tokens(&["rm"]), Decision::Forbidden)?;
+    let unlisted = policy.clone();
+    policy.set_host_executable_paths("rm".to_string(), vec![absolute_path(&listed)]);
+    let found = policy.case_folded_matches(&[listed_upper.clone(), "x".to_string()], &FOLD);
+    assert_eq!(
+        found,
+        vec![RuleMatch::PrefixRuleMatch {
+            matched_prefix: tokens(&["rm"]),
+            decision: Decision::Forbidden,
+            resolved_program: Some(absolute_path(&listed_upper)),
+            justification: None,
+        }]
+    );
+    // Another directory is another program when paths are listed.
+    assert_eq!(
+        policy.case_folded_matches(std::slice::from_ref(&other_upper), &FOLD),
+        Vec::new()
+    );
+    // With no list any directory counts. (On Windows the basename key is
+    // already lower case, so the exact lookup matches it.)
+    assert_eq!(
+        unlisted
+            .case_folded_matches(&[other_upper], &FOLD)
+            .iter()
+            .map(RuleMatch::decision)
+            .collect::<Vec<_>>(),
+        if cfg!(windows) {
+            Vec::new()
+        } else {
+            vec![Decision::Forbidden]
+        }
+    );
+    // Relative paths read by their basename, as the exact lookup does.
+    for cmd in ["./RM", "../bin/RM"] {
+        assert_eq!(
+            unlisted
+                .case_folded_matches(&tokens(&[cmd, "x"]), &FOLD)
+                .iter()
+                .map(RuleMatch::decision)
+                .collect::<Vec<_>>(),
+            if cfg!(windows) {
+                Vec::new()
+            } else {
+                vec![Decision::Forbidden]
+            },
+            "{cmd}"
+        );
+    }
+    // Without host resolution, only the word itself folds.
+    assert_eq!(
+        policy.case_folded_matches(
+            &[listed_upper],
+            &MatchOptions {
+                resolve_host_executables: false,
+                fold_program_case: true,
+            }
+        ),
+        Vec::new()
+    );
+    Ok(())
+}
+
+#[test]
+fn strictest_rule_matching_more_args_folds_only_strict_rules() -> Result<()> {
+    let mut policy = Policy::empty();
+    policy.add_prefix_rule(&tokens(&["rm", "-rf"]), Decision::Forbidden)?;
+    policy.add_prefix_rule(&tokens(&["ls", "-l"]), Decision::Allow)?;
+    let exact = MatchOptions {
+        resolve_host_executables: true,
+        fold_program_case: false,
+    };
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["RM"]), &FOLD),
+        Some(Decision::Forbidden)
+    );
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["RM"]), &exact),
+        None
+    );
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["LS"]), &FOLD),
+        None
+    );
+    assert_eq!(
+        policy.strictest_rule_matching_more_args(&tokens(&["ls"]), &FOLD),
+        Some(Decision::Allow)
+    );
+    Ok(())
+}
+
 fn ask_all(_: &[String]) -> Decision {
     Decision::Prompt
 }
@@ -1215,9 +1444,10 @@ prefix_rule(pattern=["git", "push"], decision="allow")
 prefix_rule(pattern=["git", "push", "--force"], decision="forbidden")"#,
     )?;
     let policy = parser.build();
-    {
+    for fold_program_case in [false, true] {
         let options = MatchOptions {
             resolve_host_executables: true,
+            fold_program_case,
         };
         let decision = |cmd: &[&str]| {
             policy
@@ -1283,40 +1513,5 @@ fn allow_rule_examples_keep_the_host_lookup() -> Result<()> {
     // Windows reads `GIT.EXE` by its lookup key `git`; elsewhere it never
     // matched.
     assert_eq!(parsed.is_ok(), cfg!(windows), "{parsed:?}");
-    Ok(())
-}
-
-/// D696: a `canonical_matching` allow rule asks for caseless names, so it
-/// still approves `RM`, but not the `.exe` spellings Windows' host lookup
-/// also reaches.
-#[test]
-fn canonical_allow_rules_fold_case_but_keep_the_suffix() -> Result<()> {
-    let mut parser = PolicyParser::new();
-    parser.parse(
-        "test.rules",
-        r#"prefix_rule(pattern=["rm"], decision="allow", canonical_matching=True)"#,
-    )?;
-    let policy = parser.build();
-    let options = MatchOptions {
-        resolve_host_executables: true,
-    };
-    let decision = |cmd: &[&str]| {
-        policy
-            .check_with_options(&tokens(cmd), &ask_all, &options)
-            .decision
-    };
-    assert_eq!(decision(&["rm", "x"]), Decision::Allow);
-    assert_eq!(decision(&["RM", "x"]), Decision::Allow);
-    for program in [
-        "RM.EXE".to_string(),
-        "rm.exe".to_string(),
-        host_absolute_path(&["Windows", "RM.exe"]),
-    ] {
-        assert_eq!(
-            decision(&[program.as_str(), "x"]),
-            Decision::Prompt,
-            "{program}"
-        );
-    }
     Ok(())
 }
