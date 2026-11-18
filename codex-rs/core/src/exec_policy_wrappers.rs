@@ -399,6 +399,15 @@ pub(super) fn check(
                 if used_complex_parsing {
                     push_prompt(&mut matches, inner);
                 }
+                // #2548 (D553): a script outside the minimal lexical set (a
+                // here-document) asks wherever a rule could match a command
+                // in it, as main's `asks_outside_minimal_set`; D691: a fresh
+                // human decision where a forbidden or prompt-user rule could.
+                if shell_lc_script_read(parsed_as).is_some_and(|read| !read.minimal) {
+                    let ask = any_rule();
+                    raise_match(&mut matches, inner, ask);
+                    unread_script_prompts |= ask.is_some();
+                }
                 if !reads_past_bound {
                     // #2531: nested too deep to read; D691: a fresh human
                     // decision where a forbidden or prompt-user rule could

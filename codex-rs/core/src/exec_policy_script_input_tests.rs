@@ -394,6 +394,25 @@ async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(asks(&result), "{script:?}: {result:?}");
+        // Sync (D691), review r1 of #2640: where a forbidden rule could
+        // match, every one (here-documents included) is a fresh human
+        // decision; where only a prompt rule could, an ordinary prompt
+        // with no amendment.
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsHumanApproval { .. }),
+            "{script:?}: {result:?}"
+        );
+        let result = check(script, PROMPT, /*mode*/ 0).await;
+        assert!(
+            matches!(
+                result,
+                ExecApprovalRequirement::NeedsApproval {
+                    proposed_execpolicy_amendment: None,
+                    ..
+                }
+            ),
+            "{script:?}: {result:?}"
+        );
         // Sync: any here-document script asks, as before (S3b).
         if script.contains("<<") {
             continue;
@@ -500,4 +519,33 @@ async fn builtin_wrappers_are_classified_as_argv_too() {
         .await;
         assert!(asks(&result), "{command:?}: {result:?}");
     }
+}
+
+/// Sync, review r1 of #2640: inside the session shell's `bash -lc`, a
+/// non-ASCII word lies outside the minimal set, so the script is not split
+/// and `execpolicy_blocks_shell_invocation`'s reason may name the session
+/// shell's own `bash`. Canonical folding stays pinned here with a program
+/// that is not the session shell: only folding `lſ` to `ls` can match.
+#[tokio::test]
+async fn canonical_rule_still_folds_inside_an_unsplit_script() {
+    let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+        policy_src: Some(
+            r#"prefix_rule(pattern=["ls"], canonical_matching=True, decision="forbidden")"#
+                .to_string(),
+        ),
+        command: vec!["bash".into(), "-lc".into(), "lſ -a".into()],
+        approval_policy: AskForApproval::Never,
+        permission_profile: PermissionProfile::workspace_write(),
+        sandbox_permissions: SandboxPermissions::UseDefault,
+        prefix_rule: None,
+    })
+    .await;
+    let ExecApprovalRequirement::Forbidden { reason } = &result else {
+        panic!("{result:?}");
+    };
+    assert!(
+        reason.contains("policy forbids commands starting with `ls`")
+            || reason.contains("policy forbids commands starting with `'lſ'`"),
+        "{reason}"
+    );
 }
