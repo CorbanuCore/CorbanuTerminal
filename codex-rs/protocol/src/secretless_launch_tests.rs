@@ -112,6 +112,8 @@ fn issue_2401_extracts_every_url_password() {
             "http://pub.example,user:Pa\"ss-2401@proxy:3128",
             &["Pa\"ss-2401"],
         ),
+        ("http://pub.example,user:Pass-2401@proxy)/x", &["Pass-2401"]),
+        ("http://pub.example,user:Pass-2401@proxy'?q", &["Pass-2401"]),
         ("user:p@ss@proxy", &["p@ss"]),
         ("http://u:p@host", &["p"]),
         ("http://user:@host user:@proxy http://user:   @host", &[]),

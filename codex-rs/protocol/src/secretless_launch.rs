@@ -227,7 +227,9 @@ fn authority_password(rest: &str) -> Option<&str> {
     // the conservative explicit-URL match (userinfo can contain separators).
     if let Some((_, item)) = authority[..user.len()].rsplit_once([',', ';']) {
         let item_start = user.len() - item.len();
-        let item = authority[item_start..].split([',', ';']).next()?;
+        let item = rest[item_start..]
+            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+            .next()?;
         if schemeless_url_password(item) == Some(full_password) {
             return None;
         }
