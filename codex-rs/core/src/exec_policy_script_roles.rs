@@ -42,6 +42,9 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
     let Some((program, args)) = program_and_args.split_first() else {
         return Role::Argv;
     };
+    if powershell_runs_code(program, args.iter().map(String::as_str)) {
+        return Role::Unread;
+    }
     if runs_shell(program) {
         return shell_role(program, args, stdin);
     }
@@ -76,7 +79,9 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
 /// its program is one that runs more than its argv, those words may make it
 /// run anything.
 pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> bool {
-    if runs_shell(program) {
+    if runs_shell(program)
+        || powershell_runs_code(program, args.iter().flatten().map(String::as_str))
+    {
         return true;
     }
     match builtin_lookup_name(program).as_str() {
@@ -100,6 +105,56 @@ fn builtin_lookup_name(program: &str) -> String {
 /// #2585: a POSIX shell, fish, csh, or PowerShell.
 pub(super) fn runs_shell(program: &str) -> bool {
     policy_runs_shell(program) || policy_runs_powershell(program)
+}
+
+/// #2601 (D553): PowerShell commands (and their aliases) that rebind a
+/// command name or run code that is not their argv: text, a module, a
+/// compiled type, a script file in a job.
+const POWERSHELL_CODE_COMMANDS: &[&str] = &[
+    "invoke-expression",
+    "iex",
+    "set-alias",
+    "sal",
+    "new-alias",
+    "nal",
+    "import-alias",
+    "ipal",
+    "new-psdrive",
+    "ndr",
+    "mount",
+    "import-module",
+    "ipmo",
+    "add-type",
+    "invoke-command",
+    "icm",
+    "start-job",
+    "sajb",
+    "start-threadjob",
+];
+
+/// #2601 (D553): a PowerShell command that may change what a later command
+/// name runs, or run code rules cannot read: one of
+/// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too, any case, as
+/// PowerShell looks them up), or any command given a path on the alias or
+/// function drive (`Set-Item alias:f git`, `Set-Location function:`).
+/// Windows only: elsewhere no PowerShell script is read, so a PowerShell
+/// command line asks wherever a prompt or forbidden rule exists.
+fn powershell_runs_code<'a>(program: &str, mut args: impl Iterator<Item = &'a str>) -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let name = program
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    POWERSHELL_CODE_COMMANDS.contains(&name.as_str())
+        || args.any(|arg| {
+            let arg = arg.to_ascii_lowercase();
+            ["alias:", "function:"]
+                .iter()
+                .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
+        })
 }
 
 /// `NAME=value` for a variable that runs code ([`runs_code_from_variable`]).

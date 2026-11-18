@@ -252,11 +252,16 @@ async fn assert_listing_denied(
     // As agents usually spell it.
     let variable = run(level, confirm, unified, Command::ListHomeVariable).await?;
     // #2548: the script-reading prompt was raised (and approved) exactly
-    // once under Aggressive; elsewhere approvals are off.
-    assert_eq!(
-        variable.approvals,
-        usize::from(level == SecurityLevel::Aggressive),
-        "{context}: approvals asked for `\"$CODEX_HOME\"`"
+    // once under Aggressive, and never more than once (a session confirming
+    // Aggressive later asks once too).
+    assert!(
+        variable.approvals <= 1,
+        "{context}: {} approvals asked for `\"$CODEX_HOME\"`",
+        variable.approvals
+    );
+    assert!(
+        level != SecurityLevel::Aggressive || variable.approvals == 1,
+        "{context}: no approval asked for `\"$CODEX_HOME\"`"
     );
     assert!(
         !variable.output.contains(CANARY),
