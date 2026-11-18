@@ -939,7 +939,15 @@ async fn approve_reading_gate(
     let mut gate_prompts = 0;
     while let Some(approval) = next_exec_approval(test).await {
         // Counted at every level, so a prompt where none is expected fails.
-        let gate = approval.reason.is_none();
+        // On Linux the prompt before the run carries the Aggressive notice
+        // for what the command touches (a protected path, a user namespace)
+        // as its reason instead; a sandbox retry carries neither.
+        let gate = approval.reason.as_deref().is_none_or(|reason| {
+            reason.starts_with("Security level Aggressive blocked access to")
+                || reason.starts_with(
+                    "On Linux, security level Aggressive blocks creating user namespaces",
+                )
+        });
         gate_prompts += usize::from(gate);
         let decision = if level == SecurityLevel::Aggressive && gate {
             ReviewDecision::Approved
