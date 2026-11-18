@@ -39,6 +39,8 @@ use toml::Value as TomlValue;
 mod nested_script_tests;
 #[path = "exec_policy_quoted_script_tests.rs"]
 mod quoted_script_tests;
+#[path = "exec_policy_script_input_tests.rs"]
+mod script_input_tests;
 
 #[path = "exec_policy_wrapper_tests.rs"]
 mod wrapper_tests;

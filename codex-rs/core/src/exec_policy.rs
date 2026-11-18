@@ -1286,6 +1286,15 @@ fn program_key(token: &str) -> Option<String> {
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
+    // Keep stdin attached to its shell; lowering to argv would lose it,
+    // including in the single-command here-document fallback below.
+    if wrappers::has_script_input(command) {
+        return ExecPolicyCommands {
+            commands: vec![command.to_vec()],
+            used_complex_parsing: false,
+            command_origin: ExecPolicyCommandOrigin::Generic,
+        };
+    }
     // #2543: quoted words read as bash runs them (`'git' push`). A script
     // that is not plain is read for prompt and forbidden rules only, by
     // `wrappers`.

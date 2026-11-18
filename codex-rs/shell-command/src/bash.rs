@@ -8,6 +8,12 @@ use tree_sitter_bash::LANGUAGE as BASH;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
+mod script_input;
+pub use script_input::shell_lc_script_inputs;
+#[cfg(test)]
+#[path = "bash/script_input_tests.rs"]
+mod script_input_tests;
+
 /// Parse the provided bash source using tree-sitter-bash, returning a Tree on
 /// success or None if parsing failed.
 pub fn try_parse_shell(shell_lc_arg: &str) -> Option<Tree> {

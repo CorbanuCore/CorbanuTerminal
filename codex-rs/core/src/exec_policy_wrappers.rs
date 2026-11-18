@@ -12,7 +12,9 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::Policy;
 use codex_execpolicy::RuleMatch;
 use codex_shell_command::bash::ScriptCommands;
+use codex_shell_command::bash::read_script_commands;
 use codex_shell_command::bash::shell_lc_script_commands;
+use codex_shell_command::bash::shell_lc_script_inputs;
 
 /// #2531 (D553): how many shell scripts nested in one another
 /// (`bash -lc "bash -c '…'"`, also through launchers such as
@@ -38,6 +40,85 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         // #2531: a script nested in the script; an amendment for its
         // literal argv cannot approve the commands inside.
         || script_commands(command).is_some()
+        || has_script_input(command)
+        || script_builtin(command).first().is_some_and(|word| matches!(word.as_str(), "eval" | "." | "source"))
+}
+
+/// A shell receiving stdin must retain that input through argv lowering.
+/// Unknown receiver words are already handled by partial-command matching.
+pub(super) fn has_script_input(command: &[String]) -> bool {
+    shell_input_scripts(command).next().is_some()
+}
+
+/// Known literal bodies become a shell -c argv, so the existing reader and
+/// depth bound apply. Unsupported shells/options and producers remain unknown.
+fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<String>>> {
+    let eval = eval_script(command).map(|script| vec!["sh".to_string(), "-c".to_string(), script]);
+    shell_lc_script_inputs(eval.as_deref().unwrap_or(command))
+        .into_iter()
+        .filter_map(|input| {
+            let words = input.words.into_iter().collect::<Option<Vec<_>>>()?;
+            let wrappers = policy_wrapper_commands(&words);
+            let start = *wrappers.starts.last()?;
+            let inner = &words[start..];
+            // Eval may itself start a shell inheriting this stdin. Its input
+            // is not eval's script text, so never read that input as literal.
+            if script_builtin(inner)
+                .first()
+                .is_some_and(|program| program == "eval")
+            {
+                return Some(None);
+            }
+            if !inner
+                .first()
+                .is_some_and(|program| policy_runs_shell(program))
+                || runs_unread_script(inner)
+            {
+                return None;
+            }
+            let script = input
+                .literal
+                .filter(|_| {
+                    !wrappers.uncertain
+                        && wrappers.open.is_none()
+                        && inner[1..]
+                            .iter()
+                            .all(|arg| matches!(arg.as_str(), "-s" | "--"))
+                })
+                .and_then(|script| {
+                    let argv = vec![inner[0].clone(), "-c".to_string(), script];
+                    let respelled = policy_shell_script(&argv).unwrap_or(argv);
+                    shell_lc_script_commands(&respelled).map(|_| respelled)
+                });
+            Some(script)
+        })
+}
+
+// Only used for restrict-only script checks, never to grant an allow rule.
+// Bash's builtin can invoke eval/source, including through another builtin.
+fn script_builtin(mut command: &[String]) -> &[String] {
+    while command.first().is_some_and(|word| word == "builtin") {
+        command = &command[1..];
+        if command.first().is_some_and(|word| word == "--") {
+            command = &command[1..];
+        }
+    }
+    command
+}
+
+/// Eval joins its static argv after its optional option terminator. The
+/// partial-command path handles unknown words before this is called.
+fn eval_script(command: &[String]) -> Option<String> {
+    let (program, words) = script_builtin(command).split_first()?;
+    if program != "eval" {
+        return None;
+    }
+    let words = if words.first().is_some_and(|word| word == "--") {
+        &words[1..]
+    } else {
+        words
+    };
+    Some(words.join(" "))
 }
 
 /// #2546: whether [`check`] asks for a PowerShell script in `commands` that
@@ -258,6 +339,34 @@ pub(crate) fn check(
             // come from a script already (`bash -lc "bash -c 'git push'"`
             // gives `bash -c 'git push'`), or are those the caller gives.
             let reads_script = always_read || depth > 0 || read_own_scripts;
+            if reads_script {
+                for script in shell_input_scripts(parsed_as) {
+                    if let Some(command) = script.filter(|_| depth < MAX_SCRIPT_DEPTH) {
+                        pending.push(Pending {
+                            command,
+                            depth: depth + 1,
+                            restrict_only: true,
+                        });
+                    } else if any_strict_rule() {
+                        matches.push(RuleMatch::HeuristicsRuleMatch {
+                            command: inner.to_vec(),
+                            decision: Decision::Prompt,
+                        });
+                        unread_script_prompts = true;
+                    }
+                }
+            }
+            let reading = || {
+                if let Some(script) = eval_script(inner) {
+                    Some(if wrappers.open.is_some() {
+                        ScriptCommands::Unreadable
+                    } else {
+                        read_script_commands(&script)
+                    })
+                } else {
+                    shell_lc_script_commands(parsed_as)
+                }
+            };
             if reads_script && let Some(parsed) = script_commands(parsed_as) {
                 if parsed.used_complex_parsing || depth >= MAX_SCRIPT_DEPTH {
                     matches.push(RuleMatch::HeuristicsRuleMatch {
@@ -274,7 +383,7 @@ pub(crate) fn check(
                         restrict_only,
                     }));
                 }
-            } else if reads_script && let Some(reading) = shell_lc_script_commands(parsed_as) {
+            } else if reads_script && let Some(reading) = reading() {
                 // #2543 (D553, D688): a script rules cannot read as plain
                 // commands. The literal argv above keeps its fallback; the
                 // commands inside can only add prompts and refusals, and
@@ -282,8 +391,17 @@ pub(crate) fn check(
                 // rule could match it.
                 let reading_from = matches.len();
                 let mut ask = false;
+                let reading = match reading {
+                    ScriptCommands::Plain(commands) => ScriptCommands::Partial(
+                        commands
+                            .into_iter()
+                            .map(|words| words.into_iter().map(Some).collect())
+                            .collect(),
+                    ),
+                    other => other,
+                };
                 match reading {
-                    ScriptCommands::Plain(_) => {}
+                    ScriptCommands::Plain(_) => unreachable!("plain reading converted above"),
                     ScriptCommands::Unreadable => ask = any_strict_rule(),
                     ScriptCommands::Partial(commands) => {
                         for words in commands {
@@ -320,7 +438,13 @@ pub(crate) fn check(
                 unread_script_prompts |= matches[reading_from..]
                     .iter()
                     .any(|rule_match| rule_match.decision() > Decision::Allow);
-            } else if reads_script && runs_unread_script(parsed_as) && any_strict_rule() {
+            } else if reads_script
+                && (runs_unread_script(parsed_as)
+                    || script_builtin(inner)
+                        .first()
+                        .is_some_and(|word| matches!(word.as_str(), "." | "source")))
+                && any_strict_rule()
+            {
                 // #2543: a script the parser does not read
                 // (`bash -c 'git push' x`, `bash -ec …`, `fish -c …`).
                 matches.push(RuleMatch::HeuristicsRuleMatch {
@@ -420,7 +544,11 @@ fn partial_command_matches(
         }
         let known = &argv[start..end];
         // An unknown program, or a shell given unknown words, runs anything.
-        if known.is_empty() || (end < words.len() && policy_runs_shell(&known[0])) {
+        if known.is_empty()
+            || (end < words.len()
+                && (policy_runs_shell(&known[0])
+                    || matches!(known[0].as_str(), "eval" | "." | "source" | "builtin")))
+        {
             return any_strict_rule();
         }
         let mut found = policy
