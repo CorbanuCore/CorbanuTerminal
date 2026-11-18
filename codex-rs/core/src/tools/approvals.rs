@@ -1121,6 +1121,26 @@ impl ApprovalReviewer {
             Self::User
         }
     }
+
+    /// [`Self::for_context`], also counting administrator requirements that force the automatic
+    /// reviewer whatever the step says (D625 (a); `decide_approval` reads the same live
+    /// requirement), so a forced review is never treated as the person's.
+    pub(super) async fn for_session_context(session: &Session, ctx: &ApprovalContext) -> Self {
+        match Self::for_context(ctx) {
+            Self::User
+                if !ctx.requires_human_approval()
+                    && session
+                        .get_config()
+                        .await
+                        .config_layer_stack
+                        .requirements()
+                        .automatic_reviewer_forced(&ctx.review_context.model_info.slug) =>
+            {
+                Self::Guardian
+            }
+            reviewer => reviewer,
+        }
+    }
 }
 
 /// Who lists a refused approval under the inspector's recent denials (#437).
@@ -1194,8 +1214,9 @@ where
     let thread = tool_ctx.session.thread_id();
     // An interrupted wait is "declined by you" only when the person was
     // asked (not a hook or the automatic reviewer).
-    let asks_person =
-        fresh_human_authority || ApprovalReviewer::for_context(&ctx) == ApprovalReviewer::User;
+    let asks_person = fresh_human_authority
+        || ApprovalReviewer::for_session_context(&tool_ctx.session, &ctx).await
+            == ApprovalReviewer::User;
     // D50: only a person is told why they are asked again.
     if asked_again && asks_person {
         asked_again_reason(&mut ctx, &action);
@@ -1293,6 +1314,10 @@ mod tests;
 #[cfg(all(test, windows))]
 #[path = "approvals_windows_tests.rs"]
 mod windows_tests;
+
+#[cfg(test)]
+#[path = "approvals_forced_reviewer_tests.rs"]
+mod forced_reviewer_tests;
 
 /// The approval-cache keys of a command approval: the action's keys with the exec policy of
 /// the environment it runs in, so an answer given under one policy does not answer under

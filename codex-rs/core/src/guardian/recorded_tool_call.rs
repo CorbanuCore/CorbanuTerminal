@@ -67,12 +67,7 @@ pub(crate) async fn review_tool_call(
     let deadline = ReviewDeadline::from_timeout(session.get_config().await.guardian_review_timeout);
 
     let review = async {
-        let turn = session
-            .new_turn_with_default_settings(uuid::Uuid::now_v7().to_string(), Default::default())
-            .await;
-        let step = session
-            .capture_speculative_step_context(turn, cancellation)
-            .await?;
+        let step = speculative_review_step(session, cancellation).await?;
         let parsed_call = step
             .tool_router
             .build_tool_call(tool_call.clone())
@@ -189,6 +184,21 @@ pub(crate) async fn review_tool_call(
     }
 }
 
+/// #2092: the recorded call is prepared on a fresh speculative turn, never on a running task's
+/// turn, so it gets no turn-scoped grant; session grants are read through `Session::usable_grant`
+/// (protected paths stripped, none after a security transition).
+async fn speculative_review_step(
+    session: &Arc<Session>,
+    cancellation: &CancellationToken,
+) -> Result<Arc<crate::session::step_context::StepContext>> {
+    let turn = session
+        .new_turn_with_default_settings(uuid::Uuid::now_v7().to_string(), Default::default())
+        .await;
+    session
+        .capture_speculative_step_context(turn, cancellation)
+        .await
+}
+
 fn tool_error(error: FunctionCallError) -> CodexErr {
     match error {
         FunctionCallError::RespondToModel(message) => CodexErr::InvalidRequest(message),
@@ -196,3 +206,7 @@ fn tool_error(error: FunctionCallError) -> CodexErr {
         FunctionCallError::MalformedToolCall { message, .. } => CodexErr::InvalidRequest(message),
     }
 }
+
+#[cfg(test)]
+#[path = "recorded_tool_call_tests.rs"]
+mod tests;

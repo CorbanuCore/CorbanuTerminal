@@ -489,14 +489,19 @@ impl ToolOrchestrator {
                     requirement,
                     ExecApprovalRequirement::NeedsApproval { .. }
                         | ExecApprovalRequirement::NeedsHumanApproval { .. }
-                ) && ApprovalReviewer::for_context(&approval_context(
-                    tool_ctx,
-                    &requirement,
-                    strict_auto_review,
-                    /*approval_reason*/ None,
-                    /*retry_reason*/ None,
-                    /*network_approval_context*/ None,
-                )) == ApprovalReviewer::User);
+                ) && ApprovalReviewer::for_session_context(
+                    &tool_ctx.session,
+                    &approval_context(
+                        tool_ctx,
+                        &requirement,
+                        strict_auto_review,
+                        /*approval_reason*/ None,
+                        /*retry_reason*/ None,
+                        /*network_approval_context*/ None,
+                    ),
+                )
+                .await
+                    == ApprovalReviewer::User);
             let writes = protected_additional::ReadOnlyScope::before_approval(
                 state.level,
                 person_may_decide,
@@ -923,14 +928,18 @@ impl ToolOrchestrator {
             }
             ExecApprovalRequirement::NeedsApproval { reason, .. }
             | ExecApprovalRequirement::NeedsHumanApproval { reason } => {
-                let reviewer = ApprovalReviewer::for_context(&approval_context(
-                    tool_ctx,
-                    &requirement,
-                    strict_auto_review,
-                    /*approval_reason*/ None,
-                    /*retry_reason*/ None,
-                    /*network_approval_context*/ None,
-                ));
+                let reviewer = ApprovalReviewer::for_session_context(
+                    &tool_ctx.session,
+                    &approval_context(
+                        tool_ctx,
+                        &requirement,
+                        strict_auto_review,
+                        /*approval_reason*/ None,
+                        /*retry_reason*/ None,
+                        /*network_approval_context*/ None,
+                    ),
+                )
+                .await;
                 let protected_read_note = if reviewer == ApprovalReviewer::User {
                     protected_read_note(grant_operation.as_ref(), tool_ctx, turn_ctx).await
                 } else {
