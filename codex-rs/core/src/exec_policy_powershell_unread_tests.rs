@@ -24,6 +24,16 @@ fn unread_forms() -> Vec<Vec<String>> {
             &encode(script),
         ]));
     }
+    let pwsh_commands: Vec<_> = commands
+        .iter()
+        .map(|command| {
+            command
+                .iter()
+                .map(|word| word.replace("powershell.exe", "pwsh.exe"))
+                .collect()
+        })
+        .collect();
+    commands.extend(pwsh_commands);
     commands
 }
 
@@ -53,8 +63,17 @@ async fn unread_scripts_ask_without_amendments_across_permission_modes() {
                             prefix_rule: Some(command.clone()),
                         })
                         .await;
+                    let expected = if approval_policy == AskForApproval::Never {
+                        ExecApprovalRequirement::Forbidden {
+                            reason:
+                                "approval required by policy, but AskForApproval is set to Never"
+                                    .into(),
+                        }
+                    } else {
+                        ASKED
+                    };
                     assert_eq!(
-                        result, ASKED,
+                        result, expected,
                         "{command:?} {decision} {approval_policy:?} {permission_profile:?}"
                     );
                 }
@@ -108,7 +127,7 @@ async fn known_commands_in_declined_scripts_still_refuse() {
                         exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
                             policy_src: Some(rules.clone()),
                             command: command.clone(),
-                            approval_policy: AskForApproval::Never,
+                            approval_policy: AskForApproval::OnRequest,
                             permission_profile,
                             sandbox_permissions: SandboxPermissions::UseDefault,
                             prefix_rule: None,
@@ -116,11 +135,20 @@ async fn known_commands_in_declined_scripts_still_refuse() {
                         .await;
                     if decision == "forbidden" {
                         assert!(
-                            matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+                            matches!(&result, ExecApprovalRequirement::Forbidden { reason } if reason.contains("policy forbids commands starting with `git push`")),
                             "{command:?}: {result:?}"
                         );
                     } else {
-                        assert_eq!(result, ASKED, "{command:?}");
+                        assert!(
+                            matches!(
+                                result,
+                                ExecApprovalRequirement::NeedsApproval {
+                                    reason: Some(_),
+                                    proposed_execpolicy_amendment: None,
+                                }
+                            ),
+                            "{command:?}: {result:?}"
+                        );
                     }
                 }
             }
@@ -131,28 +159,73 @@ async fn known_commands_in_declined_scripts_still_refuse() {
 #[tokio::test]
 async fn non_plain_parameters_keep_literal_restrictions() {
     let encoded = encode("git status");
-    for tail in [
-        vec!["-EncodedCommand", encoded.as_str()],
-        vec!["-ExecutionPolicy", "Bypass", "-Command", "git status"],
-        vec!["-WindowStyle", "Hidden", "-Command", "git status"],
-        vec!["-ep", "Bypass", "-c", "git status"],
-    ] {
-        let mut line = vec!["powershell.exe"];
-        line.extend(tail);
+    let mut lines = vec![
+        vec!["powershell.exe", "-EncodedCommand", encoded.as_str()],
+        vec!["PowerShell.EXE", "-EncodedCommand", encoded.as_str()],
+        vec![
+            "powershell.exe",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "git status",
+        ],
+        vec![
+            "powershell.exe",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            "git status",
+        ],
+        vec!["powershell.exe", "-ep", "Bypass", "-c", "git status"],
+    ];
+    if trusted_pwsh_reads() {
+        lines.push(vec![
+            "pwsh.exe",
+            "-WorkingDirectory",
+            "C:\\",
+            "-c",
+            "git status",
+        ]);
+    }
+    for line in lines {
         let command = words(&line);
         for decision in ["forbidden", "prompt"] {
             let rules = format!(
-                r#"prefix_rule(pattern=["powershell.exe", "{}"], decision="{decision}")"#,
-                line[1]
+                r#"prefix_rule(pattern=["{}", "{}"], decision="{decision}")"#,
+                line[0], line[1]
             );
-            let result = requirement(command.clone(), Some(&rules)).await;
-            if decision == "forbidden" {
-                assert!(
-                    matches!(result, ExecApprovalRequirement::Forbidden { .. }),
-                    "{command:?}: {result:?}"
-                );
-            } else {
-                assert_eq!(result, ASKED, "{command:?}");
+            for permission_profile in [
+                PermissionProfile::Disabled,
+                PermissionProfile::read_only(),
+                PermissionProfile::workspace_write(),
+            ] {
+                let result =
+                    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+                        policy_src: Some(rules.clone()),
+                        command: command.clone(),
+                        approval_policy: AskForApproval::OnRequest,
+                        permission_profile,
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: None,
+                    })
+                    .await;
+                if decision == "forbidden" {
+                    assert!(
+                        matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+                        "{command:?}: {result:?}"
+                    );
+                } else {
+                    assert!(
+                        matches!(
+                            result,
+                            ExecApprovalRequirement::NeedsApproval {
+                                reason: Some(_),
+                                proposed_execpolicy_amendment: None,
+                            }
+                        ),
+                        "{command:?}: {result:?}"
+                    );
+                }
             }
         }
         assert!(
@@ -213,9 +286,19 @@ async fn joined_dangerous_script_keeps_heuristic_prompt_without_rules() {
         ]),
     ] {
         let result = requirement(command.clone(), None).await;
+        assert_eq!(result, ASKED, "{command:?}");
+        let never = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: None,
+            command: command.clone(),
+            approval_policy: AskForApproval::Never,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
         assert!(
-            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
-            "{command:?}: {result:?}"
+            matches!(never, ExecApprovalRequirement::Forbidden { .. }),
+            "{command:?}: {never:?}"
         );
     }
 }

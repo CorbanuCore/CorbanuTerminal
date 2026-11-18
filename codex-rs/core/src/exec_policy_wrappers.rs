@@ -60,7 +60,8 @@ fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
 /// PowerShell could read (none found, or it could not run), so rules cannot
 /// see its commands. #2568: also a command line PowerShell reads in a way
 /// this reader cannot (unknown parameters, a script from stdin), and a
-/// `-File` script, whose content is not read.
+/// `-File` script, whose content is not read. A parser-declined or partially
+/// read script has the same unknown remainder (#2556, #2583).
 #[cfg(windows)]
 fn powershell_script_unreadable(command: &[String]) -> bool {
     use codex_shell_command::powershell::PowershellScriptRead;

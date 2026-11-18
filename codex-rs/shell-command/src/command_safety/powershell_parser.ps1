@@ -7,6 +7,8 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <u64>, "payload": "<base64-encoded UTF-16LE script>" }
 # We answer with one compact JSON line per request:
 #   { "id": <same>, "status": "ok", "commands": [["Get-Content", "foo.txt"]] }
+# or a restrictive-only reading of an unsupported script:
+#   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
 #
