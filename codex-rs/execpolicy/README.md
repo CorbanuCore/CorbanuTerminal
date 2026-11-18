@@ -16,10 +16,12 @@ Windows PowerShell, case matching, xargs, and known limits, see the
 [Corbanu command-rule guide](../../docs/execpolicy.md).
 
 The runtime checks recognized wrapper layers and readable inner commands, using
-the strictest result. Unreadable commands ask when a prompt or forbidden rule
-could match; approvals disabled means refusal. Nested scripts have an
-eight-level inspection bound. These checks have documented limits, including
-shell-fed code (#2548) and run-time PowerShell words inside POSIX scripts (#2585).
+the strictest result. Unreadable POSIX script commands ask when a restrictive
+rule could match, subject to the PowerShell exception below; approvals disabled
+means refusal for commands that require approval. Nested scripts have an
+eight-level inspection bound. Known limits include shell-fed code (#2548),
+complex PowerShell scripts whose inner commands are not checked (#2556/#2583),
+and run-time PowerShell words inside POSIX scripts (#2585).
 
 The `execpolicy check` CLI below is a **prefix-rule diagnostic**. It does not run
 the runtime's wrapper/script checks or platform case folding, and its result is

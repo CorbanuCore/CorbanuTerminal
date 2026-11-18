@@ -31,15 +31,17 @@ Rules live in `.rules` files under the active home's `rules/` directory;
 remembered approvals use `rules/default.rules`.
 
 Explain a prompt in terms of the command inside recognized launchers and shells,
-not just its outer name. Literal quotes do not hide words. Unreadable or run-time
-words can require approval when a prompt or forbidden rule could match; with
+not just its outer name. Literal quotes do not hide words. In POSIX scripts,
+unreadable or run-time words can require approval when a restrictive rule could
+match (subject to the documented PowerShell gap); with
 approvals disabled, that means refusal. Allow rules require exact spelling,
 including Windows executable suffixes and listed drive-letter case. On macOS
 and Windows, prompt/forbidden program names match without regard to case.
 
 Do not promise complete shell interpretation: the guide records the nested
 script bound, xargs input checks, trusted Windows PowerShell parsing, and open
-limits for eval/shell input and run-time PowerShell words inside POSIX scripts.
+limits for eval/shell input, complex PowerShell scripts (#2556/#2583), and
+run-time PowerShell words inside POSIX scripts (#2585).
 The `corbanu execpolicy check` command tests supplied prefixes, not the complete
 runtime decision. Avoid recommending an outer-shell allow rule as a workaround.
 

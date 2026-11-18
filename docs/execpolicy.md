@@ -5,7 +5,7 @@ an approval. They work alongside the session's permissions and sandbox.
 
 Product basis: [Shipping MVP — LIVE](corbanu-product-spec.md#shipping-mvp-live),
 **Workspaces**: “approvals, existing general sandboxing”. This page describes
-Corbanu's command-rule behavior for 0.1.49.
+Corbanu's command rules.
 
 ## Write a rule
 
@@ -57,14 +57,14 @@ nesting requires approval. Launcher and shell checks may still find a forbidden
 command beyond that limit. A saved approval for an outer shell does not stand
 in for approving its inner commands.
 
-## When the command cannot be determined
+## When a POSIX shell command cannot be determined
 
-Rules also inspect commands in scripts with redirections, substitutions, loops,
-and functions. This partial reading can add a prompt or refusal; it cannot use
+For POSIX shells such as bash, rules also inspect commands in scripts with
+redirections, substitutions, loops, and functions. This partial reading can add a prompt or refusal; it cannot use
 an allow rule to approve the complex script.
 
-If a command cannot be determined and a prompt or forbidden rule could match,
-Corbanu asks. For example, with the `git push` prompt rule above:
+If a command in that POSIX script cannot be determined and a prompt or forbidden
+rule could match, Corbanu asks (with the PowerShell exception below). For example, with the `git push` prompt rule above:
 
 ```text
 bash -c '$x push'
@@ -89,7 +89,9 @@ starts the executable named by the proposed command just to parse its script.
 It prefers the matching system installation under
 `%SystemRoot%\System32\WindowsPowerShell\v1.0` or
 `%ProgramFiles%\PowerShell\7`, then searches absolute `PATH` entries outside the
-current folder and its descendants. That exclusion also covers alternate case,
+Corbanu process's current folder and its descendants. The parser choice is
+cached for the process, not resolved against each command's working folder.
+That exclusion also covers alternate case,
 8.3 short paths, junctions, and links back into the folder. Network or device
 paths supplied as system-installation roots are rejected.
 
@@ -107,10 +109,19 @@ spellings include `-c`, `-nop`, `-ec`, `/Command`, and `--command`.
 
 `-File` checks the file path and arguments, **not the file's contents**. It also
 asks whenever any prompt or forbidden rule exists. The same conservative
-approval applies if no trusted parser can read a script, or the invocation is
-unsupported or ambiguous: for example `-NoExit`, script input from stdin,
+approval applies if the trusted parser is unavailable, or the command-line
+invocation is unsupported or ambiguous: for example `-NoExit`, script input from stdin,
 invalid encoded text, or `-CommandWithArgs` with arguments. Positional scripts
 are not inspected as file contents either.
+
+A parser that is available but rejects the script's syntax is a different case:
+complex PowerShell scripts currently fall back to checking the outer command.
+For example, `powershell.exe -Command "git push > log"` and
+`pwsh -Command '& $x push'` may neither ask nor refuse under an inner `git push`
+rule. Variables, redirections, control flow, invocation operators, and parse
+errors can reach this path. Do not rely on inner rules for these scripts
+([#2556](https://github.com/CorbanuCore/CorbanuTerminal/issues/2556),
+[#2583](https://github.com/CorbanuCore/CorbanuTerminal/issues/2583)).
 
 ## Case and executable paths
 
@@ -137,7 +148,7 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")
 An allow match then requires the listed path's spelling, including the drive
 letter's case. **A host-executable list also limits prompt and forbidden
 basename rules to listed paths.** It is not a way to prohibit every other copy
-of that program. See the [policy reference](../codex-rs/execpolicy/README.md) for
+of that program. See the [policy reference](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/codex-rs/execpolicy/README.md) for
 exact-match precedence and path resolution.
 
 ## xargs
@@ -178,5 +189,5 @@ corbanu execpolicy check --rules path/to/policy.rules --pretty git push origin m
 
 This diagnostic checks the supplied words. It does not reproduce runtime
 wrapper expansion, nested-script inspection, platform case folding, or approval
-and sandbox decisions. See the [policy reference](../codex-rs/execpolicy/README.md)
+and sandbox decisions. See the [policy reference](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/codex-rs/execpolicy/README.md)
 for its JSON output and optional absolute-path resolution.
