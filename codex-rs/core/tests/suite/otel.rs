@@ -95,6 +95,34 @@ fn touch_command(path: &str) -> String {
     }
 }
 
+/// A thread-scoped test subscriber that a concurrent test thread without a
+/// subscriber cannot disable once this guard is installed. tracing-core caches
+/// callsite interest process-wide; with only one live dispatcher it computes
+/// that interest from the default subscriber of whichever thread first hits the
+/// callsite. Keeping an inert second dispatcher alive makes tracing-core consult
+/// this subscriber as well, so a concurrently starting no-subscriber thread does
+/// not cache `Interest::never` for callsites this guard needs.
+struct ScopedTestSubscriber {
+    _default: tracing::subscriber::DefaultGuard,
+    _second_dispatcher: tracing::Dispatch,
+}
+
+impl ScopedTestSubscriber {
+    fn set_default<S>(subscriber: S) -> Self
+    where
+        S: tracing::Subscriber + Send + Sync + 'static,
+    {
+        let second_dispatcher =
+            tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+        let default = tracing::subscriber::set_default(subscriber);
+        tracing::callsite::rebuild_interest_cache();
+        Self {
+            _default: default,
+            _second_dispatcher: second_dispatcher,
+        }
+    }
+}
+
 #[test]
 fn extract_log_field_handles_empty_bare_values() {
     let line = "event.name=\"codex.tool_result\" mcp_server= mcp_server_origin=";
@@ -643,7 +671,7 @@ async fn turn_and_completed_response_spans_record_token_usage() {
         .with_span_events(FmtSpan::FULL)
         .with_writer(MockWriter::new(buffer))
         .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let _guard = ScopedTestSubscriber::set_default(subscriber);
 
     let server = start_mock_server().await;
 
@@ -740,7 +768,7 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
         .with_span_events(FmtSpan::FULL)
         .with_writer(MockWriter::new(buffer))
         .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let _guard = ScopedTestSubscriber::set_default(subscriber);
 
     let server = start_mock_server().await;
 
@@ -816,7 +844,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .with_span_events(FmtSpan::FULL)
         .with_writer(MockWriter::new(buffer))
         .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
+    let _guard = ScopedTestSubscriber::set_default(subscriber);
 
     let server = start_mock_server().await;
 
