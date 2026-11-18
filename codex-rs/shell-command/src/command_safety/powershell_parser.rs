@@ -312,7 +312,10 @@ mod tests {
         let parsed = parser
             .parse("git log --% HEAD --output=codex_poc.txt")
             .unwrap();
-        assert_eq!(parsed, PowershellParseOutcome::Unsupported);
+        assert_eq!(
+            parsed,
+            PowershellParseOutcome::Partial(vec![vec!["git".into(), "log".into()],])
+        );
     }
 
     #[test]

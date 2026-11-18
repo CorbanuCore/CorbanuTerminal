@@ -64,7 +64,7 @@ function Invoke-ParseRequest {
     # flatten below. Keep that form out of the argv-like lowering path entirely.
     foreach ($token in $tokens) {
         if ($token.Text -eq '--%') {
-            return @{ id = $RequestId; status = 'unsupported' }
+            return Get-PartialCommands $RequestId $ast
         }
     }
 
@@ -118,12 +118,17 @@ function Get-PartialCommands {
         param($n)
         $n -is [System.Management.Automation.Language.CommandAst]
     }, $true)) {
-        # Stop-parsing changes the meaning of words beyond the marker.
-        if (@($node.CommandElements | Where-Object { $_.Extent.Text -eq '--%' }).Count -gt 0) {
-            continue
+        # A known prefix remains certain even if later arguments expand to
+        # zero or many words. Stop at the first unknown word or --%; never
+        # guess its value, nor treat subsequent words as fixed positions.
+        $words = @()
+        foreach ($element in $node.CommandElements) {
+            if ($element.Extent.Text -eq '--%') { break }
+            $converted = Convert-CommandElement $element
+            if ($null -eq $converted) { break }
+            $words += $converted
         }
-        $words = Convert-PipelineElement $node
-        if ($null -ne $words -and @($words).Count -gt 0) {
+        if ($words.Count -gt 0) {
             $null = $commands.Add(@($words))
         }
     }

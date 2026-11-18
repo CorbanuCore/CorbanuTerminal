@@ -117,8 +117,8 @@ pub enum PowershellScriptRead {
     /// The parser read the script but cannot list its commands (constructs
     /// it does not read, syntax errors).
     NotPlain,
-    /// Literal commands recovered from an otherwise unread script. These
-    /// may only add restrictions; they never authorize the whole script.
+    /// Literal commands or prefixes recovered from an otherwise unread
+    /// script. These may only add restrictions, never authorize the script.
     Partial(Vec<Vec<String>>),
     /// `-File`: the script file and its arguments, which rules see as a
     /// command; the file's content is not read (#2568).

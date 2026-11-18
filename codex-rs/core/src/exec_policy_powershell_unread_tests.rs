@@ -109,6 +109,10 @@ async fn known_commands_in_declined_scripts_still_refuse() {
         "if ($x) { git push }",
         "& ('wr'+'ite-output') x; git push",
         "git status | & $cmd; git push",
+        "git push $remote",
+        "git push --% $REMOTE",
+        "git push > $path",
+        "& 'git' push $remote",
     ] {
         for command in [
             words(&["powershell.exe", "-Command", script]),
