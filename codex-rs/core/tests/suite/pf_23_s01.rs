@@ -3005,16 +3005,27 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
             let path = root.to_string_lossy().into_owned();
             // Split inside the home folder's own name: neither part names it.
             let (head, tail) = split_home_name(&path);
+            // #2548: a shell function is now unread execution text and asks
+            // under Aggressive rules. Keep this sandbox probe executable with
+            // approvals disabled by emitting the same direct commands.
+            let hold = |path: &str, label: &str| {
+                format!(
+                    "perl -e 'use Fcntl qw(:flock); \
+                     open(my $f, \">>\", $ARGV[0]) or die \"open: $!\\n\"; \
+                     flock($f, LOCK_EX | LOCK_NB) or die \"lock: $!\\n\"' {path} && echo held-{label}"
+                )
+            };
             let attempts = if missing {
-                "hold \"$h/$n\" lower; hold \"$h/PFTERMINAL_DB_$(printf INIT).LOCK\" upper"
+                format!(
+                    "{}; {}",
+                    hold("\"$h/$n\"", "lower"),
+                    hold("\"$h/PFTERMINAL_DB_$(printf INIT).LOCK\"", "upper")
+                )
             } else {
-                "ln \"$h/$n\" ./link586 && hold ./link586 link"
+                format!("ln \"$h/$n\" ./link586 && {}", hold("./link586", "link"))
             };
             let command = format!(
                 "h=\"$(printf '{head}%s' {tail})\"; n=\"pfterminal_db_$(printf init).lock\"; \
-                 hold() {{ perl -e 'use Fcntl qw(:flock); \
-                 open(my $f, \">>\", $ARGV[0]) or die \"open: $!\\n\"; \
-                 flock($f, LOCK_EX | LOCK_NB) or die \"lock: $!\\n\"' \"$1\" && echo \"held-$2\"; }}; \
                  {attempts}; echo ran-586"
             );
             let (test, captured) = start_turn_after(
