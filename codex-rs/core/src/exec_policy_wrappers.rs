@@ -210,7 +210,11 @@ fn check(
             {
                 raise(&mut heuristic, candidate, could_complete(&[]));
                 if let UnreadPowershell::File(file) = unread {
-                    pending.push(file.to_vec());
+                    pending.push(Pending {
+                        command: file.to_vec(),
+                        restrict_only,
+                        depth,
+                    });
                 }
             }
         }
