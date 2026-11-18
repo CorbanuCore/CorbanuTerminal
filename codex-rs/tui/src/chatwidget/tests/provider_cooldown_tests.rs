@@ -3,31 +3,29 @@ use pretty_assertions::assert_eq;
 
 #[tokio::test]
 async fn model_clear_cooldown_dispatches_only_the_current_provider_and_model() {
-    let model = "claude-opus-5-5-plan";
-    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(Some(model)).await;
-    chat.config.model_provider_id = "claude-plan".to_string();
-    drain_insert_history(&mut rx);
+    for action in ["clear-cooldown", "CLEAR-COOLDOWN"] {
+        let model = "claude-opus-5-5-plan";
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(Some(model)).await;
+        chat.config.model_provider_id = "claude-plan".to_string();
+        drain_insert_history(&mut rx);
 
-    chat.dispatch_command_with_args(
-        SlashCommand::Model,
-        "clear-cooldown".to_string(),
-        Vec::new(),
-    );
+        chat.dispatch_command_with_args(SlashCommand::Model, action.to_string(), Vec::new());
 
-    let event = rx.try_recv().expect("clear cooldown action");
-    let AppEvent::ClearProviderCooldown {
-        config,
-        model: selected_model,
-    } = event
-    else {
-        panic!("expected ClearProviderCooldown, got {event:?}");
-    };
-    assert_eq!(
-        (config.model_provider_id.as_str(), selected_model.as_str()),
-        ("claude-plan", model)
-    );
-    assert!(rx.try_recv().is_err());
-    assert!(ops.try_recv().is_err());
+        let event = rx.try_recv().expect("clear cooldown action");
+        let AppEvent::ClearProviderCooldown {
+            config,
+            model: selected_model,
+        } = event
+        else {
+            panic!("expected ClearProviderCooldown, got {event:?}");
+        };
+        assert_eq!(
+            (config.model_provider_id.as_str(), selected_model.as_str()),
+            ("claude-plan", model)
+        );
+        assert!(rx.try_recv().is_err());
+        assert!(ops.try_recv().is_err());
+    }
 }
 
 #[tokio::test]

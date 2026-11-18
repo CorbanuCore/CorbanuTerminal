@@ -245,7 +245,7 @@ impl SlashCommand {
     /// after the command and a space until the user types an argument.
     pub fn argument_hint(self) -> Option<&'static str> {
         match self {
-            SlashCommand::Model => Some("clear-cooldown"),
+            SlashCommand::Model => Some("[clear-cooldown]"),
             SlashCommand::Cost => Some(COST_ARGUMENT_HINT),
             _ => None,
         }

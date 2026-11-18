@@ -945,8 +945,13 @@ impl ChatWidget {
             return;
         }
         match cmd {
-            SlashCommand::Model if trimmed.split_whitespace().next() == Some("clear-cooldown") => {
-                if trimmed == "clear-cooldown" {
+            SlashCommand::Model
+                if trimmed
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(|action| action.eq_ignore_ascii_case("clear-cooldown")) =>
+            {
+                if trimmed.eq_ignore_ascii_case("clear-cooldown") {
                     self.app_event_tx.send(AppEvent::ClearProviderCooldown {
                         config: Box::new(self.config.clone()),
                         model: self.current_model().to_string(),
