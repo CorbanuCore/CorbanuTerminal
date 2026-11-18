@@ -304,6 +304,47 @@ async fn scripts_no_rule_could_match_keep_their_decision() {
     }
 }
 
+/// D696 holds through quoted script words: an allow rule approves only the
+/// exact spelling (`'GIT' push` is not `git`), on every platform. Sync: the
+/// rules' D692 case folding (#2510) is not on this branch, so forbidden
+/// rules are not checked for other spellings here.
+#[tokio::test]
+async fn quoted_words_keep_rule_case_handling() {
+    let unless_trusted = async |command: &[String]| {
+        exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(ALLOW_GIT.to_string()),
+            command: command.to_vec(),
+            // Asks for every command no rule allows.
+            approval_policy: AskForApproval::UnlessTrusted,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await
+    };
+    // The control: the exact spelling is allowed.
+    let command = words(&["bash", "-lc", "'git' push"]);
+    let result = unless_trusted(&command).await;
+    assert!(runs(&result), "{command:?}: {result:?}");
+    for script in [
+        "'GIT' push",
+        "\"Git\" push",
+        "G'I'T push",
+        "echo hi; 'GIT' push",
+    ] {
+        let command = words(&["bash", "-lc", script]);
+        let result = unless_trusted(&command).await;
+        assert!(
+            matches!(
+                result,
+                ExecApprovalRequirement::NeedsApproval { .. }
+                    | ExecApprovalRequirement::NeedsHumanApproval { .. }
+            ),
+            "{command:?}: {result:?}"
+        );
+    }
+}
+
 /// Allow rules never approve a script read only for prompts and refusals.
 #[tokio::test]
 async fn allow_rules_do_not_approve_scripts_read_in_part() {
