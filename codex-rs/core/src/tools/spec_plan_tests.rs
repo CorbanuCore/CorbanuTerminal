@@ -1818,6 +1818,14 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
 
 #[tokio::test]
 async fn model_lookup_respects_override_visibility() {
+    let disabled = probe(|turn| {
+        set_feature(turn, Feature::Collab, /*enabled*/ false);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    disabled.assert_visible_lacks(&["list_models"]);
+    disabled.assert_registered_lacks(&["list_models"]);
+
     let hidden = probe(|turn| {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
         update_config(turn, |config| {
