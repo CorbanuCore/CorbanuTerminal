@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -8,68 +9,86 @@ use crate::command_safety::parse_with_powershell_ast;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
-const POWERSHELL_FLAGS: &[&str] = &["-nologo", "-noprofile", "-command", "-c"];
+mod cli;
 
 /// Prefixed command for powershell shell calls to request UTF-8 console output.
 pub const UTF8_OUTPUT_PREFIX: &str =
     "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n";
 
+/// `command` with [`UTF8_OUTPUT_PREFIX`] before its `-Command` script, which
+/// becomes one argument (PowerShell joins a script's arguments with spaces
+/// anyway). Any other command is returned as it is.
 pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
-    let Some((_, script)) = extract_powershell_command(command) else {
+    let Some((
+        _,
+        cli::Invocation {
+            run: cli::Run::Command { start, script },
+            ..
+        },
+    )) = read_invocation(command)
+    else {
         return command.to_vec();
     };
 
-    let trimmed = script.trim_start();
-    let script = if trimmed.starts_with(UTF8_OUTPUT_PREFIX) {
-        script.to_string()
+    let script = if script.trim_start().starts_with(UTF8_OUTPUT_PREFIX) {
+        script.into_owned()
     } else {
         format!("{UTF8_OUTPUT_PREFIX}{script}")
     };
 
-    let mut command: Vec<String> = command[..(command.len() - 1)]
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
-    command.push(script);
-    command
+    let mut prefixed = command[..start].to_vec();
+    prefixed.push(script);
+    prefixed
 }
 
-/// Extract the PowerShell script body from an invocation such as:
+/// Whether `program` names a PowerShell this crate reads command lines of
+/// (`pwsh`, `powershell.exe`, `C:\…\pwsh.exe`).
+pub fn is_powershell_program(program: &str) -> bool {
+    matches!(
+        detect_shell_type(PathBuf::from(program)),
+        Some(ShellType::PowerShell)
+    )
+}
+
+/// `command` read as PowerShell reads its command line (#2568); `None` when
+/// `command[0]` is not a PowerShell.
+fn read_invocation(command: &[String]) -> Option<(&str, cli::Invocation<'_>)> {
+    let shell = command.first()?;
+    if !is_powershell_program(shell) {
+        return None;
+    }
+    Some((shell, cli::read(command, PowershellKind::of(shell))))
+}
+
+/// Extract the script a PowerShell invocation runs, as PowerShell reads it:
 ///
 /// - ["pwsh", "-NoProfile", "-Command", "Get-ChildItem -Recurse | Select-String foo"]
-/// - ["powershell.exe", "-Command", "Write-Host hi"]
-/// - ["powershell", "-NoLogo", "-NoProfile", "-Command", "...script..."]
+/// - ["powershell.exe", "-c", "git status", "; git push"] runs
+///   `git status ; git push`: PowerShell joins every argument after
+///   `-Command` with spaces (#2568).
+/// - ["pwsh", "-EncodedCommand", "<base64 of UTF-16LE>"], decoded.
 ///
-/// Returns (`shell`, `script`) when the first arg is a PowerShell executable and a
-/// `-Command` (or `-c`) flag is present followed by a script string.
-pub fn extract_powershell_command(command: &[String]) -> Option<(&str, &str)> {
-    if command.len() < 3 {
-        return None;
+/// Returns (`shell`, `script`); `None` for any other command, including a
+/// PowerShell invocation whose script cannot be read (see
+/// [`read_powershell_command_script`]).
+pub fn extract_powershell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    let (shell, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::Command { script, .. } => Some((shell, script)),
+        cli::Run::Encoded(script) => Some((shell, Cow::Owned(script))),
+        cli::Run::File(_) | cli::Run::Unreadable | cli::Run::Interactive => None,
     }
+}
 
-    let shell = &command[0];
-    if !matches!(
-        detect_shell_type(PathBuf::from(shell)),
-        Some(ShellType::PowerShell)
-    ) {
-        return None;
+/// [`extract_powershell_command`] for a plain `-Command` (or `-c`)
+/// invocation only, with no other parameter than `-NoLogo`, `-NoProfile`,
+/// `-NonInteractive`, `-STA` or `-MTA`.
+pub fn extract_plain_powershell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    let (shell, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::Command { script, .. } if invocation.plain => Some((shell, script)),
+        _ => None,
     }
-
-    // Find the first occurrence of -Command (accept common short alias -c as well)
-    let mut i = 1usize;
-    while i + 1 < command.len() {
-        let flag = &command[i];
-        // Reject unknown flags
-        if !POWERSHELL_FLAGS.contains(&flag.to_ascii_lowercase().as_str()) {
-            return None;
-        }
-        if flag.eq_ignore_ascii_case("-Command") || flag.eq_ignore_ascii_case("-c") {
-            let script = &command[i + 1];
-            return Some((shell, script));
-        }
-        i += 1;
-    }
-    None
 }
 
 /// Parse the script body from a top-level PowerShell wrapper into argv-like commands.
@@ -82,7 +101,9 @@ pub fn parse_powershell_command_into_plain_commands(
 ) -> Option<Vec<Vec<String>>> {
     match read_powershell_command_script(command)? {
         PowershellScriptRead::Commands(commands) => Some(commands),
-        PowershellScriptRead::NotPlain | PowershellScriptRead::Unreadable => None,
+        PowershellScriptRead::NotPlain
+        | PowershellScriptRead::File(_)
+        | PowershellScriptRead::Unreadable => None,
     }
 }
 
@@ -95,21 +116,34 @@ pub enum PowershellScriptRead {
     /// The parser read the script but cannot list its commands (constructs
     /// it does not read, syntax errors).
     NotPlain,
-    /// #2546 (D553): no trusted PowerShell could read the script: none was
-    /// found, or it could not be run.
+    /// `-File`: the script file and its arguments, which rules see as a
+    /// command; the file's content is not read (#2568).
+    File(Vec<String>),
+    /// No trusted PowerShell could read the script: none was found, or it
+    /// could not be run (#2546, D553). Or the command line cannot be read
+    /// the way PowerShell reads it (#2568): an unknown or unsupported
+    /// parameter, a script from stdin, `-CommandWithArgs` with arguments, an
+    /// `-EncodedCommand` that does not decode.
     Unreadable,
 }
 
-/// Read the script of a PowerShell `-Command` invocation (see
-/// [`extract_powershell_command`]); `None` for any other command.
+/// Read the script of a PowerShell invocation (see
+/// [`extract_powershell_command`]); `None` for any other command, and for an
+/// interactive PowerShell (`pwsh -NoProfile`), which has no script.
 ///
 /// #2546 (D553): the script is parsed by a PowerShell found on the system
 /// ([`trusted_powershell_parser`]), never by the invocation's own `argv[0]`:
 /// that program may be any file named `pwsh` or `powershell`, and parsing
 /// runs before approval, outside the sandbox.
 pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellScriptRead> {
-    let (shell, script) = extract_powershell_command(command)?;
-    Some(read_script_with_trusted_parser(shell, script))
+    let (shell, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::Command { script, .. } => Some(read_script_with_trusted_parser(shell, &script)),
+        cli::Run::Encoded(script) => Some(read_script_with_trusted_parser(shell, &script)),
+        cli::Run::File(words) => Some(PowershellScriptRead::File(words.to_vec())),
+        cli::Run::Unreadable => Some(PowershellScriptRead::Unreadable),
+        cli::Run::Interactive => None,
+    }
 }
 
 /// Parse `script`, written for the PowerShell named `shell`, with the
@@ -142,11 +176,15 @@ impl PowershellKind {
     /// The kind a PowerShell program name (`pwsh`, `C:\…\PowerShell.EXE`)
     /// runs.
     pub(crate) fn of(shell: &str) -> Self {
-        let stem = std::path::Path::new(shell)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or(shell);
-        if stem.eq_ignore_ascii_case("pwsh") {
+        let name = std::path::Path::new(shell)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(shell)
+            .to_ascii_lowercase();
+        // #2568: Windows drops trailing dots and spaces (`pwsh.exe.`).
+        let name = name.trim_end_matches(['.', ' ']);
+        let stem = name.strip_suffix(".exe").unwrap_or(name);
+        if stem.trim_end_matches(['.', ' ']) == "pwsh" {
             Self::Pwsh
         } else {
             Self::WindowsPowershell
@@ -197,47 +235,109 @@ pub(crate) fn trusted_powershell_parser(kind: PowershellKind) -> Option<&'static
 }
 
 fn find_trusted_powershell(kind: PowershellKind) -> Option<PathBuf> {
-    let (fixed, name): (&[(&str, &str)], &str) = match kind {
+    let current_dir = std::env::current_dir().ok();
+    find_trusted_powershell_in(
+        kind,
+        &|variable| std::env::var_os(variable),
+        current_dir.as_deref(),
+    )
+}
+
+/// The file name a PowerShell of `kind` has on `PATH`.
+fn powershell_file_name(kind: PowershellKind) -> &'static str {
+    match (kind, cfg!(windows)) {
+        (PowershellKind::Pwsh, true) => "pwsh.exe",
+        (PowershellKind::Pwsh, false) => "pwsh",
+        (PowershellKind::WindowsPowershell, true) => "powershell.exe",
+        (PowershellKind::WindowsPowershell, false) => "powershell",
+    }
+}
+
+/// [`find_trusted_powershell`] with the environment and current directory
+/// given.
+fn find_trusted_powershell_in(
+    kind: PowershellKind,
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    current_dir: Option<&std::path::Path>,
+) -> Option<PathBuf> {
+    if cfg!(windows)
+        && let Some(found) = fixed_powershell_paths(kind, env)
+            .into_iter()
+            .find(|candidate| candidate.is_file())
+    {
+        return Some(found);
+    }
+    trusted_on_path(powershell_file_name(kind), &env("PATH")?, current_dir?)
+}
+
+/// #2568: the first `name` in the absolute directories of `path` (a `PATH`
+/// value) that is not in `current_dir` or under it (`.venv\Scripts`,
+/// `node_modules\.bin`), where a command may write. Compared canonical, so
+/// the current directory spelled in another case, by its 8.3 short name, or
+/// through a junction or link is excluded too, and so is a link to a file
+/// in it. `None` where the current directory cannot be resolved.
+fn trusted_on_path(
+    name: &str,
+    path: &std::ffi::OsStr,
+    current_dir: &std::path::Path,
+) -> Option<PathBuf> {
+    let current_dir = current_dir.canonicalize().ok()?;
+    let in_current_dir = |path: &std::path::Path| {
+        path.canonicalize()
+            .ok()
+            .is_none_or(|canonical| canonical.starts_with(&current_dir))
+    };
+    std::env::split_paths(path).find_map(|dir| {
+        // A relative entry names a directory under the current one.
+        if !dir.is_absolute() || in_current_dir(&dir) {
+            return None;
+        }
+        let found = which::which_in(name, Some(&dir), &dir).ok()?;
+        let file_dir = found.canonicalize().ok()?.parent()?.to_path_buf();
+        (!file_dir.starts_with(&current_dir) && !in_current_dir(found.parent()?)).then_some(found)
+    })
+}
+
+/// #2546, #2568: where Windows installs a PowerShell of `kind`: under
+/// `%SystemRoot%` (`%windir%`) or `%ProgramFiles%` (`%ProgramW6432%`) where
+/// those are local absolute paths, then the default locations.
+fn fixed_powershell_paths(
+    kind: PowershellKind,
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+) -> Vec<PathBuf> {
+    let (variables, relative, default): (&[&str], &str, &str) = match kind {
         PowershellKind::Pwsh => (
-            &[
-                ("ProgramFiles", r"PowerShell\7\pwsh.exe"),
-                ("ProgramW6432", r"PowerShell\7\pwsh.exe"),
-            ],
-            if cfg!(windows) { "pwsh.exe" } else { "pwsh" },
+            &["ProgramFiles", "ProgramW6432"],
+            r"PowerShell\7\pwsh.exe",
+            r"C:\Program Files\PowerShell\7\pwsh.exe",
         ),
         PowershellKind::WindowsPowershell => (
-            &[
-                (
-                    "SystemRoot",
-                    r"System32\WindowsPowerShell\v1.0\powershell.exe",
-                ),
-                ("windir", r"System32\WindowsPowerShell\v1.0\powershell.exe"),
-            ],
-            if cfg!(windows) {
-                "powershell.exe"
-            } else {
-                "powershell"
-            },
+            &["SystemRoot", "windir"],
+            r"System32\WindowsPowerShell\v1.0\powershell.exe",
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
         ),
     };
-    if cfg!(windows) {
-        for (variable, relative) in fixed {
-            let Some(base) = std::env::var_os(variable).map(PathBuf::from) else {
-                continue;
-            };
-            let candidate = base.join(relative);
-            if base.is_absolute() && candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    let current_dir = std::env::current_dir().ok();
-    which::which(name).ok().filter(|found| {
-        found.is_absolute()
-            && current_dir
-                .as_deref()
-                .is_none_or(|current| found.parent() != Some(current))
-    })
+    variables
+        .iter()
+        .filter_map(|variable| env(variable).map(PathBuf::from))
+        .filter(|base| is_local_absolute(base))
+        .map(|base| base.join(relative))
+        .chain(std::iter::once(PathBuf::from(default)))
+        .collect()
+}
+
+/// #2568: whether `path` is a plain local absolute path (`C:\Windows`): not
+/// a UNC (`\\server\share`) or device (`\\?\`, `\\.\`) path, and with no
+/// `.` or `..` component.
+fn is_local_absolute(path: &std::path::Path) -> bool {
+    use std::path::Component;
+    use std::path::Prefix;
+    let mut components = path.components();
+    matches!(
+        components.next(),
+        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::Disk(_))
+    ) && matches!(components.next(), Some(Component::RootDir))
+        && components.all(|component| matches!(component, Component::Normal(_)))
 }
 
 /// This function attempts to find a powershell.exe executable on the system.
@@ -307,6 +407,11 @@ fn is_powershellish_executable_available(powershell_or_pwsh_exe: &std::path::Pat
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+#[cfg(windows)]
+#[path = "powershell/trusted_path_tests.rs"]
+mod trusted_path_tests;
 
 #[cfg(test)]
 mod tests {
@@ -392,6 +497,125 @@ mod tests {
         ];
 
         assert_eq!(prefix_powershell_script_with_utf8(&cmd), cmd);
+    }
+
+    fn words(line: &[&str]) -> Vec<String> {
+        line.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn powershell_kind_follows_windows_name_rules() {
+        use super::PowershellKind;
+        for (shell, kind) in [
+            ("pwsh", PowershellKind::Pwsh),
+            ("pwsh.exe", PowershellKind::Pwsh),
+            ("PWSH.EXE", PowershellKind::Pwsh),
+            ("pwsh.exe.", PowershellKind::Pwsh),
+            ("pwsh.exe. ", PowershellKind::Pwsh),
+            ("pwsh. ", PowershellKind::Pwsh),
+            ("powershell", PowershellKind::WindowsPowershell),
+            ("powershell.exe.", PowershellKind::WindowsPowershell),
+        ] {
+            assert_eq!(PowershellKind::of(shell), kind, "{shell:?}");
+        }
+    }
+
+    #[test]
+    fn prefix_keeps_every_script_argument() {
+        // #2568: the trailing arguments stay in the script PowerShell runs,
+        // joined as PowerShell joins them.
+        assert_eq!(
+            prefix_powershell_script_with_utf8(&words(&[
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                "git status",
+                "; git push",
+            ])),
+            words(&[
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                &format!("{UTF8_OUTPUT_PREFIX}git status ; git push"),
+            ])
+        );
+        // Anything else runs as given.
+        for line in [
+            &["pwsh", "-EncodedCommand", "ZwBpAHQA"][..],
+            &["pwsh", "-File", "x.ps1", "-c", "y"],
+            &["pwsh", "-NoExit", "-Command", "git status"],
+            &["pwsh", "-cwa", "$args", "x"],
+            &["pwsh"],
+            &["bash", "-c", "git status"],
+        ] {
+            let command = words(line);
+            assert_eq!(prefix_powershell_script_with_utf8(&command), command);
+        }
+    }
+
+    #[test]
+    fn extracts_the_script_powershell_runs() {
+        let script = |line: &[&str]| {
+            extract_powershell_command(&words(line)).map(|(_, script)| script.into_owned())
+        };
+        assert_eq!(
+            script(&["powershell.exe", "-Command", "git status", "; git push"]).as_deref(),
+            Some("git status ; git push")
+        );
+        assert_eq!(
+            script(&["pwsh", "-NonInteractive", "-c", "git push"]).as_deref(),
+            Some("git push")
+        );
+        assert_eq!(
+            script(&["pwsh", "-EncodedCommand", "ZwBpAHQA"]).as_deref(),
+            Some("git")
+        );
+        assert_eq!(script(&["pwsh", "-NoExit", "-c", "git push"]), None);
+        assert_eq!(script(&["pwsh", "-File", "x.ps1"]), None);
+        assert_eq!(script(&["bash", "-c", "git push"]), None);
+
+        let plain = |line: &[&str]| {
+            super::extract_plain_powershell_command(&words(line))
+                .map(|(_, script)| script.into_owned())
+        };
+        assert_eq!(
+            plain(&["pwsh", "-NoProfile", "-c", "git", "push"]).as_deref(),
+            Some("git push")
+        );
+        assert_eq!(plain(&["pwsh", "-ep", "Bypass", "-c", "git push"]), None);
+        assert_eq!(plain(&["pwsh", "-ec", "ZwBpAHQA"]), None);
+    }
+
+    #[test]
+    fn reads_unreadable_command_lines_as_unreadable() {
+        use super::PowershellScriptRead;
+        use super::read_powershell_command_script;
+        for line in [
+            &["pwsh", "-NoExit", "-c", "git push"][..],
+            &["powershell.exe", "-Version", "2", "-Command", "git push"],
+            &["powershell.exe", "git", "push"],
+            &["pwsh", "-Command", "-"],
+            &["pwsh", "-ec", "!!!"],
+            &["pwsh", "-cwa", "$args", "x"],
+        ] {
+            assert_eq!(
+                read_powershell_command_script(&words(line)),
+                Some(PowershellScriptRead::Unreadable),
+                "{line:?}"
+            );
+        }
+        assert_eq!(
+            read_powershell_command_script(&words(&["pwsh", "-File", "x.ps1", "a"])),
+            Some(PowershellScriptRead::File(words(&["x.ps1", "a"])))
+        );
+        assert_eq!(
+            read_powershell_command_script(&words(&["pwsh", "-nop"])),
+            None
+        );
+        assert_eq!(
+            read_powershell_command_script(&words(&["git", "push"])),
+            None
+        );
     }
 
     #[cfg(windows)]

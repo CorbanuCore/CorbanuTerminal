@@ -22,7 +22,8 @@ pub(crate) fn policy_powershell_script(words: &[String]) -> Option<Vec<String>> 
 fn respelled(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
     let (program, rest) = words.split_first()?;
     if case != names::NameCase::Windows
-        || codex_shell_command::powershell::extract_powershell_command(words).is_some()
+        // #2568: the reader reads any command line of a PowerShell it knows.
+        || codex_shell_command::powershell::is_powershell_program(program)
     {
         return None;
     }

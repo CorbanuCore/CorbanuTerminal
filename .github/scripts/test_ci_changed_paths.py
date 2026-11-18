@@ -54,6 +54,7 @@ class PrChangedPathsTest(unittest.TestCase):
         "windows_native_other",
         "windows_native_pty",
         "windows_native_app_server",
+        "windows_native_shell",
         "workflows",
     )
     NAMES = (
@@ -193,6 +194,12 @@ class PrChangedPathsTest(unittest.TestCase):
                 "windows_native_tests",
                 "windows_native_pty",
             ),
+            "codex-rs/shell-command/src": (
+                "codex",
+                "argument_comment_lint",
+                "windows_native_tests",
+                "windows_native_shell",
+            ),
             "codex-rs/app-server/tests": (
                 "codex",
                 "argument_comment_lint",
@@ -276,10 +283,11 @@ class PrChangedPathsTest(unittest.TestCase):
                 "windows_native_other",
                 "windows_native_pty",
                 "windows_native_app_server",
+                "windows_native_shell",
             ),
         )
 
-    GROUPS = ("core", "sandbox", "other", "pty", "app_server")
+    GROUPS = ("core", "sandbox", "other", "pty", "app_server", "shell")
 
     def targets(self, *groups: str) -> str:
         workflow = (REPO_ROOT / ".github/workflows/rust-ci.yml").read_text()
@@ -310,15 +318,17 @@ class PrChangedPathsTest(unittest.TestCase):
         other = "//codex-rs/exec-server/..."
         pty = "//codex-rs/utils/pty/..."
         app_server = "//codex-rs/app-server/..."
+        shell = "//codex-rs/shell-command/..."
         self.assertEqual(self.targets(), "")
         self.assertEqual(self.targets("core"), core)
         self.assertEqual(self.targets("sandbox"), sandbox)
         self.assertEqual(self.targets("other"), other)
         self.assertEqual(self.targets("pty"), pty)
         self.assertEqual(self.targets("app_server"), app_server)
+        self.assertEqual(self.targets("shell"), shell)
         self.assertEqual(
             self.targets(*self.GROUPS),
-            f"{core} {sandbox} {other} {pty} {app_server}",
+            f"{core} {sandbox} {other} {pty} {app_server} {shell}",
         )
 
 
