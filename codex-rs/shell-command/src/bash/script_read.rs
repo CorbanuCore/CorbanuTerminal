@@ -62,32 +62,36 @@ pub struct ScriptRead {
     pub plain: bool,
     /// Text other than whitespace (a comment too) follows the last command.
     pub text_after_commands: bool,
-    /// The language it was read in; text its commands run as scripts
-    /// (`eval`) is read in it too.
-    pub dialect: Dialect,
+    /// Every byte lies within the minimal lexical set (`script_lexical`),
+    /// which tree-sitter-bash and the shells read alike. A script outside
+    /// it fails closed however the syntax tree reads it.
+    pub minimal: bool,
 }
 
-/// Which shell language a script is read in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Dialect {
-    /// bash or zsh (read as bash).
-    #[default]
-    Bash,
-    /// `sh`, which may be dash: bash's own syntax (`$'…'`, `[[`, `&>`,
-    /// `|&`, `<<<`, `<(…)`) means something else there, so it is unread.
-    Posix,
+impl ScriptRead {
+    /// Whether rules must ask (where any prompt or forbidden rule exists)
+    /// besides what its commands match: part of it is not read, or it lies
+    /// outside the minimal lexical set.
+    pub fn fails_closed(&self) -> bool {
+        self.unread || !self.minimal
+    }
 }
 
 /// Reads `script` as bash would run it; see the module documentation.
 pub fn read_script(script: &str) -> ScriptRead {
-    read_script_in(script, Dialect::Bash)
+    let mut read = read_tree(script);
+    // The lexical pre-filter: a script outside the minimal set fails closed
+    // whatever the syntax tree says.
+    read.minimal = lexically_safe(script);
+    read.plain &= read.minimal;
+    read
 }
 
-/// [`read_script`] in `dialect`.
-pub fn read_script_in(script: &str, dialect: Dialect) -> ScriptRead {
+/// [`read_script`] by the syntax tree alone, without the lexical
+/// pre-filter.
+pub(super) fn read_tree(script: &str) -> ScriptRead {
     let unread = ScriptRead {
         unread: true,
-        dialect,
         ..ScriptRead::default()
     };
     let Some(tree) = try_parse_shell(script) else {
@@ -113,10 +117,6 @@ pub fn read_script_in(script: &str, dialect: Dialect) -> ScriptRead {
         .map(|(_, command)| command)
         .filter(|command| !command.words.is_empty())
         .collect();
-    // The lexical pre-filter: a script outside the safe set is unread
-    // whatever the syntax tree says, and so is one whose here-documents end
-    // elsewhere than the tree ends them (`cat <<Q &&⏎Q⏎git push⏎Q`).
-    reader.unread |= lexically_safe(script, dialect) != Some(heredoc_ends(root));
     let plain = !reader.unread
         && word_only_command_nodes(&tree).is_some()
         && commands
@@ -133,7 +133,8 @@ pub fn read_script_in(script: &str, dialect: Dialect) -> ScriptRead {
         unread: reader.unread,
         plain,
         text_after_commands: !script[end..].trim().is_empty(),
-        dialect,
+        // Set by `read_script`.
+        minimal: false,
     }
 }
 
@@ -164,24 +165,6 @@ fn has_token(node: Node<'_>, tokens: &[&str]) -> bool {
         );
     }
     false
-}
-
-/// Where the syntax tree's here-document delimiter lines start, sorted.
-fn heredoc_ends(root: Node<'_>) -> Vec<usize> {
-    let mut ends = Vec::new();
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        if node.kind() == "heredoc_end" {
-            ends.push(node.start_byte());
-        }
-        stack.extend(
-            fields(node, /*named_only*/ true)
-                .into_iter()
-                .map(|(_, child)| child),
-        );
-    }
-    ends.sort_unstable();
-    ends
 }
 
 /// The grammar drops a backslash-newline between tokens, and also before a
@@ -938,9 +921,9 @@ impl<'a> Reader<'a> {
     }
 
     /// `export`, `local`, `readonly`, `declare`, `typeset` with names,
-    /// assignments and attribute options that run no code (`-i` makes later
-    /// assignments arithmetic, `-n` names another variable, `-a`/`-A` read
-    /// a quoted value as elements with subscripts).
+    /// assignments and attribute options that run no code (`-i` and zsh's
+    /// and ksh's `-F` make assignments arithmetic, `-n` names another
+    /// variable, `-a`/`-A` read a quoted value as elements with subscripts).
     fn declaration<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
         let keyword = node.child(0).map(|keyword| self.text(keyword));
         if !matches!(
@@ -954,11 +937,7 @@ impl<'a> Reader<'a> {
             match child.kind() {
                 "variable_name" if !runs_code_from_variable(self.text(child)) => {}
                 "variable_assignment" => self.assignment(child, stack),
-                "word"
-                    if matches!(
-                        self.text(child),
-                        "-x" | "+x" | "-r" | "-g" | "-p" | "-f" | "-F"
-                    ) => {}
+                "word" if matches!(self.text(child), "-x" | "+x" | "-r" | "-g" | "-p") => {}
                 _ => self.deny(child, stack),
             }
         }

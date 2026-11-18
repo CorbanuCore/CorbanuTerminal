@@ -268,9 +268,10 @@ fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Ve
 
 /// Shells in [`SHELLS`] besides bash, zsh and sh that read a `-c` script
 /// with sh's syntax and quoting.
-const POSIX_SHELLS: &[&str] = &[
-    "dash", "ksh", "ash", "mksh", "yash", "rbash", "posh", "lksh", "oksh", "hush", "osh",
-];
+/// #2548: not the ksh family, yash, hush or osh, whose builtins and
+/// assignments run code (`alarm`, `typeset -F`, `x=(typeset -i …)`) where
+/// sh's do not: their `-c` scripts are not read, so they ask.
+const POSIX_SHELLS: &[&str] = &["dash", "ash", "rbash", "posh"];
 
 /// #2543: whether `program` may run a shell on this platform (see
 /// [`names`]), which runs any command its words give it.

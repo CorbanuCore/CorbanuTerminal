@@ -1,7 +1,7 @@
 //! #2543: [`read_script`] reads quoted words as bash does, and never reads
 //! a word bash still changes as written.
 
-use super::read_script;
+use super::script_read::read_tree;
 use super::shell_lc_script_read;
 use pretty_assertions::assert_eq;
 
@@ -13,8 +13,10 @@ enum ScriptCommands {
     Unreadable,
 }
 
+/// By the syntax tree alone: the lexical pre-filter is tested in
+/// `script_read_tests`.
 fn read_script_commands(script: &str) -> ScriptCommands {
-    summary(read_script(script))
+    summary(read_tree(script))
 }
 
 fn shell_lc_script_commands(command: &[String]) -> Option<ScriptCommands> {
@@ -106,6 +108,8 @@ fn words_bash_builds_at_run_time_are_unknown() {
         ),
         ("/usr/bin/gi? push", partial(&[&["?", "push"]])),
         ("/usr/bin/g*t push", partial(&[&["?", "push"]])),
+        ("/usr/bin/gi[t] push", partial(&[&["?", "push"]])),
+        ("git {pu,}sh", partial(&[&["git", "?"]])),
         ("~/bin/git push", partial(&[&["?", "push"]])),
         ("=git push", partial(&[&["?", "push"]])),
         ("[ -f x ] && 'git' push", partial(&[&["git", "push"]])),
@@ -132,15 +136,7 @@ fn words_bash_builds_at_run_time_are_unknown() {
 #[test]
 fn unparsable_scripts_are_unreadable() {
     // The grammar does not read a brace expansion as a command name.
-    // #2548: so are words the lexical pre-filter does not accept.
-    for script in [
-        "git push (",
-        "'git push",
-        "if then fi",
-        "{git,} push",
-        "/usr/bin/gi[t] push",
-        "git {pu,}sh",
-    ] {
+    for script in ["git push (", "'git push", "if then fi", "{git,} push"] {
         assert_eq!(
             read_script_commands(script),
             ScriptCommands::Unreadable,

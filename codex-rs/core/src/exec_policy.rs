@@ -511,6 +511,23 @@ impl ExecPolicyManager {
             &exec_policy_fallback,
             &match_options,
         );
+        // #2548: a script outside the minimal lexical set that was checked
+        // as its one command (a here-document) asks where a strict rule
+        // exists, as one read in part does.
+        let unread_script_prompts = if (commands.len() != 1 || commands[0] != *command)
+            && wrappers::asks_outside_minimal_set(exec_policy.as_ref(), command, &match_options)
+        {
+            evaluation
+                .matched_rules
+                .push(RuleMatch::HeuristicsRuleMatch {
+                    command: command.to_vec(),
+                    decision: Decision::Prompt,
+                });
+            evaluation.decision = evaluation.decision.max(Decision::Prompt);
+            true
+        } else {
+            unread_script_prompts
+        };
         // #2543: an amendment for the script's literal argv cannot approve
         // the commands in it that need approval.
         let auto_amendment_allowed = auto_amendment_allowed && !unread_script_prompts;

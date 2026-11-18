@@ -283,22 +283,12 @@ async fn negative_controls_and_no_rule() {
         "eval 'git status'",
         "eval",
         "echo 'git push' | cat",
-        "cat <<EOF\ngit push\nEOF",
-        "bash <<EOF\necho safe\nEOF",
         "echo 'git push' | bash -c 'echo safe'",
-        // Review round 1: everyday here-document scripts stay read.
-        "cat <<'EOF' > f.py && python3 f.py\nprint(1)\nEOF",
-        "cat <<'EOF' | python3\nprint(1)\nEOF",
         "printf '%s\\n' \"$x\" | sort",
         "shift 2; exit 0",
         // Review round 2: everyday job control, status and formats stay read.
         "sleep 1 & pid=$!; kill $pid; wait $!",
-        "f() { return $?; }; f; exit $?",
         "printf '%s: %d\\n' \"$name\" 3",
-        "true;#note",
-        "printf '%1$s %2$s\\n' a b; a+=(c); f() { :; }",
-        // Review round 4: substitutions inside a test are not its operators.
-        "[ -n \"$(git status --porcelain)\" ] || [ \"$(uname)\" = Darwin ]",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(
@@ -358,6 +348,31 @@ async fn eval_text_reads_like_the_same_script() {
                 "{rules} {script:?}: {direct:?} / {through_eval:?}"
             );
         }
+    }
+}
+
+/// #2548 (coordinator, review round 5): scripts outside the minimal
+/// lexical set ask wherever a prompt or forbidden rule exists, even with no
+/// rule for what they run; with none, nothing changes. #2593's here-document
+/// negative controls are among them.
+#[tokio::test]
+async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
+    for script in [
+        "cat <<EOF\ngit push\nEOF",
+        "bash <<EOF\necho safe\nEOF",
+        "cat <<'EOF' > f.py && python3 f.py\nprint(1)\nEOF",
+        "f() { return $?; }; f; exit $?",
+        "true;#note",
+        "[ -n \"$(git status --porcelain)\" ] || [ \"$(uname)\" = Darwin ]",
+        "cmd >/dev/null 2>&1",
+    ] {
+        let result = check(script, FORBID, /*mode*/ 0).await;
+        assert!(asks(&result), "{script:?}: {result:?}");
+        let result = check(script, "", /*mode*/ 0).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Skip { .. }),
+            "{script:?}: {result:?}"
+        );
     }
 }
 

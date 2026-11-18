@@ -4,6 +4,7 @@
 use super::CommandStdin;
 use super::parse_shell_lc_single_command_prefix;
 use super::read_script;
+use super::script_read::read_tree;
 use pretty_assertions::assert_eq;
 
 fn words(script: &str) -> Vec<Vec<Option<String>>> {
@@ -89,10 +90,19 @@ fn reserved_prefixes_are_read_in_any_order() {
         "coproc git push",
         "time coproc git push",
     ] {
-        let read = read_script(script);
+        let read = read_tree(script);
         assert!(!read.unread, "{script:?}");
-        assert_eq!(words(script), vec![known(&["git", "push"])], "{script:?}");
+        assert_eq!(
+            read.commands
+                .iter()
+                .map(|command| command.words.clone())
+                .collect::<Vec<_>>(),
+            vec![known(&["git", "push"])],
+            "{script:?}"
+        );
     }
+    // The minimal lexical set has no `coproc`.
+    assert!(read_script("coproc git push").fails_closed());
     // Quoted, they are programs (`'time'` is /usr/bin/time).
     assert_eq!(
         words("'time' git push"),
@@ -198,7 +208,7 @@ fn shapes_not_fully_understood_are_unread() {
         "git push (",
         "echo *(e:'git push':)",
     ] {
-        assert!(read_script(script).unread, "{script:?}");
+        assert!(read_script(script).fails_closed(), "{script:?}");
     }
 }
 
@@ -230,7 +240,7 @@ fn understood_shapes_are_read() {
         "case $x in a|b*) echo;; esac",
         "[ -t 1 ] && [[ -t 0 ]]",
     ] {
-        let read = read_script(script);
+        let read = read_tree(script);
         assert!(!read.unread, "{script:?}: {read:?}");
     }
 }
@@ -282,25 +292,48 @@ fn lexically_unsafe_scripts_are_unread() {
         "echo a\r",
         "cat <<E\"O\"F\nx\nE\"O\"F",
     ] {
-        assert!(read_script(script).unread, "{script:?}");
+        assert!(read_script(script).fails_closed(), "{script:?}");
     }
 }
 
-/// `sh` may be dash: bash's own syntax there is unread.
+/// Shapes outside the minimal lexical set (most of which the syntax tree
+/// reads): they ask whenever a prompt or forbidden rule exists.
 #[test]
-fn posix_dialect_refuses_bash_only_syntax() {
-    use super::Dialect;
-    use super::read_script_in;
+fn minimal_set_refuses_more_than_the_tree() {
     for script in [
         "echo $'\\' ; git push ; echo ' #'",
-        "[[ -z x || sh -c 'git push' ]]",
         "echo hi &> log",
         "echo hi |& cat",
         "cat <<< hi",
         "cat <(echo hi)",
+        "cat <<'EOF'\nhi\nEOF",
+        "bash <<EOF\necho safe\nEOF",
+        "if [ -f x ]; then echo a; fi",
+        "[[ -n $x ]]",
+        "case $x in a) echo;; esac",
+        "f() { echo; }",
+        "( cd x && make )",
+        "{ echo; }",
+        "a=(x y)",
+        "echo ${x:-default}",
+        "true;#note",
+        "echo $(true #x\n)",
+        "cmd >/dev/null 2>&1",
+        "cmd > \"$out\"",
+        "echo \"$(echo ${x:- #'}'} )\"",
+        "x=$(cat <<'E'\n)\ngit push\nE\n)",
     ] {
-        assert!(read_script_in(script, Dialect::Posix).unread, "{script:?}");
-        assert!(!read_script(script).unread, "bash reads {script:?}");
+        assert!(read_script(script).fails_closed(), "{script:?}");
     }
-    assert!(!read_script_in("git status && echo ok", Dialect::Posix).unread);
+    for script in [
+        "git status && echo ok",
+        "x=$(git log -1); echo \"$x\"",
+        "for f in *.rs; do wc -l \"$f\"; done",
+        "cargo build 2>&1 | tail -n 5",
+        "ls > /dev/null; echo \"${HOME}\" $1 $?",
+        "find . -name '*.rs' -exec wc -l {} \\;",
+        "if test -f x; then echo a; else echo b; fi # done",
+    ] {
+        assert!(!read_script(script).fails_closed(), "{script:?}");
+    }
 }
