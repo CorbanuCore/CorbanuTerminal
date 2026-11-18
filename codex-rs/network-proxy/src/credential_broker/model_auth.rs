@@ -31,6 +31,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 /// Request header carrying the signed broker frame.
 pub const MODEL_BROKER_FRAME_HEADER: &str = FRAME_HEADER;
@@ -206,6 +207,44 @@ impl ModelCredentialBroker {
         }
         match refused {
             Some(error) => Err(error.into()),
+            None => Ok(taken),
+        }
+    }
+
+    /// SMQ-2: removes every variable whose value contains a key the broker
+    /// holds (D685's known-credential check) from this process's environment,
+    /// value bytes overwritten, so a copy under another name (a header,
+    /// prefixed or embedded value) is not inherited by commands either.
+    /// Returns the names removed (never values). Fails closed: a value that
+    /// cannot be checked, or a matching variable that cannot be removed,
+    /// returns an error after every other variable is processed, and the
+    /// caller must not use the broker.
+    pub fn take_env_copies(&self) -> Result<Vec<String>, ModelCredentialBrokerError> {
+        let mut taken = Vec::new();
+        let mut refused = None;
+        for (name, value) in std::env::vars_os() {
+            if value.is_empty() {
+                continue;
+            }
+            let value = Zeroizing::new(value.to_string_lossy().into_owned());
+            match self.client.model_credential_occurs_in(&value) {
+                Ok(false) => {}
+                Ok(true) => match name.to_str() {
+                    Some(name) if super::env_scrub::take_env_var(name).is_some() => {
+                        taken.push(name.to_string());
+                    }
+                    Some(name) if std::env::var_os(name).is_none() => {}
+                    _ => {
+                        refused.get_or_insert(ModelCredentialBrokerError::Unavailable);
+                    }
+                },
+                Err(error) => {
+                    refused.get_or_insert(error.into());
+                }
+            }
+        }
+        match refused {
+            Some(error) => Err(error),
             None => Ok(taken),
         }
     }

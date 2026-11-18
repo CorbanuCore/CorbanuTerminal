@@ -1801,6 +1801,52 @@ mod pf_27_s05 {
         assert_eq!(denial(&response), Some("unknown_credential"));
     }
 
+    /// SMQ-2: a held key copied into another variable (a header, prefixed or
+    /// embedded value) is removed from the environment commands inherit;
+    /// other variables stay. A broker that cannot check fails closed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn smq2_env_copies_of_held_keys_are_removed_and_fail_closed() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let pid = std::process::id();
+        let key = format!("sk-smq2-held-{:016x}", rand::random::<u64>());
+        let credential = broker
+            .register(binding(upstream.port, "/v1", ModelAuthHeader::Bearer), &key)
+            .expect("register");
+        let header = format!("SMQ2_AUTH_HEADER_{pid}");
+        let embedded = format!("SMQ2_EMBEDDED_{pid}");
+        let safe = format!("SMQ2_SAFE_{pid}");
+        let set = crate::credential_broker::env_scrub::set_env_var_for_test;
+        set(&header, &format!("Bearer {key}"));
+        set(&embedded, &format!("url=https://x.test/?k={key}&v=1"));
+        set(&safe, "ordinary value");
+
+        let mut taken: Vec<String> = broker
+            .take_env_copies()
+            .expect("checked")
+            .into_iter()
+            .filter(|name| name.ends_with(&format!("_{pid}")))
+            .collect();
+        taken.sort();
+        assert_eq!(taken, vec![header.clone(), embedded.clone()]);
+        assert_eq!(std::env::var_os(&header), None);
+        assert_eq!(std::env::var_os(&embedded), None);
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+
+        let late = format!("SMQ2_LATE_{pid}");
+        set(&late, &format!("Bearer {key}"));
+        broker.kill_for_test();
+        assert_eq!(
+            broker.take_env_copies(),
+            Err(ModelCredentialBrokerError::Unavailable)
+        );
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+        drop(credential);
+        for name in [&late, &safe] {
+            drop(crate::credential_broker::env_scrub::take_env_var(name));
+        }
+    }
+
     /// The vault lock is created before containment (so a vault first
     /// created later in the session is still usable) and is never reached
     /// through a symlink.
