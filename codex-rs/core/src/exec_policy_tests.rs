@@ -2812,8 +2812,15 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
         );
     }
     // #2543: rules read the commands of a script that is not plain, so
-    // these are refused without loose-text matching too.
-    for script in [agent_shaped[2], agent_shaped[4], agent_shaped[6]] {
+    // these are refused without loose-text matching too. #2548 extends
+    // that guarantee to eval and literal shell here-documents.
+    for script in [
+        agent_shaped[2],
+        agent_shaped[4],
+        agent_shaped[5],
+        agent_shaped[6],
+        agent_shaped[7],
+    ] {
         assert!(
             matches!(
                 requirement(&lenient, script).await,
@@ -2822,7 +2829,7 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
             "lenient: {script}"
         );
     }
-    for script in [agent_shaped[3], agent_shaped[5], agent_shaped[7]] {
+    for script in [agent_shaped[3]] {
         assert!(
             !matches!(
                 requirement(&lenient, script).await,

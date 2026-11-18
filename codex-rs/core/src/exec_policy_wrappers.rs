@@ -41,7 +41,30 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         // literal argv cannot approve the commands inside.
         || script_commands(command).is_some()
         || has_script_input(command)
+        || partial_script_interprets_text(command)
         || script_builtin(command).first().is_some_and(|word| matches!(word.as_str(), "eval" | "." | "source"))
+}
+
+/// Unknown eval/source text must not acquire a remembered argv approval,
+/// even when no current rule prompts. Retain ordinary non-interpreting argv.
+fn partial_script_interprets_text(command: &[String]) -> bool {
+    let Some(ScriptCommands::Partial(commands)) = shell_lc_script_commands(command) else {
+        return false;
+    };
+    commands.into_iter().any(|words| {
+        let argv: Vec<_> = words
+            .into_iter()
+            .map(|word| word.unwrap_or_else(|| UNKNOWN_WORD.to_string()))
+            .collect();
+        let wrappers = policy_wrapper_commands(&argv);
+        wrappers.uncertain
+            || wrappers.starts.iter().any(|start| {
+                script_builtin(&argv[*start..]).first().is_some_and(|word| {
+                    matches!(word.as_str(), "eval" | "." | "source" | UNKNOWN_WORD)
+                        || policy_runs_shell(word)
+                })
+            })
+    })
 }
 
 /// A shell receiving stdin must retain that input through argv lowering.
@@ -72,9 +95,33 @@ fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<St
             if !inner
                 .first()
                 .is_some_and(|program| policy_runs_shell(program))
-                || runs_unread_script(inner)
             {
                 return None;
+            }
+            if runs_unread_script(inner) {
+                // A -c script may pass its stdin on to another shell
+                // (`echo text | bash -c bash`). Only discard that input
+                // when every plain command is known not to interpret it.
+                let respelled = policy_shell_script(inner);
+                let independent =
+                    match shell_lc_script_commands(respelled.as_deref().unwrap_or(inner)) {
+                        Some(ScriptCommands::Plain(commands)) => commands.iter().all(|command| {
+                            let wrappers = policy_wrapper_commands(command);
+                            let target =
+                                wrappers.starts.last().and_then(|start| command.get(*start));
+                            !wrappers.uncertain
+                                && wrappers.open.is_none()
+                                && target.is_some_and(|program| {
+                                    !policy_runs_shell(program)
+                                        && !matches!(
+                                            program.as_str(),
+                                            "eval" | "." | "source" | "builtin"
+                                        )
+                                })
+                        }),
+                        _ => false,
+                    };
+                return (!independent).then_some(None);
             }
             let script = input
                 .literal

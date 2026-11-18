@@ -29,7 +29,8 @@ pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
         if node.kind() == "command" {
             let mut input = None;
             let mut child = node;
-            while let Some(parent) = child.parent() {
+            let mut ancestor = Some(node);
+            while let Some(parent) = ancestor {
                 // A pipeline after a here-doc delimiter is nested inside the
                 // redirect by this grammar; its first node is still a receiver.
                 if parent.kind() == "pipeline"
@@ -61,6 +62,7 @@ pub fn shell_lc_script_inputs(command: &[String]) -> Vec<ScriptInput> {
                     }
                 }
                 child = parent;
+                ancestor = parent.parent();
             }
             if let Some(literal) = input {
                 inputs.push(ScriptInput {

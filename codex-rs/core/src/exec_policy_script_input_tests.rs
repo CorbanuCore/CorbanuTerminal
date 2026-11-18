@@ -87,6 +87,9 @@ async fn unknown_scripts_table() {
         "eval echo \"$arg\"",
         "eval 'echo git push | bash'",
         "echo 'git push' | eval bash",
+        "echo 'git push' | bash -c bash",
+        "echo 'git push' | sh -c 'env A=1 bash'",
+        "bash -c bash <<EOF\ngit push\nEOF",
         "eval 'git ' \"$verb\"",
         "eval $(printf 'git push')",
         "echo 'git push' | bash",
@@ -110,6 +113,9 @@ async fn unknown_scripts_table() {
         "builtin eval \"$script\"",
         ". \"$file\"",
         "env A=1 bash -c 'source ./x.sh'",
+        "sudo sh -c 'source ./x.sh'",
+        "xargs sh -c 'source ./x.sh'",
+        "xargs -I{} bash <<EOF\ngit push\nEOF",
         "eval \"source ./x.sh\"",
         "bash <<'EOF'\nsource ./x.sh\nEOF",
     ] {
@@ -140,6 +146,13 @@ async fn negative_controls_and_no_rule() {
             matches!(result, ExecApprovalRequirement::Skip { .. }),
             "{script:?}: {result:?}"
         );
+        for mode in 1..3 {
+            assert_eq!(
+                check(script, FORBID, mode).await,
+                check(script, "", mode).await,
+                "{mode} {script:?}: an unrelated rule must not tighten the fallback"
+            );
+        }
     }
     for script in [
         "eval \"$script\"",
