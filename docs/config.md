@@ -40,28 +40,43 @@ shows a startup warning that names them:
 Set them in your user config (`CODEX_HOME/config.toml`), with `-c` on the
 command line, or in managed config. `CODEX_SQLITE_HOME` still works too.
 
-The same applies to agent roles a project declares: role files in the
-project's `.codex/agents/` folder and files a project's config names with
-`[agents.<role>] config_file`. When Corbanu spawns a child agent with such a
-role, it ignores those settings in the role file (the child keeps the parent's
-values) and names them in a startup warning. Roles you declare yourself (in
-`CODEX_HOME/agents/` or your user config), roles from managed config and
-built-in roles can still set them. A project role file also can't declare
-further roles (`[agents.<role>]` entries) for its child to spawn; declare those
-in the project's `.codex/agents/` folder instead. If a project only re-describes
-a role you declared or adds nicknames, without its own `config_file`, your file
-applies as before.
+### Agent role files
 
-The other project-config rules apply to those role files too (D525, #2052):
-their hooks are project hooks that need your review (keyed by the role file,
-and a `[hooks.state]` table in the role is ignored); an MCP server they define
-or change counts as a project's server; and they can't change a security
-level's feature defaults, skill settings or `project_root_markers`. Like
-project config, their `[security]` table can only raise the security level.
+A role file supplies a limited set of overrides for a child agent; it is not
+another complete `config.toml`. Supported overrides include instructions,
+model selection, reasoning effort and summary, verbosity, personality and
+service tier. User, managed and built-in roles can select a configured provider
+and its provider table, subject to the parent's provider allowlist and managed
+requirements. They cannot reroute a built-in provider to another endpoint.
 
-`[agents] provider_allowlist` is your spend policy: a project's config or a
-project role can narrow the list your own, managed or `-c` config sets, but
-can't add providers to it.
+Roles can disable `shell_tool`, `apps`, `plugins`, `memories` and
+`request_permissions_tool`, and set `allow_login_shell = false`; they cannot
+use these fields to enable capabilities. Non-project roles can disable skills,
+bundled skills or skill instructions. Managed requirements still apply.
+
+Project roles have additional restrictions (D525): role files in the project's
+`.codex/agents/` folder and files its config names with
+`[agents.<role>] config_file` cannot set the project-forbidden keys listed
+above. They also cannot change skill settings or declare further roles in the
+role file. Declare project roles in `.codex/agents/` instead. Ignored keys,
+including project-role `skills`, are named in warnings. If a project only
+re-describes a user role or adds nicknames without its own `config_file`, the
+user's role file still applies.
+
+Role files do not apply `hooks`, `mcp_servers`, `security`,
+`project_root_markers` or `[agents]` settings, including `provider_allowlist`.
+The child keeps the parent's values; unsupported keys are reported in warnings.
+Configure those settings in the appropriate parent config layer. A project's
+parent config can narrow your provider allowlist but cannot add providers.
+The project-config restrictions and hook/MCP review requirements still apply
+to that parent layer.
+
+Permissions also remain inherited. A role requesting a stricter sandbox or
+approval policy that the role loader cannot apply is refused rather than
+silently running with the parent's weaker policy. Other incomparable permission
+overrides can likewise refuse the spawn. Configure the parent with the required
+permissions before spawning the role; a role file is not a way to grant more
+authority or to claim an unsupported restriction took effect.
 
 ## Built-In Providers
 
