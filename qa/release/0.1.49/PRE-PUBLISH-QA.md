@@ -70,8 +70,8 @@ binary; native credential tests need a dedicated isolated account/VM.
 | Platform | Execution lane | Status |
 | --- | --- | --- |
 | macOS arm64 | isolated account/VM; tmux PTY using test-tui procedure | Pending release build |
-| Linux x86_64 | glitch, private profile and tmux PTY; private target; count real Cargo builds first, maximum two machine-wide, -j10 | Phase-1 upgrade setup in progress; release replay pending |
-| Native Windows | DESKTOP-UJS3HC4, existing `C:\CorbanuQA` MSYS2/tmux and console-session harness; native `.exe`, not WSL | Pending release build and harness preflight |
+| Linux x86_64 | glitch, private profile and tmux PTY; private target; count real Cargo builds first, maximum two machine-wide, -j10 | Phase-1 upgrade complete; release replay pending |
+| Native Windows | DESKTOP-UJS3HC4, existing `C:\CorbanuQA` MSYS2/tmux and console-session harness; native `.exe`, not WSL | Native harness preflight complete; release build/replay pending |
 
 For Windows, use the existing SSH identity `ambient_windows_desktop_ujs3hc4` and
 host `desktop-ujs3hc4.tail36b615.ts.net`. Check the active harness and user session
