@@ -130,6 +130,7 @@ const CHILD_AGENT: &[&str] = &[
     "wait_agent_v1",
 ];
 const NO_PROTECTED_EFFECT: &[&str] = &[
+    "list_models",
     "update_plan",
     "request_user_input",
     "sleep",

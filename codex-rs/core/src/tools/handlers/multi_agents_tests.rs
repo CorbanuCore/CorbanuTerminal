@@ -969,6 +969,24 @@ async fn spawn_agent_accepts_exact_configured_model_even_when_catalog_hidden() {
 }
 
 #[tokio::test]
+async fn spawn_agent_unknown_model_points_to_authorized_lookup() {
+    let (session, turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    let err = apply_requested_spawn_agent_model_overrides(
+        &session,
+        &turn,
+        &mut config,
+        Some("unknown-model-2577"),
+        /*requested_reasoning_effort*/ None,
+    )
+    .await
+    .expect_err("unknown model must fail");
+    assert_eq!(err, FunctionCallError::RespondToModel(
+        "Unknown model `unknown-model-2577` for spawn_agent. Call `list_models` to discover authorized picker-visible models; follow `next_offset` for every page.".to_string()
+    ));
+}
+
+#[tokio::test]
 async fn spawn_agent_rejects_unmapped_model_override_for_zai() {
     let (session, mut turn) = make_session_and_context().await;
     let provider_info =

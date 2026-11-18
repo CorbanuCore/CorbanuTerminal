@@ -1,4 +1,3 @@
-use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
@@ -26,7 +25,7 @@ const SPAWN_AGENT_PROVIDER_OVERRIDE_DESCRIPTION: &str = "Provider override for t
 const SPAWN_AGENT_SERVICE_TIER_OVERRIDE_DESCRIPTION: &str =
     "Service tier override for the new agent. Omit unless explicitly requested.";
 const MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION: usize = 64;
-const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = MAX_SPAWN_AGENT_MODEL_OVERRIDES;
+const MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION: usize = 3;
 
 #[derive(Debug, Clone)]
 pub struct SpawnAgentToolOptions {
@@ -1146,7 +1145,7 @@ fn spawn_agent_models_description(
         .collect();
     if visible_models.is_empty() {
         return format!(
-            "{inherited_runtime}\nNo authorized picker-visible model overrides are currently loaded."
+            "{inherited_runtime}\nNo authorized picker-visible model overrides are currently loaded. Call `list_models` to inspect the authorized catalog."
         );
     }
 
@@ -1250,11 +1249,11 @@ fn spawn_agent_models_description(
     format!(
         "{inherited_runtime}\n\
 Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`.\n\
-Default allocation policy: compare the task with this catalogue before every spawn. Models marked `explicit-choice only` support user-requested selection or parent inheritance, but must not be chosen for automatic cost-based allocation. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent. This list is capped at {MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION} entries, not an exhaustive allowlist; an unlisted exact configured runtime can still be requested.\n{model_descriptions}"
+Default allocation policy: compare the task with this catalogue before every spawn. Models marked `explicit-choice only` support user-requested selection or parent inheritance, but must not be chosen for automatic cost-based allocation. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent. Top models are previewed below. Call `list_models` for all authorized picker-visible models and capability hints; follow `next_offset` until null. This preview is not an exhaustive allowlist; an unlisted exact configured runtime can still be requested.\n{model_descriptions}"
     )
 }
 
-fn format_model_billing(billing: &ModelBilling) -> String {
+pub(super) fn format_model_billing(billing: &ModelBilling) -> String {
     match billing {
         ModelBilling::Plan {
             relative_burn_millis,
