@@ -10,4 +10,9 @@ codex_rust_crate(
     ],
     crate_name = "codex_sandboxing",
     test_tags = ["no-sandbox"],
+    unit_test_extra_binaries = [
+        "//codex-rs/windows-sandbox-rs:codex-command-runner",
+        "//codex-rs/windows-sandbox-rs:codex-conpty-launcher",
+        "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
+    ],
 )
