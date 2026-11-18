@@ -30,8 +30,9 @@ versioned QA/notes changes. D701 explicitly changes the base for 0.1.49 to main.
 - [x] #2571 merged (astra-models62 new models), 2026-11-18 01:56:12Z;
   merge `1036647d52c95fd02ce32112c69b799d0e5f8328`.
 - [ ] #2580 merged (fixing issue #2568, Windows PowerShell command parsing).
-- [ ] The accepted fixing PR for #2584 merged (fresh Medium-integrity Windows
-  sandbox registry failure); identify and record its PR and merge SHA.
+- [ ] #2586 merged (#2584 investigation: report the underlying Win32 labeling
+  failure). Correct the private fixture's folder permissions and require a
+  passing Medium-token live replay on the final candidate.
 
 The coordinator added #2568 and #2584 as release gates on 2026-11-18.
 Keep this preparation PR as the evidence home. After #2584's fix merges,
@@ -75,7 +76,14 @@ macOS and Windows prompt/cancel/recovery flows. Its failed navigation/onboarding
 attempts are preserved. [Live local-model fixture preflight](LIVE-TUI-PREFLIGHT.md)
 passed on macOS, Linux and native Windows from a High-integrity launcher, with
 the stated sandbox limits. The subsequent [Windows Medium-token case failed](WINDOWS-MEDIUM-FINDING.md)
-at private-registry labeling; it is not counted as qualified.
+at private-registry labeling. The investigation traced it to the fixture's
+inherited folder permissions; our corrected user-profile-permission Medium
+replay passes all four live checks. The original failure is retained, and the
+release candidate still needs its own replay after #2586 merges.
+[Extended preflight](EXTENDED-TUI-PREFLIGHT.md) adds passing macOS/Linux
+navigation, approval typing/cancellation and security-state restart/recovery
+checks. The selected Windows non-admin sandbox correctly refuses Moderate;
+its security-state replay is unavailable without default/admin sandbox setup.
 Canonical TensorCash/Isometric URLs were unavailable to this executor and no
 local overrides were configured. Final release-branch replays remain pending.
 
