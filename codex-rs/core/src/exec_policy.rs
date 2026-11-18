@@ -460,15 +460,6 @@ impl ExecPolicyManager {
             }
             commands
         };
-        // Keep heredoc prefix parsing for rule evaluation so existing
-        // allow/prompt/forbidden rules still apply, but avoid auto-derived
-        // amendments when only the heredoc fallback parser matched.
-        // A wrapper-only amendment cannot approve stricter inner commands,
-        // and an uncertain boundary must never become a remembered bypass.
-        let auto_amendment_allowed = !used_complex_parsing
-            && !commands
-                .iter()
-                .any(|command| wrappers::has_wrappers(command));
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command(
                 cmd,
@@ -488,6 +479,20 @@ impl ExecPolicyManager {
             // any case where this platform finds programs that way.
             fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
+        // Keep heredoc prefix parsing for rule evaluation so existing
+        // allow/prompt/forbidden rules still apply, but avoid auto-derived
+        // amendments when only the heredoc fallback parser matched.
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = !used_complex_parsing
+            && !commands
+                .iter()
+                .any(|command| wrappers::has_wrappers(command))
+            && !wrappers::asks_for_unread_powershell(
+                exec_policy.as_ref(),
+                &commands,
+                &match_options,
+            );
         let wrappers::Checked {
             mut evaluation,
             folded: case_folded,
@@ -1298,9 +1303,11 @@ fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
     {
         // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
         // `pwsh -c`, `powershell.exe -Command`.
+        // #2546 (D553): a trusted PowerShell reads the script, never the
+        // command's own argv[0]; a script none can read asks (`wrappers`).
         let respelled = crate::security::tainted_action::policy_powershell_script(command);
-        if let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_command_into_plain_commands(
+        if let Some(codex_shell_command::powershell::PowershellScriptRead::Commands(commands)) =
+            codex_shell_command::powershell::read_powershell_command_script(
                 respelled.as_deref().unwrap_or(command),
             )
             && !commands.is_empty()

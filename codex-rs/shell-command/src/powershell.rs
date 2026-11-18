@@ -1,8 +1,10 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
 
-use crate::command_safety::try_parse_powershell_ast_commands;
+use crate::command_safety::PowershellParseOutcome;
+use crate::command_safety::parse_with_powershell_ast;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
@@ -78,8 +80,164 @@ pub fn extract_powershell_command(command: &[String]) -> Option<(&str, &str)> {
 pub fn parse_powershell_command_into_plain_commands(
     command: &[String],
 ) -> Option<Vec<Vec<String>>> {
-    let (executable, script) = extract_powershell_command(command)?;
-    try_parse_powershell_ast_commands(executable, script)
+    match read_powershell_command_script(command)? {
+        PowershellScriptRead::Commands(commands) => Some(commands),
+        PowershellScriptRead::NotPlain | PowershellScriptRead::Unreadable => None,
+    }
+}
+
+/// What a trusted PowerShell reads of the script in a PowerShell `-Command`
+/// invocation.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PowershellScriptRead {
+    /// The script's commands.
+    Commands(Vec<Vec<String>>),
+    /// The parser read the script but cannot list its commands (constructs
+    /// it does not read, syntax errors).
+    NotPlain,
+    /// #2546 (D553): no trusted PowerShell could read the script: none was
+    /// found, or it could not be run.
+    Unreadable,
+}
+
+/// Read the script of a PowerShell `-Command` invocation (see
+/// [`extract_powershell_command`]); `None` for any other command.
+///
+/// #2546 (D553): the script is parsed by a PowerShell found on the system
+/// ([`trusted_powershell_parser`]), never by the invocation's own `argv[0]`:
+/// that program may be any file named `pwsh` or `powershell`, and parsing
+/// runs before approval, outside the sandbox.
+pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellScriptRead> {
+    let (shell, script) = extract_powershell_command(command)?;
+    Some(read_script_with_trusted_parser(shell, script))
+}
+
+/// Parse `script`, written for the PowerShell named `shell`, with the
+/// trusted PowerShell of the same kind; `shell` itself is never started.
+pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
+    let Some(parser) =
+        trusted_powershell_parser(PowershellKind::of(shell)).and_then(|parser| parser.to_str())
+    else {
+        return PowershellScriptRead::Unreadable;
+    };
+    match parse_with_powershell_ast(parser, script) {
+        PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
+        PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => {
+            PowershellScriptRead::NotPlain
+        }
+        PowershellParseOutcome::Unavailable => PowershellScriptRead::Unreadable,
+    }
+}
+
+/// Which PowerShell a script is written for: `pwsh` (PowerShell 7) and
+/// `powershell` (Windows PowerShell 5.1) read different languages, so each
+/// is parsed by its own kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PowershellKind {
+    Pwsh,
+    WindowsPowershell,
+}
+
+impl PowershellKind {
+    /// The kind a PowerShell program name (`pwsh`, `C:\…\PowerShell.EXE`)
+    /// runs.
+    pub(crate) fn of(shell: &str) -> Self {
+        let stem = std::path::Path::new(shell)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or(shell);
+        if stem.eq_ignore_ascii_case("pwsh") {
+            Self::Pwsh
+        } else {
+            Self::WindowsPowershell
+        }
+    }
+}
+
+thread_local! {
+    static NO_TRUSTED_POWERSHELL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Test support: while the returned guard lives, this thread finds no
+/// trusted PowerShell, so scripts read as [`PowershellScriptRead::Unreadable`].
+/// It can only make policy stricter.
+#[doc(hidden)]
+pub fn hide_trusted_powershell_on_this_thread() -> HiddenTrustedPowershell {
+    NO_TRUSTED_POWERSHELL.with(|hidden| hidden.set(true));
+    HiddenTrustedPowershell(())
+}
+
+#[doc(hidden)]
+pub struct HiddenTrustedPowershell(());
+
+impl Drop for HiddenTrustedPowershell {
+    fn drop(&mut self) {
+        NO_TRUSTED_POWERSHELL.with(|hidden| hidden.set(false));
+    }
+}
+
+/// #2546 (D553): the PowerShell that parses scripts of `kind`, found once:
+/// its fixed system location (`%SystemRoot%\System32\WindowsPowerShell\v1.0`,
+/// `%ProgramFiles%\PowerShell\7`), else the first on `PATH` outside the
+/// current directory. Never a command's own `argv[0]`, and never through
+/// `cmd`, which looks in the current directory first.
+pub(crate) fn trusted_powershell_parser(kind: PowershellKind) -> Option<&'static std::path::Path> {
+    static PWSH: OnceLock<Option<PathBuf>> = OnceLock::new();
+    static WINDOWS_POWERSHELL: OnceLock<Option<PathBuf>> = OnceLock::new();
+    if NO_TRUSTED_POWERSHELL.with(std::cell::Cell::get) {
+        return None;
+    }
+    let found = match kind {
+        PowershellKind::Pwsh => &PWSH,
+        PowershellKind::WindowsPowershell => &WINDOWS_POWERSHELL,
+    };
+    found
+        .get_or_init(|| find_trusted_powershell(kind))
+        .as_deref()
+}
+
+fn find_trusted_powershell(kind: PowershellKind) -> Option<PathBuf> {
+    let (fixed, name): (&[(&str, &str)], &str) = match kind {
+        PowershellKind::Pwsh => (
+            &[
+                ("ProgramFiles", r"PowerShell\7\pwsh.exe"),
+                ("ProgramW6432", r"PowerShell\7\pwsh.exe"),
+            ],
+            if cfg!(windows) { "pwsh.exe" } else { "pwsh" },
+        ),
+        PowershellKind::WindowsPowershell => (
+            &[
+                (
+                    "SystemRoot",
+                    r"System32\WindowsPowerShell\v1.0\powershell.exe",
+                ),
+                ("windir", r"System32\WindowsPowerShell\v1.0\powershell.exe"),
+            ],
+            if cfg!(windows) {
+                "powershell.exe"
+            } else {
+                "powershell"
+            },
+        ),
+    };
+    if cfg!(windows) {
+        for (variable, relative) in fixed {
+            let Some(base) = std::env::var_os(variable).map(PathBuf::from) else {
+                continue;
+            };
+            let candidate = base.join(relative);
+            if base.is_absolute() && candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    let current_dir = std::env::current_dir().ok();
+    which::which(name).ok().filter(|found| {
+        found.is_absolute()
+            && current_dir
+                .as_deref()
+                .is_none_or(|current| found.parent() != Some(current))
+    })
 }
 
 /// This function attempts to find a powershell.exe executable on the system.

@@ -17,9 +17,12 @@ expression: popup
                             below Astra and above Luna. Requires eligible OpenAI account access;
                             ChatGPT sign-in may reject it.
 › 4. GPT-5.6-Sol (current)  Model: gpt-5.6-sol. Latest frontier agentic coding model.
-  5. GPT-6 Luna             Model: gpt-6-luna. Efficient GPT-6 model for focused coding and high-
+  5. GPT-6.2 Astra          Model: gpt-6.2-astra. GPT-6.2 Astra through OpenAI with ChatGPT sign-
+                            in or an API key. Requires eligible account access.
+  6. GPT-6.2 Sol            Model: gpt-6.2-sol. GPT-6.2 Sol through OpenAI with ChatGPT sign-in or
+                            an API key. Requires eligible account access.
+  7. GPT-6 Luna             Model: gpt-6-luna. Efficient GPT-6 model for focused coding and high-
                             volume tasks.
-  6. GPT-5.6-Terra          Model: gpt-5.6-terra. Balanced agentic coding model for everyday work.
-  7. GPT-5.6-Luna           Model: gpt-5.6-luna. Fast and affordable agentic coding model.
-
+  8. GPT-5.6-Terra          Model: gpt-5.6-terra. Balanced agentic coding model for everyday work.
+                                                                                             4 / 9
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

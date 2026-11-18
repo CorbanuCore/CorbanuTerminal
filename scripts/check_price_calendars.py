@@ -107,6 +107,9 @@ def main() -> int:
     parser.add_argument("--catalogue", type=Path, default=CATALOGUE)
     args = parser.parse_args()
     models = json.loads(args.catalogue.read_text())["models"]
+    if args.catalogue == CATALOGUE:
+        for shard in sorted(CATALOGUE.parent.glob("models-*.json")):
+            models.extend(json.loads(shard.read_text())["models"])
     status, lines = check(models, args.today, args.days, args.warn_only)
     print("\n".join(lines))
     return status
