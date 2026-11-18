@@ -519,12 +519,12 @@ impl LaunchContract {
             group.as_mut_ptr().cast(),
         )
         .map_err(|_| LaunchDenied::CodexHomeLockUnavailable)?;
+        // D609 (a): on the real folder, not a junction in front of it.
+        let home = codex_home_acl_target(self.codex_home.as_path())
+            .map_err(|_| LaunchDenied::WindowsSandboxNotSetUp)?;
         // SAFETY: `group` holds a valid SID for the duration of the call.
         let present = unsafe {
-            codex_windows_sandbox::add_deny_read_ace_for_new_files(
-                self.codex_home.as_path(),
-                group.as_mut_ptr().cast(),
-            )
+            codex_windows_sandbox::add_deny_read_ace_for_new_files(&home, group.as_mut_ptr().cast())
         };
         if !matches!(present, Ok(true)) {
             return Err(LaunchDenied::WindowsSandboxNotSetUp);
@@ -1082,12 +1082,16 @@ pub(crate) fn release_codex_home_when_unarmed(codex_home: &AbsolutePathBuf) {
         return;
     }
     ONCE.call_once(|| {
+        // D609 (a): the entry is on the real folder (see `codex_home_acl_target`).
+        let Ok(codex_home) = codex_home_acl_target(codex_home.as_path()) else {
+            return;
+        };
         // Cheap check first: most users never ran a protected launch, and
         // resolving the group name can reach a domain controller.
         // SAFETY: no SID is passed.
         let present = unsafe {
             codex_windows_sandbox::has_exact_deny_read_ace_for_new_files(
-                codex_home.as_path(),
+                &codex_home,
                 /*psid*/ None,
             )
         };
@@ -1098,7 +1102,7 @@ pub(crate) fn release_codex_home_when_unarmed(codex_home: &AbsolutePathBuf) {
         let Ok(mut group) = codex_windows_sandbox::resolve_sid(WINDOWS_SANDBOX_USERS_GROUP) else {
             return;
         };
-        match release_new_file_deny(codex_home.as_path(), group.as_mut_ptr().cast()) {
+        match release_new_file_deny(&codex_home, group.as_mut_ptr().cast()) {
             Ok(true) => tracing::info!(
                 "secretless_agent_launch is off: removed the CODEX_HOME new-file deny"
             ),
@@ -1108,6 +1112,15 @@ pub(crate) fn release_codex_home_when_unarmed(codex_home: &AbsolutePathBuf) {
             ),
         }
     });
+}
+
+/// D609 (a): the folder the new-file read deny is added to, checked on and removed from:
+/// `CODEX_HOME`'s real path. The ACL calls act on a link itself (no-follow), so on a junctioned
+/// default home the deny would land on the junction, never reach files created in the real
+/// folder, and still read as present.
+#[cfg(windows)]
+fn codex_home_acl_target(codex_home: &Path) -> std::io::Result<std::path::PathBuf> {
+    dunce::canonicalize(codex_home)
 }
 
 /// Removes the new-file deny for `group` from `codex_home` unless an armed

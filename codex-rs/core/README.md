@@ -339,7 +339,9 @@ its writable roots (except those that come only from `%TEMP%`/`%TMP%`:
 every program creates folders there, so each project folder made there
 while any legacy command ran would count as planted, and the temp folder
 isn't treated as a project location; a workspace or configured root stays
-watched even if the temp folder resolves to it), with its file identity; it doesn't look inside `.git`
+watched even if the temp folder resolves to it. Since D610, a temp root does
+get the read-only `.git`/`.codex`/`.agents` protection at its top, like any
+other writable root; only this walk and the planting report skip it), with its file identity; it doesn't look inside `.git`
 folders, inside those it finds, or behind links (about 30 ms on a
 100,000-file workspace). Other reparse points, such as ProjFS (VFS for Git)
 folders or cloud placeholders a program sees as they are, aren't links: the
