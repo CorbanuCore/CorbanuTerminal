@@ -2463,11 +2463,6 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
     // This command should not be run without user approval unless there is
     // a proper sandbox in place to ensure safety.
     let sneaky_command = vec_str(&["pwsh", "-Command", "echo hi @(calc)"]);
-    let expected_amendment = Some(ExecPolicyAmendment::new(vec_str(&[
-        "pwsh",
-        "-Command",
-        "echo hi @(calc)",
-    ])));
     let (pwsh_approval_reason, expected_req) = if cfg!(windows) {
         (
             r#"On Windows, SandboxPolicy::ReadOnly should be assumed to mean
@@ -2485,7 +2480,9 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
             "On non-Windows, rely on the read-only sandbox to prevent harm.",
             ExecApprovalRequirement::Skip {
                 bypass_sandbox: false,
-                proposed_execpolicy_amendment: expected_amendment.clone(),
+                // #2601: no PowerShell script is read off Windows, so as on
+                // Windows its literal argv gets no always-allow rule.
+                proposed_execpolicy_amendment: None,
             },
         )
     };
