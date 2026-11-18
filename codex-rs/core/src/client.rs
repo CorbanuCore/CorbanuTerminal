@@ -6146,6 +6146,17 @@ fn anthropic_reasoning_for_model_and_effort(
     model: &str,
     effort: Option<&ReasoningEffortConfig>,
 ) -> (Option<Value>, Option<Value>) {
+    // Fable 5.2 always uses adaptive thinking, including when an older
+    // session carries an unset or unsupported reasoning preference.
+    if model.trim() == codex_model_provider_info::CLAUDE_FABLE_5_2_MODEL {
+        let effort = effort
+            .and_then(anthropic_adaptive_effort_value)
+            .unwrap_or_else(|| "high".to_string());
+        return (
+            Some(json!({ "type": "adaptive", "display": "summarized" })),
+            Some(json!({ "effort": effort })),
+        );
+    }
     if anthropic_model_uses_adaptive_effort(model)
         && let Some(effort) = effort.and_then(anthropic_adaptive_effort_value)
     {
@@ -7342,6 +7353,10 @@ impl WebsocketTelemetry for ApiTelemetry {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "client_fable_5_2_tests.rs"]
+mod fable_5_2_tests;
 
 /// The level in force for `thread_id`: the session's own level or the
 /// stricter one its policy tree holds (Aggressive when that is unreadable).

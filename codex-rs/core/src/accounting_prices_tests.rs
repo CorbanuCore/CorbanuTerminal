@@ -806,6 +806,27 @@ fn accounting_zai_api_states_published_rates_and_a_free_cache_write() -> anyhow:
     Ok(())
 }
 
+#[test]
+fn fable_5_2_api_rates_match_the_published_sheet() -> anyhow::Result<()> {
+    let prices = anthropic_original(
+        "claude-fable-5-2",
+        "anthropic",
+        Uuid::new_v4(),
+        utc("2026-11-17T00:00:00Z"),
+    )?;
+    assert_eq!(prices.len(), 1);
+    assert_eq!(
+        prices[0].rates,
+        Rates {
+            noncached: Some(rate(/*milli*/ 8_000)?),
+            read: Some(rate(/*milli*/ 200)?),
+            write: Some(rate(/*milli*/ 10_000)?),
+            output: Some(rate(/*milli*/ 40_000)?),
+        }
+    );
+    Ok(())
+}
+
 /// Milliseconds at a UTC instant.
 fn utc(text: &str) -> i64 {
     chrono::DateTime::parse_from_rfc3339(text)
@@ -826,7 +847,9 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
     let read_on = utc("2026-10-09T19:00:00Z");
     // (model, input, cached input, cache writes, output, long-context tier)
     type Row = (&'static str, u32, u32, Option<u32>, u32, bool);
-    let sheet: [Row; 12] = [
+    let sheet: [Row; 14] = [
+        ("gpt-6.2-astra", 8_000, 400, Some(10_000), 40_000, true),
+        ("gpt-6.2-sol", 2_000, 100, Some(2_500), 10_000, true),
         ("gpt-6-astra", 10_000, 1_000, Some(12_500), 50_000, true),
         ("gpt-6.1-sol", 2_000, 100, Some(2_500), 10_000, true),
         ("gpt-6-sol", 2_000, 200, Some(2_500), 10_000, true),
@@ -881,7 +904,7 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
         }
         // Fast (formerly Priority), Flex and unknown tiers have no Standard
         // price here: no price, never the Standard one.
-        for tier in ["priority", "flex", "auto"] {
+        for tier in ["priority", "ultrafast", "flex", "auto"] {
             assert!(
                 responses_original(model, "openai", scope, read_on, Some(tier))?.is_empty(),
                 "{model} {tier}"

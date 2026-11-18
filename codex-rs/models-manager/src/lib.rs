@@ -14,7 +14,14 @@ pub use codex_protocol::openai_models::OPENAI_CODEX_COMPAT_VERSION;
 /// Load the bundled model catalog shipped with `codex-models-manager`.
 pub fn bundled_models_response()
 -> std::result::Result<codex_protocol::openai_models::ModelsResponse, serde_json::Error> {
-    serde_json::from_str(include_str!("../models.json"))
+    // Keep catalog shards below the repository blob limit without duplicating
+    // or changing existing model metadata when adding a new release.
+    let mut catalog: codex_protocol::openai_models::ModelsResponse =
+        serde_json::from_str(include_str!("../models.json"))?;
+    let additions: codex_protocol::openai_models::ModelsResponse =
+        serde_json::from_str(include_str!("../models-2026-11-17.json"))?;
+    catalog.models.extend(additions.models);
+    Ok(catalog)
 }
 
 /// Convert the client version string to a whole version string (e.g. "1.2.3-alpha.4" -> "1.2.3").
