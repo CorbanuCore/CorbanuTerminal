@@ -14,6 +14,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -73,6 +74,18 @@ async fn run(
         home_path.join("secrets").display(),
         marker.display()
     );
+    // #2548 (coordinator decision A): Aggressive's rules include a forbidden
+    // one, so a script outside the minimal lexical set (`${…:-unset}`) asks
+    // before it runs, and with approvals off it would be refused before the
+    // sandbox is exercised. Such runs allow approvals and approve that
+    // prompt (below); the sandbox still decides.
+    let reading_gate = level == SecurityLevel::Aggressive
+        && codex_shell_command::bash::read_script(&script).fails_closed();
+    let approval_policy = if reading_gate {
+        AskForApproval::OnRequest
+    } else {
+        AskForApproval::Never
+    };
     let mut responses = Vec::new();
     if untrusted_first {
         responses.push(sse(vec![
@@ -107,7 +120,7 @@ async fn run(
         .with_model("test-gpt-5.1-codex")
         .with_config(move |config| {
             config.security_level = level;
-            config.permissions.approval_policy = Constrained::allow_any(AskForApproval::Never);
+            config.permissions.approval_policy = Constrained::allow_any(approval_policy);
             config
                 .features
                 .enable(Feature::SourceEnvelopes)
@@ -143,10 +156,47 @@ async fn run(
             .with_thread_settings(Default::default()),
         )
         .await?;
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
+    let mut gate_prompts = 0;
+    while let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {
+        matches!(
+            event,
+            EventMsg::TurnComplete(_) | EventMsg::ExecApprovalRequest(_)
+        )
     })
-    .await;
+    .await
+    {
+        // The prompt before the run: no reason, or on Linux the Aggressive
+        // notice for what the command touches (the vault folder it lists,
+        // the user namespaces it needs), as pf_23_s01's helper accepts.
+        // Anything else (a retry outside the sandbox) is denied, so the
+        // sandbox decides.
+        let gate = approval.reason.as_deref().is_none_or(|reason| {
+            reason.starts_with("Security level Aggressive blocked access to `")
+                || reason.starts_with(
+                    "On Linux, security level Aggressive blocks creating user namespaces \
+                     for agent commands: if you approve, the command runs",
+                )
+        });
+        gate_prompts += usize::from(gate);
+        let decision = if reading_gate && gate {
+            codex_protocol::protocol::ReviewDecision::Approved
+        } else {
+            codex_protocol::protocol::ReviewDecision::denied("a sandbox retry")
+        };
+        test.codex
+            .submit(Op::ExecApproval {
+                id: approval.effective_approval_id(),
+                turn_id: None,
+                decision,
+            })
+            .await?;
+    }
+    // Exactly the one reading prompt where the gate applies, none otherwise.
+    assert_eq!(
+        gate_prompts,
+        usize::from(reading_gate),
+        "{level:?}: the script-reading prompt"
+    );
     let output = captured
         .requests()
         .iter()

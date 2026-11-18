@@ -188,10 +188,11 @@ pub(crate) fn unread_script_matches(
 ) -> (Vec<RuleMatch>, Vec<RuleMatch>) {
     let respelled = policy_shell_script(command);
     let reading = shell_lc_script_read(respelled.as_deref().unwrap_or(command));
-    // #2548: a plain script the split lowered to its commands is read there.
+    // #2548: a plain script the split lowered to its commands is read there,
+    // unless one runs a script file, whose unread commands ask below.
     let plain = reading
         .as_ref()
-        .is_some_and(|read| read.plain && !runs_more_than_argv(read))
+        .is_some_and(|read| read.plain && !runs_more_than_argv(read) && !runs_script_file(read))
         && respelled.is_none();
     // A top-level heredoc script has its own pass
     // (`apply_heredoc_restrictive_matches`) unless (#2548) it runs more than
@@ -403,7 +404,9 @@ pub(super) fn check(
                 // here-document) asks wherever a rule could match a command
                 // in it, as main's `asks_outside_minimal_set`; D691: a fresh
                 // human decision where a forbidden or prompt-user rule could.
-                if shell_lc_script_read(parsed_as).is_some_and(|read| !read.minimal) {
+                if shell_lc_script_read(parsed_as)
+                    .is_some_and(|read| !read.minimal || runs_script_file(&read))
+                {
                     let ask = any_rule();
                     raise_match(&mut matches, inner, ask);
                     unread_script_prompts |= ask.is_some();
@@ -471,7 +474,7 @@ pub(super) fn check(
             let reading_from = matches.len();
             let ask = match roles::role(&command[..start], inner, stdin) {
                 Role::Argv => None,
-                Role::Unread => any_rule(),
+                Role::Unread | Role::File => any_rule(),
                 Role::Script { text, single } => {
                     let past_bound = depth >= MAX_SCRIPT_DEPTH;
                     let ask = queue_script(
@@ -591,8 +594,29 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
             };
             let wrappers = policy_wrapper_commands(&command);
             let start = wrappers.starts.last().copied().unwrap_or(0);
-            roles::role(&command[..start], &command[start..], stdin) != Role::Argv
+            !matches!(
+                roles::role(&command[..start], &command[start..], stdin),
+                Role::Argv | Role::File
+            )
         })
+}
+
+/// #2548: whether a command of `read` is a shell running a named script file
+/// ([`Role::File`]): split like argv, but its commands are unread.
+pub(super) fn runs_script_file(read: &ScriptRead) -> bool {
+    read.commands.iter().any(|read_command| {
+        let Some(command) = read_command
+            .words
+            .iter()
+            .cloned()
+            .collect::<Option<Vec<_>>>()
+        else {
+            return false;
+        };
+        let wrappers = policy_wrapper_commands(&command);
+        let start = wrappers.starts.last().copied().unwrap_or(0);
+        roles::role(&command[..start], &command[start..], &read_command.stdin) == Role::File
+    })
 }
 
 fn inner_runs_shell(command: &[String]) -> bool {
