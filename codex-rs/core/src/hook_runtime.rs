@@ -748,6 +748,20 @@ pub(crate) async fn inspect_pending_input(
     }
 }
 
+/// Clears D523's host-only hook marker, so it is never persisted, and reports it.
+fn take_hook_output(
+    mut item: codex_history::ResponseItemEnvelope,
+) -> (codex_history::ResponseItemEnvelope, bool) {
+    let Some(metadata) = item.metadata.as_mut() else {
+        return (item, false);
+    };
+    let hook_output = std::mem::take(&mut metadata.hook_output);
+    if *metadata == codex_history::CodexHarnessMetadata::default() {
+        item.metadata = None;
+    }
+    (item, hook_output)
+}
+
 pub(crate) async fn record_pending_input(
     sess: &Arc<Session>,
     turn_context: &Arc<TurnContext>,
@@ -772,10 +786,25 @@ pub(crate) async fn record_pending_input(
             )
             .await;
         }
-        TurnInput::ResponseItem(item) => {
-            sess.record_annotated_conversation_items(turn_context, model_info, vec![item])
+        TurnInput::ResponseItem(item) => match take_hook_output(item) {
+            // D523 (a): background hook output queued for this turn is recorded as hook
+            // output (labelled external data), as `record_additional_contexts` does.
+            (item, true) => {
+                sess.record_annotated_conversation_items_from(
+                    turn_context,
+                    model_info,
+                    vec![item],
+                    Some(crate::security::ingress::MessageOrigin::External(
+                        codex_protocol::provenance::SourceKind::Hook,
+                    )),
+                )
                 .await;
-        }
+            }
+            (item, false) => {
+                sess.record_annotated_conversation_items(turn_context, model_info, vec![item])
+                    .await;
+            }
+        },
         TurnInput::FunctionCallOutput(item) => {
             sess.record_annotated_conversation_items(turn_context, model_info, vec![item.clone()])
                 .await;
