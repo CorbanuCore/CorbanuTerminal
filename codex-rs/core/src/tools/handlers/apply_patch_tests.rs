@@ -354,18 +354,33 @@ async fn foreign_patch_paths_are_not_auto_approved_under_a_restricted_turn() {
     turn_environment.config_mut().windows_sandbox_level = WindowsSandboxLevel::RestrictedToken;
     let step_context = StepContext::for_test(Arc::clone(&turn));
 
-    let requirement =
-        match prepare_verified_patch(action, turn_environment, &session, &step_context).await {
-            Ok((request, _handler_basis)) => request.exec_approval_requirement,
-            // Refusing the foreign patch outright (the model is told why) is
-            // also not auto-approval.
-            Err(FunctionCallError::RespondToModel(message))
-                if message.starts_with("failed to check patch permissions") =>
-            {
-                return;
-            }
-            Err(error) => panic!("unexpected error: {error:?}"),
-        };
+    let requirement = match prepare_verified_patch(
+        action,
+        turn_environment,
+        &session,
+        &step_context,
+    )
+    .await
+    {
+        Ok((request, _handler_basis)) => request.exec_approval_requirement,
+        // Refusing the foreign patch outright (the model is told why) is
+        // also not auto-approval.
+        Err(FunctionCallError::RespondToModel(message))
+            if message.starts_with("failed to check patch permissions") =>
+        {
+            return;
+        }
+        // Seatbelt rejects the foreign drive root while preparing its path
+        // matcher, before the later write-permission check can refuse it.
+        Err(FunctionCallError::RespondToModel(message))
+            if cfg!(target_os = "macos")
+                && message
+                    == "failed to prepare patch permissions: 'file:///C:' is invalid on 'macos'" =>
+        {
+            return;
+        }
+        Err(error) => panic!("unexpected error: {error:?}"),
+    };
     assert!(
         matches!(
             requirement,
