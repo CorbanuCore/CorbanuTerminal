@@ -327,6 +327,7 @@ async fn issue_2601_powershell_name_rebinding_and_code_asks() {
     {
         use codex_shell_command::powershell::PowershellScriptRead;
         use codex_shell_command::powershell::read_powershell_command_script;
+        use pretty_assertions::assert_eq;
         assert_eq!(
             read_powershell_command_script(&argv(&[
                 "powershell.exe",
