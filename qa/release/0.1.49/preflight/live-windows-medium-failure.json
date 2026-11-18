@@ -1,0 +1,28 @@
+{
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "binary_sha256": "5e5173876cc2c300eaaac7f3143bdfc9be8bd88396f7d470da15d3a2d160c011",
+  "model": "Qwen3.8-Flash-Next-Uncensored-MLX-Serve-mixed-4-8bit",
+  "checks": {},
+  "isolation": "Private profile/USERPROFILE, debug native-keyring guard; native non-admin Windows sandbox; private SSH loopback tunnel; no provider credentials",
+  "limits": "one task, 240-second cutoff; fixture, not canonical live-repository qualification",
+  "known_folder_path": "C:/CorbanuQA/astra-rel149/live-medium3/os-home\\AppData\\Local",
+  "launcher_token": [
+    {
+      "label": "NT AUTHORITY\\Local account and member of Administrators group",
+      "sid": "S-1-5-114",
+      "attributes": "Group used for deny only"
+    },
+    {
+      "label": "BUILTIN\\Administrators",
+      "sid": "S-1-5-32-544",
+      "attributes": "Group used for deny only"
+    },
+    {
+      "label": "Mandatory Label\\Medium Mandatory Level",
+      "sid": "S-1-16-8192",
+      "attributes": ""
+    }
+  ],
+  "error": "240-second task cutoff reached",
+  "elapsed_seconds": 240.39
+}

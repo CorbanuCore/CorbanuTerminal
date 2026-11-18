@@ -1,0 +1,20 @@
+{
+  "checks": {
+    "request_blocked_by_preserved_cooldown": true,
+    "legacy_key_removed": true,
+    "one_salted_row": true,
+    "cooldown_preserved": true,
+    "lease_preserved": true,
+    "count_preserved": true
+  },
+  "exit_code": 1,
+  "rows": [
+    [
+      "env-salted:QA_UPGRADE_KEY:b5ad6fee3f89de19",
+      1795267115861,
+      "qa-legacy-lease",
+      1794962341861,
+      4
+    ]
+  ]
+}
