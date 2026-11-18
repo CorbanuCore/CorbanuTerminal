@@ -72,7 +72,7 @@ initial versioned notes body exactly matched that preview. Subsequently the
 coordinator requested #2595's five claim corrections and complete command-rule
 documentation. After its merge `edfc83dcfe5c36b993d9db43a6a93235e4207d87`, all 141
 fragments were reconstructed, the five corrected bodies substituted, and the
-assembler rerun. The new notes match the updated preview with one relative docs
-link rebased from fragment depth to versioned-note depth. No fragments remain.
+assembler rerun. The new notes match the updated preview with one command-rules
+link made absolute for the published release body. No fragments remain.
 This is coverage evidence, not certification of every historical merge's product
 classification or fresh qualification of every described feature.

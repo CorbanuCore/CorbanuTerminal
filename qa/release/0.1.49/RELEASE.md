@@ -28,8 +28,8 @@ this evidence commit. This record does not pre-approve those steps.
   binary QA was not repeated for this documentation-only delta. See
   [delta provenance](candidate/documentation-delta.json).
 - All 141 fragments were reassembled with those five corrections. The body matches
-  the updated preview apart from one relative command-rules link rebased for the
-  versioned directory. No fragments remain. [Coverage audit](NOTES-AUDIT.md)
+  the updated preview apart from one command-rules link made absolute for the
+  published release body. No fragments remain. [Coverage audit](NOTES-AUDIT.md)
   records verified additions.
 
 ## Builds and automated checks
@@ -165,7 +165,8 @@ migration are not claimed.
 - Final exact-head Opus review and release-PR CI must finish before merge/READY.
   Initial Opus rounds 1 and 2 approved preparation and candidate head `a9f03383`.
   The coordinator granted one extra delta-only round 3 for #2595's documentation,
-  reassembly and provenance. Final exact-head review/approval is recorded on the
+  reassembly and provenance, then one link/provenance-only round 4 at 07:52Z.
+  Final exact-head review/approval is recorded on the
   PR; do not alter that head without following the review-budget rules.
 
 Once the PR is reviewed, green and merged, the coordinator uses workflow

@@ -90,7 +90,10 @@ Initial review budget: **2**, both used. Round 1 approved preparation head
 Round 2 approved `a9f033833a4da28df67c8e4a3bb37a74a638c599`. The coordinator's
 2026-11-18 07:07Z grant authorizes **one extra delta-only round 3** for #2595's
 documentation, reassembly and provenance, with complete-PR scope confirmed at
-07:16Z. Any further round requires a new written grant via
+07:16Z. Round 3 approved `ff0c7f559dd6f3ba1fb749087ebaad9e54f93955`.
+The coordinator granted **one link/provenance-only round 4** at 07:52Z to use
+an absolute guide URL in the published release body. Any further round requires
+a new written grant via
 `$W/astra-rel149.request.md`. Never post approval/request-changes under
 the maintainer account. Follow CODEOWNERS and exact-SHA security approval rules
 where applicable. Merge only after all checks complete successfully, using the

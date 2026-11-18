@@ -6,7 +6,8 @@
   "documentation_merge": "edfc83dcfe5c36b993d9db43a6a93235e4207d87",
   "coordinator_authority": [
     "2026-11-18 07:07Z: integrate documentation, grant one extra delta-only Opus round 3, no binary QA rerun",
-    "2026-11-18 07:16Z: integrate complete merged PR; disclose embedded help Markdown"
+    "2026-11-18 07:16Z: integrate complete merged PR; disclose embedded help Markdown",
+    "2026-11-18 07:52Z: grant one link/provenance-only Opus round 4 for the absolute published-notes URL"
   ],
   "documentation_paths": [
     "codex-rs/execpolicy/README.md",
@@ -27,5 +28,5 @@
   "rust_executable_source_changed": false,
   "binary_qa_repeated": false,
   "qa_provenance": "All candidate binary hashes and functional results remain those of tested_build_source. They do not claim testing of the later embedded help text.",
-  "assembly_link_adjustment": "One command-rules link rebased from ../../../../docs/execpolicy.md to ../../../docs/execpolicy.md for qa/release/0.1.49/RELEASE_NOTES.md."
+  "assembly_link_adjustment": "One command-rules link changed from fragment-relative ../../../../docs/execpolicy.md to https://github.com/CorbanuCore/CorbanuTerminal/blob/main/docs/execpolicy.md so the destination also works in the published release body."
 }
