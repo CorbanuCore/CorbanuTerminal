@@ -1409,11 +1409,14 @@ fn commands_for_exec_policy_for_platform(
         && let Some((_, script)) =
             codex_shell_command::powershell::extract_powershell_command(command)
         && let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_script_into_plain_commands(script)
+            codex_shell_command::powershell::parse_powershell_script_into_plain_commands(&script)
         && !commands.is_empty()
     {
+        // #2568: the script as PowerShell reads it (every argument after
+        // `-Command`, `-EncodedCommand` decoded); one rules cannot read asks
+        // (`wrappers`).
         return ExecPolicyCommands {
-            command_origin: powershell_command_origin(script, &commands),
+            command_origin: powershell_command_origin(&script, &commands),
             commands,
         };
     }

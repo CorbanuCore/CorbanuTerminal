@@ -10,6 +10,8 @@ use codex_execpolicy::Policy;
 use codex_execpolicy::RuleMatch;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
 use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
+use codex_shell_command::powershell::UnreadPowershell;
+use codex_shell_command::powershell::unread_powershell_command_line;
 
 pub(super) fn has_wrappers(command: &[String]) -> bool {
     let wrappers = policy_wrapper_commands(command);
@@ -17,6 +19,9 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
         || wrappers.approval_only
         || wrappers.starts.len() > 1
         || wrappers.open.is_some()
+        // #2568: an amendment for a PowerShell command line whose script
+        // rules cannot read cannot approve the commands inside.
+        || unread_powershell_command_line(command).is_some()
 }
 
 /// D677/D686 (#2506), D691 and #2519: what a command gets for a rule that
@@ -108,6 +113,18 @@ pub(crate) fn check_with_wrappers(
             if let Some(open) = &wrappers.open {
                 let known = &command[start..open.known_end.max(start)];
                 raise(&mut heuristic, candidate, could_complete(known));
+            }
+            // #2568 (D553): a PowerShell command line whose script rules
+            // cannot read (an unknown parameter, a script from stdin,
+            // `-File`): every rule counts. A `-File` script's file and
+            // arguments are checked as a command too.
+            if platform == DangerousCommandPlatform::Windows
+                && let Some(unread) = unread_powershell_command_line(candidate)
+            {
+                raise(&mut heuristic, candidate, could_complete(&[]));
+                if let UnreadPowershell::File(file) = unread {
+                    pending.push(file.to_vec());
+                }
             }
         }
         if let Some((command, decision)) = heuristic {
