@@ -4,4 +4,6 @@ codex_rust_crate(
     name = "network-proxy",
     crate_name = "codex_network_proxy",
     integration_compile_data_extra = ["src/destination_contract.rs"],
+    # The bounded 3 MiB/eight-length credential scan exceeds 300s on native Windows.
+    unit_test_timeout = "long",
 )
