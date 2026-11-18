@@ -145,11 +145,11 @@ exact-match precedence and path resolution.
 `xargs` is checked both as a launcher and for the command it runs. With a
 forbidden rule for `git push`:
 
-| Invocation | Command-rule result |
-| --- | --- |
-| `xargs -n1 git push` | Refused: the fixed words already match. |
-| `xargs git` | Asks: input could append `push`. |
-| `xargs -I{} git {}` | Asks: input could replace `{}` with `push`. |
+| Invocation           | Command-rule result                         |
+| -------------------- | ------------------------------------------- |
+| `xargs -n1 git push` | Refused: the fixed words already match.     |
+| `xargs git`          | Asks: input could append `push`.            |
+| `xargs -I{} git {}`  | Asks: input could replace `{}` with `push`. |
 
 Allow rules alone do not trigger this extra input-dependent prompt. However,
 `xargs sh -c`, `xargs env`, and `xargs command -v` still require approval even
