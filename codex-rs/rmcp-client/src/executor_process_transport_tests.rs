@@ -372,6 +372,118 @@ async fn closes_on_an_unsequenced_process_failure_without_inventing_missing_outp
     assert!(transport.closed);
 }
 
+/// exec-server gives `Exited` its own sequence number and can sequence output after it
+/// (`exec-server/src/local_process.rs`: exit = 1, late stdout = 2, closed = 3). The gap at the
+/// exit's sequence number is not lost output.
+#[tokio::test]
+async fn recovers_output_sequenced_after_the_exit_event() {
+    let mut response = retained_read_response(
+        vec![recovered_output(
+            /*seq*/ 2,
+            ExecOutputStream::Stdout,
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+        )],
+        /*next_seq*/ 4,
+    );
+    response.exited = true;
+    response.exit_code = Some(0);
+    response.closed = true;
+    let process = Arc::new(RetainedReadProcess {
+        process_id: ProcessId::from("mcp-stdio-output-after-exit"),
+        response,
+    });
+    let mut transport =
+        ExecutorProcessTransport::new(process, "mcp-stdio-output-after-exit".to_string());
+    transport.last_seq = 0;
+
+    transport
+        .recover_lagged_events()
+        .await
+        .expect("the exit event's sequence number is not lost output");
+
+    assert_eq!(
+        transport.stdout.take_line(),
+        Some(BytesMut::from(
+            &b"{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}"[..]
+        ))
+    );
+    assert_eq!(transport.last_seq, 3);
+    assert!(transport.closed);
+}
+
+/// An unseen exit accounts for one missing sequence number, not more. A second
+/// gap is evicted output and must still close the transport.
+#[tokio::test]
+async fn rejects_lagged_recovery_with_more_gaps_than_unseen_terminal_events() {
+    let mut response = retained_read_response(
+        vec![recovered_output(
+            /*seq*/ 3,
+            ExecOutputStream::Stdout,
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+        )],
+        /*next_seq*/ 5,
+    );
+    response.exited = true;
+    response.exit_code = Some(0);
+    response.closed = true;
+    let process = Arc::new(RetainedReadProcess {
+        process_id: ProcessId::from("mcp-stdio-extra-gap"),
+        response,
+    });
+    let mut transport = ExecutorProcessTransport::new(process, "mcp-stdio-extra-gap".to_string());
+    transport.last_seq = 0;
+
+    let error = transport
+        .recover_lagged_events()
+        .await
+        .expect_err("a gap beyond the unseen exit must close the transport");
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(
+        error.to_string(),
+        "remote MCP server output stream lost process events: expected sequence 1, received 3"
+    );
+    assert_eq!(transport.stdout, LineBuffer::default());
+    assert!(transport.closed);
+}
+
+/// An exit already observed before the lag is at or below `last_seq`, so it
+/// cannot account for a gap in the recovered range.
+#[tokio::test]
+async fn rejects_lagged_recovery_gap_when_the_exit_was_already_seen() {
+    let mut response = retained_read_response(
+        vec![recovered_output(
+            /*seq*/ 3,
+            ExecOutputStream::Stdout,
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+        )],
+        /*next_seq*/ 5,
+    );
+    response.exited = true;
+    response.exit_code = Some(0);
+    response.closed = true;
+    let process = Arc::new(RetainedReadProcess {
+        process_id: ProcessId::from("mcp-stdio-exit-seen"),
+        response,
+    });
+    let mut transport = ExecutorProcessTransport::new(process, "mcp-stdio-exit-seen".to_string());
+    transport.last_seq = 1;
+    transport.exit_seen = true;
+
+    let error = transport
+        .recover_lagged_events()
+        .await
+        .expect_err("an exit seen before the lag must not hide lost output");
+
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert_eq!(
+        error.to_string(),
+        "remote MCP server output stream lost process events: expected sequence 2, received 3"
+    );
+    assert_eq!(transport.stdout, LineBuffer::default());
+    assert!(transport.closed);
+}
+
 #[test]
 fn searches_only_new_bytes_after_partial_line() {
     let mut buffer = LineBuffer::default();
