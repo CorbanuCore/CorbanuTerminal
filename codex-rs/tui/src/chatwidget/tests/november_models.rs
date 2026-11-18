@@ -15,8 +15,7 @@ async fn november_models_picker_snapshots() {
         chat.config.model_provider_id = provider.to_string();
         chat.set_model(slug);
         chat.thread_id = Some(ThreadId::new());
-        let presets = chat.model_catalog.try_list_models().expect("catalog");
-        chat.open_all_models_popup(presets);
+        chat.open_all_models_popup();
         let popup = render_bottom_popup_with_height(&chat, /*width*/ 130, /*height*/ 44);
         assert!(popup.contains(slug), "{popup}");
         insta::assert_snapshot!(snapshot, popup);
