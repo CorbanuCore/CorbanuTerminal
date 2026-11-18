@@ -1713,12 +1713,22 @@ fn armed_launch_contract_skips_only_sandboxed_snapshots() {
 }
 
 /// #310 / #2562 (main ledger row 13): the capture shell never inherits a provider credential
-/// variable (`removed_env_vars`), matched case-insensitively, on the plain path.
+/// variable (`removed_env_vars`), matched case-insensitively, on the plain path and on the
+/// sandboxed path every brokered capture takes. The probe is a variable the test runner sets
+/// and a shell never sets itself (`CARGO_MANIFEST_DIR` under Cargo, `TEST_TMPDIR` under Bazel).
 #[cfg(unix)]
 #[tokio::test]
 async fn snapshot_shell_does_not_inherit_removed_env_vars() -> Result<()> {
-    let probe = "CARGO_MANIFEST_DIR";
-    let expected = std::env::var(probe).context("cargo sets CARGO_MANIFEST_DIR for tests")?;
+    use crate::tools::sandboxing::SandboxAttempt;
+    use codex_exec_server::LOCAL_ENVIRONMENT_ID;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    use codex_sandboxing::SandboxManager;
+    use codex_sandboxing::SandboxType;
+
+    let (probe, expected) = ["CARGO_MANIFEST_DIR", "TEST_TMPDIR"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().map(|value| (name, value)))
+        .context("the test runner sets CARGO_MANIFEST_DIR or TEST_TMPDIR")?;
     let dir = tempdir()?;
     let cwd = dir.path().abs();
     let shell = Shell {
@@ -1726,29 +1736,122 @@ async fn snapshot_shell_does_not_inherit_removed_env_vars() -> Result<()> {
         shell_path: PathBuf::from("/bin/bash"),
     };
     let script = format!("printf '%s\\n' \"${{{probe}-removed}}\"");
-    let run = |removed: Vec<String>| {
-        let shell = shell.clone();
-        let script = script.clone();
-        let cwd = cwd.clone();
-        async move {
-            run_script_with_timeout(
-                &shell,
-                &script,
-                Duration::from_secs(10),
-                SnapshotShellMode::NonLogin,
-                &cwd,
-                /*credential_broker*/ None,
-                /*sandbox*/ None,
-                &removed,
-            )
-            .await
-        }
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let manager = SandboxManager::new();
+    let permissions = PermissionProfile::Disabled;
+    let attempt = SandboxAttempt {
+        sandbox_override: SandboxOverride::NoOverride,
+        sandbox: SandboxType::None,
+        sandbox_requested: false,
+        permissions: &permissions,
+        exec_server_permissions: &permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        sandbox_exe: None,
+        use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::None,
+        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
     };
-    assert_eq!(run(Vec::new()).await?.trim_end(), expected, "control");
-    assert_eq!(
-        run(vec![probe.to_ascii_lowercase()]).await?.trim_end(),
-        "removed"
+    let sandbox = ShellSnapshotSandbox::new(
+        &attempt,
+        /*network*/ None,
+        LOCAL_ENVIRONMENT_ID,
+        /*additional_permissions*/ None,
     );
+    for sandbox in [None, Some(&sandbox)] {
+        let run = |removed: Vec<String>| {
+            let shell = shell.clone();
+            let script = script.clone();
+            let cwd = cwd.clone();
+            async move {
+                run_script_with_timeout(
+                    &shell,
+                    &script,
+                    Duration::from_secs(10),
+                    SnapshotShellMode::NonLogin,
+                    &cwd,
+                    /*credential_broker*/ None,
+                    sandbox,
+                    &removed,
+                )
+                .await
+            }
+        };
+        let path = if sandbox.is_some() {
+            "sandboxed"
+        } else {
+            "plain"
+        };
+        assert_eq!(
+            run(Vec::new()).await?.trim_end(),
+            expected,
+            "{path} control"
+        );
+        assert_eq!(
+            run(vec![probe.to_ascii_lowercase()]).await?.trim_end(),
+            "removed",
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+/// #310 / #2562 (main ledger row 13): on the brokered path the snapshot file drops a
+/// secret-named export and a provider credential name, both matched case-insensitively, even
+/// when their values look nothing like credentials (so the value scan can't be what drops them).
+#[cfg(unix)]
+#[tokio::test]
+async fn brokered_snapshot_drops_secret_and_provider_names_case_insensitively() -> Result<()> {
+    let dir = tempdir()?;
+    let startup = dir.path().join("startup.sh");
+    std::fs::write(
+        &startup,
+        "export lowercase_api_key=plainvalueone\n\
+         export corp_llm_cred=plainvaluetwo\n\
+         export KEEP_ME_VISIBLE=plainvaluethree\n",
+    )?;
+    let started_proxy = credential_snapshot_proxy().await?;
+    let shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: PathBuf::from("/bin/bash"),
+    };
+    let shell_environment_policy = ShellEnvironmentPolicy {
+        r#set: HashMap::from([("BASH_ENV".to_string(), startup.display().to_string())]),
+        ..ShellEnvironmentPolicy::default()
+    };
+    let credential_broker = SnapshotCredentialBroker {
+        network_proxy: started_proxy.proxy(),
+        shell_environment_policy: shell_environment_policy.clone(),
+        allow_login_shell: false,
+    };
+    let path = dir.path().join("snapshot.sh").abs();
+    write_shell_snapshot(
+        &shell,
+        &path,
+        &dir.path().abs(),
+        &shell_environment_policy,
+        Some(&credential_broker),
+        /*sandbox*/ None,
+        &["CORP_LLM_CRED".to_string()],
+    )
+    .await?;
+    let snapshot = fs::read_to_string(&path).await?;
+    assert!(
+        snapshot.contains("KEEP_ME_VISIBLE"),
+        "control: the startup export is captured: {snapshot}"
+    );
+    for hidden in [
+        "lowercase_api_key",
+        "corp_llm_cred",
+        "plainvalueone",
+        "plainvaluetwo",
+    ] {
+        assert!(!snapshot.contains(hidden), "{hidden} reached the file");
+    }
     Ok(())
 }
 
