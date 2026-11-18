@@ -309,6 +309,49 @@ async fn allow_rules_do_not_approve_scripts_read_in_part() {
     assert!(runs(&result), "{result:?}");
 }
 
+/// D696 and D692 hold through quoted script words: an allow rule approves
+/// only the exact spelling (`'GIT' push` is not `git`), on every platform;
+/// where programs are found without regard to case (macOS, Windows), a
+/// forbidden rule refuses it.
+#[tokio::test]
+async fn quoted_words_keep_rule_case_handling() {
+    let unless_trusted = async |command: &[String], rules: &str| {
+        exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(rules.to_string()),
+            command: command.to_vec(),
+            // Asks for every command no rule allows.
+            approval_policy: AskForApproval::UnlessTrusted,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await
+    };
+    // The control: the exact spelling is allowed.
+    let command = words(&["bash", "-lc", "'git' push"]);
+    let result = unless_trusted(&command, ALLOW_GIT).await;
+    assert!(runs(&result), "{command:?}: {result:?}");
+    for script in [
+        "'GIT' push",
+        "\"Git\" push",
+        "G'I'T push",
+        "echo hi; 'GIT' push",
+    ] {
+        let command = words(&["bash", "-lc", script]);
+        let result = unless_trusted(&command, ALLOW_GIT).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+            "{command:?}: {result:?}"
+        );
+        let result = requirement(&command, FORBID).await;
+        if codex_execpolicy::PROGRAM_NAMES_FOLD_CASE {
+            assert!(forbidden(&result), "{command:?}: {result:?}");
+        } else {
+            assert!(runs(&result), "{command:?}: {result:?}");
+        }
+    }
+}
+
 /// #2510: a quoted drive path names the shell Windows runs.
 #[cfg(windows)]
 #[tokio::test]
