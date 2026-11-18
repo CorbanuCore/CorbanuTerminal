@@ -2563,7 +2563,6 @@ async fn first_cua_review_does_not_wait_for_initial_score(
     Ok(())
 }
 
-#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_approval_skips_async_guardian_without_changing_other_modes() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2736,13 +2735,9 @@ async fn user_approval_skips_async_guardian_without_changing_other_modes() -> Re
             state.guardian_reviews.load(Ordering::SeqCst),
             reviews_before + expected_reviews
         );
-        if approval_policy == OnRequest
-            && (reviewer == AutoReview || live_reviewer == Some(AutoReview))
-        {
-            wait_for_luna_request(&state, /*index*/ 0).await?;
-        } else if reviews_before <= 1 {
-            assert_eq!(state.luna_connections.load(Ordering::SeqCst), 0);
-        }
+        // D604 (#2562): background scoring stays off until disclosure-gated, so no
+        // reviewer mode ever opens a classifier connection.
+        assert_eq!(state.luna_connections.load(Ordering::SeqCst), 0);
     }
     app_server.shutdown_gracefully().await?;
     mcp_server.abort();

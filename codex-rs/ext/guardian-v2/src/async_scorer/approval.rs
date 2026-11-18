@@ -212,6 +212,12 @@ async fn cached_evidence(
         record_fast_decision(metrics, "deferred", "missing_score");
         return Err(GuardianReviewReason::MissingScore);
     };
+    // D604: neither a cached score nor the initial computer-use allowance can come from a
+    // scorer whose transport was never built.
+    if store.get::<LunaSampler>().is_none() {
+        record_fast_decision(metrics, "deferred", "missing_score");
+        return Err(GuardianReviewReason::MissingScore);
+    }
     // Elicitations and intercepted execs can expand beyond the original scored action.
     let action = codex_guardian_context::action_for_review(input.action.clone());
     let max_action_bytes = TruncationPolicy::Tokens(config.max_action_tokens).byte_budget();
