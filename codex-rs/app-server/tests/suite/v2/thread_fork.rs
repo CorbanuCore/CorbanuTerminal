@@ -667,14 +667,24 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
         "mock_provider".into(),
     )
     .await?;
-    let source_goal = state_db
+    let now = chrono::Utc::now();
+    let source_goal = codex_state::ThreadGoal {
+        thread_id: source_thread_id,
+        goal_id: uuid::Uuid::new_v4().to_string(),
+        objective: "continue after the retry".to_string(),
+        status: codex_state::ThreadGoalStatus::Active,
+        token_budget: Some(150),
+        tokens_used: 0,
+        time_used_seconds: 0,
+        created_at: now,
+        updated_at: now,
+    };
+    // This direct state write bypasses the goal runtime mutation lock. Install
+    // the source deferral in the same transaction so a delayed idle hook cannot
+    // append an automatic continuation turn before the forks are requested.
+    state_db
         .thread_goals()
-        .replace_thread_goal(
-            source_thread_id,
-            "continue after the retry",
-            codex_state::ThreadGoalStatus::Active,
-            /*token_budget*/ Some(150),
-        )
+        .replace_thread_goal_snapshot(&source_goal)
         .await?;
     state_db
         .thread_goals()
@@ -852,6 +862,10 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
         Some(source_goal)
     );
 
+    state_db
+        .thread_goals()
+        .clear_thread_goal_continuation_deferral(source_thread_id)
+        .await?;
     Ok(())
 }
 
