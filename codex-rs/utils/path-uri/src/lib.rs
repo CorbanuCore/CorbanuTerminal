@@ -601,6 +601,17 @@ impl PathUri {
                 && let Ok(path) = AbsolutePathBuf::from_absolute_path_checked(decoded_path)
                 && Self::from_abs_path(&path).eq(self)
             {
+                // D537 (b): a `\\localhost` folder is refused everywhere, as
+                // on main, where its URI lost `localhost` (#1863). Upstream
+                // keeps it in an opaque URI instead, so refuse it here.
+                if is_windows_localhost_unc_path(&path.as_path().to_string_lossy()) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        PathUriParseError::LocalhostUncPath {
+                            path: path.as_path().display().to_string(),
+                        },
+                    ));
+                }
                 return Ok(path);
             }
 
@@ -721,6 +732,16 @@ impl JsonSchema for PathUri {
     fn json_schema(generator: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         String::json_schema(generator)
     }
+}
+
+/// Whether `path` is a Windows network (UNC) path on `localhost`: `\\localhost\`,
+/// `\\?\UNC\localhost\` or `\\.\UNC\localhost\`, in any letter case (#1863, D537 (b)).
+pub fn is_windows_localhost_unc_path(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    [r"\\?\unc\", r"\\.\unc\", r"\\"]
+        .into_iter()
+        .find_map(|prefix| path.strip_prefix(prefix))
+        .is_some_and(|rest| rest.split(['\\', '/']).next() == Some("localhost"))
 }
 
 /// Removes the local `localhost` alias while retaining non-local UNC authority.

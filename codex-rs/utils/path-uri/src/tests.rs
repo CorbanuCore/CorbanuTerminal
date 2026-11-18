@@ -595,14 +595,72 @@ fn file_uri_round_trips_windows_unc_paths() {
     assert_eq!(uri.encoded_path(), "/share/src/main.rs");
     assert_eq!(uri.to_abs_path().expect("UNC URI should convert"), path);
 
+    // Sync-only edit (D537 (b)): upstream round-trips a `\\localhost` path
+    // through its opaque URI; Corbanu refuses it, as main did (#1863).
     let localhost = AbsolutePathBuf::from_absolute_path_checked(r"\\localhost\share\src")
         .expect("absolute localhost UNC path");
     let uri = PathUri::from_abs_path(&localhost);
     assert!(uri.to_string().starts_with(BAD_PATH_URI_PREFIX));
     assert_eq!(
-        uri.to_abs_path().expect("opaque URI should convert"),
-        localhost
+        uri.to_abs_path()
+            .expect_err("a localhost UNC path should be refused")
+            .kind(),
+        io::ErrorKind::InvalidInput
     );
+}
+
+/// D537 (b): every spelling of a `\\localhost` folder is refused when its
+/// URI converts back to a path, which file tools and agent commands do.
+#[cfg(windows)]
+#[test]
+fn localhost_unc_spellings_are_refused_on_conversion() {
+    for native in [
+        r"\\localhost\C$\work",
+        r"\\LocalHost\share\src\main.rs",
+        r"\\?\UNC\localhost\share\report.pdf",
+        r"\\.\UNC\LOCALHOST\share\report.pdf",
+    ] {
+        let path = AbsolutePathBuf::from_absolute_path_checked(native).expect(native);
+        let err = PathUri::from_abs_path(&path)
+            .to_abs_path()
+            .expect_err(native);
+        assert!(
+            err.to_string()
+                .contains(r"is a network (UNC) path on \\localhost"),
+            "{native}: {err}"
+        );
+    }
+    for other in [r"\\server\share\src", r"\\localhost.example\share\src"] {
+        let path = AbsolutePathBuf::from_absolute_path_checked(other).expect(other);
+        assert_eq!(
+            PathUri::from_abs_path(&path).to_abs_path().expect(other),
+            path,
+            "{other}"
+        );
+    }
+}
+
+#[test]
+fn localhost_unc_classification() {
+    for path in [
+        r"\\localhost\C$",
+        r"\\LOCALHOST\share",
+        r"\\?\UNC\localhost\share",
+        r"\\.\unc\LocalHost\share",
+        r"\\localhost",
+    ] {
+        assert!(crate::is_windows_localhost_unc_path(path), "{path}");
+    }
+    for path in [
+        r"\\server\share",
+        r"\\localhost.example\share",
+        r"\\localhostx\share",
+        r"C:\localhost\share",
+        "/localhost/share",
+        r"\\?\C:\localhost",
+    ] {
+        assert!(!crate::is_windows_localhost_unc_path(path), "{path}");
+    }
 }
 
 #[test]
