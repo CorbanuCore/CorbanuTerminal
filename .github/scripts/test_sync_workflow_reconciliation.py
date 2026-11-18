@@ -38,9 +38,11 @@ class WorkflowReconciliationTest(unittest.TestCase):
                     )
 
     def test_candidate_ownership_survives_sync_mode_removal(self):
-        permanent = (ROOT / ".github/CODEOWNERS").read_text().split(
-            "# BEGIN sync-branch security owners", 1
-        )[0]
+        permanent = (
+            (ROOT / ".github/CODEOWNERS")
+            .read_text()
+            .split("# BEGIN sync-branch security owners", 1)[0]
+        )
         for name in DISABLED:
             with self.subTest(workflow=name):
                 self.assertIn(
