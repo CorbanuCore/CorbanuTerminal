@@ -50,11 +50,10 @@ pub(crate) async fn run(
                 config.model_provider_id.clone(),
             )
             .await?;
-            let auth = codex_login::AuthManager::shared_from_config(
-                &config, /*enable_codex_api_key_env*/ true,
+            codex_core::clear_provider_cooldown(
+                &state, &config, model, /*enable_codex_api_key_env*/ true,
             )
-            .await;
-            codex_core::clear_provider_cooldown(&state, &config, model, auth.auth_mode()).await?;
+            .await?;
             println!(
                 "Cleared the local cooldown for {}/{}. The next request will probe the provider.",
                 config.model_provider_id, model

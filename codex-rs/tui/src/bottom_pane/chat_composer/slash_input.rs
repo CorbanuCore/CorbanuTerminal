@@ -718,15 +718,32 @@ mod tests {
     }
 
     #[test]
+    fn model_completion_preserves_cooldown_action() {
+        let action = "clear-cooldown";
+        let expected_text = "/model clear-cooldown";
+        let mut composer = composer_with_draft_tail("/mo", action);
+        assert_eq!(press(&mut composer, KeyCode::Tab), InputResult::None);
+        assert_eq!(composer.draft.textarea.text(), expected_text);
+        assert_eq!(composer.draft.textarea.cursor(), expected_text.len());
+
+        let mut composer = composer_with_draft_tail("/mo", action);
+        assert_eq!(
+            press(&mut composer, KeyCode::Enter),
+            InputResult::CommandWithArgs(SlashCommand::Model, action.to_string(), Vec::new())
+        );
+        assert_eq!(composer.draft.textarea.text(), expected_text);
+    }
+
+    #[test]
     fn slash_completion_does_not_preserve_existing_draft_tail_for_other_commands() {
         let mut composer = composer_with_draft_tail(
-            "/mo",
+            "/di",
             "preserve this draft only for opted-in slash commands",
         );
 
         assert_eq!(press(&mut composer, KeyCode::Tab), InputResult::None);
-        assert_eq!(composer.draft.textarea.text(), "/model ");
-        assert_eq!(composer.draft.textarea.cursor(), "/model ".len());
+        assert_eq!(composer.draft.textarea.text(), "/diff ");
+        assert_eq!(composer.draft.textarea.cursor(), "/diff ".len());
     }
 
     #[test]

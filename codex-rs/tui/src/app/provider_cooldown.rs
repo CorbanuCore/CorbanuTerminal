@@ -21,11 +21,14 @@ impl App {
             );
             return;
         };
-        let auth = codex_login::AuthManager::shared_from_config(
-            config, /*enable_codex_api_key_env*/ false,
+        match crate::legacy_core::clear_provider_cooldown(
+            state_db,
+            config,
+            model,
+            /*enable_codex_api_key_env*/ false,
         )
-        .await;
-        match crate::legacy_core::clear_provider_cooldown(state_db, config, model, auth.auth_mode()).await {
+        .await
+        {
             Ok(()) => self.chat_widget.add_info_message(
                 format!(
                     "Cleared the local cooldown for {}/{}. The next request will probe the provider.",
