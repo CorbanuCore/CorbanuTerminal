@@ -17,9 +17,11 @@ use codex_app_server_protocol::JSONRPCMessage;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ServerNotification;
+use codex_app_server_protocol::ServerRequest;
 use codex_app_server_protocol::SessionSource;
 use codex_app_server_protocol::ThreadForkParams;
 use codex_app_server_protocol::ThreadForkResponse;
+use codex_app_server_protocol::ThreadGoalSetResponse;
 use codex_app_server_protocol::ThreadHistoryMode;
 use codex_app_server_protocol::ThreadItem;
 use codex_app_server_protocol::ThreadListParams;
@@ -36,11 +38,13 @@ use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::ThreadStartedNotification;
 use codex_app_server_protocol::ThreadStatus;
 use codex_app_server_protocol::ThreadStatusChangedNotification;
+use codex_app_server_protocol::ThreadTokenUsageUpdatedNotification;
 use codex_app_server_protocol::ThreadTurnsListParams;
 use codex_app_server_protocol::ThreadTurnsListResponse;
 use codex_app_server_protocol::TurnItemsView;
 use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
+use codex_app_server_protocol::TurnStartedNotification;
 use codex_app_server_protocol::TurnStatus;
 use codex_app_server_protocol::UserInput;
 use codex_config::types::AuthCredentialsStoreMode;
@@ -701,11 +705,14 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
         .await?
         .expect("source goal");
 
-    mcp = TestAppServer::builder()
-        .with_codex_home(codex_home.path())
-        .without_managed_config()
-        .build_initialized()
-        .await?;
+    let _old_mcp = std::mem::replace(
+        &mut mcp,
+        TestAppServer::builder()
+            .with_codex_home(codex_home.path())
+            .without_managed_config()
+            .build_initialized()
+            .await?,
+    );
 
     let ordinary_fork_id = mcp
         .send_thread_fork_request(ThreadForkParams {
@@ -821,10 +828,10 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
             .any(|method| method == "turn/started"),
         "deferred goal should remain deferred after app-server restart"
     );
-    timeout(
+    let completed = timeout(
         DEFAULT_READ_TIMEOUT,
         mcp.start_turn_and_wait_for_completion(TurnStartParams {
-            thread_id: forked_thread.id,
+            thread_id: forked_thread.id.clone(),
             input: vec![UserInput::Text {
                 text: "retry the interrupted prompt".to_string(),
                 text_elements: Vec::new(),
@@ -833,6 +840,7 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
         }),
     )
     .await??;
+    let explicit_turn_id = completed.turn.id;
 
     assert!(
         !state_db
@@ -841,11 +849,285 @@ async fn thread_fork_defers_inherited_active_goal_until_next_turn() -> Result<()
             .await?,
         "first explicit turn should consume the deferred-goal marker"
     );
+    let explicit_started: TurnStartedNotification =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("turn/started")).await??;
+    assert_eq!(explicit_started.turn.id, explicit_turn_id);
+    let continuation_started: TurnStartedNotification =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("turn/started")).await??;
+    assert_eq!(continuation_started.thread_id, forked_thread_id.to_string());
+    assert_ne!(continuation_started.turn.id, explicit_turn_id);
     timeout(
         DEFAULT_READ_TIMEOUT,
-        mcp.read_stream_until_notification_message("turn/started"),
+        mcp.read_stream_until_notification_message("turn/completed"),
     )
     .await??;
+
+    let forked_goal = state_db
+        .thread_goals()
+        .get_thread_goal(forked_thread_id)
+        .await?
+        .expect("forked goal");
+    assert_eq!(forked_goal.goal_id, source_goal.goal_id);
+    assert_eq!(forked_goal.objective, source_goal.objective);
+    assert_eq!(forked_goal.token_budget, Some(150));
+    assert_eq!(forked_goal.tokens_used, 157);
+    assert!(forked_goal.time_used_seconds >= source_goal.time_used_seconds);
+    assert_eq!(
+        forked_goal.status,
+        codex_state::ThreadGoalStatus::BudgetLimited
+    );
+    assert_eq!(
+        state_db
+            .thread_goals()
+            .get_thread_goal(source_thread_id)
+            .await?,
+        Some(source_goal)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_fork_flushes_live_source_goal_progress_before_deferring() -> Result<()> {
+    let mut source_usage_response =
+        responses::ev_completed_with_tokens("live-source-turn", /*total_tokens*/ 37);
+    source_usage_response["response"]["end_turn"] = json!(false);
+    let source_usage_response = responses::sse(vec![
+        responses::ev_response_created("live-source-turn"),
+        source_usage_response,
+    ]);
+    let source_approval_response = responses::sse(vec![
+        responses::ev_response_created("live-source-approval-turn"),
+        responses::ev_function_call(
+            "live-source-approval",
+            "shell_command",
+            &serde_json::to_string(&json!({
+                "command": "python3 -c 'print(42)'",
+                "workdir": null,
+                "timeout_ms": 5000,
+            }))?,
+        ),
+        responses::ev_completed_with_tokens("live-source-approval-turn", /*total_tokens*/ 0),
+    ]);
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        source_usage_response,
+        source_approval_response,
+        responses::sse(vec![
+            responses::ev_response_created("explicit-fork-turn"),
+            responses::ev_completed_with_tokens("explicit-fork-turn", /*total_tokens*/ 20),
+        ]),
+        responses::sse(vec![
+            responses::ev_response_created("goal-continuation"),
+            responses::ev_completed_with_tokens("goal-continuation", /*total_tokens*/ 100),
+        ]),
+    ])
+    .await;
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_approval_policy("untrusted")
+        .enable_feature(Feature::Goals)
+        .write(codex_home.path())?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_managed_config()
+        .build_initialized()
+        .await?;
+
+    let start_id = mcp
+        .send_thread_start_request_with_auto_env(ThreadStartParams::default())
+        .await?;
+    let ThreadStartResponse {
+        thread: source_thread,
+        ..
+    } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(start_id)).await??;
+    let source_thread_id = ThreadId::from_string(&source_thread.id)?;
+
+    let state_db = StateRuntime::init(
+        codex_state::SqliteConfig::new_for_testing(codex_home.path().abs()),
+        "mock_provider".into(),
+    )
+    .await?;
+    // Keep the newly active goal from starting an idle continuation before
+    // the source turn opens; the turn start consumes this deferral.
+    let paused_goal = state_db
+        .thread_goals()
+        .replace_thread_goal(
+            source_thread_id,
+            "continue after the retry",
+            codex_state::ThreadGoalStatus::Paused,
+            /*token_budget*/ Some(150),
+        )
+        .await?;
+    state_db
+        .thread_goals()
+        .replace_thread_goal_snapshot(&paused_goal)
+        .await?;
+
+    let goal_set_id = mcp
+        .send_raw_request(
+            "thread/goal/set",
+            Some(json!({
+                "threadId": source_thread.id.clone(),
+                "objective": "continue after the retry",
+                "status": "active",
+                "tokenBudget": 150,
+            })),
+        )
+        .await?;
+    let goal_set: ThreadGoalSetResponse =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(goal_set_id)).await??;
+    assert_eq!(goal_set.goal.objective, "continue after the retry");
+    assert_eq!(goal_set.goal.token_budget, Some(150));
+    assert_eq!(
+        state_db
+            .thread_goals()
+            .get_thread_goal(source_thread_id)
+            .await?
+            .expect("source goal")
+            .status,
+        codex_state::ThreadGoalStatus::Active
+    );
+
+    let source_turn_id = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: source_thread.id.clone(),
+            input: vec![UserInput::Text {
+                text: "hold the source turn open".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let TurnStartResponse { turn: source_turn } =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(source_turn_id)).await??;
+    // The first source response asks for a server-side continuation. Its next model
+    // request cannot start until the 37-token usage has been recorded, and the token
+    // count notification below is emitted only after that recording.
+    let usage: ThreadTokenUsageUpdatedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_notification("thread/tokenUsage/updated"),
+    )
+    .await??;
+    assert_eq!(usage.turn_id, source_turn.id);
+    assert_eq!(usage.token_usage.total.total_tokens, 37);
+    assert_eq!(
+        state_db
+            .thread_goals()
+            .get_thread_goal(source_thread_id)
+            .await?
+            .expect("source goal")
+            .tokens_used,
+        0,
+        "the source usage should still be in-flight before the fork"
+    );
+    let approval = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_request_message(),
+    )
+    .await??;
+    let ServerRequest::CommandExecutionRequestApproval { params, .. } = approval else {
+        anyhow::bail!("expected the live source turn's command approval, got {approval:?}");
+    };
+    assert_eq!(params.thread_id, source_thread.id);
+    assert_eq!(params.turn_id, source_turn.id);
+    mcp.clear_message_buffer();
+    let model_requests_before_fork = server
+        .received_requests()
+        .await
+        .expect("wiremock requests")
+        .iter()
+        .filter(|request| request.url.path().ends_with("/responses"))
+        .count();
+    assert_eq!(
+        model_requests_before_fork, 2,
+        "the source turn should have issued its usage and approval requests"
+    );
+
+    let fork_id = mcp
+        .send_thread_fork_request(ThreadForkParams {
+            thread_id: source_thread.id.clone(),
+            defer_goal_continuation: true,
+            ..Default::default()
+        })
+        .await?;
+    let ThreadForkResponse {
+        thread: forked_thread,
+        ..
+    } = timeout(DEFAULT_READ_TIMEOUT, mcp.read_response(fork_id)).await??;
+    let forked_thread_id = ThreadId::from_string(&forked_thread.id)?;
+
+    let source_goal = state_db
+        .thread_goals()
+        .get_thread_goal(source_thread_id)
+        .await?
+        .expect("source goal");
+    let mut expected_forked_goal = source_goal.clone();
+    expected_forked_goal.thread_id = forked_thread_id;
+    expected_forked_goal.tokens_used = 37;
+    let forked_goal = state_db
+        .thread_goals()
+        .get_thread_goal(forked_thread_id)
+        .await?;
+    let forked_goal_is_deferred = state_db
+        .thread_goals()
+        .has_thread_goal_continuation_deferral(forked_thread_id)
+        .await?;
+    assert_eq!(
+        (forked_goal, forked_goal_is_deferred),
+        (Some(expected_forked_goal), true),
+        "the inherited active goal should be deferred with the live source's flushed progress"
+    );
+    assert_eq!(
+        source_goal.tokens_used, 37,
+        "fork should flush the live source turn's in-flight goal progress"
+    );
+    assert!(
+        !mcp.pending_notification_methods()
+            .iter()
+            .any(|method| method == "turn/started"),
+        "deferred goal should not start a turn while forking"
+    );
+    assert_eq!(
+        server
+            .received_requests()
+            .await
+            .expect("wiremock requests")
+            .iter()
+            .filter(|request| request.url.path().ends_with("/responses"))
+            .count(),
+        model_requests_before_fork,
+        "deferred goal should not issue a model request while forking"
+    );
+
+    let completed = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.start_turn_and_wait_for_completion(TurnStartParams {
+            thread_id: forked_thread.id.clone(),
+            input: vec![UserInput::Text {
+                text: "retry the interrupted prompt".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        }),
+    )
+    .await??;
+    let explicit_turn_id = completed.turn.id;
+
+    assert!(
+        !state_db
+            .thread_goals()
+            .has_thread_goal_continuation_deferral(forked_thread_id)
+            .await?,
+        "first explicit turn should consume the deferred-goal marker"
+    );
+    let explicit_started: TurnStartedNotification =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("turn/started")).await??;
+    assert_eq!(explicit_started.turn.id, explicit_turn_id);
+    let continuation_started: TurnStartedNotification =
+        timeout(DEFAULT_READ_TIMEOUT, mcp.read_notification("turn/started")).await??;
+    assert_eq!(continuation_started.thread_id, forked_thread.id);
+    assert_ne!(continuation_started.turn.id, explicit_turn_id);
     timeout(
         DEFAULT_READ_TIMEOUT,
         mcp.read_stream_until_notification_message("turn/completed"),
