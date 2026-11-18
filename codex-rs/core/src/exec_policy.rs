@@ -52,7 +52,6 @@ mod wrappers;
 
 pub(crate) use inheritance::InheritedExecPolicy;
 pub(crate) use model_policy::AllowPrefixRules;
-pub(crate) use wrappers::check_with_wrappers;
 
 const PROMPT_CONFLICT_REASON: &str =
     "approval required by policy, but AskForApproval is set to Never";
@@ -550,22 +549,23 @@ impl ExecPolicyManager {
             fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE
                 || command_platform == DangerousCommandPlatform::Windows,
         };
-        // Avoid reusable approvals when this model does not honor prefix rules.
-        // A wrapper-only amendment cannot approve stricter inner commands,
-        // and an uncertain boundary must never become a remembered bypass.
-        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
-            && !commands
-                .iter()
-                .any(|command| wrappers::has_wrappers(command, command_platform))
-            // Upstream keeps top-level heredocs as shell argv. The restrictive
-            // heredoc pass still sees wrappers inside that script, as on main.
-            && parse_shell_lc_single_command_prefix(full_command)
-                .is_none_or(|command| !wrappers::has_wrappers(&command, command_platform));
         // #2531: rules read a shell script among the commands given, which on
         // main always come from the caller's split. Sync: a command line the
         // split left whole (a top-level heredoc) keeps its own script to the
         // heredoc pass below, as before.
         let read_own_scripts = !(commands.len() == 1 && commands[0] == full_command);
+        // Avoid reusable approvals when this model does not honor prefix rules.
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
+            && !commands.iter().any(|command| {
+                wrappers::has_wrappers(command, command_platform, read_own_scripts)
+            })
+            // Upstream keeps top-level heredocs as shell argv. The restrictive
+            // heredoc pass still sees wrappers inside that script, as on main.
+            && parse_shell_lc_single_command_prefix(full_command).is_none_or(|command| {
+                !wrappers::has_wrappers(&command, command_platform, /*read_own_scripts*/ true)
+            });
         let check_commands = |policy: &Policy, fallback: &dyn Fn(&[String]) -> Decision| {
             wrappers::check(
                 policy,

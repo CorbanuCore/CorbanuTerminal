@@ -1100,6 +1100,7 @@ fn strictest_rule_matching_more_args_by_maps_each_rule() -> Result<()> {
     policy.add_prefix_rule(&tokens(&["git", "status", "-s"]), Decision::Allow)?;
     let options = MatchOptions {
         resolve_host_executables: false,
+        fold_program_case: false,
     };
     let weaken_forbidden = |decision| match decision {
         Decision::Allow => None,
@@ -1216,6 +1217,7 @@ fn canonical_allow_rules_fold_case_but_keep_the_suffix() -> Result<()> {
     let policy = parser.build();
     let options = MatchOptions {
         resolve_host_executables: true,
+        fold_program_case: false,
     };
     let decision = |cmd: &[&str]| {
         policy
