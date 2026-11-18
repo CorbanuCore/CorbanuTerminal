@@ -1,3 +1,6 @@
+use super::ScriptCommands;
+use super::parse_shell_lc_single_command_prefix;
+use super::read_script_commands;
 use super::script_input::ScriptInput;
 use super::shell_lc_script_inputs;
 use pretty_assertions::assert_eq;
@@ -14,6 +17,9 @@ fn stdin_syntax_keeps_literal_bodies_and_unknown_producers_distinct() {
         ("cat <<EOF | bash\ngit push\nEOF", None),
         ("bash <<< 'git push'", None),
         ("bash < file", None),
+        ("{ bash; } <<EOF\ngit push\nEOF", None),
+        ("exec <<EOF\ngit push\nEOF\nbash", None),
+        ("f() { bash; }; f <<EOF\ngit push\nEOF", None),
         ("bash <<EOF < file\necho safe\nEOF", None),
     ] {
         let argv = vec!["bash".into(), "-c".into(), script.into()];
@@ -30,6 +36,24 @@ fn stdin_syntax_keeps_literal_bodies_and_unknown_producers_distinct() {
             }],
             "{script:?}"
         );
+    }
+}
+
+#[test]
+fn mixed_delimiters_fail_closed_for_the_whole_script() {
+    for delimiter in ["E\"O\"F", "E'O'F", "'E\\OF'", "\"E\\OF\"", "E\\OF"] {
+        let script = format!("cat <<{delimiter}\necho safe\n{delimiter}");
+        assert_eq!(read_script_commands(&script), ScriptCommands::Unreadable);
+        let argv = vec!["sh".into(), "-c".into(), script];
+        assert_eq!(parse_shell_lc_single_command_prefix(&argv), None);
+    }
+}
+
+#[test]
+fn nonexact_terminators_fail_closed() {
+    for end in ["EOFX", " EOF", "\tEOF", "EOF "] {
+        let script = format!("cat <<EOF\necho safe\n{end}\necho later\nEOF");
+        assert_eq!(read_script_commands(&script), ScriptCommands::Unreadable);
     }
 }
 

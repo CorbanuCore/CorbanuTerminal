@@ -271,7 +271,7 @@ pub fn read_script_commands(script: &str) -> ScriptCommands {
         return ScriptCommands::Unreadable;
     };
     let root = tree.root_node();
-    if root.has_error() {
+    if root.has_error() || !script_input::heredoc_boundaries_readable(root, script) {
         return ScriptCommands::Unreadable;
     }
     let mut command_nodes = Vec::new();
@@ -459,7 +459,7 @@ pub fn parse_shell_lc_single_command_prefix(command: &[String]) -> Option<Vec<St
     let (_, script) = extract_bash_command(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
-    if root.has_error() {
+    if root.has_error() || !script_input::heredoc_boundaries_readable(root, script) {
         return None;
     }
     if !has_named_descendant_kind(root, "heredoc_redirect") {

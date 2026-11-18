@@ -48,8 +48,10 @@ pub(super) fn has_wrappers(command: &[String]) -> bool {
 /// Unknown eval/source text must not acquire a remembered argv approval,
 /// even when no current rule prompts. Retain ordinary non-interpreting argv.
 fn partial_script_interprets_text(command: &[String]) -> bool {
-    let Some(ScriptCommands::Partial(commands)) = shell_lc_script_commands(command) else {
-        return false;
+    let commands = match shell_lc_script_commands(command) {
+        Some(ScriptCommands::Partial(commands)) => commands,
+        Some(ScriptCommands::Unreadable) => return true,
+        Some(ScriptCommands::Plain(_)) | None => return false,
     };
     commands.into_iter().any(|words| {
         let argv: Vec<_> = words
@@ -84,13 +86,14 @@ fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<St
             let wrappers = policy_wrapper_commands(&words);
             let start = *wrappers.starts.last()?;
             let inner = &words[start..];
-            // Eval may itself start a shell inheriting this stdin. Its input
-            // is not eval's script text, so never read that input as literal.
+            // Eval may start a shell; command-less exec may redirect the
+            // surrounding shell's stdin, including across an eval boundary.
+            // Their input is not script text we can attribute to a receiver.
             if script_builtin(inner)
                 .first()
-                .is_some_and(|program| program == "eval")
+                .is_some_and(|program| matches!(program.as_str(), "eval" | "exec"))
             {
-                return Some(None);
+                return Some(vec![None]);
             }
             if !inner
                 .first()
@@ -121,7 +124,7 @@ fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<St
                         }),
                         _ => false,
                     };
-                return (!independent).then_some(None);
+                return (!independent).then_some(vec![None]);
             }
             let script = input
                 .literal
@@ -135,10 +138,23 @@ fn shell_input_scripts(command: &[String]) -> impl Iterator<Item = Option<Vec<St
                 .and_then(|script| {
                     let argv = vec![inner[0].clone(), "-c".to_string(), script];
                     let respelled = policy_shell_script(&argv).unwrap_or(argv);
-                    shell_lc_script_commands(&respelled).map(|_| respelled)
+                    let reading = shell_lc_script_commands(&respelled)?;
+                    // Stdin scripts are read incrementally. An earlier command
+                    // can consume later lines (even part of a quoted word).
+                    // A single plain command consumes its whole syntax first.
+                    let single =
+                        matches!(reading, ScriptCommands::Plain(commands) if commands.len() <= 1);
+                    Some((respelled, single))
                 });
-            Some(script)
+            Some(match script {
+                Some((command, true)) => vec![Some(command)],
+                // Still inspect the literal text for refusals, but do not
+                // assume it is the text the shell will actually parse.
+                Some((command, false)) => vec![Some(command), None],
+                None => vec![None],
+            })
         })
+        .flatten()
 }
 
 // Only used for restrict-only script checks, never to grant an allow rule.

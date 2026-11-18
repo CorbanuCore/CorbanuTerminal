@@ -66,6 +66,7 @@ async fn literal_scripts_table() {
         "bash <<'EOF'\neval 'git push'\nEOF",
         "bash <<EOF\nenv A=1 sudo git push\nEOF",
         "bash <<EOF\nxargs git push\nEOF",
+        "{ bash <<EOF\ngit push\nEOF\n} < /dev/null",
     ] {
         for script in [script.to_string(), nested(script)] {
             for mode in 0..3 {
@@ -104,6 +105,23 @@ async fn unknown_scripts_table() {
         "bash <<EOF\n$script\nEOF",
         "bash <<EOF\ngit $verb\nEOF",
         "bash <<< 'git push'",
+        // Security review: stdin consumers can shift the shell's parse.
+        "bash <<'EOF'\nread -r _\necho '\ngit push\n'\nEOF",
+        "bash <<'EOF'\nhead -c 1\n#git push\nEOF",
+        "bash <<'EOF'\necho one\necho two\nEOF",
+        "{ read -r _; bash; } <<'EOF'\necho '\ngit push\n'\nEOF",
+        "( read -r _; bash ) <<'EOF'\necho '\ngit push\n'\nEOF",
+        "while read -r _; do bash; break; done <<'EOF'\necho '\ngit push\n'\nEOF",
+        "exec <<'EOF'\ngit push\nEOF\nbash",
+        "command exec <<'EOF'\ngit push\nEOF\nbash",
+        "builtin exec <<'EOF'\ngit push\nEOF\nbash",
+        "f() { bash; }; f <<'EOF'\ngit push\nEOF",
+        "f() { eval bash; }; f <<'EOF'\ngit push\nEOF",
+        "eval 'f() { bash; }'; f <<EOF\ngit push\nEOF",
+        "eval 'exec <<EOF\ngit push\nEOF'; bash",
+        // The scanner does not apply shell quote removal to mixed delimiters.
+        "bash <<E\"O\"F\necho '\nEOF\ngit push\n'\nE\"O\"F",
+        "cat <<E\"O\"F\necho '\nEOF\ngit push\n'\nE\"O\"F",
         "bash < ./x.sh",
         "bash <<EOF < ./x.sh\necho safe\nEOF",
         "bash <<EOF\necho safe\nEOF\n. ./x.sh",
@@ -179,6 +197,7 @@ async fn allow_rules_cannot_hide_script_rules_or_offer_amendments() {
     for script in [
         "eval 'git push'",
         "bash <<EOF\ngit push\nEOF",
+        "cat <<E\"O\"F\necho safe\nEOF\nE\"O\"F",
         "echo 'git push' | bash",
         "source ./x.sh",
         "builtin source ./x.sh",
