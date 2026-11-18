@@ -39,6 +39,7 @@ async fn attachment_socket_grants_respect_configured_restrictions_at_remote_laun
         /*managed_allowed_domains_only*/ false,
     );
     for (name, toml, required, expected) in [
+        // D714: an unset controller setting inherits the owner's allow-all grant.
         ("omitted", "", None, true),
         (
             "explicit_deny",

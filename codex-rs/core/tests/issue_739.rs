@@ -7,8 +7,9 @@
 //!   and the refusal says plainly that it isn't possible here;
 //! - a remembered exec-policy rule that would skip the sandbox is not
 //!   applied silently: the command runs inside it and the person is told;
-//! - "retry without sandbox?" is not offered after a sandbox denial, and the
-//!   person is told why;
+//! - "retry without sandbox?" is not offered after a sandbox denial. D639
+//!   accepted upstream's behaviour of offering no such retry at all here, so
+//!   no note about it is due (D716 dropped the earlier "told why" check);
 //! - the model's instructions say so.
 //!
 //! Nothing ends in "Protected launch refused". Moderate keeps its own
@@ -287,7 +288,8 @@ async fn issue_739_permissive_under_protected_launch_offers_no_run_outside_the_s
         ),
         // Still no prompt, but inside the sandbox, and the person is told.
         (Permissive, Route::Rule, 0, false, None, Some(RULE_NOTE)),
-        (Permissive, Route::Retry, 1, false, None, Some(RETRY_NOTE)),
+        // D716: no retry is offered (D639), so no note either.
+        (Permissive, Route::Retry, 1, false, None, None),
         (Permissive, Route::Inside, 0, true, None, None),
         // #747: Moderate still asks (an approval lifts its protected-file
         // rules for that one command) and keeps the run in the sandbox.
