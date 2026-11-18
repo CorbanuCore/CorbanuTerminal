@@ -152,9 +152,17 @@ impl Session {
         if active_turn.task.is_none() {
             return Err(input);
         }
+        // D523 (a): queued hook context keeps its hook origin until it is recorded,
+        // including when admission is deferred.
         let input = input
             .into_iter()
-            .map(ResponseItemEnvelope::new)
+            .map(|item| ResponseItemEnvelope {
+                item,
+                metadata: Some(CodexHarnessMetadata {
+                    hook_output: true,
+                    ..Default::default()
+                }),
+            })
             .map(PendingTurnInput::ResponseItem)
             .collect();
         // D532: background hook results are not the running turn's own output.
