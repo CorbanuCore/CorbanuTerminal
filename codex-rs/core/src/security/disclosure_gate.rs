@@ -41,6 +41,13 @@ use zeroize::Zeroizing;
 
 /// Environment values shorter than this are flags, not credentials.
 const MIN_ENV_VALUE_BYTES: usize = 8;
+/// URL password strings registered from one environment value, and from all
+/// of them, beyond each value's first URL password (#2401). Each costs about
+/// a dozen output-gate entries and the gate must still arm with room for
+/// every other managed value, so these stay well below its capacity.
+const MAX_URL_PASSWORDS_PER_VALUE: usize = 64;
+const MAX_URL_PASSWORDS_TOTAL: usize = 128;
+const MAX_URL_PASSWORD_BYTES_TOTAL: usize = 64 * 1024;
 /// Open streams tracked at once; the oldest is dropped (its held-back tail is
 /// simply not shown; the completed item carries the full gated text).
 const MAX_OPEN_STREAMS: usize = 512;
@@ -905,6 +912,8 @@ where
     I: IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
 {
     let mut values = Labeled::new();
+    let mut url_passwords_total = 0;
+    let mut url_password_bytes = 0;
     for (name, value) in vars {
         let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
             continue;
@@ -916,7 +925,48 @@ where
         {
             values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
         }
-        if let Some(password) = url_password(value) {
+        // The first URL's password exactly as before #2401, at any length and
+        // outside the limits below, so no value loses what it registered.
+        let first = secretless_launch::first_url_password(value);
+        if let Some(password) = first
+            && is_plausible_secret(password)
+        {
+            values.push((
+                format!("env:{name}:password"),
+                Zeroizing::new(password.to_string()),
+            ));
+        }
+        // Every other reading, raw spellings before decoded ones: tools can
+        // echo the URL verbatim or print its decoded password. Escapes of
+        // whitespace alone are not a credential.
+        let mut raw = Vec::new();
+        let mut decoded = Vec::new();
+        for password in secretless_launch::url_password_candidates(value, MIN_ENV_VALUE_BYTES) {
+            let plain = Zeroizing::new(
+                urlencoding::decode(password)
+                    .map(std::borrow::Cow::into_owned)
+                    .unwrap_or_else(|_| password.to_string()),
+            );
+            if plain.trim().is_empty() {
+                continue;
+            }
+            let plain_plausible = is_plausible_secret(&plain);
+            if (plain_plausible || is_plausible_secret(password)) && Some(password) != first {
+                raw.push(Zeroizing::new(password.to_string()));
+            }
+            if plain_plausible && plain.as_str() != password && Some(plain.as_str()) != first {
+                decoded.push(plain);
+            }
+        }
+        for (count, password) in raw.into_iter().chain(decoded).enumerate() {
+            if count == MAX_URL_PASSWORDS_PER_VALUE
+                || url_passwords_total == MAX_URL_PASSWORDS_TOTAL
+                || url_password_bytes + password.len() > MAX_URL_PASSWORD_BYTES_TOTAL
+            {
+                break;
+            }
+            url_passwords_total += 1;
+            url_password_bytes += password.len();
             values.push((format!("env:{name}:password"), password));
         }
         for (param, secret) in url_query_secrets(value) {
@@ -924,18 +974,6 @@ where
         }
     }
     values
-}
-
-fn url_password(value: &str) -> Option<Zeroizing<String>> {
-    if !secretless_launch::value_has_url_password(value) {
-        return None;
-    }
-    let (_, rest) = value.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let (userinfo, _) = authority.rsplit_once('@')?;
-    let (_, password) = userinfo.split_once(':')?;
-    let password = password.trim();
-    is_plausible_secret(password).then(|| Zeroizing::new(password.to_string()))
 }
 
 /// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).
@@ -1053,6 +1091,10 @@ fn push_secret(label: &str, text: &str, out: &mut Labeled) {
         out.push((label.to_string(), Zeroizing::new(token.trim().to_string())));
     }
 }
+
+#[cfg(test)]
+#[path = "issue_2401_url_password_tests.rs"]
+mod issue_2401_url_password_tests;
 
 #[cfg(test)]
 #[path = "disclosure_gate_tests.rs"]
