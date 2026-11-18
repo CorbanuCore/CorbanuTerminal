@@ -925,11 +925,16 @@ fn reading_gate_approval(level: SecurityLevel) -> AskForApproval {
 }
 
 /// Approves the script-reading prompt [`reading_gate_approval`] expects
-/// under Aggressive, asserting it was raised (and that no other level
+/// under Aggressive for `script`, asserting it was raised exactly when the
+/// script lies outside the minimal lexical set (and that no other level
 /// asks); any other approval request (a sandbox retry) is denied, so the
 /// sandbox still decides.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn approve_reading_gate(test: &TestCodex, level: SecurityLevel) -> anyhow::Result<()> {
+async fn approve_reading_gate(
+    test: &TestCodex,
+    level: SecurityLevel,
+    script: &str,
+) -> anyhow::Result<()> {
     use codex_protocol::protocol::ReviewDecision;
     let mut gate_prompts = 0;
     while let Some(approval) = next_exec_approval(test).await {
@@ -949,10 +954,13 @@ async fn approve_reading_gate(test: &TestCodex, level: SecurityLevel) -> anyhow:
             })
             .await?;
     }
-    // Exactly the one prompt for the script under Aggressive, none otherwise.
+    // Exactly the one prompt for a script outside the minimal set under
+    // Aggressive (the Linux and macOS variants differ), none otherwise.
+    let expected = level == SecurityLevel::Aggressive
+        && codex_shell_command::bash::read_script(script).fails_closed();
     assert_eq!(
         gate_prompts,
-        usize::from(level == SecurityLevel::Aggressive),
+        usize::from(expected),
         "{level:?}: the script-reading prompt"
     );
     Ok(())
@@ -1004,7 +1012,7 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
             |_| {},
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &evading).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-read");
         assert_eq!(
@@ -1208,7 +1216,7 @@ async fn pf_23_s02_aggressive_denies_home_reads_before_untrusted_content() -> an
         |_| {},
     )
     .await?;
-    approve_reading_gate(&test, SecurityLevel::Aggressive).await?;
+    approve_reading_gate(&test, SecurityLevel::Aggressive, &evading).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -2285,7 +2293,7 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = [
@@ -2367,7 +2375,7 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-move");
         let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap_or_default();
@@ -2564,7 +2572,7 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &home.command(/*read*/ false)).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-replace");
         drop(test);
@@ -2741,7 +2749,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-1472");
         drop(test);
@@ -2817,7 +2825,7 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = ["rules/x.rules", "new-entry"];
@@ -2990,7 +2998,7 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
                 },
             )
             .await?;
-            approve_reading_gate(&test, level).await?;
+            approve_reading_gate(&test, level, &command).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-create");
             let mut entries = vec!["rules/x.rules", "hooks.json", "agents/x"];
@@ -3100,7 +3108,7 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
                 },
             )
             .await?;
-            approve_reading_gate(&test, level).await?;
+            approve_reading_gate(&test, level, &command).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-lock");
             let ok = if missing {
@@ -3185,7 +3193,7 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-db");
         let achieved = [
@@ -3272,7 +3280,7 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-650");
         // Where the folder is now (Permissive moves it).
@@ -3367,7 +3375,7 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-675");
         let changed = std::fs::read_to_string(x.join("other/.git")).unwrap_or_default() != original;
@@ -3489,7 +3497,7 @@ async fn issue_732_database_folder_outputs(
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call("call-732", "shell_command", json!({ "command": command })),
                 done_step(),
@@ -3512,7 +3520,7 @@ async fn issue_732_database_folder_outputs(
         )
         .await?;
         let readable = std::fs::read_dir(&private).is_ok();
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-732");
         drop(test);
@@ -3636,7 +3644,7 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
             },
         )
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-651m");
         let achieved = [
@@ -3781,7 +3789,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
             },
         )
         .await?;
-        let approved = approve_reading_gate(&test, level).await;
+        let approved = approve_reading_gate(&test, level, &command).await;
         // SAFETY: as above.
         unsafe {
             match &original_tmpdir {
@@ -4125,7 +4133,7 @@ async fn pf_23_s03_stored_level_survives_restart_over_a_lower_config() -> anyhow
         |_| {},
     )
     .await?;
-    approve_reading_gate(&test, SecurityLevel::Aggressive).await?;
+    approve_reading_gate(&test, SecurityLevel::Aggressive, &evading).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -4165,7 +4173,7 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
                 .expect("full access");
         })
         .await?;
-        approve_reading_gate(&test, level).await?;
+        approve_reading_gate(&test, level, &write).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-write");
         assert_eq!(
