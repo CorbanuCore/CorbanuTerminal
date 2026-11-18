@@ -2473,7 +2473,9 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
                 safe" should require approval."#,
             ExecApprovalRequirement::NeedsApproval {
                 reason: None,
-                proposed_execpolicy_amendment: expected_amendment.clone(),
+                // The script is unread: approving literal argv must not
+                // create an always-allow rule for its contents.
+                proposed_execpolicy_amendment: None,
             },
         )
     } else {

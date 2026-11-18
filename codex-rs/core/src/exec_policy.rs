@@ -509,25 +509,6 @@ impl ExecPolicyManager {
             allow_prefix_rules,
             live_aggressive,
         );
-        // #2524: a respelled PowerShell (`PWSH -c`) keeps its literal argv
-        // too, as a respelled bash does (#2510), so reading its script only
-        // adds checks. Sync: either PowerShell origin; the respelling is
-        // host-gated as on main.
-        #[cfg(windows)]
-        let commands = {
-            let mut commands = commands;
-            if command_platform == DangerousCommandPlatform::Windows
-                && matches!(
-                    command_origin,
-                    ExecPolicyCommandOrigin::PowerShell
-                        | ExecPolicyCommandOrigin::PowerShellLiteral
-                )
-                && crate::security::tainted_action::policy_powershell_script(command).is_some()
-            {
-                commands.push(command.to_vec());
-            }
-            commands
-        };
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -581,6 +562,29 @@ impl ExecPolicyManager {
             folded: mut case_folded,
             unread_script_prompts,
         } = check_commands(exec_policy.as_ref(), &exec_policy_fallback);
+        // #2599: non-plain PowerShell flags and respelled executable names
+        // keep literal restrictions without an outer allow authorizing the script.
+        if command_platform == DangerousCommandPlatform::Windows
+            && matches!(
+                command_origin,
+                ExecPolicyCommandOrigin::PowerShell | ExecPolicyCommandOrigin::PowerShellLiteral
+            )
+            && codex_shell_command::powershell::extract_plain_powershell_command(command).is_none()
+        {
+            let mut literal = exec_policy.matches_for_command_with_options(
+                command,
+                /*heuristics_fallback*/ None,
+                &match_options,
+            );
+            literal.retain(|rule_match| rule_match.decision() > Decision::Allow);
+            let folded = exec_policy.case_folded_matches(command, &match_options);
+            literal.extend(folded.iter().cloned());
+            case_folded.extend(folded);
+            for rule_match in &literal {
+                evaluation.decision = evaluation.decision.max(rule_match.decision());
+            }
+            evaluation.matched_rules.extend(literal);
+        }
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
         apply_heredoc_restrictive_matches(

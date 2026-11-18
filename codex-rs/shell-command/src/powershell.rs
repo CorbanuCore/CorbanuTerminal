@@ -17,10 +17,13 @@ pub const UTF8_OUTPUT_PREFIX: &str =
 /// becomes one argument (PowerShell joins a script's arguments with spaces
 /// anyway). Any other command is returned as it is.
 pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
-    let Some((_, cli::Invocation {
-        run: cli::Run::Command { start, script },
-        ..
-    })) = read_invocation(command)
+    let Some((
+        _,
+        cli::Invocation {
+            run: cli::Run::Command { start, script },
+            ..
+        },
+    )) = read_invocation(command)
     else {
         return command.to_vec();
     };
@@ -120,6 +123,9 @@ pub enum UnreadPowershell<'a> {
     /// `-File`: the script file and its arguments, which rules see as a
     /// command; the file's content is not read.
     File(&'a [String]),
+    /// Known literal prefixes in a script that cannot be fully lowered.
+    /// These may only add prompt or forbidden matches.
+    Partial(Vec<Vec<String>>),
     /// A command line this reader cannot read the way PowerShell reads it:
     /// an unknown or unsupported parameter, a script from stdin,
     /// `-CommandWithArgs` with arguments, an `-EncodedCommand` that does not
@@ -128,16 +134,28 @@ pub enum UnreadPowershell<'a> {
 }
 
 /// The way `command`, a PowerShell invocation, runs a script rules cannot
-/// read; `None` for any other command, for a script rules read (see
-/// [`extract_powershell_command`]), and for an interactive PowerShell
-/// (`pwsh -NoProfile`), which has no script.
+/// read; `None` for other commands and scripts fully lowered into a plain
+/// command list. A PowerShell invocation without a script can read stdin.
 pub fn unread_powershell_command_line(command: &[String]) -> Option<UnreadPowershell<'_>> {
     let (_, invocation) = read_invocation(command)?;
     match invocation.run {
         cli::Run::File(file) => Some(UnreadPowershell::File(file)),
-        cli::Run::Unreadable => Some(UnreadPowershell::Unreadable),
-        cli::Run::Command { .. } | cli::Run::Encoded(_) | cli::Run::Interactive => None,
+        cli::Run::Unreadable | cli::Run::Interactive => Some(UnreadPowershell::Unreadable),
+        cli::Run::Command { script, .. } => unread_script(&script),
+        cli::Run::Encoded(script) => unread_script(&script),
     }
+}
+
+fn unread_script(script: &str) -> Option<UnreadPowershell<'static>> {
+    if try_parse_powershell_commands(script).is_some() {
+        return None;
+    }
+    let prefixes = crate::command_safety::powershell_restrictive_prefixes(script);
+    Some(if prefixes.is_empty() {
+        UnreadPowershell::Unreadable
+    } else {
+        UnreadPowershell::Partial(prefixes)
+    })
 }
 
 /// Parse the script body from a top-level PowerShell wrapper into argv-like commands.
@@ -421,6 +439,7 @@ mod tests {
             &["pwsh", "-Command", "-"],
             &["pwsh", "-ec", "!!!"],
             &["pwsh", "-cwa", "$args", "x"],
+            &["pwsh", "-nop"],
         ] {
             assert_eq!(
                 unread_powershell_command_line(&words(line)),
@@ -434,12 +453,15 @@ mod tests {
             Some(UnreadPowershell::File(&file[2..]))
         );
         for line in [
-            &["pwsh", "-nop"][..],
-            &["pwsh", "-c", "git push"],
+            &["pwsh", "-c", "git push"][..],
             &["pwsh", "-ec", "ZwBpAHQA"],
             &["git", "push"],
         ] {
-            assert_eq!(unread_powershell_command_line(&words(line)), None, "{line:?}");
+            assert_eq!(
+                unread_powershell_command_line(&words(line)),
+                None,
+                "{line:?}"
+            );
         }
     }
 
