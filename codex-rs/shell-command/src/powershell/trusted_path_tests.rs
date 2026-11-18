@@ -96,10 +96,10 @@ fn path_lookup_never_finds_the_current_directory() {
         trusted_on_path("pwsh.exe", &path_of(&[Path::new("bin")]), &current),
         None
     );
+    // Nor an absolute entry under it, where a command may write.
     assert_eq!(
         trusted_on_path("pwsh.exe", &path_of(&[&nested]), &current),
-        Some(nested.join("pwsh.exe")),
-        "an absolute entry under it is another directory"
+        None
     );
 
     // Its 8.3 short name, either side.

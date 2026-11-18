@@ -176,11 +176,15 @@ impl PowershellKind {
     /// The kind a PowerShell program name (`pwsh`, `C:\…\PowerShell.EXE`)
     /// runs.
     pub(crate) fn of(shell: &str) -> Self {
-        let stem = std::path::Path::new(shell)
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or(shell);
-        if stem.eq_ignore_ascii_case("pwsh") {
+        let name = std::path::Path::new(shell)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(shell)
+            .to_ascii_lowercase();
+        // #2568: Windows drops trailing dots and spaces (`pwsh.exe.`).
+        let name = name.trim_end_matches(['.', ' ']);
+        let stem = name.strip_suffix(".exe").unwrap_or(name);
+        if stem.trim_end_matches(['.', ' ']) == "pwsh" {
             Self::Pwsh
         } else {
             Self::WindowsPowershell
@@ -267,10 +271,11 @@ fn find_trusted_powershell_in(
 }
 
 /// #2568: the first `name` in the absolute directories of `path` (a `PATH`
-/// value) that is not in `current_dir`. Compared canonical, so the current
-/// directory spelled in another case, by its 8.3 short name, or through a
-/// junction or link is excluded too, and so is a link to a file in it.
-/// `None` where the current directory cannot be resolved.
+/// value) that is not in `current_dir` or under it (`.venv\Scripts`,
+/// `node_modules\.bin`), where a command may write. Compared canonical, so
+/// the current directory spelled in another case, by its 8.3 short name, or
+/// through a junction or link is excluded too, and so is a link to a file
+/// in it. `None` where the current directory cannot be resolved.
 fn trusted_on_path(
     name: &str,
     path: &std::ffi::OsStr,
@@ -280,7 +285,7 @@ fn trusted_on_path(
     let in_current_dir = |path: &std::path::Path| {
         path.canonicalize()
             .ok()
-            .is_none_or(|canonical| canonical == current_dir)
+            .is_none_or(|canonical| canonical.starts_with(&current_dir))
     };
     std::env::split_paths(path).find_map(|dir| {
         // A relative entry names a directory under the current one.
@@ -289,7 +294,7 @@ fn trusted_on_path(
         }
         let found = which::which_in(name, Some(&dir), &dir).ok()?;
         let file_dir = found.canonicalize().ok()?.parent()?.to_path_buf();
-        (file_dir != current_dir && !in_current_dir(found.parent()?)).then_some(found)
+        (!file_dir.starts_with(&current_dir) && !in_current_dir(found.parent()?)).then_some(found)
     })
 }
 
@@ -495,6 +500,23 @@ mod tests {
 
     fn words(line: &[&str]) -> Vec<String> {
         line.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn powershell_kind_follows_windows_name_rules() {
+        use super::PowershellKind;
+        for (shell, kind) in [
+            ("pwsh", PowershellKind::Pwsh),
+            ("pwsh.exe", PowershellKind::Pwsh),
+            ("PWSH.EXE", PowershellKind::Pwsh),
+            ("pwsh.exe.", PowershellKind::Pwsh),
+            ("pwsh.exe. ", PowershellKind::Pwsh),
+            ("pwsh. ", PowershellKind::Pwsh),
+            ("powershell", PowershellKind::WindowsPowershell),
+            ("powershell.exe.", PowershellKind::WindowsPowershell),
+        ] {
+            assert_eq!(PowershellKind::of(shell), kind, "{shell:?}");
+        }
     }
 
     #[test]

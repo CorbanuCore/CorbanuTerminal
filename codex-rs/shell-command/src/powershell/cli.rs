@@ -68,13 +68,13 @@ const PWSH_PARAMS: &[(&str, &str, Param)] = &[
     ("help", "h", Param::Other),
     ("?", "?", Param::Other),
     ("login", "l", Param::Other),
-    ("noexit", "noe", Param::Other),
+    ("noexit", "noe", Param::Other), // codespell:ignore
     ("noprofile", "nop", Param::PlainSwitch),
     ("nologo", "nol", Param::PlainSwitch),
     ("noninteractive", "noni", Param::PlainSwitch),
     ("socketservermode", "so", Param::Other),
     ("servermode", "s", Param::Other),
-    ("namedpipeservermode", "nam", Param::Other),
+    ("namedpipeservermode", "nam", Param::Other), // codespell:ignore
     ("sshservermode", "sshs", Param::Other),
     ("noprofileloadtime", "noprofileloadtime", Param::Switch),
     ("interactive", "i", Param::Other),
@@ -118,14 +118,14 @@ const WINDOWS_POWERSHELL_PARAMS: &[(&str, &str, Param)] = &[
     ("version", "v", Param::Other),
     ("help", "h", Param::Other),
     ("?", "?", Param::Other),
-    ("noexit", "noe", Param::Other),
+    ("noexit", "noe", Param::Other), // codespell:ignore
     ("importsystemmodules", "imp", Param::Other),
     ("noprofile", "nop", Param::PlainSwitch),
     ("nologo", "nol", Param::PlainSwitch),
     ("noninteractive", "noni", Param::PlainSwitch),
     ("socketservermode", "so", Param::Other),
     ("servermode", "s", Param::Other),
-    ("namedpipeservermode", "nam", Param::Other),
+    ("namedpipeservermode", "nam", Param::Other), // codespell:ignore
     ("sshservermode", "sshs", Param::Other),
     ("configurationname", "config", Param::Other),
     ("command", "c", Param::Command),
@@ -235,7 +235,8 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
     while i < command.len() {
         let arg = command[i].trim_matches(is_ascii_space);
         if arg.is_empty() {
-            // Every PowerShell skips an empty parameter.
+            // Windows PowerShell skips an empty parameter; PowerShell 7
+            // refuses the command line, so reading on only adds checks.
             i += 1;
             continue;
         }

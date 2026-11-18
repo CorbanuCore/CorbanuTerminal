@@ -1,7 +1,7 @@
 use crate::bash::extract_bash_command;
 use crate::bash::try_parse_shell;
 use crate::bash::try_parse_word_only_commands_sequence;
-use crate::powershell::extract_powershell_command;
+use crate::powershell::extract_plain_powershell_command;
 use codex_protocol::parse_command::ParsedCommand;
 use shlex::split as shlex_split;
 use shlex::try_join as shlex_try_join;
@@ -13,11 +13,14 @@ pub fn shlex_join(tokens: &[String]) -> String {
         .unwrap_or_else(|_| "<command included NUL byte>".to_string())
 }
 
-/// Extracts the shell and script from a command, regardless of platform
+/// Extracts the shell and script from a command, regardless of platform.
+/// #2568: a PowerShell invocation only when it is a plain `-Command`, so a
+/// display never hides parameters such as `-WorkingDirectory` or an
+/// encoded script behind its script.
 pub fn extract_shell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
     extract_bash_command(command)
         .map(|(shell, script)| (shell, Cow::Borrowed(script)))
-        .or_else(|| extract_powershell_command(command))
+        .or_else(|| extract_plain_powershell_command(command))
 }
 
 /// DO NOT REVIEW THIS CODE BY HAND
@@ -1280,7 +1283,7 @@ pub fn parse_command_impl(command: &[String]) -> Vec<ParsedCommand> {
         return commands;
     }
 
-    if let Some((_, script)) = extract_powershell_command(command) {
+    if let Some((_, script)) = extract_plain_powershell_command(command) {
         return vec![ParsedCommand::Unknown {
             cmd: script.to_string(),
         }];
