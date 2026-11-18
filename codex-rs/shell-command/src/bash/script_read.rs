@@ -94,8 +94,9 @@ pub fn read_script(script: &str) -> ScriptRead {
         .filter(|command| !command.words.is_empty())
         .collect();
     // The lexical pre-filter: a script outside the safe set is unread
-    // whatever the syntax tree says.
-    reader.unread |= !lexically_safe(script);
+    // whatever the syntax tree says, and so is one whose here-documents end
+    // elsewhere than the tree ends them (`cat <<Q &&⏎Q⏎git push⏎Q`).
+    reader.unread |= lexically_safe(script) != Some(heredoc_ends(root));
     let plain = !reader.unread
         && word_only_command_nodes(&tree).is_some()
         && commands
@@ -113,6 +114,24 @@ pub fn read_script(script: &str) -> ScriptRead {
         plain,
         text_after_commands: !script[end..].trim().is_empty(),
     }
+}
+
+/// Where the syntax tree's here-document delimiter lines start, sorted.
+fn heredoc_ends(root: Node<'_>) -> Vec<usize> {
+    let mut ends = Vec::new();
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "heredoc_end" {
+            ends.push(node.start_byte());
+        }
+        stack.extend(
+            fields(node, /*named_only*/ true)
+                .into_iter()
+                .map(|(_, child)| child),
+        );
+    }
+    ends.sort_unstable();
+    ends
 }
 
 /// The grammar drops a backslash-newline between tokens, and also before a
@@ -167,6 +186,21 @@ pub fn runs_code_from_variable(name: &str) -> bool {
         "BASH_ENV"
             | "ENV"
             | "PS4"
+            // Prompts other shells or options may expand (zsh's PROMPT4 is
+            // its xtrace prompt).
+            | "PS0"
+            | "PS1"
+            | "PS2"
+            | "PS3"
+            | "PROMPT"
+            | "PROMPT2"
+            | "PROMPT3"
+            | "PROMPT4"
+            | "RPROMPT"
+            | "RPROMPT2"
+            | "RPS1"
+            | "RPS2"
+            | "SPROMPT"
             | "SHELLOPTS"
             | "BASHOPTS"
             | "PROMPT_COMMAND"
@@ -177,6 +211,23 @@ pub fn runs_code_from_variable(name: &str) -> bool {
     ) || name.starts_with("BASH_FUNC_")
         // zsh's hook functions.
         || name.ends_with("_functions")
+        // Tables that rename or define commands: zsh's special hashes, bash's
+        // command hash and aliases.
+        || matches!(
+            name,
+            "commands"
+                | "functions"
+                | "aliases"
+                | "galiases"
+                | "saliases"
+                | "builtins"
+                | "reswords"
+                | "options"
+                | "nameddirs"
+                | "BASH_CMDS"
+                | "BASH_ALIASES"
+        )
+        || name.starts_with("dis_")
         || INTEGER_SPECIALS.contains(&name)
 }
 
@@ -368,8 +419,20 @@ impl<'a> Reader<'a> {
     /// arithmetic comparison (`[[`'s, and zsh's `[`) evaluates its operands,
     /// subscripts included: read only where both are numbers or `$?`, `$#`.
     fn test_command<'t>(&mut self, node: Node<'t>, stack: &mut Vec<(Node<'t>, Visit)>) {
+        let single = !self.text(node).starts_with("[[");
         let mut inner = vec![node];
         while let Some(part) = inner.pop() {
+            // In `[ … ]` the grammar takes `|`, `&`, `&&` and `||` for test
+            // operators; bash ends the command there (`[ x | sh … ]`).
+            let operators = fields(part, /*named_only*/ false);
+            if operators.iter().any(|(_, child)| {
+                !child.is_named()
+                    && (matches!(child.kind(), "|" | "&")
+                        || (single && matches!(child.kind(), "&&" | "||")))
+            }) {
+                self.deny(node, stack);
+                return;
+            }
             let children = fields(part, /*named_only*/ true);
             // zsh's `-t FD` evaluates FD as arithmetic too.
             let arithmetic = children.iter().any(|(_, child)| {
@@ -443,12 +506,17 @@ impl<'a> Reader<'a> {
         let mut words = script_command_words(command, self.src);
         // The reserved prefixes bash reads before a pipeline: any sequence
         // of `!` and `time [-p] [--]` (and zsh's `nocorrect`, which allows an
-        // assignment after it), then `coproc`.
+        // assignment after it), with one `coproc`.
         let mut skip = 0;
+        let mut coproc = false;
         loop {
             let unquoted = nodes.get(skip).and_then(|node| self.unquoted(*node));
             match nodes.get(skip).and_then(|node| self.reserved(*node)) {
                 _ if unquoted == Some("nocorrect") => skip += 1,
+                Some("coproc") if !coproc => {
+                    coproc = true;
+                    skip += 1;
+                }
                 Some("!") => skip += 1,
                 Some("time") => {
                     skip += 1;
@@ -460,10 +528,6 @@ impl<'a> Reader<'a> {
                 }
                 _ => break,
             }
-        }
-        let coproc = nodes.get(skip).and_then(|node| self.reserved(*node)) == Some("coproc");
-        if coproc {
-            skip += 1;
         }
         nodes.drain(..skip.min(nodes.len()));
         words.drain(..skip.min(words.len()));
@@ -586,6 +650,15 @@ impl<'a> Reader<'a> {
                 }
             }
             "heredoc_redirect" => {
+                let delimiter = fields(node, /*named_only*/ true)
+                    .into_iter()
+                    .find(|(_, child)| child.kind() == "heredoc_start")
+                    .map(|(_, start)| {
+                        self.text(start)
+                            .trim_matches(['\'', '"'])
+                            .trim_start_matches('\\')
+                            .to_string()
+                    });
                 // An unquoted here-document's text is expanded as it is read.
                 let expanded = node
                     .child_by_field_name("start")
@@ -607,7 +680,17 @@ impl<'a> Reader<'a> {
                         }
                         "heredoc_body" => {
                             for (_, part) in fields(child, /*named_only*/ true) {
-                                if part.kind() != "heredoc_content" {
+                                // bash ends the body at the delimiter line even
+                                // inside a substitution the grammar reads on.
+                                if part.kind() != "heredoc_content"
+                                    && delimiter.as_deref().is_some_and(|delimiter| {
+                                        self.text(part)
+                                            .lines()
+                                            .any(|line| line.trim_start_matches('\t') == delimiter)
+                                    })
+                                {
+                                    self.deny(part, stack);
+                                } else if part.kind() != "heredoc_content" {
                                     stack.push((part, Visit::Word));
                                 } else if expanded && hides_expansion(self.text(part)) {
                                     self.deny(part, stack);
@@ -669,10 +752,18 @@ impl<'a> Reader<'a> {
         let text = self.text(node);
         match node.parent().map(|parent| parent.kind()) {
             Some("binary_expression") => {
+                let mut test = node.parent();
+                while let Some(parent) = test
+                    && parent.kind() != "test_command"
+                {
+                    test = parent.parent();
+                }
+                let single = test.is_none_or(|test| !self.text(test).starts_with("[["));
                 !(text.contains(';')
                     || text.contains('\n')
                     || text.contains("&&")
-                    || text.contains("||"))
+                    || text.contains("||")
+                    || (single && text.contains(['|', '&'])))
             }
             Some("case_item") => node.kind() == "extglob_pattern",
             Some("expansion") => node.kind() == "regex" && !text.contains(['{', '}']),

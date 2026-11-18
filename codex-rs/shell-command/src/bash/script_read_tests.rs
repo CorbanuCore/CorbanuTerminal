@@ -170,6 +170,16 @@ fn shapes_not_fully_understood_are_unread() {
         "echo \"$HOME[1]\"",
         "nocorrect X=1 git push",
         "NULLCMD=reboot",
+        // Review round 3.
+        "cat <<'Q' &&\nQ\ngit push\nQ",
+        "cat <<'Q' && echo $(\ncat <<EOF\n$(echo '\nEOF\ngit push\n#')\nEOF\nQ\n)\nQ",
+        "[ x | git push ]",
+        "commands=(ls /usr/bin/git)",
+        "functions+=(x y)",
+        "PROMPT4='$(git push)'",
+        "coproc nocorrect X=1 git push",
+        "echo /(e:'git push':)",
+        "X==(git push)",
         "precmd_functions=(x)",
         // Does not parse.
         "git push (",
@@ -202,6 +212,7 @@ fn understood_shapes_are_read() {
         "cat <<'EOF' | python3\nprint(1)\nEOF",
         "cat <<'EOF'\nuse `code` and $(this) literally\nEOF",
         "true;#note",
+        "a+=(c); f() { :; }; [[ -n $x || -z $y ]]",
         "[ -t 1 ] && [[ -t 0 ]]",
     ] {
         let read = read_script(script);
@@ -251,7 +262,7 @@ fn lexically_unsafe_scripts_are_unread() {
         "echo {a,b}",
         "echo $((1 + 2))",
         "cat <<EOF\n$(date)\nEOF",
-        "echo caf\u{e9}",
+        "echo na\u{ef}ve",
         "echo a\u{a0}b",
         "echo a\r",
         "cat <<E\"O\"F\nx\nE\"O\"F",

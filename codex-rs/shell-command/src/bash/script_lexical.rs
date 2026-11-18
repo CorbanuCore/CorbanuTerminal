@@ -17,17 +17,27 @@
 //! `$name`/`${name}`); comments starting a word. Inside `'…'` and `$'…'`
 //! anything but a carriage return; inside `"…"` text, `\` escapes and the
 //! same `$` forms. Never: backquotes, `$((`, `((`, `$[`, `==`, `=~`, `[`
-//! after an expansion or inside a word, `X(` for a glob character X, braces
-//! inside words, control characters, bytes above ASCII outside quotes.
+//! after an expansion or inside a word, braces inside words, `(` after a
+//! word other than `NAME=(`, `NAME+=(` and `name()` (zsh glob qualifiers,
+//! `=(…)`), control characters, bytes above ASCII outside quotes.
+//! Here-documents must end where the syntax tree ends them, and one started
+//! before a `$(…)` is read after the line holding it, as bash does.
 
-/// Whether `script` lies within the safe set (see the module docs).
-pub(super) fn lexically_safe(script: &str) -> bool {
+/// Where each here-document's delimiter line starts (after `<<-` tabs),
+/// sorted, if `script` lies within the safe set (see the module docs). The
+/// caller checks these against the syntax tree's.
+pub(super) fn lexically_safe(script: &str) -> Option<Vec<usize>> {
     let mut lexer = Lexer {
         bytes: script.as_bytes(),
         at: 0,
         heredocs: Vec::new(),
+        heredoc_ends: Vec::new(),
     };
-    lexer.script(/*closing*/ None) && lexer.at == lexer.bytes.len() && lexer.heredocs.is_empty()
+    (lexer.script(/*closing*/ None) && lexer.at == lexer.bytes.len() && lexer.heredocs.is_empty())
+        .then(|| {
+            lexer.heredoc_ends.sort_unstable();
+            lexer.heredoc_ends
+        })
 }
 
 struct Heredoc {
@@ -39,16 +49,28 @@ struct Heredoc {
 struct Lexer<'a> {
     bytes: &'a [u8],
     at: usize,
-    /// Here-documents whose bodies start after the current line.
+    /// Here-documents whose bodies start after the current line (of the
+    /// current substitution: bash reads an outer one only after the line
+    /// holding the whole substitution).
     heredocs: Vec<Heredoc>,
+    heredoc_ends: Vec<usize>,
 }
 
 const WORD_BYTES: &[u8] = b"_-./,:@%+=~*?!^]#";
-const GLOB_BYTES: &[u8] = b"*?+@!";
 
 impl Lexer<'_> {
     fn peek(&self, offset: usize) -> Option<u8> {
         self.bytes.get(self.at + offset).copied()
+    }
+
+    /// The byte at the current position.
+    fn current(&self) -> Option<u8> {
+        self.peek(/*offset*/ 0)
+    }
+
+    /// The byte after the current one.
+    fn following(&self) -> Option<u8> {
+        self.peek(/*offset*/ 1)
     }
 
     fn rest(&self) -> &[u8] {
@@ -81,9 +103,22 @@ impl Lexer<'_> {
             .is_none_or(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b';' | b'&' | b'|' | b')'))
     }
 
+    /// `$(…)`, `<(…)` or `>(…)` from just after its `(`: its own
+    /// here-documents end inside it.
+    fn substitution(&mut self) -> bool {
+        let outer = std::mem::take(&mut self.heredocs);
+        let read =
+            self.script(Some(b')')) && self.current() == Some(b')') && self.heredocs.is_empty();
+        self.heredocs = outer;
+        if read {
+            self.at += 1;
+        }
+        read
+    }
+
     /// Reads until the end, or until `closing` (`)`) at depth 0.
     fn script(&mut self, closing: Option<u8>) -> bool {
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             match byte {
                 b'\n' => {
                     self.at += 1;
@@ -94,17 +129,17 @@ impl Lexer<'_> {
                 b' ' | b'\t' => self.at += 1,
                 b')' if closing == Some(b')') => return true,
                 b')' => self.at += 1,
-                b'(' if self.peek(1) == Some(b'(') => return false,
+                b'(' if self.following() == Some(b'(') => return false,
                 b'(' => {
                     self.at += 1;
-                    if !self.script(Some(b')')) || self.peek(0) != Some(b')') {
+                    if !self.script(Some(b')')) || self.current() != Some(b')') {
                         return false;
                     }
                     self.at += 1;
                 }
                 b'#' if self.at_comment_start() => {
-                    while self.peek(0).is_some_and(|byte| byte != b'\n') {
-                        if self.peek(0) == Some(b'\r') {
+                    while self.current().is_some_and(|byte| byte != b'\n') {
+                        if self.current() == Some(b'\r') {
                             return false;
                         }
                         self.at += 1;
@@ -139,18 +174,22 @@ impl Lexer<'_> {
 
     /// One word: unquoted bytes, quotes and expansions.
     fn word(&mut self) -> bool {
+        let start = self.at;
         if (self.rest().starts_with(b"==") || self.rest().starts_with(b"=~"))
             && self.at_word_start()
         {
             return false;
         }
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             match byte {
                 b' ' | b'\t' | b'\n' | b';' | b'&' | b'|' | b')' | b'<' | b'>' => return true,
-                b'(' if self.at > 0 && GLOB_BYTES.contains(&self.bytes[self.at - 1]) => {
-                    return false;
+                // Only `NAME=(…)`, `NAME+=(…)` and `name()` open a paren
+                // after a word: elsewhere zsh reads glob qualifiers or
+                // `=(…)` process substitution.
+                b'(' => {
+                    return self.at == start
+                        || paren_after_word(&self.bytes[start..self.at], self.following());
                 }
-                b'(' => return true,
                 b'\'' => {
                     if !self.single_quoted() {
                         return false;
@@ -166,7 +205,7 @@ impl Lexer<'_> {
                         return false;
                     }
                 }
-                b'\\' => match self.peek(1) {
+                b'\\' => match self.following() {
                     Some(b'\n' | b'\r') | None => return false,
                     Some(_) => self.at += 2,
                 },
@@ -179,7 +218,7 @@ impl Lexer<'_> {
 
     fn single_quoted(&mut self) -> bool {
         self.at += 1;
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             self.at += 1;
             match byte {
                 b'\'' => return true,
@@ -192,14 +231,14 @@ impl Lexer<'_> {
 
     fn double_quoted(&mut self) -> bool {
         self.at += 1;
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             match byte {
                 b'"' => {
                     self.at += 1;
                     return true;
                 }
                 b'`' | b'\r' => return false,
-                b'\\' => match self.peek(1) {
+                b'\\' => match self.following() {
                     Some(b'\n' | b'\r') | None => return false,
                     Some(_) => self.at += 2,
                 },
@@ -217,15 +256,11 @@ impl Lexer<'_> {
 
     /// `$name`, `$?`, `${name}`, `${name:-word}`, `$(…)`, `$'…'`.
     fn dollar(&mut self, quoted: bool) -> bool {
-        match self.peek(1) {
-            Some(b'(') if self.peek(2) == Some(b'(') => false,
+        match self.following() {
+            Some(b'(') if self.peek(/*offset*/ 2) == Some(b'(') => false,
             Some(b'(') => {
                 self.at += 2;
-                if !self.script(Some(b')')) || self.peek(0) != Some(b')') {
-                    return false;
-                }
-                self.at += 1;
-                true
+                self.substitution()
             }
             Some(b'\'') if !quoted => {
                 self.at += 1;
@@ -235,17 +270,17 @@ impl Lexer<'_> {
             Some(byte) if byte.is_ascii_alphabetic() || byte == b'_' => {
                 self.at += 1;
                 while self
-                    .peek(0)
+                    .current()
                     .is_some_and(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
                 {
                     self.at += 1;
                 }
                 // zsh reads `$name[…]` as a subscript.
-                self.peek(0) != Some(b'[')
+                self.current() != Some(b'[')
             }
             Some(byte) if byte.is_ascii_digit() || b"?#$!@*-".contains(&byte) => {
                 self.at += 2;
-                self.peek(0) != Some(b'[')
+                self.current() != Some(b'[')
             }
             // A `$` alone is a literal dollar.
             Some(b' ' | b'\t' | b'\n' | b'"') | None => {
@@ -258,11 +293,11 @@ impl Lexer<'_> {
 
     fn ansi_c_quoted(&mut self) -> bool {
         self.at += 1;
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             self.at += 1;
             match byte {
                 b'\'' => return true,
-                b'\\' if self.peek(0).is_some() => self.at += 1,
+                b'\\' if self.current().is_some() => self.at += 1,
                 b'\r' => return false,
                 _ => {}
             }
@@ -276,36 +311,36 @@ impl Lexer<'_> {
         self.at += 2;
         let name_start = self.at;
         while self
-            .peek(0)
+            .current()
             .is_some_and(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
         {
             self.at += 1;
         }
         if self.at == name_start {
-            match self.peek(0) {
+            match self.current() {
                 Some(byte) if b"?#$!@*-".contains(&byte) => self.at += 1,
                 _ => return false,
             }
         }
-        if self.peek(0) == Some(b':') {
+        if self.current() == Some(b':') {
             self.at += 1;
-            if !self.peek(0).is_some_and(|byte| b"-=+?".contains(&byte)) {
+            if !self.current().is_some_and(|byte| b"-=+?".contains(&byte)) {
                 return false;
             }
         }
-        match self.peek(0) {
+        match self.current() {
             Some(b'}') => {
                 self.at += 1;
-                return self.peek(0) != Some(b'[');
+                return self.current() != Some(b'[');
             }
             Some(byte) if b"-=+?".contains(&byte) => self.at += 1,
             _ => return false,
         }
-        while let Some(byte) = self.peek(0) {
+        while let Some(byte) = self.current() {
             match byte {
                 b'}' => {
                     self.at += 1;
-                    return self.peek(0) != Some(b'[');
+                    return self.current() != Some(b'[');
                 }
                 b'{' | b'`' | b'\\' | b'\r' | b'\n' => return false,
                 b'"' if !quoted => {
@@ -352,7 +387,7 @@ impl Lexer<'_> {
                     .take_while(|byte| byte.is_ascii_digit())
                     .count();
                 self.at += digits;
-                if digits == 0 && self.peek(0) == Some(b'-') {
+                if digits == 0 && self.current() == Some(b'-') {
                     self.at += 1;
                 }
                 return digits > 0 || self.bytes[self.at - 1] == b'-';
@@ -360,15 +395,11 @@ impl Lexer<'_> {
             _ => {}
         }
         // Process substitutions `<(…)` and `>(…)`.
-        if self.peek(0) == Some(b'(') && matches!(operator, b">" | b"<") {
+        if self.current() == Some(b'(') && matches!(operator, b">" | b"<") {
             self.at += 1;
-            if !self.script(Some(b')')) || self.peek(0) != Some(b')') {
-                return false;
-            }
-            self.at += 1;
-            return true;
+            return self.substitution();
         }
-        while matches!(self.peek(0), Some(b' ' | b'\t')) {
+        while matches!(self.current(), Some(b' ' | b'\t')) {
             self.at += 1;
         }
         let start = self.at;
@@ -377,10 +408,10 @@ impl Lexer<'_> {
 
     /// `<<WORD`, `<<'WORD'`, `<<"WORD"`: the body follows the line.
     fn heredoc_start(&mut self, strip_tabs: bool) -> bool {
-        while matches!(self.peek(0), Some(b' ' | b'\t')) {
+        while matches!(self.current(), Some(b' ' | b'\t')) {
             self.at += 1;
         }
-        let quote = match self.peek(0) {
+        let quote = match self.current() {
             Some(quote @ (b'\'' | b'"')) => {
                 self.at += 1;
                 Some(quote)
@@ -389,7 +420,7 @@ impl Lexer<'_> {
         };
         let start = self.at;
         while self
-            .peek(0)
+            .current()
             .is_some_and(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
         {
             self.at += 1;
@@ -399,7 +430,7 @@ impl Lexer<'_> {
         }
         let delimiter = self.bytes[start..self.at].to_vec();
         if let Some(quote) = quote {
-            if self.peek(0) != Some(quote) {
+            if self.current() != Some(quote) {
                 return false;
             }
             self.at += 1;
@@ -410,7 +441,7 @@ impl Lexer<'_> {
             strip_tabs,
         });
         // The delimiter must end the word.
-        self.word_ends_after(0)
+        self.word_ends_after(/*len*/ 0)
     }
 
     /// After a newline: the bodies of the here-documents started on the line
@@ -427,12 +458,14 @@ impl Lexer<'_> {
                         line
                     };
                     if line == heredoc.delimiter.as_slice() {
+                        self.heredoc_ends.push(self.bytes.len() - line.len());
                         self.at = self.bytes.len();
                         break;
                     }
                     return false;
                 };
-                let line = &self.bytes[self.at..self.at + line_len];
+                let line_start = self.at;
+                let line = &self.bytes[line_start..line_start + line_len];
                 self.at += line_len + 1;
                 let trimmed = if heredoc.strip_tabs {
                     trim_tabs(line)
@@ -440,6 +473,8 @@ impl Lexer<'_> {
                     line
                 };
                 if trimmed == heredoc.delimiter.as_slice() {
+                    self.heredoc_ends
+                        .push(line_start + line_len - trimmed.len());
                     break;
                 }
                 if line.contains(&b'\r') || (!heredoc.quoted && !plain_heredoc_line(line)) {
@@ -449,6 +484,26 @@ impl Lexer<'_> {
         }
         true
     }
+}
+
+/// `word` (the text before a `(`) is `NAME=` or `NAME+=` (an array), or a
+/// function name before `()`.
+fn paren_after_word(word: &[u8], next: Option<u8>) -> bool {
+    let name = |bytes: &[u8]| {
+        bytes
+            .first()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'_')
+            && bytes
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+    };
+    if let Some(assigned) = word.strip_suffix(b"=") {
+        return name(assigned.strip_suffix(b"+").unwrap_or(assigned));
+    }
+    next == Some(b')')
+        && word
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_.:-".contains(byte))
 }
 
 fn trim_tabs(line: &[u8]) -> &[u8] {

@@ -297,10 +297,12 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
                 return args.is_empty();
             };
             let slots = numeric_slots(format);
+            // `%2$d` picks its argument by number: then any may be numeric.
+            let positional = format.contains('$') && slots.contains(&true);
             !format.starts_with('-')
                 && args[1..].iter().enumerate().all(|(index, arg)| {
                     slots.is_empty()
-                        || !slots[index % slots.len()]
+                        || !(positional || slots[index % slots.len()])
                         || arg.as_deref().is_some_and(is_number)
                 })
         }

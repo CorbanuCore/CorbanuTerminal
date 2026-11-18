@@ -222,6 +222,18 @@ async fn unknown_scripts_table() {
         "zsh -c \"a=\\$HOME['\\$(git push)']\"",
         "zsh -c 'nocorrect X=1 git push'",
         "zsh -c \"nocorrect OPTIND='a[\\$(git push)]'\"",
+        // Review round 3 (#2613).
+        "cat <<'Q' &&\nQ\ngit push\nQ",
+        "cat <<Q |\nQ\ngit push\nQ",
+        "cat <<'Q' && echo $(\ncat <<EOF\n$(echo '\nEOF\ngit push\n#')\nEOF\nQ\n)\nQ",
+        "[ x | sh$IFS-c$IFS'git push' ]",
+        "zsh -c 'commands=(ls /usr/bin/git); ls push'",
+        "zsh -c \"functions=(ls 'git push'); ls\"",
+        "zsh -c 'echo \"ls /usr/bin/git\" | read -A commands; ls push'",
+        "zsh -c 'coproc nocorrect X=1 git push'",
+        "zsh -c \"printf '%2\\$d %1\\$s' 5 'path[\\$(git push)]'\"",
+        "zsh -c 'X==(git push)'",
+        "zsh -c \"echo /(e:'git push':)\"",
         "env A=1 bash -c 'source ./x.sh'",
         "sudo sh -c 'source ./x.sh'",
         "xargs sh -c 'source ./x.sh'",
@@ -270,6 +282,7 @@ async fn negative_controls_and_no_rule() {
         "f() { return $?; }; f; exit $?",
         "printf '%s: %d\\n' \"$name\" 3",
         "true;#note",
+        "printf '%1$s %2$s\\n' a b; a+=(c); f() { :; }",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(

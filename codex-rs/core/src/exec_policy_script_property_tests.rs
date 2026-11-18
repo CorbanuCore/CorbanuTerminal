@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 66;
+const CONSTRUCTS: u64 = 72;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -151,6 +151,27 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
             single_quoted(&format!("nocorrect X=1 {inner}"))
         ),
         65 => format!("echo a\\\r\n{inner}"),
+        // Review round 3: here-document ends the grammar places elsewhere,
+        // `[ … | … ]`, zsh's command tables, `coproc nocorrect`, positional
+        // printf conversions.
+        66 => format!("cat <<'{delimiter}' &&\n{delimiter}\n{inner}\n{delimiter}"),
+        67 => format!("[ x | sh -c {} ]", single_quoted(inner)),
+        68 => format!(
+            "zsh -c {}",
+            single_quoted(&format!(
+                "commands=(x /bin/sh); x -c {}",
+                single_quoted(inner)
+            ))
+        ),
+        69 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("coproc nocorrect X=1 {inner}"))
+        ),
+        70 => format!(
+            "zsh -c {}",
+            single_quoted(&format!("printf '%2$d %1$s' 5 {arithmetic}"))
+        ),
+        71 => format!("cat <<'{delimiter}' && echo $(\n{inner}\n)\n{delimiter}"),
         _ => format!("noglob {inner}"),
     }
 }
