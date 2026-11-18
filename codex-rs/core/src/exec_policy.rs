@@ -39,8 +39,9 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use codex_shell_command::bash::parse_shell_lc_plain_commands;
+use codex_shell_command::bash::ScriptCommands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
+use codex_shell_command::bash::shell_lc_script_commands;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
@@ -500,12 +501,20 @@ impl ExecPolicyManager {
                 &commands,
                 &match_options,
             );
-        let (mut evaluation, case_folded) = wrappers::check_with_wrappers_and_folded(
+        let wrappers::Checked {
+            mut evaluation,
+            folded: case_folded,
+            unread_script_prompts,
+        } = wrappers::check(
             exec_policy.as_ref(),
             &commands,
+            /*read_own_scripts*/ true,
             &exec_policy_fallback,
             &match_options,
         );
+        // #2543: an amendment for the script's literal argv cannot approve
+        // the commands in it that need approval.
+        let auto_amendment_allowed = auto_amendment_allowed && !unread_script_prompts;
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
             // the first command of a heredoc script.
@@ -1289,7 +1298,10 @@ fn program_key(token: &str) -> Option<String> {
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
-    if let Some(commands) = parse_shell_lc_plain_commands(command)
+    // #2543: quoted words read as bash runs them (`'git' push`). A script
+    // that is not plain is read for prompt and forbidden rules only, by
+    // `wrappers`.
+    if let Some(ScriptCommands::Plain(commands)) = shell_lc_script_commands(command)
         && !commands.is_empty()
     {
         return ExecPolicyCommands {

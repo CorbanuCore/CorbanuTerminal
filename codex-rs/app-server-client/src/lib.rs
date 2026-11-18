@@ -100,6 +100,7 @@ pub mod legacy_core {
     pub use codex_core::broker_removed_environment_keys;
     // #625: a key the broker holds still configures its provider.
     pub use codex_core::broker_holds_environment_key;
+    pub use codex_core::clear_provider_cooldown;
 
     pub mod config {
         pub use codex_core::config::*;

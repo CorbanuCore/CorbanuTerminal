@@ -253,6 +253,8 @@ mod plan_mode;
 #[path = "tests/plugin_catalog_tests.rs"]
 mod plugin_catalog;
 mod popups_and_settings;
+#[path = "tests/provider_cooldown_tests.rs"]
+mod provider_cooldown;
 mod refusal_diagnostics;
 mod review_mode;
 mod side;

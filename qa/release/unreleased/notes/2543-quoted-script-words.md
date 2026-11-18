@@ -1,0 +1,5 @@
+## Security
+
+Command rules can no longer be bypassed by quoting a word in a shell script (#2543, D553, D688): `bash -lc "'git' push"`, `"git" push`, `g'i't push`, `'/usr/bin/git' push` and `echo hi; 'git' push` are checked like `bash -lc 'git push'`. Scripts that are more than plain commands (redirections, substitutions, loops, functions) are now read for prompt and forbidden rules too, as are `dash -c` and `ksh -c` scripts. Where a command is only known once the script runs (`$cmd push`, `"$(echo git)" push`, `/usr/bin/gi? push`), or a shell gets a script rules cannot read (`bash -c '…' name`, `fish -c '…'`), the command asks for approval whenever a prompt or forbidden rule could match it; with no such rule, nothing changes. Allow rules still never approve a script that is not plain commands.
+
+On macOS and Windows, the built-in dangerous-command check now matches program names in any case (`RM -rf x`, `/bin/Rm -f x`, `SUDO rm -rf x`), as those systems run them (D692); the safe-command list is unchanged.
