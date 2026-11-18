@@ -4,8 +4,11 @@
 //! PowerShell allows. A command line it cannot read that way asks wherever
 //! a prompt or forbidden rule could match (as an unread wrapper does,
 //! #2519); `-File` is checked as its file and arguments, and asks too. The
-//! script itself is parsed in process here (#2569), so every script form
-//! reads without a trusted PowerShell.
+//! script itself is parsed in process here (#2569). Only the literal subset
+//! is fully readable; dynamic or unsupported scripts retain unread handling.
+
+#[path = "exec_policy_powershell_unread_tests.rs"]
+mod unread_tests;
 
 use super::*;
 use base64::Engine as _;
@@ -122,7 +125,13 @@ async fn parameters_and_abbreviations_are_read() {
     // PowerShell 7 too, with its own parameters.
     lines.extend([
         vec!["-wd", "C:\\", "-c", "git push"],
-        vec!["-WorkingDirectory", "C:\\", "-NoProfileLoadTime", "-c", "git push"],
+        vec![
+            "-WorkingDirectory",
+            "C:\\",
+            "-NoProfileLoadTime",
+            "-c",
+            "git push",
+        ],
         vec!["-cwa", "git push"],
     ]);
     for line in &lines {

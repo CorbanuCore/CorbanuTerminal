@@ -1,4 +1,5 @@
 use crate::command_safety::powershell_tree_sitter::try_parse_powershell_commands;
+use crate::powershell::extract_powershell_command;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use shlex::split as shlex_split;
@@ -26,19 +27,33 @@ fn is_dangerous_powershell(command: &[String]) -> bool {
     if !is_powershell_executable(exe) {
         return false;
     }
-    let Some(parsed) = parse_powershell_invocation(rest) else {
-        return false;
-    };
+    let mut normalized = command.to_vec();
+    normalized[0] = executable_basename(exe).unwrap_or_default();
+    if let Some((_, script)) = extract_powershell_command(&normalized)
+        && dangerous_script(&script)
+    {
+        return true;
+    }
+    // Preserve older warnings for invocation syntax the shared reader declines.
+    parse_powershell_invocation(rest).is_some_and(|parsed| {
+        parsed.script.as_deref().map_or_else(
+            || is_dangerous_powershell_words(&parsed.tokens),
+            dangerous_script,
+        )
+    })
+}
 
-    if let Some(script) = parsed.script
-        && let Some(commands) = try_parse_powershell_commands(script)
+fn dangerous_script(script: &str) -> bool {
+    if let Some(commands) = try_parse_powershell_commands(script)
         && powershell_commands_are_independent(script, &commands)
     {
         return commands
             .iter()
             .any(|words| is_dangerous_powershell_literal_words(words));
     }
-    is_dangerous_powershell_words(&parsed.tokens)
+    let tokens = shlex_split(script)
+        .unwrap_or_else(|| script.split_whitespace().map(str::to_owned).collect());
+    is_dangerous_powershell_words(&tokens)
 }
 
 /// Whether strictly lowered commands can be classified independently of the rest of the script.
@@ -433,12 +448,12 @@ fn is_browser_executable(name: &str) -> bool {
     )
 }
 
-struct ParsedPowershell<'a> {
+struct ParsedPowershell {
     tokens: Vec<String>,
-    script: Option<&'a str>,
+    script: Option<String>,
 }
 
-fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell<'_>> {
+fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell> {
     if args.is_empty() {
         return None;
     }
@@ -449,11 +464,9 @@ fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell<'_>> 
         let lower = arg.to_ascii_lowercase();
         match lower.as_str() {
             "-command" | "/command" | "-c" => {
-                let script = args.get(idx + 1)?;
-                if idx + 2 != args.len() {
-                    return None;
-                }
-                let tokens = shlex_split(script)?;
+                args.get(idx + 1)?;
+                let script = args[idx + 1..].join(" ");
+                let tokens = shlex_split(&script).unwrap_or_default();
                 return Some(ParsedPowershell {
                     tokens,
                     script: Some(script),
@@ -464,10 +477,10 @@ fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell<'_>> 
                     return None;
                 }
                 let (_, script) = arg.split_once(':')?;
-                let tokens = shlex_split(script)?;
+                let tokens = shlex_split(script).unwrap_or_default();
                 return Some(ParsedPowershell {
                     tokens,
-                    script: Some(script),
+                    script: Some(script.to_owned()),
                 });
             }
             "-nologo" | "-noprofile" | "-noninteractive" | "-mta" | "-sta" => {
@@ -488,6 +501,10 @@ fn parse_powershell_invocation(args: &[String]) -> Option<ParsedPowershell<'_>> 
 
     None
 }
+
+#[cfg(test)]
+#[path = "windows_powershell_dangerous_tests.rs"]
+mod powershell_script_tests;
 
 #[cfg(test)]
 mod tests {
