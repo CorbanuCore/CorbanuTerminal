@@ -179,6 +179,9 @@ mod winutil;
 #[cfg(target_os = "windows")]
 mod workspace_acl;
 
+#[cfg(target_os = "windows")]
+mod world_writable;
+
 pub mod credential_watch;
 mod deny_read_resolver;
 mod deny_read_targets;
