@@ -196,20 +196,40 @@ pub fn is_launch_env_name_allowed(name: &str) -> bool {
 /// form such as `user:pass@proxy:3128` as one of its whitespace-, comma- or
 /// semicolon-separated items (#2395).
 pub fn value_has_url_password(value: &str) -> bool {
-    value
-        .match_indices("://")
-        .any(|(index, _)| authority_has_password(&value[index + 3..]))
-        || value
-            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
-            .any(is_schemeless_url_with_password)
+    url_passwords(value).next().is_some()
 }
 
-/// The original PF-27-S02 rule, applied to the text after one `://`.
-fn authority_has_password(rest: &str) -> bool {
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    authority
-        .rsplit_once('@')
-        .is_some_and(|(userinfo, _)| userinfo.contains(':'))
+/// Every nonempty URL password in a value, including scheme-less proxy items.
+/// Passwords are borrowed verbatim: percent escapes are preserved, not decoded.
+/// Consumers registering redactions must apply their minimum-length policy to
+/// the decoded password as well; launch filtering deliberately catches even
+/// short passwords.
+pub fn url_passwords(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .match_indices("://")
+        .filter_map(|(index, _)| authority_password(&value[index + 3..]))
+        .chain(
+            value
+                .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+                .filter_map(schemeless_url_password),
+        )
+}
+
+/// Extract userinfo only, never a colon or at-sign in a URL path/query.
+fn authority_password(rest: &str) -> Option<&str> {
+    let authority = rest
+        .split(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#'))
+        .next()?;
+    // Commas and semicolons are legal in userinfo. They separate list items
+    // only after an at-sign, so a later scheme-less item cannot swallow this
+    // URL's password.
+    let at = authority.find('@')?;
+    let host_end = authority[at..]
+        .find([',', ';'])
+        .map_or(authority.len(), |offset| at + offset);
+    let (userinfo, _) = authority[..host_end].rsplit_once('@')?;
+    let (_, password) = userinfo.split_once(':')?;
+    (!password.is_empty()).then_some(password)
 }
 
 /// Prefixes written `prefix:name@host` that are not a user name: URI schemes
@@ -236,16 +256,12 @@ const OPAQUE_USER_SCHEMES: &[&str] = &[
 /// `user:pass@host[:port][/path]` with no scheme, as curl accepts for proxies.
 /// The shape is strict so that values without a password, emails, `git@host:repo`,
 /// image digests (`img:tag@sha256:...`) and package specs (`npm:pkg@1.2.3`) pass.
-fn is_schemeless_url_with_password(token: &str) -> bool {
+fn schemeless_url_password(token: &str) -> Option<&str> {
     let token = token.trim_matches(|c| matches!(c, '"' | '\'' | '(' | ')' | '<' | '>'));
-    let authority = token.split(['/', '?', '#']).next().unwrap_or_default();
-    let Some((userinfo, host_port)) = authority.rsplit_once('@') else {
-        return false;
-    };
-    let Some((user, password)) = userinfo.split_once(':') else {
-        return false;
-    };
-    !user.is_empty()
+    let authority = token.split(['/', '?', '#']).next()?;
+    let (userinfo, host_port) = authority.rsplit_once('@')?;
+    let (user, password) = userinfo.split_once(':')?;
+    (!user.is_empty()
         && !password.is_empty()
         && user
             .chars()
@@ -256,7 +272,8 @@ fn is_schemeless_url_with_password(token: &str) -> bool {
         && !OPAQUE_USER_SCHEMES
             .iter()
             .any(|scheme| user.eq_ignore_ascii_case(scheme))
-        && is_host_and_port(host_port)
+        && is_host_and_port(host_port))
+    .then_some(password)
 }
 
 /// RFC 3986 unreserved characters, sub-delims and `%` escapes, minus the

@@ -74,6 +74,57 @@ fn pf_27_s02_url_passwords_are_detected() {
 }
 
 #[test]
+fn issue_2401_extracts_every_url_password() {
+    let cases: &[(&str, &[&str])] = &[
+        (
+            "http://a:First-2401@one https://b:Second-2401@two/path",
+            &["First-2401", "Second-2401"],
+        ),
+        (
+            "https://public.example,user:Proxy-2401@proxy:3128;https://u:Last-2401@[::1]/",
+            &["Last-2401", "Proxy-2401"],
+        ),
+        (
+            "user:Raw%40Pass-2401@[2001:db8::1]:3128 https://u:Next%3aPass-2401@host",
+            &["Next%3aPass-2401", "Raw%40Pass-2401"],
+        ),
+        (
+            "https://example.com/?next=http://u:Nested-2401@proxy",
+            &["Nested-2401"],
+        ),
+        (
+            "http://u:First,Part;2401@host;u:Second-2401@proxy",
+            &["First,Part;2401", "Second-2401"],
+        ),
+        ("user:p@ss@proxy", &["p@ss"]),
+        ("http://u:p@host", &["p"]),
+        ("http://user:@host user:@proxy http://user:   @host", &[]),
+        ("https://user@host user@[::1]:3128", &[]),
+        (
+            "status: ready contact: alice@example.com git@host:repo",
+            &[],
+        ),
+        ("mailto:alice@example.com npm:package@latest", &[]),
+        ("https://host/path:word@other", &[]),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(
+            url_passwords(value).collect::<Vec<_>>(),
+            *expected,
+            "{value}"
+        );
+        assert_eq!(
+            value_has_url_password(value),
+            !expected.is_empty(),
+            "{value}"
+        );
+        let mut env = HashMap::from([("HTTP_PROXY".to_string(), (*value).to_string())]);
+        retain_launch_env(&mut env, |_| false);
+        assert_eq!(env.is_empty(), !expected.is_empty(), "{value}");
+    }
+}
+
+#[test]
 fn pf_27_s02_password_in_a_later_url_is_detected() {
     for value in [
         "a=http://x http://u:p@y",
@@ -123,9 +174,8 @@ fn pf_27_s02_user_without_password_is_kept() {
             "user@host",
             "user@proxy:3128",
             "http://user@proxy:3128/ user@other:8080",
-            // Empty password: kept here, while `http://user:@proxy` stays
-            // flagged by the original `://` rule (stricter-only).
             "user:@proxy:3128",
+            "http://user:@proxy:3128",
         ],
     );
 }

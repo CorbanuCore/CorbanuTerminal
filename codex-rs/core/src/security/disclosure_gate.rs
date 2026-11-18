@@ -916,26 +916,31 @@ where
         {
             values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
         }
-        if let Some(password) = url_password(value) {
-            values.push((format!("env:{name}:password"), password));
+        for password in secretless_launch::url_passwords(value) {
+            // Judge the decoded value so escapes cannot turn a short word or
+            // whitespace into a plausible credential. Keep both spellings:
+            // tools can echo the URL verbatim or print its decoded password.
+            let decoded = Zeroizing::new(
+                urlencoding::decode(password)
+                    .map(std::borrow::Cow::into_owned)
+                    .unwrap_or_else(|_| password.to_string()),
+            );
+            if decoded.trim().is_empty() || !is_plausible_secret(&decoded) {
+                continue;
+            }
+            values.push((
+                format!("env:{name}:password"),
+                Zeroizing::new(password.to_string()),
+            ));
+            if decoded.as_str() != password {
+                values.push((format!("env:{name}:password"), decoded));
+            }
         }
         for (param, secret) in url_query_secrets(value) {
             values.push((format!("env:{name}:{param}"), secret));
         }
     }
     values
-}
-
-fn url_password(value: &str) -> Option<Zeroizing<String>> {
-    if !secretless_launch::value_has_url_password(value) {
-        return None;
-    }
-    let (_, rest) = value.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
-    let (userinfo, _) = authority.rsplit_once('@')?;
-    let (_, password) = userinfo.split_once(':')?;
-    let password = password.trim();
-    is_plausible_secret(password).then(|| Zeroizing::new(password.to_string()))
 }
 
 /// Secret-named query parameters of a URL (`?token=`, `?api_key=`, `?sig=`).

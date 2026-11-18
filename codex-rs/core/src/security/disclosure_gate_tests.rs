@@ -58,6 +58,106 @@ fn pf_28_s01_env_values_are_credentials_not_session_plumbing() {
 }
 
 #[test]
+fn issue_2401_url_passwords_are_redacted_in_later_output() {
+    let vars = [
+        (
+            "PROXY_LIST",
+            "https://public.example,http://u:First-2401@one https://v:Second-2401@two",
+        ),
+        (
+            "PROXY_LIST_V6",
+            "u:Proxy-2401@[2001:db8::1]:3128;http://v:Last-2401@[::1]/",
+        ),
+        (
+            "ENCODED_PROXY",
+            "u:Raw%40Pass-2401@proxy https://v:Next%3aPass-2401@host",
+        ),
+    ]
+    .map(|(name, value)| (OsString::from(name), OsString::from(value)));
+    let values = env_values(vars);
+    assert_eq!(
+        values
+            .iter()
+            .map(|(_, value)| value.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "First-2401",
+            "Second-2401",
+            "Last-2401",
+            "Proxy-2401",
+            "Next%3aPass-2401",
+            "Next:Pass-2401",
+            "Raw%40Pass-2401",
+            "Raw@Pass-2401",
+        ],
+    );
+    let gate = OutputGate::new();
+    let entries: Vec<_> = values
+        .iter()
+        .map(|(label, value)| (label.as_str(), SecretClass::Operational, value.as_str()))
+        .collect();
+    gate.register_all(&entries).expect("register URL passwords");
+    gate.arm().expect("arm");
+    for (password, name) in [
+        ("First-2401", "PROXY_LIST"),
+        ("Second-2401", "PROXY_LIST"),
+        ("Proxy-2401", "PROXY_LIST_V6"),
+        ("Last-2401", "PROXY_LIST_V6"),
+        ("Raw%40Pass-2401", "ENCODED_PROXY"),
+        ("Raw@Pass-2401", "ENCODED_PROXY"),
+        ("Next%3aPass-2401", "ENCODED_PROXY"),
+        ("Next:Pass-2401", "ENCODED_PROXY"),
+    ] {
+        let output = EventMsg::Error(ErrorEvent {
+            message: format!("tool later printed {password}"),
+            codex_error_info: None,
+        });
+        assert_eq!(
+            serde_json::to_value(present(&gate, output)).expect("serialize output"),
+            serde_json::json!({
+                "type": "error",
+                "message": format!("tool later printed [REDACTED:env:{name}:password]"),
+                "codex_error_info": null,
+            }),
+        );
+    }
+}
+
+#[test]
+fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_redacted() {
+    let vars = [
+        (
+            "SETTING",
+            "status: ready contact: alice@example.com git@host:repo",
+        ),
+        (
+            "URLS",
+            "http://user@host user@[::1]:3128 mailto:alice@example.com",
+        ),
+        ("EMPTY", "http://u:@host u:@proxy http://u:   @host"),
+        ("BLANK", "u:%20%20%20%20%20%20%20%20@proxy"),
+        (
+            "SHORT",
+            "http://u:Word-12@host u:%57%6f%72%64%2d%31%32@proxy",
+        ),
+        ("ORDINARY", "http://u:postgres@host user:ordinary@proxy"),
+    ]
+    .map(|(name, value)| (OsString::from(name), OsString::from(value)));
+    assert!(env_values(vars).is_empty());
+    // Eight decoded bytes and mixed character classes meet the existing
+    // environment-seeding threshold; encoded length alone must not count.
+    let vars = [("PROXY", "u:%57%6f%72%64%2d%31%32%33@proxy")]
+        .map(|(name, value)| (OsString::from(name), OsString::from(value)));
+    assert_eq!(
+        env_values(vars)
+            .iter()
+            .map(|(_, value)| value.as_str())
+            .collect::<Vec<_>>(),
+        vec!["%57%6f%72%64%2d%31%32%33", "Word-123"],
+    );
+}
+
+#[test]
 fn pf_28_s01_ordinary_settings_are_not_seeded() {
     let vars = [
         ("GIT_AUTHOR_NAME", "Pat Example"),
