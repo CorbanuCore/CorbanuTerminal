@@ -12,6 +12,42 @@ use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;
 
+/// Match the protected user-owned roots used by native sandbox tests (#158).
+/// Runner temp ACLs may already grant writes to ordinary users, which would
+/// make a parent canary writable independently of the sandbox's grants.
+#[cfg(windows)]
+fn protect_temp_fixture_root(root: &std::path::Path) -> Result<()> {
+    let system32 =
+        std::path::PathBuf::from(std::env::var_os("SystemRoot").context("SystemRoot is missing")?)
+            .join("System32");
+    let output = std::process::Command::new(system32.join("whoami.exe"))
+        .arg("/user")
+        .output()?;
+    anyhow::ensure!(output.status.success(), "fixture user SID lookup failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let sid = stdout
+        .split_whitespace()
+        .find(|token| token.starts_with("S-1-"))
+        .context("fixture user SID was not reported")?;
+    let output = std::process::Command::new(system32.join("icacls.exe"))
+        .arg(root)
+        .args([
+            "/inheritance:r",
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)F",
+            "*S-1-5-32-544:(OI)(CI)F",
+        ])
+        .arg(format!("*{sid}:(OI)(CI)F"))
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "protect fixture root: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
 /// Windows alias casing must not prevent fallback when the primary runtime is absent from PATH.
 #[test_case::test_case("pwsh.exe"; "lowercase_pwsh")]
 #[test_case::test_case("PWSH.exe"; "uppercase_pwsh")]
@@ -119,6 +155,8 @@ async fn tmpdir_uses_command_environment_over_rpc(
         None
     };
     let root = TempDir::new()?;
+    #[cfg(windows)]
+    protect_temp_fixture_root(root.path())?;
     let command_temp = root.path().join("command temp");
     let server_temp = root.path().join("server temp");
     std::fs::create_dir(&command_temp)?;
