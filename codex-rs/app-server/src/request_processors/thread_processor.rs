@@ -6,6 +6,7 @@ mod daemon_snapshot;
 
 mod workspace_switching;
 
+use super::fork_windows_sandbox::pin_fork_windows_sandbox;
 use super::persisted_resume_settings::PersistedResumeSettings;
 use super::persisted_resume_settings::latest_owned_thread_settings;
 use super::persisted_resume_settings::latest_persisted_model_settings;
@@ -6083,7 +6084,8 @@ impl ThreadRequestProcessor {
         };
         let history_cwd = Some(source_thread.cwd.clone());
 
-        // Persist Windows sandbox mode.
+        // Persist Windows sandbox mode; D721: a stricter one the request
+        // asked for is kept.
         let mut cli_overrides = cli_overrides.unwrap_or_default();
         if cfg!(windows) && !experimental_prediction_mode {
             let mode = self.config.permissions.windows_sandbox_mode.or_else(|| {
@@ -6096,7 +6098,7 @@ impl ThreadRequestProcessor {
                 }
             });
             if let Some(mode) = mode {
-                cli_overrides.insert("windows.sandbox".to_string(), serde_json::json!(mode));
+                pin_fork_windows_sandbox(&mut cli_overrides, mode);
             }
         }
         let request_overrides = if cli_overrides.is_empty() {

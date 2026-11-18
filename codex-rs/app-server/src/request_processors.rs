@@ -559,6 +559,7 @@ mod feedback_doctor_report;
 mod feedback_processor;
 mod feedback_rollout_history;
 mod feedback_thread_index;
+mod fork_windows_sandbox;
 mod fs_processor;
 mod git_processor;
 mod initialize_processor;
