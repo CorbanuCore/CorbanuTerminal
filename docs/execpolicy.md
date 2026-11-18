@@ -136,11 +136,11 @@ exact-match precedence and path resolution.
 `xargs` is checked both as a launcher and for the command it runs. With a
 forbidden rule for `git push`:
 
-| Invocation | Command-rule result |
-| --- | --- |
-| `xargs -n1 git push` | Refused: the fixed words already match. |
-| `xargs git` | Asks: input could append `push`. |
-| `xargs -I{} git {}` | Asks: input could replace `{}` with `push`. |
+| Invocation           | Command-rule result                         |
+| -------------------- | ------------------------------------------- |
+| `xargs -n1 git push` | Refused: the fixed words already match.     |
+| `xargs git`          | Asks: input could append `push`.            |
+| `xargs -I{} git {}`  | Asks: input could replace `{}` with `push`. |
 
 If input could complete a forbidden rule, sync requires a fresh human decision
 (`prompt_user`); fixed words already matching that rule are refused. Allow rules
