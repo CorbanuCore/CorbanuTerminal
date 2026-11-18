@@ -159,6 +159,22 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertIn("--config=windows-native-tests", args)
             self.assertIn("--keep_going", args)
             self.assertNotIn("--config=ci-windows", args)
+            self.assertIn("--disk_cache=", args)
+
+            env["RUNNER_OS"] = "Linux"
+            result = subprocess.run(
+                ["bash", str(script), "--", "test", "--", "//..."],
+                cwd=script.parents[2],
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = json.loads(capture_path.read_text(encoding="utf-8"))
+            self.assertIn("--disk_cache=", args)
+            self.assertIn("--keep_going", args)
+            self.assertNotIn("--config=windows-native-tests", args)
 
     def run_with_exit_codes(
         self, exit_codes: list[int]
