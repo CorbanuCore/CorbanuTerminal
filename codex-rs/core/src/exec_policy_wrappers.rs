@@ -417,6 +417,7 @@ pub(crate) fn check(
                         command,
                         depth: depth + 1,
                         restrict_only: true,
+                        stdin: CommandStdin::Inherited,
                     }));
                 }
             }
