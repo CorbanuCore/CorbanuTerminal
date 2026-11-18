@@ -146,7 +146,7 @@ fn write_http_response(stream: &mut TcpStream, status: &str) -> std::io::Result<
     stream.flush()
 }
 
-/// Serves the collector until a request for `expected_path` has been captured.
+/// Serves the collector until `expected_requests` for `expected_path` are captured.
 /// The exporter sends it on shutdown, which can take several seconds on a
 /// loaded runner, so this doesn't stop at a short fixed window (it once had
 /// 3 s, which Windows CI overran; #691). The long deadline only bounds a run
@@ -154,13 +154,18 @@ fn write_http_response(stream: &mut TcpStream, status: &str) -> std::io::Result<
 fn spawn_collector(
     listener: TcpListener,
     expected_path: &'static str,
+    expected_requests: usize,
 ) -> thread::JoinHandle<Vec<CapturedRequest>> {
     thread::spawn(move || {
         let mut captured: Vec<CapturedRequest> = Vec::new();
         let deadline = Instant::now() + COLLECTOR_DEADLINE;
 
         while Instant::now() < deadline
-            && !captured.iter().any(|request| request.path == expected_path)
+            && captured
+                .iter()
+                .filter(|request| request.path == expected_path)
+                .count()
+                < expected_requests
         {
             match listener.accept() {
                 Ok((mut stream, _)) => {
@@ -227,7 +232,8 @@ fn otlp_http_exporter_honors_cumulative_temporality_env() -> Result<()> {
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
 
-    let server = spawn_collector(listener, "/v1/metrics");
+    // Cumulative metrics export on both force_flush and shutdown; serve both.
+    let server = spawn_collector(listener, "/v1/metrics", /*expected_requests*/ 2);
 
     let metrics = MetricsClient::new(MetricsConfig::otlp(
         "test",
@@ -392,7 +398,7 @@ fn otlp_http_exporter_sends_logs_to_collector()
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
 
-    let server = spawn_collector(listener, "/v1/logs");
+    let server = spawn_collector(listener, "/v1/logs", /*expected_requests*/ 1);
 
     let otel = OtelProvider::try_new(&OtelSettings {
         http_client_factory: HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
@@ -491,7 +497,7 @@ fn otlp_http_exporter_sends_traces_to_collector()
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
 
-    let server = spawn_collector(listener, "/v1/traces");
+    let server = spawn_collector(listener, "/v1/traces", /*expected_requests*/ 1);
 
     let otel = OtelProvider::try_new(&OtelSettings {
         http_client_factory: HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
@@ -803,7 +809,7 @@ fn otlp_http_exporter_sends_traces_to_collector_in_current_thread_tokio_runtime(
     let addr = listener.local_addr().expect("local_addr");
     listener.set_nonblocking(true).expect("set_nonblocking");
 
-    let server = spawn_collector(listener, "/v1/traces");
+    let server = spawn_collector(listener, "/v1/traces", /*expected_requests*/ 1);
 
     let (runtime_result_tx, runtime_result_rx) = mpsc::channel::<std::result::Result<(), String>>();
     let runtime_thread = thread::spawn(move || {
