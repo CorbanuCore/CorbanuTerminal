@@ -7,4 +7,6 @@ codex_rust_crate(
         "src/destination_contract.rs",
         "tests/contract-v1.json",
     ],
+    # The bounded 3 MiB/eight-length credential scan exceeds 300s on native Windows.
+    unit_test_timeout = "long",
 )

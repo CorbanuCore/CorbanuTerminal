@@ -17,7 +17,10 @@ static FIXTURE: OnceLock<Box<CredentialBuilder>> = OnceLock::new();
 /// Install an in-memory or fixture-file builder, once in an isolated child process.
 /// Never pass an OS credential builder. Release builds cannot install fixtures.
 pub fn install(builder: Box<CredentialBuilder>) {
-    require_isolated_debug_lane().expect("credential fixture requires the isolated debug lane");
+    assert!(
+        require_isolated_debug_lane().is_ok(),
+        "credential fixture requires the isolated debug lane"
+    );
     assert!(
         FIXTURE.set(builder).is_ok(),
         "one credential fixture per process"
