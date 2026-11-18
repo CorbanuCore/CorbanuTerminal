@@ -27,7 +27,8 @@ This is not qualification of the new production models in gate PR #2571.
 | --- | --- | --- | --- | --- |
 | macOS arm64 | `5fd571822bef255237f963c7bc18286a9110f58b` | Four checks pass, 11.28s | Two `exec_command` calls | External Seatbelt; candidate native sandbox disabled for this fixture |
 | Linux x64 | `d3fe32513ee65deb397fa228c786212fb5afacd3` | Four checks pass, 9.55s | Two `exec_command` calls | Non-root Docker; candidate native sandbox disabled for this fixture |
-| Native Windows x64 | `5fd571822bef255237f963c7bc18286a9110f58b` | Four checks pass, 14.58s | Two `shell_command` calls | Candidate native non-admin Windows sandbox |
+| Native Windows x64, High launcher | `5fd571822bef255237f963c7bc18286a9110f58b` | Four checks pass, 14.58s | Two `shell_command` calls | Candidate non-admin sandbox mode; launcher was High integrity |
+| Native Windows x64, Medium launcher | same source and binary | **Fail**, 240.39s cutoff | File-read commands fail in private-registry labeling | [Measured Medium token and finding](WINDOWS-MEDIUM-FINDING.md) |
 
 The preparation source adds only notes/evidence to the main baseline. All
 executables still report 0.1.48; exact binary hashes are in the raw results.
@@ -46,11 +47,13 @@ executables still report 0.1.48; exact binary hashes are in the raw results.
   loopback SSH forward; no provider credentials are present. Docker inspection
   is preserved. This is not native bubblewrap qualification.
 - Windows: private profile and OS-home paths, debug native-keyring guard,
-  non-admin sandbox selected, no UAC/elevation. The first attempt lacked private
+  non-admin sandbox selected, no UAC action. The first attempt lacked private
   AppData directories; native commands failed with `no LocalAppData folder` and
   the task reached its cutoff. The replay created those directories and checked
   the Windows known-folder lookup stayed under the disposable OS home before
-  starting the TUI. Shell commands then read and wrote the fixture successfully.
+  starting the TUI. Shell commands then read and wrote the fixture successfully
+  from the High-integrity SSH launcher. A separate measured Medium-token replay
+  subsequently failed at private-registry labeling; see the finding above.
 - Windows and Linux SSH forwards bound only remote loopback and were closed
   after their cases. The source model server was left unchanged.
 

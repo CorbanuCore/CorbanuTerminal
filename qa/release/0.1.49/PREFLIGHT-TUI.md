@@ -26,7 +26,9 @@ targets and `-j8`, sequentially: macOS 4m19s, native Windows 3m42s.
 - Windows: native MSVC `corbanu.exe` under the existing MSYS2 tmux harness,
   started over SSH. Private profile, USERPROFILE/APPDATA/LOCALAPPDATA/TEMP,
   clean environment and debug keyring denial. Fresh onboarding selected the
-  non-admin sandbox. No UAC action or elevated-sandbox claim; the active desktop
+  non-admin sandbox. The SSH launcher was subsequently measured at High
+  integrity; a [Medium-token tool replay failed](WINDOWS-MEDIUM-FINDING.md).
+  No UAC action or default/elevated-sandbox-mode claim; the active desktop
   session was observed in preflight but this run was not a desktop GUI run.
 - Both: 140x45 PTY, actual text and separate Enter events, trace logging to
   private paths, local mock Responses endpoint, no real credentials. `/status`,

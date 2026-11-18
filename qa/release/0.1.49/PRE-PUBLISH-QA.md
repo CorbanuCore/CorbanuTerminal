@@ -63,7 +63,9 @@ literal head SHA with `--merge --match-head-commit`.
 Current-main [native harness preflight](PREFLIGHT-TUI.md) passed the exercised
 macOS and Windows prompt/cancel/recovery flows. Its failed navigation/onboarding
 attempts are preserved. [Live local-model fixture preflight](LIVE-TUI-PREFLIGHT.md)
-also passed on macOS, Linux and native Windows, with the stated sandbox limits.
+passed on macOS, Linux and native Windows from a High-integrity launcher, with
+the stated sandbox limits. The subsequent [Windows Medium-token case failed](WINDOWS-MEDIUM-FINDING.md)
+at private-registry labeling; it is not counted as qualified.
 Canonical TensorCash/Isometric URLs were unavailable to this executor and no
 local overrides were configured. Final release-branch replays remain pending.
 
