@@ -556,17 +556,16 @@ fn file_uri_round_trips_literal_percent_characters() {
 #[cfg(windows)]
 #[test]
 fn host_windows_paths_round_trip_through_file_uris() {
+    // Sync-only edit (D537 (b)): upstream's `\\LOCALHOST` spellings moved to
+    // `localhost_unc_spellings_are_refused_on_conversion`.
     for native in [
         r"C:\temp\test-file.txt",
         r"C:/temp/test-file.txt",
         r"C:\temp/test-file.txt",
         r"\\127.0.0.1\c$\temp\test-file.txt",
         r"//127.0.0.1/c$/temp/test-file.txt",
-        r"\\LOCALHOST\c$\temp\test-file.txt",
-        r"//LOCALHOST/c$/temp/test-file.txt",
         r"\\.\C:\temp\test-file.txt",
         r"\\?\C:\temp\test-file.txt",
-        r"\\.\UNC\LOCALHOST\c$\temp\test-file.txt",
         r"\\?\UNC\server\share\temp\test-file.txt",
         r"\\.\COM1",
         r"\\?\Volume{00000000-0000-0000-0000-000000000000}\file.txt",
@@ -619,6 +618,9 @@ fn localhost_unc_spellings_are_refused_on_conversion() {
         r"\\LocalHost\share\src\main.rs",
         r"\\?\UNC\localhost\share\report.pdf",
         r"\\.\UNC\LOCALHOST\share\report.pdf",
+        r"\\LOCALHOST\c$\temp\test-file.txt",
+        r"//LOCALHOST/c$/temp/test-file.txt",
+        r"\\.\UNC\LOCALHOST\c$\temp\test-file.txt",
     ] {
         let path = AbsolutePathBuf::from_absolute_path_checked(native).expect(native);
         let err = PathUri::from_abs_path(&path)
@@ -648,6 +650,8 @@ fn localhost_unc_classification() {
         r"\\?\UNC\localhost\share",
         r"\\.\unc\LocalHost\share",
         r"\\localhost",
+        "//localhost/share",
+        r"//?/UNC/localhost/share",
     ] {
         assert!(crate::is_windows_localhost_unc_path(path), "{path}");
     }

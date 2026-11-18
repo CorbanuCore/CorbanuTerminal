@@ -336,7 +336,11 @@ async fn file_system_operations_refuse_localhost_unc_paths(
     assert_eq!(
         context
             .file_system
-            .read_file(&PathUri::from_host_native_path(&existing)?, read, /*sandbox*/ None)
+            .read_file(
+                &PathUri::from_host_native_path(&existing)?,
+                read,
+                /*sandbox*/ None
+            )
             .await?,
         b"unchanged"
     );
@@ -607,6 +611,7 @@ async fn file_system_elevated_relative_read_denial_uses_policy_cwd(
         FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "files/*.env".to_string(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ),
