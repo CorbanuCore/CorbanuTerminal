@@ -41,15 +41,22 @@ pub(crate) fn powershell_restrictive_prefixes(script: &str) -> Vec<Vec<String>> 
         return Vec::new();
     }
     let mut nodes = Vec::new();
-    collect_command_nodes(tree.root_node(), &mut nodes);
+    collect_nested_command_nodes(tree.root_node(), &mut nodes);
     nodes
         .into_iter()
         .filter_map(|node| {
             let text = node.utf8_text(script.as_bytes()).ok()?;
-            // The invocation operator executes the following literal name; a
-            // dynamic name still fails before any prefix can be recovered.
+            // The call (`&`) and dot-source (`. `) operators execute the
+            // following literal name; a dynamic name still fails before any
+            // prefix can be recovered. `.\x` is a path, not an operator.
             let text = text.trim_start();
-            let text = text.strip_prefix('&').map_or(text, str::trim_start);
+            let text = text
+                .strip_prefix('&')
+                .or_else(|| {
+                    text.strip_prefix('.')
+                        .filter(|rest| rest.starts_with(char::is_whitespace))
+                })
+                .map_or(text, str::trim_start);
             lower_command_text_with_prefix(text, true).ok()
         })
         .collect()
@@ -123,6 +130,23 @@ fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<String>>, String> {
         return Err("empty lowered command or word".to_string());
     }
     Ok(commands)
+}
+
+/// Every `command` node, including commands nested in another command's
+/// arguments (script blocks, `(...)`, `$(...)`). Only for restrictive
+/// prefixes, where collecting more can only add restrictions.
+fn collect_nested_command_nodes<'tree>(root: Node<'tree>, commands: &mut Vec<Node<'tree>>) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if node.kind() == "command" {
+            commands.push(node);
+        }
+        for child_index in (0..node.named_child_count()).rev() {
+            if let Some(child) = node.named_child(child_index) {
+                stack.push(child);
+            }
+        }
+    }
 }
 
 fn collect_command_nodes<'tree>(root: Node<'tree>, commands: &mut Vec<Node<'tree>>) {
@@ -365,6 +389,14 @@ fn lower_command_text_with_prefix(
             index += 1;
         }
         if index == chars.len() || chars[index] == '#' {
+            break;
+        }
+        // `--%` stops PowerShell parsing; what follows is passed verbatim
+        // (with `%VAR%` expanded), so it is not part of a known prefix.
+        if partial
+            && chars[index..].starts_with(&['-', '-', '%'])
+            && chars.get(index + 3).is_none_or(|ch| ch.is_whitespace())
+        {
             break;
         }
         let lowered = (|| {
