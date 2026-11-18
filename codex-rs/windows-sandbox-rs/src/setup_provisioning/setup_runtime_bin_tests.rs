@@ -19,6 +19,7 @@ use windows_sys::Win32::Security::PROTECTED_DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::Security::SetFileSecurityW;
 use windows_sys::Win32::Storage::FileSystem::DELETE;
 use windows_sys::Win32::Storage::FileSystem::FILE_APPEND_DATA;
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_EXECUTE;
 use windows_sys::Win32::Storage::FileSystem::FILE_GENERIC_READ;
 use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
@@ -230,14 +231,17 @@ fn repairs_children_when_runtime_root_already_has_read_execute_access() {
 }
 
 #[test]
-fn runtime_paths_include_desktop_parent_and_primary_runtime_roots() {
+/// D611 (sync-only edit): main's narrower roots, not upstream's whole
+/// `OpenAI\Codex` folder.
+fn runtime_paths_include_codex_bin_runtimes_and_primary_runtime_roots() {
     let local_app_data = PathBuf::from(r"C:\Users\user\AppData\Local");
     let user_profile = PathBuf::from(r"C:\Users\user");
 
     assert_eq!(
         runtime_paths(Some(local_app_data), Some(user_profile)),
         vec![
-            PathBuf::from(r"C:\Users\user\AppData\Local\OpenAI\Codex"),
+            PathBuf::from(r"C:\Users\user\AppData\Local\OpenAI\Codex\bin"),
+            PathBuf::from(r"C:\Users\user\AppData\Local\OpenAI\Codex\runtimes"),
             PathBuf::from(r"C:\Users\user\.cache\codex-runtimes"),
         ]
     );
@@ -251,4 +255,87 @@ fn primary_runtime_path_does_not_depend_on_local_app_data() {
         runtime_paths(/*local_app_data*/ None, Some(user_profile)),
         vec![PathBuf::from(r"C:\Users\user\.cache\codex-runtimes")]
     );
+}
+
+type ListingHook = Box<dyn FnMut(&std::path::Path)>;
+
+thread_local! {
+    static AFTER_LISTING: std::cell::RefCell<Option<ListingHook>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Called by the walk after it lists a directory's entries, before it opens
+/// them: where a racing process could swap a folder for a link.
+pub(super) fn after_listing(path: &std::path::Path) {
+    AFTER_LISTING.with(|hook| {
+        if let Some(hook) = hook.borrow_mut().as_mut() {
+            hook(path);
+        }
+    });
+}
+
+/// D611: a runtime folder is swapped for a junction to an outside folder
+/// after the walk listed it. Its entries are opened through the folder the
+/// walk already holds, so the grant lands on the real (moved) folder's
+/// children and never on the junction's target.
+#[test]
+fn d611_runtime_repair_does_not_follow_a_folder_swapped_for_a_junction_mid_walk() {
+    let tmp = tempfile::tempdir().expect("temp directory");
+    let runtime = tmp.path().join("runtimes");
+    let node = runtime.join("node");
+    fs::create_dir_all(node.join("bin")).expect("runtime tree");
+    let moved = runtime.join("node-moved");
+    let outside = tmp.path().join("outside");
+    fs::create_dir_all(outside.join("bin")).expect("outside tree");
+    fs::write(outside.join("bin").join("private.js"), b"outside").expect("outside file");
+    let sandbox_sid = LocalSid::from_string("S-1-5-21-10-20-30-41").expect("test SID");
+    let readable = |path: &std::path::Path| {
+        path_mask_allows(
+            path,
+            &[sandbox_sid.as_ptr()],
+            FILE_GENERIC_READ | FILE_GENERIC_EXECUTE,
+            /*require_all_bits*/ false,
+        )
+        .expect("read ACL")
+    };
+    assert!(
+        !readable(&outside.join("bin")),
+        "control: outside starts unreadable"
+    );
+
+    let swap_from = node.clone();
+    let (swap_moved, swap_target) = (moved.clone(), outside.clone());
+    AFTER_LISTING.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move |listed| {
+            if listed == swap_from.as_path() {
+                fs::rename(&swap_from, &swap_moved).expect("move the listed folder away");
+                let output = std::process::Command::new("cmd")
+                    .args(["/C", "mklink", "/J"])
+                    .arg(&swap_from)
+                    .arg(&swap_target)
+                    .output()
+                    .expect("create junction");
+                assert!(output.status.success(), "mklink failed: {output:?}");
+            }
+        }));
+    });
+    let result = ensure_runtime_tree_readable(&runtime, sandbox_sid.as_ptr());
+    AFTER_LISTING.with(|hook| hook.borrow_mut().take());
+    result.expect("repair runtimes");
+
+    assert!(
+        std::os::windows::fs::MetadataExt::file_attributes(
+            &std::fs::symlink_metadata(&node).expect("swapped entry")
+        ) & FILE_ATTRIBUTE_REPARSE_POINT
+            != 0,
+        "control: the folder was swapped for a junction"
+    );
+    for path in [outside.join("bin"), outside.join("bin").join("private.js")] {
+        assert!(!readable(&path), "{} got the grant", path.display());
+    }
+    assert!(
+        readable(&moved.join("bin")),
+        "the real folder's child keeps its grant"
+    );
+    fs::remove_dir(&node).expect("remove junction");
 }

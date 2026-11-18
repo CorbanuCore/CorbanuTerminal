@@ -831,10 +831,13 @@ pub unsafe fn ensure_allow_mask_aces_with_inheritance(
 }
 
 /// Ensure read/execute grants without replacing existing entries or overriding denies.
-/// Returns true if any ACE was added.
+/// Returns true if any ACE was added. D611: production grants go through
+/// [`grant_read_execute_aces_to_handle`]; upstream's long-path tests still
+/// use this path form.
 ///
 /// # Safety
 /// Caller must pass valid SID pointers and an existing path.
+#[cfg(test)]
 pub(crate) unsafe fn grant_read_execute_aces(
     path: &Path,
     sids: &[*mut c_void],
@@ -848,6 +851,111 @@ pub(crate) unsafe fn grant_read_execute_aces(
         GRANT_ACCESS,
         inheritance,
     )
+}
+
+/// D611: ensure read/execute grants through an already-open handle, so the
+/// entries land on the object the handle names whatever its path now resolves
+/// to. Existing entries and denies are kept. Returns true if any ACE was added.
+///
+/// # Safety
+/// Caller must pass valid SID pointers and a handle opened with `READ_CONTROL`
+/// and `WRITE_DAC`.
+pub(crate) unsafe fn grant_read_execute_aces_to_handle(
+    handle: HANDLE,
+    sids: &[*mut c_void],
+    inheritance: u32,
+) -> Result<bool> {
+    let allow_mask = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
+    let (p_dacl, p_sd) = security_info(handle)?;
+    let mut entries: Vec<EXPLICIT_ACCESS_W> = Vec::new();
+    for sid in sids {
+        // As in `ensure_allow_mask_aces_with_inheritance_impl`: a new allow can
+        // outrank another trustee's inherited deny, so keep every deny.
+        if dacl_has_deny_mask(
+            p_dacl,
+            DenyAceScope::Any,
+            allow_mask
+                | GENERIC_READ_MASK
+                | GENERIC_WRITE_MASK
+                | GENERIC_EXECUTE_MASK
+                | GENERIC_ALL_MASK,
+        ) || !dacl_allow_mask_needs_refresh(p_dacl, *sid, allow_mask, /*disallow_mask*/ 0)
+            || inheritance == 0 && p_dacl.is_null()
+        {
+            continue;
+        }
+        entries.push(EXPLICIT_ACCESS_W {
+            grfAccessPermissions: allow_mask,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: inheritance,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: *sid as *mut u16,
+            },
+        });
+    }
+    let mut p_new_dacl: *mut ACL = std::ptr::null_mut();
+    let result = (|| -> Result<bool> {
+        if entries.is_empty() {
+            return Ok(false);
+        }
+        let code = SetEntriesInAclW(
+            entries.len() as u32,
+            entries.as_ptr(),
+            p_dacl,
+            &mut p_new_dacl,
+        );
+        if code != ERROR_SUCCESS {
+            return Err(anyhow!("SetEntriesInAclW failed: {code}"));
+        }
+        let code = SetSecurityInfo(
+            handle,
+            /*objecttype*/ 1,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            p_new_dacl,
+            std::ptr::null_mut(),
+        );
+        if code != ERROR_SUCCESS {
+            return Err(anyhow!("SetSecurityInfo failed: {code}"));
+        }
+        Ok(true)
+    })();
+    if !p_new_dacl.is_null() {
+        LocalFree(p_new_dacl as HLOCAL);
+    }
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    result
+}
+
+/// [`path_mask_allows`] for the object an open handle names (D611).
+///
+/// # Safety
+/// Caller must pass valid SID pointers and a handle opened with `READ_CONTROL`.
+pub(crate) unsafe fn handle_mask_allows(
+    handle: HANDLE,
+    psids: &[*mut c_void],
+    desired_mask: u32,
+    require_all_bits: bool,
+) -> Result<bool> {
+    let (p_dacl, p_sd) = security_info(handle)?;
+    let allows = dacl_mask_allows_with_scope(
+        p_dacl,
+        psids,
+        desired_mask,
+        require_all_bits,
+        AceScope::Effective,
+    );
+    if !p_sd.is_null() {
+        LocalFree(p_sd as HLOCAL);
+    }
+    Ok(allows)
 }
 
 /// Ensure all provided SIDs have an allow ACE with the requested mask on the path.
