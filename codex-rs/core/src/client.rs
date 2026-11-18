@@ -1435,6 +1435,15 @@ impl ModelClient {
         }
     }
 
+    /// D624 (a): whether content without standing has reached this session, at any level. A
+    /// poisoned ingress lock counts as seen (fail closed).
+    pub(crate) fn untrusted_content_seen(&self) -> bool {
+        match self.ingress_items.lock() {
+            Ok(ingress) => ingress.taint_generation() > 0,
+            Err(_) => true,
+        }
+    }
+
     /// PF-23-S01: see `NativeIngress::note_unrecorded_input`.
     pub(crate) fn note_unrecorded_input_for_taint(&self) {
         if let Ok(mut ingress) = self.ingress_items.lock() {

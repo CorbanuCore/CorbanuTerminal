@@ -2787,6 +2787,9 @@ impl ThreadRequestProcessor {
                 "thread {thread_id} listener stopped before draining shutdown events"
             ))
         })?;
+        // D624 (a): a revert never clears the session's "untrusted content seen" flag; capture
+        // it once the last turn has finished and carry it into the reloaded session.
+        let untrusted_content_seen = thread.untrusted_content_seen();
         // The listener is drained: even an interrupted turn is durable now. Inspect only the
         // suffix being reverted and remember the revision, not a collection of turn IDs.
         let receipt_to_retire = async {
@@ -2899,6 +2902,7 @@ impl ThreadRequestProcessor {
                 runtime_snapshot,
                 app_server_client_name,
                 app_server_client_version,
+                untrusted_content_seen,
             )
             .await?;
         revert_result?;
@@ -2912,6 +2916,7 @@ impl ThreadRequestProcessor {
         runtime_snapshot: ThreadRevertRuntimeSnapshot,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
+        untrusted_content_seen: bool,
     ) -> Result<ThreadRevertResponse, JSONRPCErrorError> {
         let ThreadRevertRuntimeSnapshot {
             mut config,
@@ -2947,12 +2952,13 @@ impl ThreadRequestProcessor {
             ..
         } = self
             .thread_manager
-            .resume_thread_with_history(
+            .resume_thread_after_revert(
                 config,
                 thread_history,
                 self.auth_manager.clone(),
                 self.request_trace_context(request_id).await,
                 client_mcp_extensions,
+                untrusted_content_seen,
             )
             .await
             .map_err(|err| internal_error(format!("error reloading thread after revert: {err}")))?;

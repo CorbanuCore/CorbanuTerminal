@@ -259,3 +259,77 @@ async fn provided_nonlocal_thread_spawn_is_rejected_before_child_startup() {
     );
     manager.remove_thread(&parent_id).await;
 }
+
+#[tokio::test]
+async fn factory_replacement_is_checked_before_child_startup() {
+    // #2562 / D530 (a): with no live parent (an ephemeral child skips parent preparation) the
+    // pane gets a Local controller, which a host factory replaces. The refusal must judge the
+    // replacement before child startup, and the factory must run exactly once.
+    let (_session, turn) = make_session_and_context().await;
+    let home = tempdir().expect("test home");
+    let mut config = turn.config.as_ref().clone();
+    config.codex_home = home.path().join("unstarted-child-home").abs();
+    config.cwd = home.path().abs();
+    config.ephemeral = true;
+    let factory_calls = Arc::new(AtomicUsize::new(0));
+    let factory_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+        CodexAuth::from_api_key("dummy"),
+        config.model_provider.clone(),
+        home.path().to_path_buf(),
+        Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+    )
+    .with_agent_control_factory({
+        let factory_calls = Arc::clone(&factory_calls);
+        let factory_ids = Arc::clone(&factory_ids);
+        move |thread_id| {
+            factory_calls.fetch_add(1, Ordering::SeqCst);
+            factory_ids.lock().expect("factory ids").push(thread_id);
+            let control: Arc<dyn AgentControl> = Arc::new(NonLocalPaneController);
+            async move { Ok(control) }
+        }
+    });
+    let mut created = manager.subscribe_thread_created();
+    let child_id = ThreadId::new();
+    let instructions = Arc::new(StartupInstructionsWitness(AtomicUsize::new(0)));
+    let child_home = config.codex_home.clone();
+    let error = tokio::time::timeout(
+        Duration::from_secs(5),
+        manager.start_thread(StartThreadOptions {
+            reserved_thread_id: Some(child_id),
+            environments: Some(Vec::new()),
+            thread_instructions_provider: Some(instructions.clone()),
+            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                parent_thread_id: ThreadId::new(),
+                depth: 1,
+                agent_path: Some(AgentPath::try_from("/root/worker").expect("agent path")),
+                agent_nickname: None,
+                agent_role: None,
+                agent_class: None,
+            })),
+            ..StartThreadOptions::new(config)
+        }),
+    )
+    .await
+    .expect("pre-spawn refusal must not enter asynchronous child startup")
+    .err()
+    .expect("a factory controller without the local backend must be refused");
+    assert!(
+        matches!(error.details(), CodexErrorDetails::UnsupportedOperation(message)
+            if message == "this agent operation needs Corbanu's local agent backend"),
+        "the pre-spawn check must refuse, not session startup: {error:?}"
+    );
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(*factory_ids.lock().expect("factory ids"), vec![child_id]);
+    assert_eq!(instructions.0.load(Ordering::SeqCst), 0);
+    assert_eq!(manager.list_thread_ids().await, Vec::<ThreadId>::new());
+    assert!(manager.get_thread(child_id).await.is_err());
+    assert!(matches!(
+        created.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+    assert!(
+        !child_home.exists(),
+        "no child home or rollout may be created"
+    );
+}
