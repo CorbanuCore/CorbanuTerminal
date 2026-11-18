@@ -9,6 +9,22 @@
 - `match` / `not_match` supply example invocations that are validated at load time (think of them as unit tests); examples can be token arrays or strings (strings are tokenized with `shlex`).
 - The CLI always prints the JSON serialization of the evaluation result.
 
+## Command rules in Corbanu Terminal
+
+For rule files, examples, wrapper and nested-shell checks, unreadable commands,
+Windows PowerShell, case matching, xargs, and known limits, see the
+[Corbanu command-rule guide](../../docs/execpolicy.md).
+
+The runtime checks recognized wrapper layers and readable inner commands, using
+the strictest result. Unreadable commands ask when a prompt or forbidden rule
+could match; approvals disabled means refusal. Nested scripts have an
+eight-level inspection bound. These checks have documented limits, including
+shell-fed code (#2548) and run-time PowerShell words inside POSIX scripts (#2585).
+
+The `execpolicy check` CLI below is a **prefix-rule diagnostic**. It does not run
+the runtime's wrapper/script checks or platform case folding, and its result is
+not an execution approval.
+
 ## Policy shapes
 
 - Prefix rules use Starlark syntax:
@@ -42,6 +58,15 @@ host_executable(
   - With host-executable resolution enabled, if no exact rule matches, execpolicy may fall back from `/usr/bin/git` to basename rules for `git`.
   - If `host_executable(name="git", ...)` exists, basename fallback is only allowed for listed absolute paths.
   - If no `host_executable()` entry exists for a basename, basename fallback is allowed.
+  - Allow rules require exact program spelling on every platform. On Windows,
+    basename lookup can recognize `git.exe` as `git` for restrictive rules, but
+    an allow rule needs either an exactly spelled filename or an explicitly
+    listed host path with the same spelling, including drive-letter case.
+  - A host-executable list constrains prompt and forbidden basename matches too;
+    it does not prohibit unlisted executables.
+  - At runtime on macOS and Windows, prompt and forbidden rules additionally
+    match differently cased program names. Allow rules and arguments remain
+    exact. The CLI does not enable this extra case-folding check.
 
 ## CLI
 
