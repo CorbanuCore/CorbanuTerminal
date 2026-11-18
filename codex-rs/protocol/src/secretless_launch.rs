@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::ops::ControlFlow;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
@@ -207,7 +206,7 @@ pub fn value_has_url_password(value: &str) -> bool {
         || value
             .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
             .any(is_schemeless_url_with_password)
-        || for_each_userinfo_span(value, |_, _| ControlFlow::Break(())).is_break()
+        || has_userinfo_span(value)
 }
 
 /// The original PF-27-S02 rule, applied to the text after one `://`.
@@ -218,140 +217,156 @@ fn authority_has_password(rest: &str) -> bool {
         .is_some_and(|(userinfo, _)| userinfo.contains(':'))
 }
 
-/// Longest password taken from a span that is not a `user:password@host`
-/// span (see below), in bytes. Longer real URL passwords are still caught by
-/// the span rule, which has no length limit.
+/// Longest URL password candidate, in bytes.
 const MAX_URL_PASSWORD_BYTES: usize = 1024;
-/// Most `(start, @)` pairs examined for one value, and most candidates
-/// returned. They bound the work on huge values; `user:password@host` spans are
-/// examined first, so only a value with that many credential-shaped spans
-/// before the real one can exhaust them, and launch filtering is never
-/// bounded.
-const MAX_URL_PASSWORD_PAIRS: usize = 16 * 1024;
-const MAX_URL_PASSWORD_CANDIDATES: usize = 512;
+/// Most candidates returned for one value, and most `@` readings kept for one
+/// `:`. They keep redaction within the output gate's capacity: every
+/// registered string costs about a dozen gate entries, and the gate refuses
+/// to arm (so the session does not start) when they overflow. Readings are
+/// returned round-robin, nearest `user:password@host` reading of every `:`
+/// first, so a list of up to this many credential URLs registers each one.
+const MAX_URL_PASSWORD_CANDIDATES: usize = 64;
+const MAX_ENDS_PER_COLON: usize = 16;
+/// Most `@` positions looked at after one `:`.
+const MAX_ATS_PER_COLON: usize = 64;
 /// Longest bracketed IPv6 host looked at after an `@`.
 const MAX_BRACKETED_HOST_BYTES: usize = 64;
 
-/// Every string in `value` that could be a URL password, for redaction
+/// The strings in `value` that could be a URL password, for redaction
 /// (#2401, #2604). Empty unless [`value_has_url_password`] flags the value, so
 /// that ordinary settings register nothing.
 ///
-/// The set is a deliberately generous superset rather than the result of
+/// This is a deliberately generous superset rather than the result of
 /// parsing: a userinfo password always runs from the `:` after the user name
-/// to the `@` before the host, so for every `@` in the value this returns the
-/// text from just after each preceding `:` (except a scheme's `://`) up to
-/// that `@`, and the same text cut after each `,`, `;`, whitespace or quote in
-/// it. Commas, semicolons, quotes, brackets, extra `@` or `:` in a password
+/// to an `@`, so for every `:` that follows a user name (after `//`, or
+/// starting a list item) this returns the text up to
+/// each later `@` in the same word, whatever lies between. Commas,
+/// semicolons, quotes, brackets, `/`, `?`, `#`, extra `@` or `:` in a password
 /// therefore cannot hide it; they only add wrong candidates, and registering a
 /// string that is not a password merely redacts it as well. Raw whitespace
 /// ends a URL, so no candidate contains it.
 ///
-/// Candidates are borrowed verbatim (percent escapes are not decoded) and are
-/// at least `min_bytes` long. Callers apply their own credential test, to the
-/// decoded text as well.
+/// Candidates are borrowed verbatim (percent escapes are not decoded), are at
+/// least `min_bytes` and at most `MAX_URL_PASSWORD_BYTES` long, and are
+/// ordered: the first URL's password as read before #2401, then round-robin
+/// the nearest `@` followed by a host for each `:`, the next reading of each,
+/// and so on. Callers apply their own
+/// credential test, to the decoded text as well.
 pub fn url_password_candidates(value: &str, min_bytes: usize) -> Vec<&str> {
     if !value_has_url_password(value) {
         return Vec::new();
     }
     let bytes = value.as_bytes();
-    let mut seen = HashSet::new();
-    let mut candidates = Vec::new();
-    let mut budget = MAX_URL_PASSWORD_PAIRS;
-    let mut add = |start: usize, at: usize, max_bytes: usize| {
-        if budget == 0 || candidates.len() == MAX_URL_PASSWORD_CANDIDATES {
-            return ControlFlow::Break(());
-        }
-        budget -= 1;
-        let candidate = &value[start..at];
-        if (min_bytes.max(1)..=max_bytes).contains(&candidate.len())
-            && !candidate.contains(char::is_whitespace)
-            && seen.insert(candidate)
-        {
-            candidates.push(candidate);
-        }
-        ControlFlow::Continue(())
-    };
-    // Credential-shaped spans first, without a length limit, so that the
-    // bounds above cannot crowd them out.
-    if for_each_userinfo_span(value, |colon, at| add(colon + 1, at, usize::MAX)).is_break() {
-        return candidates;
-    }
-    let first_colon = (0..bytes.len()).find(|&index| is_password_start_colon(bytes, index));
-    let starts: Vec<usize> = (0..bytes.len())
-        .filter(|&index| {
-            is_password_start_colon(bytes, index)
-                || first_colon.is_some_and(|colon| {
-                    index > colon
-                        && (matches!(bytes[index], b',' | b';' | b'"' | b'\'')
-                            || bytes[index].is_ascii_whitespace())
-                })
-        })
-        .map(|index| index + 1)
+    let ats: Vec<usize> = (0..bytes.len())
+        .filter(|&index| bytes[index] == b'@')
         .collect();
-    let mut word_start = 0;
-    for (at, &byte) in bytes.iter().enumerate() {
-        if byte.is_ascii_whitespace() {
-            word_start = at + 1;
+    let mut readings: Vec<(usize, Vec<usize>)> = Vec::new();
+    let mut stop = 0;
+    let mut word_end = 0;
+    for colon in userinfo_colons(value) {
+        if stop <= colon {
+            stop = next_index(bytes, colon + 1, ends_password);
         }
-        if byte != b'@' {
-            continue;
+        if word_end <= colon {
+            word_end = next_index(bytes, colon + 1, |byte| byte.is_ascii_whitespace());
         }
-        let before = starts.partition_point(|&start| start <= at);
-        for &start in starts[..before].iter().rev() {
-            if start < word_start || at - start > MAX_URL_PASSWORD_BYTES {
+        let limit = word_end.min(colon + 1 + MAX_URL_PASSWORD_BYTES);
+        let first = ats.partition_point(|&at| at <= colon + 1);
+        // `user:password@host` readings first, then every other `@`.
+        let (mut ends, others): (Vec<usize>, Vec<usize>) = ats[first..]
+            .iter()
+            .copied()
+            .take_while(|&at| at < limit)
+            .take(MAX_ATS_PER_COLON)
+            .partition(|&at| at < stop && host_follows(&value[at + 1..]));
+        ends.extend(others);
+        ends.truncate(MAX_ENDS_PER_COLON);
+        if !ends.is_empty() {
+            readings.push((colon, ends));
+            if readings.len() == MAX_URL_PASSWORD_CANDIDATES {
                 break;
             }
-            if add(start, at, MAX_URL_PASSWORD_BYTES).is_break() {
-                return candidates;
+        }
+    }
+    let mut seen = HashSet::new();
+    let mut candidates = Vec::new();
+    // The first URL's password as main read it before #2401, so nothing it
+    // registered is lost (for example a user name holding whitespace).
+    if let Some(password) = first_url_password(value)
+        && password.len() >= min_bytes.max(1)
+        && password.len() <= MAX_URL_PASSWORD_BYTES
+    {
+        seen.insert(password);
+        candidates.push(password);
+    }
+    for rank in 0..MAX_ENDS_PER_COLON {
+        for (colon, ends) in &readings {
+            let Some(&at) = ends.get(rank) else {
+                continue;
+            };
+            let candidate = &value[colon + 1..at];
+            if candidate.len() >= min_bytes.max(1) && seen.insert(candidate) {
+                candidates.push(candidate);
+                if candidates.len() == MAX_URL_PASSWORD_CANDIDATES {
+                    return candidates;
+                }
             }
         }
     }
     candidates
 }
 
-/// A `:` a password may follow: any `:` except a scheme's `://`, plus the
-/// `:` of `scheme://user://password@host`.
-fn is_password_start_colon(bytes: &[u8], index: usize) -> bool {
-    bytes[index] == b':'
-        && (!bytes[index + 1..].starts_with(b"//") || follows_authority_user(bytes, index))
+/// The password of the value's first `scheme://` authority, trimmed, unless
+/// it is empty or holds whitespace (then it spans several words).
+fn first_url_password(value: &str) -> Option<&str> {
+    let (_, rest) = value.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let (userinfo, _) = authority.rsplit_once('@')?;
+    let (_, password) = userinfo.split_once(':')?;
+    let password = password.trim();
+    (!password.is_empty() && !password.contains(char::is_whitespace)).then_some(password)
 }
 
-/// Calls `f(colon, at)` for each `user:password@host` span: a `:` that
-/// follows a user name (after `//`, or starting a list item), then a nonempty
+/// True when some `:` that follows a user name is followed by a nonempty
 /// password without whitespace, `\` or `` ` ``, then an `@` followed by a
 /// host, optional port, and the end of the value or a character that cannot
-/// continue a host. The password itself may hold any other punctuation,
-/// including `@`, `:`, `/`, `,`, `;`, quotes and brackets.
-fn for_each_userinfo_span(
-    value: &str,
-    mut f: impl FnMut(usize, usize) -> ControlFlow<()>,
-) -> ControlFlow<()> {
+/// continue a host. The password may hold any other punctuation, including
+/// `@`, `:`, `/`, `?`, `#`, `,`, `;`, quotes and brackets. Linear time.
+fn has_userinfo_span(value: &str) -> bool {
     let bytes = value.as_bytes();
     let hosts: Vec<usize> = (0..bytes.len())
         .filter(|&index| bytes[index] == b'@' && host_follows(&value[index + 1..]))
         .collect();
     if hosts.is_empty() {
-        return ControlFlow::Continue(());
+        return false;
     }
     // First byte after the current colon that cannot be in a password. Colons
     // are visited in order, so this only moves forward.
     let mut stop = 0;
-    for colon in (0..bytes.len()).filter(|&index| bytes[index] == b':') {
-        if !(follows_authority_user(bytes, colon) || follows_item_user(value, colon)) {
-            continue;
-        }
+    userinfo_colons(value).any(|colon| {
         if stop <= colon {
-            stop = bytes[colon + 1..]
-                .iter()
-                .position(|&byte| ends_password(byte))
-                .map_or(bytes.len(), |offset| colon + 1 + offset);
+            stop = next_index(bytes, colon + 1, ends_password);
         }
         let first = hosts.partition_point(|&at| at <= colon + 1);
-        for &at in hosts[first..].iter().take_while(|&&at| at < stop) {
-            f(colon, at)?;
-        }
-    }
-    ControlFlow::Continue(())
+        hosts.get(first).is_some_and(|&at| at < stop)
+    })
+}
+
+/// Index of the first byte at or after `from` matching `test`, or the length.
+fn next_index(bytes: &[u8], from: usize, test: impl Fn(u8) -> bool) -> usize {
+    bytes[from..]
+        .iter()
+        .position(|&byte| test(byte))
+        .map_or(bytes.len(), |offset| from + offset)
+}
+
+/// Every `:` that can separate a user name from a password, in order.
+fn userinfo_colons(value: &str) -> impl Iterator<Item = usize> + '_ {
+    let bytes = value.as_bytes();
+    (0..bytes.len()).filter(move |&index| {
+        bytes[index] == b':'
+            && (follows_authority_user(bytes, index) || follows_item_user(value, index))
+    })
 }
 
 /// Bytes a URL password cannot hold for launch detection: raw whitespace and
@@ -386,8 +401,13 @@ fn follows_item_user(value: &str, colon: usize) -> bool {
         })
         .map_or(0, |index| index + 1);
     let user = value[user_start..colon].trim_start_matches(['\'', '(']);
+    // `C:/Users/...` and `C:\Users\...` are drive paths.
+    let drive = user.len() == 1
+        && user.as_bytes()[0].is_ascii_alphabetic()
+        && matches!(bytes.get(colon + 1), Some(b'/' | b'\\'));
     (user_start == 0 || !matches!(bytes[user_start - 1], b'/' | b':' | b'?' | b'#'))
         && !user.is_empty()
+        && !drive
         && !OPAQUE_USER_SCHEMES
             .iter()
             .any(|scheme| user.eq_ignore_ascii_case(scheme))

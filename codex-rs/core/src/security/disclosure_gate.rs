@@ -41,6 +41,13 @@ use zeroize::Zeroizing;
 
 /// Environment values shorter than this are flags, not credentials.
 const MIN_ENV_VALUE_BYTES: usize = 8;
+/// URL password strings registered from one environment value, and from all
+/// of them (#2401). Each costs about a dozen output-gate entries and the gate
+/// must still arm with room for every other managed value, so these stay
+/// well below its capacity.
+const MAX_URL_PASSWORDS_PER_VALUE: usize = 64;
+const MAX_URL_PASSWORDS_TOTAL: usize = 128;
+const MAX_URL_PASSWORD_BYTES_TOTAL: usize = 64 * 1024;
 /// Open streams tracked at once; the oldest is dropped (its held-back tail is
 /// simply not shown; the completed item carries the full gated text).
 const MAX_OPEN_STREAMS: usize = 512;
@@ -905,6 +912,8 @@ where
     I: IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
 {
     let mut values = Labeled::new();
+    let mut url_passwords_total = 0;
+    let mut url_password_bytes = 0;
     for (name, value) in vars {
         let (Some(name), Some(value)) = (name.to_str(), value.to_str()) else {
             continue;
@@ -916,25 +925,42 @@ where
         {
             values.push((format!("env:{name}"), Zeroizing::new(value.to_string())));
         }
+        let mut url_passwords = 0;
         for password in secretless_launch::url_password_candidates(value, MIN_ENV_VALUE_BYTES) {
-            // Judge the decoded text so escapes cannot turn a short word into
-            // a plausible credential. Keep both spellings: tools can echo the
-            // URL verbatim or print its decoded password (#2401).
+            if url_passwords + 2 > MAX_URL_PASSWORDS_PER_VALUE
+                || url_passwords_total + 2 > MAX_URL_PASSWORDS_TOTAL
+                || url_password_bytes + 2 * password.len() > MAX_URL_PASSWORD_BYTES_TOTAL
+            {
+                break;
+            }
+            // Keep both spellings: tools can echo the URL verbatim or print
+            // its decoded password (#2401). Escapes of whitespace alone are
+            // not a credential.
             let decoded = Zeroizing::new(
                 urlencoding::decode(password)
                     .map(std::borrow::Cow::into_owned)
                     .unwrap_or_else(|_| password.to_string()),
             );
-            if decoded.trim().is_empty() || !is_plausible_secret(&decoded) {
+            if decoded.trim().is_empty() {
                 continue;
             }
-            values.push((
-                format!("env:{name}:password"),
-                Zeroizing::new(password.to_string()),
-            ));
-            if decoded.as_str() != password {
-                values.push((format!("env:{name}:password"), decoded));
+            let decoded_plausible = is_plausible_secret(&decoded);
+            let mut added = 0;
+            if decoded_plausible || is_plausible_secret(password) {
+                values.push((
+                    format!("env:{name}:password"),
+                    Zeroizing::new(password.to_string()),
+                ));
+                added += 1;
+                url_password_bytes += password.len();
             }
+            if decoded_plausible && decoded.as_str() != password {
+                url_password_bytes += decoded.len();
+                values.push((format!("env:{name}:password"), decoded));
+                added += 1;
+            }
+            url_passwords += added;
+            url_passwords_total += added;
         }
         for (param, secret) in url_query_secrets(value) {
             values.push((format!("env:{name}:{param}"), secret));

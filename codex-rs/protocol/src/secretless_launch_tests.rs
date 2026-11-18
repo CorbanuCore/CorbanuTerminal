@@ -381,32 +381,56 @@ fn issue_2401_ordinary_prose_registers_nothing_long() {
             "{value}"
         );
     }
-    // Once a value is flagged, every reading that ends at an `@` is a
-    // candidate, so text around a credential is over-registered rather than
-    // missed. Candidates never span whitespace.
+    // Once a value is flagged, every reading that ends at an `@` in the same
+    // word is a candidate; prose around a credential stays short.
     assert_eq!(
         url_password_candidates("meet at 10:30@home, then a:b@c", 1),
-        vec!["30", "b", "a:b"],
-    );
-    assert_eq!(
-        url_password_candidates("meet at 10:30@home, then a:b@c", 8),
-        Vec::<&str>::new(),
+        vec!["30", "b"],
     );
     assert_eq!(
         url_password_candidates(
             "note: call at 10:30@office, ann:Secret-2401@corp.example",
             8
         ),
-        vec!["Secret-2401", "ann:Secret-2401"],
+        vec!["Secret-2401"],
     );
-    // The original `://` rule flags this value (its authority runs to the
-    // last `@`), so the over-registration is visible here too.
+    // Flagged by the original `://` rule (its authority runs to the last
+    // `@`), but no `:` there follows a user name.
+    let value = "http://user@host user@[::1]:3128 mailto:alice@example.com";
+    assert!(value_has_url_password(value));
+    assert_eq!(url_password_candidates(value, 1), Vec::<&str>::new());
+    // Drive paths are not `user:password@host`.
+    assert!(!value_has_url_password("C:/Users/a@b.com/x"));
+}
+
+#[test]
+fn issue_2401_credential_lists_and_compact_json_stay_small() {
+    // Forty credential URLs without whitespace: each password is a
+    // candidate, ahead of the longer readings.
+    let urls: Vec<String> = (0..40)
+        .map(|index| format!("http://u{index}:Pw-{index}-Synth@h{index}.example"))
+        .collect();
+    let list = urls.join(",");
+    let candidates = url_password_candidates(&list, 8);
+    assert_eq!(candidates.len(), MAX_URL_PASSWORD_CANDIDATES);
+    for (index, candidate) in candidates.iter().take(40).enumerate() {
+        assert_eq!(*candidate, format!("Pw-{index}-Synth"));
+    }
+    // Compact JSON: keys and values hold `:` and quotes, but only the URL's
+    // user name is followed by a password.
+    let fields: Vec<String> = (0..80)
+        .map(|index| format!("\"k{index:02}\":\"v{index:02}\""))
+        .collect();
+    let json = format!(
+        "{{{},\"db\":\"postgres://svc:Synth-Pw-2401@db.internal:5432/app\",\"admin\":\"ops@example.com\"}}",
+        fields.join(",")
+    );
     assert_eq!(
-        url_password_candidates(
-            "http://user@host user@[::1]:3128 mailto:alice@example.com",
-            8
-        ),
-        vec!["mailto:alice"],
+        url_password_candidates(&json, 8),
+        vec![
+            "Synth-Pw-2401",
+            "Synth-Pw-2401@db.internal:5432/app\",\"admin\":\"ops",
+        ],
     );
 }
 
@@ -419,4 +443,16 @@ fn issue_2401_candidate_work_is_bounded() {
     assert!(candidates.len() <= MAX_URL_PASSWORD_CANDIDATES);
     let colons = "u:x@".repeat(50_000);
     assert!(url_password_candidates(&colons, 8).len() <= MAX_URL_PASSWORD_CANDIDATES);
+}
+
+#[test]
+fn issue_2401_first_url_password_is_still_a_candidate() {
+    assert_eq!(
+        url_password_candidates("http://u: Spaced-2401 @proxy", 8),
+        vec!["Spaced-2401"],
+    );
+    assert_eq!(
+        url_password_candidates("http://u:@host u:@proxy http://u:   @host", 1),
+        Vec::<&str>::new(),
+    );
 }

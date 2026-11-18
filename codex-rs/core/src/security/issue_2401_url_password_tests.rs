@@ -107,13 +107,11 @@ fn issue_2401_url_passwords_are_redacted_in_later_output() {
 fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_registered() {
     for value in [
         "status: ready contact: alice@example.com git@host:repo",
-        "http://user@host user@[::1]:3128",
+        "http://user@host user@[::1]:3128 mailto:alice@example.com",
         "http://u:@host u:@proxy http://u:   @host",
         "u:%20%20%20%20%20%20%20%20@proxy",
         "http://u:Word-12@host",
-        "u:%57%6f%72%64%2d%31%32@proxy",
-        "http://u:postgres@host",
-        "user:ordinary@proxy",
+        "http://u:postgres@host user:ordinary@proxy",
         "10:30@home",
         "a:b@c",
         "/opt/homebrew/opt/node@20/bin:/usr/bin",
@@ -124,16 +122,19 @@ fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_registered() {
             "{value}"
         );
     }
-    // Over-registration, shown: short or one-class passwords are never
-    // registered on their own, but the reading cut after a space includes the
-    // user name and can be long enough.
+    // As before #2401, a plausible encoded spelling is registered even when
+    // its decoded text is too short to be.
     assert_eq!(
-        registered("PROXY", "http://u:Word-12@host u:%57%6f%72%64%2d%31%32@proxy"),
-        vec!["u:%57%6f%72%64%2d%31%32", "u:Word-12"],
+        registered(
+            "PROXY",
+            "http://u:Word-12@host u:%57%6f%72%64%2d%31%32@proxy"
+        ),
+        vec!["%57%6f%72%64%2d%31%32"],
     );
+    // A password padded with whitespace is still read as before #2401.
     assert_eq!(
-        registered("PROXY", "http://u:postgres@host user:ordinary@proxy"),
-        vec!["user:ordinary"],
+        registered("PROXY", "http://u: Spaced-2401 @proxy"),
+        vec!["Spaced-2401"],
     );
     // Eight decoded bytes and mixed character classes meet the existing
     // environment-seeding threshold; encoded length alone does not count.
@@ -141,6 +142,54 @@ fn issue_2401_noncredentials_and_short_decoded_passwords_are_not_registered() {
         registered("PROXY", "u:%57%6f%72%64%2d%31%32%33@proxy"),
         vec!["%57%6f%72%64%2d%31%32%33", "Word-123"],
     );
+}
+
+#[test]
+fn issue_2401_large_flagged_values_still_arm_the_gate() {
+    // Compact JSON and long credential lists must not overflow the output
+    // gate: it fails closed, so an overflow would stop the session starting.
+    let fields: Vec<String> = (0..300)
+        .map(|index| format!("\"key{index:03}\":\"val{index:03}\",\"mail{index:03}\":\"user{index:03}@example.com\""))
+        .collect();
+    let json = format!(
+        "{{{},\"db\":\"postgres://svc:Synth-Pw-2401@db.internal:5432/app\"}}",
+        fields.join(",")
+    );
+    let urls: Vec<String> = (0..40)
+        .map(|index| format!("http://u{index}:Pw-{index}-Synth@h{index}.example"))
+        .collect();
+    let list = urls.join(",");
+    let mut vars = vec![
+        ("APP_CONFIG".to_string(), json),
+        ("PROXY_LIST".to_string(), list.clone()),
+    ];
+    for index in 0..6 {
+        vars.push((format!("PROXY_LIST_{index}"), list.clone()));
+    }
+    let values = env_values(
+        vars.iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+    );
+    assert!(
+        values
+            .iter()
+            .any(|(_, secret)| secret.as_str() == "Synth-Pw-2401")
+    );
+    assert!(values.len() <= MAX_URL_PASSWORDS_TOTAL);
+    let gate = OutputGate::new();
+    let entries: Vec<_> = values
+        .iter()
+        .map(|(label, value)| (label.as_str(), SecretClass::Operational, value.as_str()))
+        .collect();
+    gate.register_all(&entries)
+        .expect("gate admits every URL password");
+    let list_secrets = registered("PROXY_LIST", &list);
+    for index in 0..40 {
+        assert!(
+            list_secrets.contains(&format!("Pw-{index}-Synth")),
+            "{index}"
+        );
+    }
 }
 
 /// Deterministic xorshift generator: the property test needs no new
