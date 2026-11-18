@@ -945,9 +945,10 @@ async fn approve_reading_gate(
         // as its reason instead; a sandbox retry carries neither.
         let gate = approval.reason.as_deref().is_none_or(|reason| {
             reason.ends_with("a prompt-user or forbidden rule could match the command it runs")
-                || reason.starts_with("Security level Aggressive blocked access to")
+                || reason.starts_with("Security level Aggressive blocked access to `")
                 || reason.starts_with(
-                    "On Linux, security level Aggressive blocks creating user namespaces",
+                    "On Linux, security level Aggressive blocks creating user namespaces \
+                     for agent commands: if you approve, the command runs",
                 )
         });
         gate_prompts += usize::from(gate);
