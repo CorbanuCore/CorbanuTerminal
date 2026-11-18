@@ -31,7 +31,7 @@ codex_rust_crate(
     # cases already rely on serialization around the full CLI path.
     integration_test_args = ["--test-threads=1"],
     test_tags = ["no-sandbox"],
-    unit_test_args = ["--test-threads=1"],
+    unit_test_args = ["--test-threads=1", "--nocapture"],
     # Temporary qualification diagnostic: measure completion beyond 300 seconds.
     unit_test_timeout = "long",
 )
