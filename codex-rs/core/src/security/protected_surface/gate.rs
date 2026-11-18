@@ -11,6 +11,7 @@ use super::coverage;
 use crate::security::tainted_action::PostTaintAction;
 use crate::security::tainted_action::ProtectedActionKind;
 use crate::session::session::Session;
+use crate::session::step_context::StepContext;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
@@ -19,6 +20,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::request_user_input::RequestUserInputQuestionOption;
+use std::collections::HashSet;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -259,7 +261,8 @@ pub(crate) async fn check_dispatch(
         }
         Coverage::PolicyRequest
             if invocation.tool_name.name != "request_permissions"
-                || automatic_reviewer_answers(invocation).await =>
+                || automatic_reviewer_answers(&invocation.session, &invocation.step_context)
+                    .await =>
         {
             (Route::PolicyRequest, ProtectedActionKind::SecurityPolicy)
         }
@@ -293,7 +296,71 @@ pub(crate) async fn check_dispatch(
         question,
     )
     .await;
-    check.resolve(&invocation.session, approved)
+    check.resolve(&invocation.session, approved)?;
+    if route == Route::PolicyRequest && invocation.tool_name.name == "request_permissions" {
+        invocation
+            .step_context
+            .turn
+            .post_taint_policy_answers
+            .note(&invocation.call_id);
+    }
+    Ok(())
+}
+
+/// Calls whose policy request the person allowed at the dispatch check
+/// ([`check_dispatch`]), for that request's own review to read (D625 (a)).
+#[derive(Debug, Default)]
+pub(crate) struct PostTaintPolicyAnswers(std::sync::Mutex<HashSet<String>>);
+
+impl PostTaintPolicyAnswers {
+    fn note(&self, call_id: &str) {
+        self.lock().insert(call_id.to_string());
+    }
+
+    fn take(&self, call_id: &str) -> bool {
+        self.lock().remove(call_id)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// D625 (a) (ii): `request_permissions`' own review, about to run. The
+/// dispatch check let the call through without asking because the person
+/// answers its prompt; if administrator requirements reloaded since then (or
+/// untrusted content arrived) so that an automatic reviewer would now answer,
+/// the person is asked here first, as the dispatch check would have done.
+/// Without untrusted content, or once the person allowed this call at
+/// dispatch, nothing is asked.
+pub(crate) async fn confirm_policy_request_review(
+    session: &Session,
+    step_context: &StepContext,
+    call_id: &str,
+) -> Result<(), String> {
+    if step_context.turn.post_taint_policy_answers.take(call_id)
+        || !automatic_reviewer_answers(session, step_context).await
+    {
+        return Ok(());
+    }
+    let admission = admit(
+        session,
+        step_context.settings.approval_policy(),
+        Route::PolicyRequest,
+        call_id,
+        || Some(ProtectedActionKind::SecurityPolicy),
+    )
+    .await;
+    let check = match admission {
+        Admission::Clear => return Ok(()),
+        Admission::Refused(refusal) => return Err(refusal),
+        Admission::AskHuman(check) => check,
+    };
+    let question = format!("Allow `request_permissions`? {}", check.reason());
+    let approved = ask_human(session, &step_context.turn, call_id, question).await;
+    check.resolve(session, approved)
 }
 
 fn is_tainted(session: &Session) -> bool {
@@ -310,8 +377,8 @@ fn is_tainted(session: &Session) -> bool {
 /// settings: on-request or granular approvals with the auto reviewer. S3b:
 /// administrator requirements can also force the reviewer whatever the step
 /// says (upstream's `decide_approval`), so they count here too.
-async fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
-    let settings = &invocation.step_context.settings;
+async fn automatic_reviewer_answers(session: &Session, step_context: &StepContext) -> bool {
+    let settings = &step_context.settings;
     if matches!(
         settings.approval_policy(),
         codex_protocol::protocol::AskForApproval::OnRequest
@@ -321,8 +388,7 @@ async fn automatic_reviewer_answers(invocation: &ToolInvocation) -> bool {
     {
         return true;
     }
-    invocation
-        .session
+    session
         .get_config()
         .await
         .config_layer_stack

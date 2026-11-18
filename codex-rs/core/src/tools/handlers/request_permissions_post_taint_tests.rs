@@ -4,6 +4,7 @@
 //! (`[auto_review] required_on_models`, or `approvals_reviewer` constrained so
 //! the person may not review); the post-taint gate must count those too.
 
+use crate::config::Config;
 use crate::security::protected_surface::ToolOrigin;
 use crate::security::protected_surface::check_dispatch;
 use crate::session::session::Session;
@@ -60,31 +61,7 @@ async fn tainted_session(
                     .approval_policy
                     .set(policy)
                     .expect("approval policy");
-                let mut requirements: ConfigRequirements =
-                    config.config_layer_stack.requirements().clone();
-                match forced {
-                    Forced::No => {}
-                    Forced::ModelRequiresReview => {
-                        requirements.auto_review_required_models = Some(Sourced::new(
-                            BTreeSet::from([model]),
-                            RequirementSource::Unknown,
-                        ));
-                    }
-                    Forced::PersonMayNotReview => {
-                        requirements.approvals_reviewer.value =
-                            Constrained::allow_only(ApprovalsReviewer::AutoReview);
-                    }
-                }
-                config.config_layer_stack = ConfigLayerStack::new(
-                    config
-                        .config_layer_stack
-                        .all_layers_low_to_high()
-                        .cloned()
-                        .collect(),
-                    requirements,
-                    config.config_layer_stack.requirements_toml().clone(),
-                )
-                .expect("replace test requirements");
+                force_reviewer(config, forced, &model);
             },
         )
         .await;
@@ -102,6 +79,34 @@ async fn tainted_session(
     }]);
     session.services.replace_model_client(client);
     (session, turn, events)
+}
+
+/// Writes `forced` into `config`'s administrator requirements.
+fn force_reviewer(config: &mut Config, forced: Forced, model: &str) {
+    let mut requirements: ConfigRequirements = config.config_layer_stack.requirements().clone();
+    match forced {
+        Forced::No => {}
+        Forced::ModelRequiresReview => {
+            requirements.auto_review_required_models = Some(Sourced::new(
+                BTreeSet::from([model.to_string()]),
+                RequirementSource::Unknown,
+            ));
+        }
+        Forced::PersonMayNotReview => {
+            requirements.approvals_reviewer.value =
+                Constrained::allow_only(ApprovalsReviewer::AutoReview);
+        }
+    }
+    config.config_layer_stack = ConfigLayerStack::new(
+        config
+            .config_layer_stack
+            .all_layers_low_to_high()
+            .cloned()
+            .collect(),
+        requirements,
+        config.config_layer_stack.requirements_toml().clone(),
+    )
+    .expect("replace test requirements");
 }
 
 fn invocation(session: &Arc<Session>, turn: &Arc<TurnContext>) -> ToolInvocation {
@@ -178,5 +183,126 @@ async fn issue_2272_forced_reviewer_routes_post_taint_permission_requests_to_the
             "{forced:?}: {question}"
         );
         dispatch.abort();
+    }
+}
+
+/// D625 (a) (ii): the dispatch check lets a post-taint request through
+/// without asking because the person answers its own prompt; requirements
+/// then reload and force the automatic reviewer before that prompt. The
+/// request's review must still ask the person first, not let the automatic
+/// reviewer answer alone. Declining refuses the request.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn d625_requirements_reload_after_dispatch_still_asks_the_person_first() {
+    for forced in [Forced::ModelRequiresReview, Forced::PersonMayNotReview] {
+        let (session, turn, events) = tainted_session(AskForApproval::OnRequest, Forced::No).await;
+        *session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
+        let invocation = invocation(&session, &turn);
+        let step_context = Arc::clone(&invocation.step_context);
+        assert_eq!(
+            tokio::time::timeout(
+                Duration::from_secs(10),
+                check_dispatch(&invocation, ToolOrigin::Builtin)
+            )
+            .await,
+            Ok(Ok(())),
+            "{forced:?}: the person answers the request's own prompt"
+        );
+
+        // The host's refresh carries fresh administrator requirements.
+        let live = session.get_config().await;
+        let mut reloaded = (*live).clone();
+        force_reviewer(&mut reloaded, forced, &turn.model_info().slug);
+        assert_eq!(
+            session.refresh_mcp_config(live, reloaded).await,
+            crate::ConfigRefreshOutcome::Published,
+            "{forced:?}"
+        );
+        assert!(
+            session
+                .get_config()
+                .await
+                .config_layer_stack
+                .requirements()
+                .automatic_reviewer_forced(&turn.model_info().slug),
+            "{forced:?}: the reload forces the automatic reviewer"
+        );
+
+        let environment = turn
+            .initial_environments
+            .primary()
+            .expect("primary environment")
+            .selection();
+        let request = super::PreparedPermissionRequest {
+            environment_id: environment.environment_id,
+            reason: None,
+            permissions: codex_protocol::request_permissions::RequestPermissionProfile {
+                network: Some(codex_protocol::models::NetworkPermissions {
+                    enabled: Some(true),
+                }),
+                ..Default::default()
+            },
+        };
+        let mut review = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move {
+                session
+                    .request_permissions_explained(
+                        &step_context,
+                        "call-permissions".to_string(),
+                        request,
+                        tokio_util::sync::CancellationToken::new(),
+                    )
+                    .await
+            }
+        });
+        let shown = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                tokio::select! {
+                    finished = &mut review => {
+                        panic!("{forced:?}: answered without asking the person: {finished:?}")
+                    }
+                    event = events.recv() => match event.expect("event channel open").msg {
+                        EventMsg::RequestUserInput(shown) => return shown,
+                        EventMsg::RequestPermissions(_) => {
+                            panic!("{forced:?}: reached a prompt without the post-taint question")
+                        }
+                        _ => {}
+                    },
+                }
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("{forced:?}: the person was not asked"));
+        assert!(
+            shown.questions[0]
+                .question
+                .starts_with("Allow `request_permissions`?"),
+            "{forced:?}: {:?}",
+            shown.questions[0].question
+        );
+
+        let id = crate::security::protected_surface::question_id("call-permissions");
+        session
+            .notify_user_input_response(
+                &turn.sub_id,
+                codex_protocol::request_user_input::RequestUserInputResponse {
+                    answers: std::collections::HashMap::from([(
+                        id,
+                        codex_protocol::request_user_input::RequestUserInputAnswer {
+                            answers: vec!["Cancel".to_string()],
+                        },
+                    )]),
+                },
+            )
+            .await;
+        let refusal = tokio::time::timeout(Duration::from_secs(10), review)
+            .await
+            .expect("review finished")
+            .expect("review joined")
+            .expect_err("declined");
+        assert!(
+            refusal.contains("you declined") && refusal.contains("after untrusted content"),
+            "{forced:?}: {refusal}"
+        );
     }
 }

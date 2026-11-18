@@ -30,11 +30,13 @@ mod upload_read;
 
 pub(crate) use agent_media::prepare_agent_media;
 pub(crate) use gate::Admission;
+pub(crate) use gate::PostTaintPolicyAnswers;
 pub(crate) use gate::Route;
 pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::ask_human_answer;
 pub(crate) use gate::check_dispatch;
+pub(crate) use gate::confirm_policy_request_review;
 #[cfg(test)]
 pub(crate) use gate::question_id;
 pub(crate) use image_reads::check_image_generation;

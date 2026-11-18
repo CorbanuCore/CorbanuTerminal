@@ -4229,6 +4229,18 @@ impl Session {
                 retry_reason: None,
                 network_approval_context: None,
             };
+            // D625 (a) (ii): the post-taint dispatch check's answer for this
+            // call reaches its review, so an automatic reviewer that requirements
+            // reloaded since then never answers alone.
+            tokio::select! {
+                biased;
+                _ = cancellation_token.cancelled() => return Ok(None),
+                confirmed = crate::security::protected_surface::confirm_policy_request_review(
+                    self,
+                    step_context,
+                    &call_id,
+                ) => confirmed?,
+            }
             let decision = tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => return Ok(None),
