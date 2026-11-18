@@ -319,7 +319,9 @@ async fn issue_2015_fork_keeps_a_windows_sandbox_set_up_after_start() -> Result<
 #[tokio::test]
 async fn d721_fork_keeps_a_stricter_windows_sandbox_it_asked_for() -> Result<()> {
     let server = responses::start_mock_server().await;
-    let _response_mock = responses::mount_sse_sequence(&server, two_turn_sse()).await;
+    // Only the parent runs a turn.
+    let parent_turn = two_turn_sse().into_iter().take(1).collect();
+    let _response_mock = responses::mount_sse_sequence(&server, parent_turn).await;
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new(&server.uri())
         .with_provider_name("Mock provider")
