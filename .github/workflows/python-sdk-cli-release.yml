@@ -1,3 +1,4 @@
+# Corbanu: DISABLED. See docs/management/upstreamSync/landing-plan-v0.167.0.md.
 name: python-sdk-cli-release
 
 on:
@@ -20,7 +21,7 @@ concurrency:
 
 jobs:
   resolve-cli-release:
-    if: github.repository == 'openai/codex'
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,9 +46,9 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
   prepare-python-runtime:
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: prepare-python-runtime
     needs: resolve-cli-release
-    if: needs.resolve-cli-release.outputs.publish == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/python-runtime-build.yml
@@ -56,9 +57,9 @@ jobs:
       source_ref: ${{ needs.resolve-cli-release.outputs.source_sha }}
 
   build-python-sdk:
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: build-python-sdk
     needs: resolve-cli-release
-    if: needs.resolve-cli-release.outputs.publish == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/python-sdk-build.yml
@@ -71,7 +72,7 @@ jobs:
   # workflows as Trusted Publishers. The runtime must be available before
   # publishing the SDK that depends on it.
   publish-python-runtime:
-    if: github.repository == 'openai/codex'
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: publish-python-runtime
     needs:
       - prepare-python-runtime
@@ -115,6 +116,7 @@ jobs:
             openai-codex-cli-bin "$PYTHON_RUNTIME_VERSION"
 
   publish-python-sdk:
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: publish-python-sdk
     needs:
       - build-python-sdk
