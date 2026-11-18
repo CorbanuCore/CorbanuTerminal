@@ -1328,7 +1328,8 @@ fn apply_heredoc_restrictive_matches(
 }
 
 /// #2543: add [`wrappers::unread_script_matches`] to `evaluation`; whether
-/// it added any.
+/// it found any, including those `evaluation` already had (an amendment
+/// could not approve those either).
 fn apply_unread_script_matches(
     evaluation: &mut Evaluation,
     policy: &Policy,
@@ -1336,19 +1337,21 @@ fn apply_unread_script_matches(
     match_options: &MatchOptions,
     command_platform: DangerousCommandPlatform,
 ) -> bool {
-    let restrictive =
-        wrappers::unread_script_matches(policy, command, match_options, command_platform)
-            .into_iter()
-            .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
-            .collect::<Vec<_>>();
-    let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() else {
+    let found = wrappers::unread_script_matches(policy, command, match_options, command_platform);
+    if found.is_empty() {
         return false;
-    };
-    evaluation.decision = evaluation.decision.max(decision);
-    // These first, so a refusal names the rule that caused it.
-    let mut matched_rules = restrictive;
-    matched_rules.append(&mut evaluation.matched_rules);
-    evaluation.matched_rules = matched_rules;
+    }
+    let restrictive = found
+        .into_iter()
+        .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
+        .collect::<Vec<_>>();
+    if let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() {
+        evaluation.decision = evaluation.decision.max(decision);
+        // These first, so a refusal names the rule that caused it.
+        let mut matched_rules = restrictive;
+        matched_rules.append(&mut evaluation.matched_rules);
+        evaluation.matched_rules = matched_rules;
+    }
     true
 }
 

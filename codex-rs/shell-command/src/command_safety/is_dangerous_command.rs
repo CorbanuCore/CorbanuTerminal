@@ -416,6 +416,8 @@ mod tests {
                 vec_str(&["SUDO", "rm", "-rf", "x"]),
                 vec_str(&["\u{17f}\u{75}do", "RM", "-rf", "x"]),
                 vec_str(&["Env", "A=1", "rM", "-rf", "x"]),
+                vec_str(&["bash", "-lc", "RM -rf x"]),
+                vec_str(&["bash", "-lc", "echo hi && TRAP 'RM -rf x' EXIT"]),
             ] {
                 let expected = folds.then_some(DangerousCommandMatch::ForcedRm);
                 assert_eq!(

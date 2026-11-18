@@ -253,6 +253,18 @@ async fn unread_shell_scripts_ask_when_rules_exist() {
         // Without a prompt or forbidden rule, nothing changes.
         let result = requirement(&command, ALLOW_GIT).await;
         assert!(runs(&result), "{command:?}: {result:?}");
+        // Sync review r1: where the fallback already asks for the same
+        // argv, still no amendment for it is offered.
+        let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(PROMPT.to_string()),
+            command: command.clone(),
+            approval_policy: AskForApproval::UnlessTrusted,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        assert!(asks(&result), "{command:?}: {result:?}");
     }
 }
 
