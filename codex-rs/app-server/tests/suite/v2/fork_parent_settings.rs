@@ -13,6 +13,7 @@ use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use codex_app_server_protocol::AskForApproval;
 use codex_app_server_protocol::ClientRequest;
+use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SandboxMode;
 use codex_app_server_protocol::SandboxPolicy;
 use codex_app_server_protocol::ThreadForkParams;
@@ -307,5 +308,74 @@ async fn issue_2015_fork_keeps_a_windows_sandbox_set_up_after_start() -> Result<
         );
     }
     assert_eq!(sandbox_tag(&requests[1]), sandbox_tag(&requests[0]));
+    Ok(())
+}
+
+/// D721: on Windows, a fork request for a stricter Windows sandbox (elevated)
+/// than the server's start-up one (unelevated) keeps it. The server's config
+/// still selects unelevated, so a refresh to it is then a weaker sandbox and
+/// is rejected for the fork; before D721 the fork got unelevated and the
+/// refresh applied. Elsewhere the refresh changes nothing.
+#[tokio::test]
+async fn d721_fork_keeps_a_stricter_windows_sandbox_it_asked_for() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let _response_mock = responses::mount_sse_sequence(&server, two_turn_sse()).await;
+    let codex_home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri())
+        .with_provider_name("Mock provider")
+        .with_approval_policy("never")
+        .with_sandbox_mode("workspace-write")
+        .disable_feature(Feature::ShellSnapshot)
+        .with_extra_config("[windows]\nsandbox = \"unelevated\"")
+        .write(codex_home.path())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+    let ThreadStartResponse { thread, .. } = mcp
+        .start_thread(ThreadStartParams {
+            model: Some("mock-model".to_string()),
+            ..Default::default()
+        })
+        .await?;
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_notification_message("thread/started"),
+    )
+    .await??;
+    run_turn(&mut mcp, &thread.id).await?;
+
+    let forked = fork(
+        &mut mcp,
+        ThreadForkParams {
+            thread_id: thread.id,
+            config: Some(
+                [("windows.sandbox".to_string(), json!("elevated"))]
+                    .into_iter()
+                    .collect(),
+            ),
+            ..Default::default()
+        },
+    )
+    .await?;
+    let request_id = mcp
+        .send_thread_settings_update_request(ThreadSettingsUpdateParams {
+            thread_id: forked.thread.id,
+            confirm: true,
+            refresh_windows_sandbox: true,
+            ..Default::default()
+        })
+        .await?;
+    let refresh = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_result(RequestId::Integer(request_id)),
+    )
+    .await??;
+    if cfg!(windows) {
+        let error = refresh.expect_err("unelevated is weaker than the fork's elevated sandbox");
+        assert!(error.error.message.contains("next session"), "{error:?}");
+    } else {
+        assert!(refresh.is_ok(), "{refresh:?}");
+    }
     Ok(())
 }
