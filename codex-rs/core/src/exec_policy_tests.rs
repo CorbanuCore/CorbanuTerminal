@@ -67,6 +67,9 @@ mod launcher_case_tests;
 #[path = "exec_policy_shell_case_tests.rs"]
 mod shell_case_tests;
 
+#[path = "exec_policy_cmd_script_tests.rs"]
+mod cmd_script_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;

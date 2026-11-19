@@ -420,9 +420,13 @@ pub(crate) fn check(
                 unread_script_prompts |= matches[reading_from..]
                     .iter()
                     .any(|rule_match| rule_match.decision() > Decision::Allow);
-            } else if reads_script && runs_unread_script(parsed_as) && any_strict_rule() {
+            } else if reads_script
+                && (runs_unread_script(parsed_as) || runs_unread_cmd_script(parsed_as))
+                && any_strict_rule()
+            {
                 // #2543: a script the parser does not read
-                // (`bash -c 'git push' x`, `bash -ec …`, `fish -c …`).
+                // (`bash -c 'git push' x`, `bash -ec …`, `fish -c …`), or
+                // (#2704) one cmd.exe reads (`cmd /c "git push"`).
                 matches.push(RuleMatch::HeuristicsRuleMatch {
                     command: inner.to_vec(),
                     decision: Decision::Prompt,
@@ -591,6 +595,59 @@ fn runs_unread_script(command: &[String]) -> bool {
                     .strip_prefix('-')
                     .is_some_and(|letters| !letters.starts_with('-') && letters.contains('c'))
         })
+}
+
+/// #2704 (D553): whether `command` runs a script cmd.exe reads, which rules
+/// cannot see: cmd.exe itself, whatever its arguments (`/c`, `/k`, `/d/c`,
+/// or a script from its input), or a batch file (`.cmd`, `.bat`, also a
+/// bare name found as one on `PATH`) given an argument cmd.exe would read as
+/// more than a word when it re-reads the batch file's command line
+/// (`pnpm.cmd '&git push'`). Approximate on the side of yes.
+fn runs_unread_cmd_script(command: &[String]) -> bool {
+    let Some((program, args)) = command.split_first() else {
+        return false;
+    };
+    let name = windows_program_name(program);
+    if name == "cmd" || name == "cmd.exe" {
+        return true;
+    }
+    if !args.iter().any(|arg| cmd_rereads(arg)) {
+        return false;
+    }
+    name.ends_with(".cmd") || name.ends_with(".bat") || resolves_to_batch_file(program)
+}
+
+/// `program`'s file name as Windows finds it: lowercase, without trailing
+/// dots and spaces (`C:\Windows\System32\CMD.EXE.` is `cmd.exe`).
+fn windows_program_name(program: &str) -> String {
+    let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    name.trim_end_matches(['.', ' ']).to_ascii_lowercase()
+}
+
+/// Whether cmd.exe may read `arg` as more than one plain word: a command
+/// separator, redirection, escape, variable expansion, quote, group or
+/// line break.
+fn cmd_rereads(arg: &str) -> bool {
+    arg.contains(['&', '|', '<', '>', '^', '%', '!', '"', '(', ')', '\r', '\n'])
+}
+
+/// Whether `program` is found as a batch file, as PowerShell finds `pnpm`
+/// on `PATH` as `pnpm.cmd`.
+#[cfg(windows)]
+fn resolves_to_batch_file(program: &str) -> bool {
+    which::which(program).is_ok_and(|path| {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat")
+            })
+    })
+}
+
+/// Elsewhere a program is never a batch file cmd.exe reads.
+#[cfg(not(windows))]
+fn resolves_to_batch_file(_program: &str) -> bool {
+    false
 }
 
 /// #2543: the prompt and forbidden rule matches of a script command with
