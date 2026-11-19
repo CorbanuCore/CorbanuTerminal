@@ -526,6 +526,28 @@ impl ExecPolicyManager {
             }
             evaluation.matched_rules.extend(literal);
         }
+        // #2704: a command of the PowerShell script whose program PowerShell
+        // may run as a batch file cmd.exe re-reads (`pnpm` found as
+        // `pnpm.cmd`, `.\build`) given cmd.exe's special characters asks
+        // where a strict rule exists.
+        #[cfg(windows)]
+        let unread_script_prompts = if command_origin == ExecPolicyCommandOrigin::PowerShell
+            && wrappers::any_strict_rule(exec_policy.as_ref(), &match_options)
+            && let Some(batch) = commands
+                .iter()
+                .find(|command| wrappers::runs_unread_cmd_script(command, /*powershell*/ true))
+        {
+            evaluation
+                .matched_rules
+                .push(RuleMatch::HeuristicsRuleMatch {
+                    command: batch.clone(),
+                    decision: Decision::Prompt,
+                });
+            evaluation.decision = evaluation.decision.max(Decision::Prompt);
+            true
+        } else {
+            unread_script_prompts
+        };
         // #2548: a script outside the minimal lexical set that was checked
         // as its one command (a here-document) asks where a strict rule
         // exists, as one read in part does.
