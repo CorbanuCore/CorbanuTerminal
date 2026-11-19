@@ -931,3 +931,95 @@ fn pf_28_s02_legacy_route_is_unchanged_without_the_gate() {
         Some(format!("Bearer {PF28_S02_TOKEN}").as_str())
     );
 }
+
+const D732_TOKEN: &str = "ghp_d732DummyCopyCanary0000000000000000000";
+
+/// D732: copies of a held key under other names (a header, a second
+/// variable, an embedded value) are removed from the command environment;
+/// other variables stay and the provider variable keeps its dummy.
+#[test]
+fn d732_copies_of_a_held_key_are_removed_from_the_command_env() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let header = format!("Bearer {D732_TOKEN}");
+    let embedded = format!("https://x.test/?k={D732_TOKEN}&v=1");
+    let mut env = env_map([
+        ("GH_TOKEN", D732_TOKEN),
+        ("AUTH_HEADER", header.as_str()),
+        ("TOKEN_COPY", D732_TOKEN),
+        ("EMBEDDED", embedded.as_str()),
+        ("SAFE", "ordinary value"),
+        ("PATH", "/usr/local/bin:/bin"),
+    ]);
+    broker.virtualize_child_env(&mut env);
+
+    for name in ["AUTH_HEADER", "TOKEN_COPY", "EMBEDDED"] {
+        assert_eq!(env.get(name), None, "{name}");
+    }
+    assert_eq!(env.get("SAFE").map(String::as_str), Some("ordinary value"));
+    assert_eq!(
+        env.get("PATH").map(String::as_str),
+        Some("/usr/local/bin:/bin")
+    );
+    let dummy = env.get("GH_TOKEN").expect("dummy").clone();
+    assert_credential_shape(D732_TOKEN, &dummy, "ghp_");
+    assert!(env.values().all(|value| !value.contains(D732_TOKEN)));
+    assert_eq!(brokered_credential_dummy_env_keys(&env), vec!["GH_TOKEN"]);
+
+    // A later command whose environment carries only a copy loses it too.
+    let mut later = env_map([("AUTH_HEADER", header.as_str())]);
+    broker.virtualize_child_env(&mut later);
+    assert_eq!(later.get("AUTH_HEADER"), None);
+
+    // Removing copies does not stop the dummy from working.
+    let mut headers = headers_with_bearer(&dummy);
+    broker.inject_request_headers("api.github.com", &mut headers);
+    assert_eq!(
+        authorization(&headers),
+        Some(format!("Bearer {D732_TOKEN}").as_str())
+    );
+}
+
+/// D732: with secretless launch the key comes from Core's environment; a
+/// copy that reached the command environment is removed.
+#[test]
+fn d732_copy_of_a_core_env_key_is_removed_from_the_command_env() {
+    let permitted = ["GITHUB_TOKEN".to_string()];
+    let broker = CredentialBroker::new(/*enabled*/ true)
+        .with_process_env_lookup(Some(&permitted), pf27_s02_core_env);
+    let header = format!("token {PF27_S02_CORE_TOKEN}");
+    let mut env = env_map([("AUTH_HEADER", header.as_str())]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("AUTH_HEADER"), None);
+    assert!(env.contains_key("GITHUB_TOKEN"));
+    assert!(
+        env.values()
+            .all(|value| !value.contains(PF27_S02_CORE_TOKEN))
+    );
+}
+
+/// D732: a held key shorter than 8 bytes is not looked for, so ordinary
+/// values that happen to contain it stay.
+#[test]
+fn d732_short_keys_are_not_looked_for() {
+    let short = "tok1234";
+    assert!(short.len() < CHILD_ENV_COPY_MIN_KEY_BYTES);
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("GITHUB_TOKEN", short), ("NOTE", "uses tok1234 here")]);
+    broker.virtualize_child_env(&mut env);
+    assert_ne!(env.get("GITHUB_TOKEN").map(String::as_str), Some(short));
+    assert_eq!(
+        env.get("NOTE").map(String::as_str),
+        Some("uses tok1234 here")
+    );
+}
+
+/// D732/D733: with the broker off nothing is removed.
+#[test]
+fn d732_disabled_broker_leaves_the_env_unchanged() {
+    let broker = CredentialBroker::new(/*enabled*/ false);
+    let header = format!("Bearer {D732_TOKEN}");
+    let mut env = env_map([("GH_TOKEN", D732_TOKEN), ("AUTH_HEADER", header.as_str())]);
+    let before = env.clone();
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env, before);
+}

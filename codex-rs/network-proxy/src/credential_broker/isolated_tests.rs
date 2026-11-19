@@ -871,6 +871,60 @@ fn pf_27_s04_pf_27_s01_unavailable_broker_never_exposes_or_injects_raw_values() 
     );
 }
 
+/// D732: a copy of a key only the broker process holds is found with the
+/// broker's D685 fingerprint check and removed from the command environment.
+/// When that check cannot run, copies of keys known locally still go and no
+/// request is given a key afterwards (fail closed).
+#[tokio::test(flavor = "multi_thread")]
+async fn d732_env_copies_of_broker_held_keys_are_removed_and_fail_closed() {
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let dummy = virtualized_dummy(&broker);
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+
+    // No token variable here: only the broker process knows the key.
+    let header = format!("Bearer {SYNTHETIC_TOKEN}");
+    let mut env = HashMap::from([
+        ("AUTH_HEADER".to_string(), header.clone()),
+        ("TOKEN_COPY".to_string(), SYNTHETIC_TOKEN.to_string()),
+        ("SAFE".to_string(), "ordinary value".to_string()),
+    ]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("AUTH_HEADER"), None);
+    assert_eq!(env.get("TOKEN_COPY"), None);
+    assert_eq!(env.get("SAFE").map(String::as_str), Some("ordinary value"));
+    assert!(matches!(
+        route(&broker, upstream.port, "/echo", &dummy),
+        Ok(CredentialRouting::Brokered(_))
+    ));
+
+    // A value over the D685 scan bound cannot be checked by the broker.
+    let mut env = HashMap::from([
+        (
+            "LARGE".to_string(),
+            "x".repeat(codex_secret_broker::output_gate::MAX_SCAN_BYTES + 1),
+        ),
+        ("GH_HOST".to_string(), UPSTREAM_HOST.to_string()),
+        (
+            "GH_ENTERPRISE_TOKEN".to_string(),
+            SYNTHETIC_TOKEN.to_string(),
+        ),
+        ("AUTH_HEADER".to_string(), header),
+    ]);
+    broker.virtualize_child_env(&mut env);
+    assert_eq!(env.get("GH_ENTERPRISE_TOKEN"), Some(&dummy));
+    assert_eq!(env.get("AUTH_HEADER"), None);
+    assert!(
+        broker
+            .current_isolated_client()
+            .is_some_and(|client| client.is_alive())
+    );
+    assert_eq!(
+        route(&broker, upstream.port, "/echo", &dummy).err(),
+        Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pf_27_s04_pf_27_s01_externally_terminated_broker_is_detected_and_cleaned_up() {
