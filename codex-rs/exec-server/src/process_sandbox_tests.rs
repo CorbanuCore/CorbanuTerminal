@@ -742,7 +742,7 @@ async fn disabled_remote_proxy_config_is_rejected_before_exporting_ports() {
 }
 
 #[cfg(windows)]
-#[test_case(WindowsSandboxLevel::RestrictedToken ; "unelevated is rejected")]
+#[test_case(WindowsSandboxLevel::RestrictedToken ; "unelevated selection is promoted")]
 #[test_case(WindowsSandboxLevel::Elevated ; "elevated is accepted")]
 #[tokio::test]
 async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: WindowsSandboxLevel) {
@@ -792,20 +792,9 @@ async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: Win
     )
     .await;
 
-    if windows_sandbox_level == WindowsSandboxLevel::RestrictedToken {
-        let error = prepared
-            .err()
-            .expect("managed networking must reject an unelevated Windows sandbox");
-        assert_eq!(error.code, -32602);
-        assert!(
-            error
-                .message
-                .contains("managed networking requires the elevated Windows sandbox backend")
-        );
-        return;
-    }
-
-    let mut prepared = prepared.expect("managed networking accepts an elevated Windows sandbox");
+    // D355 promotes either selection to the elevated backend when proxy
+    // enforcement is required. Both cases must retain the restricting SID.
+    let mut prepared = prepared.expect("managed networking prepares an elevated Windows sandbox");
     let spawn = prepared
         .windows_sandbox_spawn_request()
         .expect("Windows sandbox spawn request");
