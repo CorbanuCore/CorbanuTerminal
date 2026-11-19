@@ -8,6 +8,58 @@ use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;
 
+#[cfg(windows)]
+#[test]
+fn elevated_symbolic_temp_defers_writes_until_private_folder_selection() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let cwd = AbsolutePathBuf::from_absolute_path(dir.path()).unwrap();
+    let parent = dir.path().join("command-temp");
+    std::fs::create_dir_all(&parent).unwrap();
+    for explicit_parent_grant in [false, true] {
+        let mut entries = vec![
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Root,
+                },
+                FileSystemAccessMode::Read,
+            ),
+            FileSystemSandboxEntry::new(
+                FileSystemPath::Special {
+                    value: FileSystemSpecialPath::Tmpdir,
+                },
+                FileSystemAccessMode::Write,
+            ),
+        ];
+        if explicit_parent_grant {
+            entries.push(FileSystemSandboxEntry::new(
+                FileSystemPath::Path {
+                    path: AbsolutePathBuf::from_absolute_path(&parent).unwrap(),
+                },
+                FileSystemAccessMode::Write,
+            ));
+        }
+        let profile = PermissionProfile::from_runtime_permissions(
+            &FileSystemSandboxPolicy::restricted(entries),
+            NetworkSandboxPolicy::Restricted,
+        );
+        let overrides = resolve_windows_elevated_filesystem_overrides(
+            SandboxType::WindowsRestrictedToken,
+            &profile,
+            &cwd,
+            /*use_windows_elevated_backend*/ true,
+        )
+        .unwrap();
+        // Both symbolic and explicit grants remain in the complete profile
+        // passed to the backend; neither may be frozen before temp selection.
+        assert!(
+            overrides
+                .as_ref()
+                .and_then(|value| value.write_roots_override.as_ref())
+                .is_none(),
+            "pre-session roots must not override the backend's private-temp roots"
+        );
+    }
+}
 /// A configured read-only path that doesn't exist yet is among the extra
 /// deny-write paths resolved for the legacy backend (which `command/exec`
 /// and the exec server pass on); the backend creates such paths before the
