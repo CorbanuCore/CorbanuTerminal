@@ -44,8 +44,9 @@ foreach ($name in $functionText.Split(',')) { $D729Functions[$name] = $true }
 foreach ($letter in [char[]]'abcdefghijklmnopqrstuvwxyz') { $D729Functions["${letter}:"] = $true }
 
 # The allowlist: cmdlets whose parameters cannot run code once every argument is a literal.
-#   x: excluded parameters; w: what it writes (see Get-D729Writes);
-#   d: file-system dynamic parameters (1 takes a value, 0 is a switch).
+#   x: excluded parameters; w: what it writes (see Add-D729Writes);
+#   d: file-system dynamic parameters (1 takes a value, 0 is a switch), set aside before
+#      binding when this process's metadata lacks them (PowerShell usually lists them).
 $D729Allow = @{}
 function Add-D729 {
     param([string[]]$Names, [string[]]$Excluded = @(), [string]$Writes = $null, [hashtable]$Dynamic = @{})
@@ -77,9 +78,11 @@ Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-cimi
 # Network (Windows PowerShell's Invoke-WebRequest also needs -UseBasicParsing).
 Add-D729 'invoke-webrequest', 'invoke-restmethod' -Writes 'outfile'
 # File writes, checked by path.
-Add-D729 'set-content', 'add-content' -Writes 'paths' -Dynamic @{ Encoding = 1; NoNewline = 0; AsByteStream = 0 }
-Add-D729 'clear-content', 'remove-item', 'set-item', 'clear-item', 'set-itemproperty',
-    'new-itemproperty', 'remove-itemproperty', 'rename-itemproperty', 'export-csv', 'export-clixml' -Writes 'paths'
+# An alternate data stream (`-Stream`) is not a path the Rust side can check.
+Add-D729 'set-content', 'add-content' -Excluded 'Stream' -Writes 'paths' -Dynamic @{ Encoding = 1; NoNewline = 0; AsByteStream = 0 }
+Add-D729 'clear-content', 'remove-item' -Excluded 'Stream' -Writes 'paths'
+Add-D729 'set-item', 'clear-item', 'set-itemproperty', 'new-itemproperty', 'remove-itemproperty',
+    'rename-itemproperty', 'export-csv', 'export-clixml' -Writes 'paths'
 Add-D729 'out-file' -Writes 'file'
 Add-D729 'new-item', 'mkdir' -Writes 'newitem'
 Add-D729 'copy-item' -Writes 'copy'
