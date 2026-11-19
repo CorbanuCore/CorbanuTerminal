@@ -280,7 +280,10 @@ const ARGV_ONLY_BUILTINS: &[&str] = &[
 ];
 
 /// How a command's role reads a word known only at run time that is always
-/// a number (`$?`, `$#`, `$$`, `$!`): a number, which `IFS` may still split.
+/// a number (`$?`, `$#`, `$$`, `$!`): a number, but not always one word.
+/// bash and dash drop an empty `$!` (no background job), and an `IFS` of
+/// digits splits any of them, so where a word's position matters (an
+/// option, a format) it counts as unknown.
 pub(super) const RUN_TIME_NUMBER: &str = "$?";
 
 /// Builtins whose arguments are numbers, which zsh and ksh evaluate as
@@ -413,6 +416,10 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
             let Some(Some(format)) = args.first() else {
                 return args.is_empty();
             };
+            // D713 review r3: `printf $! -v 'a[$(…)]' x` (`$!` vanishes).
+            if format == RUN_TIME_NUMBER {
+                return false;
+            }
             // ksh's `%(…)T` holds conversions of its own.
             if format.contains("%(") {
                 return false;
@@ -462,7 +469,10 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
         "getopts" | "unset" => plain_names(),
         // No arguments: forget every remembered path.
         "hash" => words().all(|arg| arg == "-r") && known(),
-        "set" => known() && set_runs_only_argv(words()),
+        // D713 review r3: `set $! -k` (`$!` vanishes, `-k` is an option).
+        "set" => {
+            known() && words().all(|arg| arg != RUN_TIME_NUMBER) && set_runs_only_argv(words())
+        }
         "shopt" => {
             known()
                 && words().all(|arg| {

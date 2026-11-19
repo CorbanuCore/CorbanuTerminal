@@ -111,6 +111,12 @@ async fn code_through_read_forms_asks() {
             // as `sh`), an `IFS` of digits splits even `$?`.
             "IFS=0; printf '%s %s %d\\n' $? 'zsh_eval_context[$(git push)]' 5",
             "IFS=0; printf '%s %d\\n' $# 'path[$(git push)]'",
+            // Review round 3: bash and dash drop an empty `$!`, moving what
+            // follows into option position (`set -k` makes later
+            // `NAME=value` words environment; `printf -v` evaluates a
+            // subscript).
+            "set $! -k; git fetch GIT_SSH_COMMAND='git push #' ssh://h/r",
+            "printf $! -v 'a[$(git push)]' x",
             // dash has no `[[`: it runs what follows `||`.
             "[[ -n x || git -nt push ]]",
             "[[ -n x || sh -c 'git push' ]]",
