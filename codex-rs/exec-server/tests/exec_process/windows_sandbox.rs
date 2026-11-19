@@ -115,14 +115,16 @@ async fn powershell_alias_falls_back_without_primary_runtime_over_rpc(
     Ok(())
 }
 
-#[test_case::test_case(WindowsSandboxSelection::Mxc, codex_sandboxing::SandboxType::WindowsMxc; "mxc")]
-#[test_case::test_case(WindowsSandboxSelection::Elevated, codex_sandboxing::SandboxType::WindowsRestrictedToken; "elevated")]
+#[test_case::test_case(WindowsSandboxSelection::Mxc, codex_sandboxing::SandboxType::WindowsMxc, false; "mxc")]
+#[test_case::test_case(WindowsSandboxSelection::Elevated, codex_sandboxing::SandboxType::WindowsRestrictedToken, false; "elevated")]
+#[test_case::test_case(WindowsSandboxSelection::Elevated, codex_sandboxing::SandboxType::WindowsRestrictedToken, true; "elevated_batch_probe")]
 #[cfg_attr(not(windows), ignore = "requires a native Windows sandbox")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial_test::serial(remote_exec_server)]
 async fn tmpdir_uses_command_environment_over_rpc(
     selection: WindowsSandboxSelection,
     expected_type: codex_sandboxing::SandboxType,
+    use_batch_probe: bool,
 ) -> Result<()> {
     if selection == WindowsSandboxSelection::Mxc {
         crate::skip_if_mxc_unavailable!(Ok(()));
@@ -166,6 +168,20 @@ async fn tmpdir_uses_command_environment_over_rpc(
     std::fs::write(&outside, "original")?;
     let command_temp_file = command_temp.join("outside-session.txt");
     std::fs::write(&command_temp_file, "original")?;
+    let probe_name = "probe-session-temp.cmd";
+    if use_batch_probe {
+        std::fs::write(
+            root.path().join(probe_name),
+            concat!(
+                "@echo off\r\n",
+                "echo CHILD-TEMP:%TEMP%\r\n",
+                "echo allowed>\"%TEMP%\\allowed.txt\"\r\n",
+                "echo modified>%COMMAND_TEMP_FILE%\r\n",
+                "echo modified>%OUTSIDE_FILE%\r\n",
+                "exit /b 0\r\n",
+            ),
+        )?;
+    }
     let server = common::exec_server::exec_server_with_env(
         [
             ("TEMP", server_temp.as_os_str()),
@@ -231,7 +247,11 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 "/D".to_owned(),
                 "/S".to_owned(),
                 "/C".to_owned(),
-                r#"echo CHILD-TEMP:%TEMP% & echo allowed>"%TEMP%\allowed.txt" & echo modified>%COMMAND_TEMP_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0"#.to_owned(),
+                if use_batch_probe {
+                    probe_name.to_owned()
+                } else {
+                    r#"echo CHILD-TEMP:%TEMP% & echo allowed>"%TEMP%\allowed.txt" & echo modified>%COMMAND_TEMP_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0"#.to_owned()
+                },
             ],
             cwd,
             env_policy: Some(ExecEnvPolicy {
