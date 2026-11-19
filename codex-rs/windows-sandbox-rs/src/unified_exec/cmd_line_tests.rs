@@ -304,7 +304,6 @@ async fn try_run(
             &[],
             /*tty*/ false,
             /*stdin_open*/ false,
-            /*use_private_desktop*/ true,
         )
         .await
         .ok()?,
