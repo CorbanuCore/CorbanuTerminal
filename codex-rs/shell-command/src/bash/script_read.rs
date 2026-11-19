@@ -17,6 +17,7 @@
 use super::heredoc::heredoc_boundaries_readable;
 use super::heredoc::literal_heredoc;
 use super::script_command_words;
+use super::script_lexical::lexical_read;
 use super::script_lexical::lexically_safe;
 use super::script_word;
 use super::try_parse_shell;
@@ -77,12 +78,33 @@ impl ScriptRead {
     }
 }
 
-/// Reads `script` as bash would run it; see the module documentation.
+/// Which shell runs a script, where that changes what can be known of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptShell {
+    /// bash, sh or dash: the value of an unquoted parameter or substitution
+    /// is split and matched against file names, which runs nothing.
+    Posix,
+    /// zsh, or a shell not known. Options a user's startup files may set
+    /// (`glob_subst`, `glob_assign`, `sh_word_split`) make such a value a
+    /// pattern whose qualifiers run code (`x='*(e:cmd:)'; echo $x`), or
+    /// split it into words that shift a builtin's arguments.
+    Any,
+}
+
+/// Reads `script` for a shell not known ([`ScriptShell::Any`]); see the
+/// module documentation.
 pub fn read_script(script: &str) -> ScriptRead {
+    read_script_as(script, ScriptShell::Any)
+}
+
+/// Reads `script` as `shell` would run it.
+pub fn read_script_as(script: &str, shell: ScriptShell) -> ScriptRead {
     let mut read = read_tree(script);
     // The lexical pre-filter: a script outside the minimal set fails closed
-    // whatever the syntax tree says.
-    read.minimal = lexically_safe(script);
+    // whatever the syntax tree says. D713: so does one with an unquoted
+    // parameter or substitution where zsh may run it.
+    let (safe, unquoted) = lexical_read(script);
+    read.minimal = safe && (shell == ScriptShell::Posix || !unquoted);
     read.plain &= read.minimal;
     read
 }
@@ -479,6 +501,12 @@ impl<'a> Reader<'a> {
         // operators (`-v 'a[$(…)]'`): only those that are always a number,
         // or a quoted one where the lexical set fixes the operators.
         if single && !only_numeric_parameters(self.text(node)) && !lexically_safe(self.text(node)) {
+            self.deny(node, stack);
+            return;
+        }
+        // `[` operands are expanded as file names, which `[` may read as
+        // operators (a file named `-v`).
+        if single && unquoted_wildcard(node, self.src) {
             self.deny(node, stack);
             return;
         }
@@ -1046,6 +1074,31 @@ pub fn numeric_operand(text: &str) -> bool {
     let digits = text.strip_prefix('-').unwrap_or(text);
     (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
         || matches!(text, "$?" | "$#" | "$$" | "$!")
+}
+
+/// Whether `node` holds a word with a wildcard outside quotes (`^` and `#`
+/// are wildcards under zsh's `extended_glob`).
+fn unquoted_wildcard(node: Node<'_>, src: &str) -> bool {
+    let mut stack = vec![node];
+    while let Some(part) = stack.pop() {
+        match part.kind() {
+            "string" | "raw_string" | "ansi_c_string" => {}
+            "word" | "extglob_pattern" | "regex"
+                if part
+                    .utf8_text(src.as_bytes())
+                    .unwrap_or_default()
+                    .contains(['*', '?', '^', '#', '[']) =>
+            {
+                return true;
+            }
+            _ => stack.extend(
+                fields(part, /*named_only*/ true)
+                    .into_iter()
+                    .map(|(_, child)| child),
+            ),
+        }
+    }
+    false
 }
 
 /// Whether every `$` in `text` begins `$?`, `$#`, `$$` or `$!`, not

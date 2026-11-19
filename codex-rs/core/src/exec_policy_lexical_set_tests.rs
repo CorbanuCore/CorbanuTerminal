@@ -101,6 +101,12 @@ async fn code_through_read_forms_asks() {
             "x='-v'; y='a[$(git push)]'; [ \"$x\" \"$y\" ]",
             "x='a[$(git push)]'; [ \"$x\" -gt 0 ]",
             "[ \\-v 'a[$(git push)]' ]",
+            // Review round 1: `[` reads file names `*` expands to as
+            // operators; an empty unquoted word shifts `printf`'s arguments
+            // into a numeric slot zsh evaluates.
+            "touch ./-v 'zsh_eval_context[$(git push)]'; [ * ]",
+            "x=; printf '%s %d %s\\n' $x 5 'path[$(git push)]'",
+            "printf '%s %d\\n' \"$@\" 'path[$(git push)]'",
             // dash has no `[[`: it runs what follows `||`.
             "[[ -n x || git -nt push ]]",
             "[[ -n x || sh -c 'git push' ]]",
@@ -155,5 +161,64 @@ async fn read_forms_do_not_ask_without_a_matching_rule() {
                 "{rules} {script:?}: {result:?}"
             );
         }
+    }
+}
+
+/// Review round 1: options a user may set in zsh's startup files make an
+/// unquoted value a pattern whose qualifiers run code (`glob_subst`,
+/// `glob_assign`). Where zsh runs the script, unquoted parameters and
+/// substitutions ask whenever a prompt or forbidden rule exists; bash and
+/// sh read them.
+#[tokio::test]
+async fn unquoted_expansions_ask_where_zsh_runs_them() {
+    for script in [
+        "x='*(e:git push:)'; echo $x",
+        "set -- '*(e:git push:)'; echo $1",
+        "x='*(e:git push:)'; y=$x",
+        "echo $(cat payload)",
+    ] {
+        for shell in [
+            &["zsh", "-lc"][..],
+            &["/bin/zsh", "-c"],
+            &["sudo", "zsh", "-c"],
+        ] {
+            let mut command = argv(shell);
+            command.push(script.to_string());
+            for rules in [FORBID, PROMPT] {
+                let result =
+                    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+                        policy_src: Some(rules.to_string()),
+                        command: command.clone(),
+                        approval_policy: AskForApproval::OnRequest,
+                        permission_profile: PermissionProfile::Disabled,
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: None,
+                    })
+                    .await;
+                assert!(
+                    matches!(
+                        result,
+                        ExecApprovalRequirement::NeedsApproval {
+                            proposed_execpolicy_amendment: None,
+                            ..
+                        }
+                    ),
+                    "{command:?} {rules}: {result:?}"
+                );
+            }
+        }
+        let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(FORBID.to_string()),
+            command: argv(&["bash", "-lc", script]),
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Skip { .. }),
+            "bash {script:?}: {result:?}"
+        );
     }
 }

@@ -325,20 +325,28 @@ async fn script_corpus_ask_rate() {
     };
     let corpus = std::fs::read_to_string(path).expect("corpus");
     let rules = r#"prefix_rule(pattern=["zz-unrelated"], decision="forbidden")"#;
-    // `CORBANU_SCRIPT_CORPUS_VERBOSE=1` lists the scripts that ask.
+    // `CORBANU_SCRIPT_CORPUS_VERBOSE=1` lists the scripts that ask;
+    // `CORBANU_SCRIPT_CORPUS_SHELL` runs them with another shell than bash.
     let verbose = std::env::var_os("CORBANU_SCRIPT_CORPUS_VERBOSE").is_some();
+    let shell = std::env::var("CORBANU_SCRIPT_CORPUS_SHELL").unwrap_or_else(|_| "bash".to_string());
     let (mut total, mut asks) = (0, 0);
     for script in corpus.split('\0').filter(|script| !script.is_empty()) {
         total += 1;
-        if !matches!(
-            check(script, rules, /*mode*/ 0).await,
-            ExecApprovalRequirement::Skip { .. }
-        ) {
+        let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(rules.to_string()),
+            command: vec![shell.clone(), "-lc".into(), script.into()],
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        if !matches!(result, ExecApprovalRequirement::Skip { .. }) {
             asks += 1;
             if verbose {
                 eprintln!("ASK {script:?}");
             }
         }
     }
-    eprintln!("CORPUS {asks} of {total} scripts ask");
+    eprintln!("CORPUS {asks} of {total} scripts ask ({shell})");
 }

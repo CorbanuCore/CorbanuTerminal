@@ -280,17 +280,26 @@ async fn scripts_no_rule_could_match_keep_their_decision() {
     }
     // #2548 (coordinator, review round 7) put `$name`, `${…}` and `$(…)`
     // outside the minimal lexical set; D713 reads them again as arguments
-    // and as scripts of the same set, so these run as before.
+    // and as scripts of the same set, so these run as before. Where zsh
+    // runs it, an unquoted one still asks with a prompt or forbidden rule
+    // (options a user may set make its value a pattern that runs code).
     for script in [
         "echo \"$HOME\"",
         "for f in *.rs; do wc -l \"$f\"; done",
         "x=$(git log -1); echo \"$x\"",
     ] {
         for command in shells(script) {
-            for rules in [FORBID, PROMPT, ""] {
+            let zsh_unquoted = script.starts_with("x=") && command.iter().any(|word| word == "zsh");
+            for rules in [FORBID, PROMPT] {
                 let result = requirement(&command, rules).await;
-                assert!(runs(&result), "{command:?} {rules}: {result:?}");
+                if zsh_unquoted {
+                    assert!(asks(&result), "{command:?} {rules}: {result:?}");
+                } else {
+                    assert!(runs(&result), "{command:?} {rules}: {result:?}");
+                }
             }
+            let result = requirement(&command, "").await;
+            assert!(runs(&result), "{command:?}: {result:?}");
         }
     }
     // A command built at run time asks only where a prompt or forbidden

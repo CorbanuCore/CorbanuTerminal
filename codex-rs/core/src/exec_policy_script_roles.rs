@@ -416,7 +416,12 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
             let slots = numeric_slots(format);
             // `%2$d` picks its argument by number: then any may be numeric.
             let positional = format.contains('$') && slots.contains(&true);
+            // D713 review: a word known only at run time may become no word
+            // or several (zsh drops an empty `$x`), shifting the arguments
+            // after it into other slots.
+            let shifts = slots.contains(&true) && args[1..].iter().any(Option::is_none);
             !format.starts_with('-')
+                && !shifts
                 && args[1..].iter().enumerate().all(|(index, arg)| {
                     slots.is_empty()
                         || !(positional || slots[index % slots.len()])
