@@ -527,8 +527,8 @@ async fn windows_requirements(command: &[String], rules: &str) -> Vec<ExecApprov
 /// trailing dots and spaces, `\` paths), exactly as the plain spelling
 /// reads; and a launcher, shell or PowerShell spelled so that no rule reads
 /// it as one (`\\?\` paths, 8.3 short names, streams, `SUDO` or `BASH.EXE`
-/// off Windows) asks whenever a prompt or forbidden rule exists. On a
-/// Windows host the same holds.
+/// off Windows; `\\?\UNC\`, `//?/`) asks whenever a prompt or forbidden
+/// rule exists, behind a launcher too. On a Windows host the same holds.
 #[tokio::test]
 async fn issue_2671_windows_executor_reads_respelled_shells_on_any_host() {
     let read = [
@@ -544,10 +544,13 @@ async fn issue_2671_windows_executor_reads_respelled_shells_on_any_host() {
         r"C:pwsh",
         "D:/PS/Pwsh",
         r"\\?\C:\PS\PWSH.EXE",
+        r"\\.\C:\PS\PWSH",
     ];
     let unread = [
         r"\\?\C:\PS\PWSH",
         r"\\?\C:\PS\PWSH.EXE.",
+        r"\\?\UNC\srv\share\PWSH",
+        "//?/C:/PS/PWSH",
         "PWSH~1.EXE",
         r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE",
         "pwsh.exe::$DATA",
@@ -601,6 +604,8 @@ async fn issue_2671_windows_executor_reads_respelled_shells_on_any_host() {
         argv(&["Bash.exe", "-lc", "git push"]),
         argv(&["BUSYBO~1.EXE", "sh", "-c", "git push"]),
         argv(&["env", "PWSH.EXE", "-Command", "git push"]),
+        argv(&["env", "A=1", r"\\?\C:\PS\PWSH", "-c", "git push"]),
+        argv(&["env", "A=1", r"\\?\UNC\srv\share\PWSH", "-c", "git push"]),
     ] {
         for rules in [FORBID, PROMPT] {
             let results = windows_requirements(&command, rules).await;
