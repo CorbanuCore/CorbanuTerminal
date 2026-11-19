@@ -317,7 +317,8 @@ async fn try_run(
     Some((String::from_utf8_lossy(&stdout).into_owned(), exit_code))
 }
 
-/// #2718: a nested cmd, `start`, and a batch file cmd finds through PATHEXT
+/// #2718: a nested cmd (also behind `if`), `start`, and a batch file cmd
+/// finds through PATHEXT
 /// get their arguments with cmd's escapes removed and parse them again. With
 /// an argument cmd acts on they are refused; nothing injected runs. The same
 /// commands with a plain argument still run.
@@ -326,8 +327,13 @@ fn check_reparsing_programs(backend: Backend, home: &SandboxHome) {
     fs::write(root.path().join("x.bat"), "@exit /b 0\r\n").expect("write x.bat");
     fs::write(root.path().join("tool.cmd"), "@echo %*\r\n").expect("write tool.cmd");
     let injection = format!("x&echo.INJECTED>{MARKER}");
-    let cases: [(&str, Vec<&str>, Option<&str>); 3] = [
+    let cases: [(&str, Vec<&str>, Option<&str>); 4] = [
         ("nested cmd", vec!["cmd", "/c", "echo.ran"], Some("ran ")),
+        (
+            "if",
+            vec!["if", "1==1", "cmd", "/c", "echo.ran"],
+            Some("ran "),
+        ),
         ("start", vec!["start", "/b", "/wait", "x.bat"], None),
         ("PATHEXT batch", vec!["tool"], Some("")),
     ];
