@@ -40,7 +40,7 @@ async fn config_and_account(
     let overrides = cli_config_overrides
         .parse_overrides()
         .unwrap_or_else(|error| exit_with(format!("Error parsing -c overrides: {error}")));
-    let config = Config::load_with_cli_overrides(overrides)
+    let config = crate::login::load_credential_command_config(overrides)
         .await
         .unwrap_or_else(|error| exit_with(format!("Error loading configuration: {error}")));
     if !config.features.enabled(Feature::NamedAccounts) {
