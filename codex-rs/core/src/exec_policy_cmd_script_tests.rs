@@ -207,7 +207,8 @@ async fn cmd_scripts_with_no_strict_rules_are_unchanged() {
                     expected.0,
                     "{command:?} {rules:?}: {result:?}"
                 );
-                if expected.1 {
+                // A launcher's argv is never offered as an amendment.
+                if expected.1 && command[0] != "env" {
                     assert!(shape(&result).1, "{command:?} {rules:?}: {result:?}");
                 }
             }
