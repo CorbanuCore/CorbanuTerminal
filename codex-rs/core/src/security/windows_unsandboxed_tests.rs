@@ -705,8 +705,8 @@ async fn issue_2562_discovery_judges_an_elevated_environment_in_an_unsandboxed_s
 
 /// #2729: a context carrying a refusal keeps main's `Disabled` selection
 /// where upstream raised it to the restricted token; nothing else changes.
-#[test]
-fn issue_2729_a_refusal_keeps_the_configured_windows_selection() {
+#[tokio::test]
+async fn issue_2729_a_refusal_keeps_the_configured_windows_selection() {
     use codex_file_system::FileSystemSandboxContext;
     use codex_file_system::WindowsSandboxSelection;
     use codex_protocol::models::PermissionProfile;
