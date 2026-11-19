@@ -136,7 +136,7 @@ async fn start_thread_with_scoring_policy() -> Result<Started> {
 
 #[test]
 fn background_scoring_stays_off_until_disclosure_gated() {
-    assert!(!BACKGROUND_SCORING_DISCLOSURE_GATED);
+    const { assert!(!BACKGROUND_SCORING_DISCLOSURE_GATED) };
 }
 
 /// D606: the Decisions comparison sampler is gone; its feature key only still parses.

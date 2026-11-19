@@ -1242,6 +1242,7 @@ async fn thread_settings_confirmation_leaves_mcp_status_responses_unaffected() -
     );
     use codex_app_server_protocol::ListMcpServerStatusParams;
     use codex_app_server_protocol::ListMcpServerStatusResponse;
+    use codex_app_server_protocol::McpServerConnectionStatus;
     use codex_app_server_protocol::McpServerStatusDetail;
     // This checks MCP status responses only. It does not prove equivalence of
     // live binding refresh, tool execution or authorization semantics.
@@ -1294,18 +1295,34 @@ async fn thread_settings_confirmation_leaves_mcp_status_responses_unaffected() -
                     timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
                 assert_eq!(response, serde_json::json!({}));
             }
-            let request = mcp
-                .send_list_mcp_server_status_request(ListMcpServerStatusParams {
-                    cursor: None,
-                    limit: None,
-                    detail: Some(McpServerStatusDetail::ToolsAndAuthOnly),
-                    thread_id: Some(thread.id.clone()),
-                    server_name: None,
-                })
-                .await?;
-            let response: ListMcpServerStatusResponse =
-                timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
-            assert_eq!(response.data.len(), 1);
+            // Tool discovery can finish before the runtime status changes from
+            // Starting to Connected. Compare both independent fixtures only
+            // after that transition, retaining the complete response assertion.
+            let response = timeout(DEFAULT_TIMEOUT, async {
+                loop {
+                    let request = mcp
+                        .send_list_mcp_server_status_request(ListMcpServerStatusParams {
+                            cursor: None,
+                            limit: None,
+                            detail: Some(McpServerStatusDetail::ToolsAndAuthOnly),
+                            thread_id: Some(thread.id.clone()),
+                            server_name: None,
+                        })
+                        .await?;
+                    let response: ListMcpServerStatusResponse = mcp.read_response(request).await?;
+                    assert_eq!(response.data.len(), 1);
+                    if response.data[0].runtime_status == Some(McpServerConnectionStatus::Connected)
+                    {
+                        break Ok::<_, anyhow::Error>(response);
+                    }
+                    assert_eq!(
+                        response.data[0].runtime_status,
+                        Some(McpServerConnectionStatus::Starting)
+                    );
+                    tokio::time::sleep(Duration::from_millis(/*millis*/ 20)).await;
+                }
+            })
+            .await??;
             let status = &response.data[0];
             let mut tools: Vec<_> = status.tools.keys().cloned().collect();
             tools.sort();
