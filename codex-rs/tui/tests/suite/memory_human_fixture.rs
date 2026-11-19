@@ -286,6 +286,9 @@ check_for_update_on_startup = false
 suppress_unstable_features_warning = true
 log_dir = {:?}
 [features]
+# Upstream starts the shared daemon by default; this cargo-built binary has no package to
+# install one from. Run embedded.
+daemon_auto_start = false
 sqlite = true
 memories = true
 code_mode_host = false

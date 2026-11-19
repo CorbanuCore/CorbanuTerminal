@@ -191,7 +191,8 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             pane.wait_stable_contains(MODEL, READY_TIMEOUT)?;
             select_label(pane, &format!("{MODEL} via {A}"))?;
             pane.wait_stable_contains("Spawned Corbanu Terminal Nazgul pane", READY_TIMEOUT)?;
-            pane.send_literal("/agent")?;
+            // Upstream renamed `/agent` to `/subagents` (`/agents` is the command center).
+            pane.send_literal("/subagents")?;
             pane.send_key(TmuxKey::Enter)?;
             pane.wait_stable_contains("Subagents", READY_TIMEOUT)?;
             pane.send_key(TmuxKey::Down)?;

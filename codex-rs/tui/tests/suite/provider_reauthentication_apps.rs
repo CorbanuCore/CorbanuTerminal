@@ -27,6 +27,7 @@ async fn tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route() 
             .plan_type("pro"),
         codex_login::AuthCredentialsStoreMode::File,
     )?;
+    mount_workspace_routing(&fixture.server, "pf58-apps-account").await;
     let auth_before = fs::read(fixture.home.path().join("auth.json"))?;
     Mock::given(method("POST"))
         .and(path_regex(".*/ps/mcp/?$"))

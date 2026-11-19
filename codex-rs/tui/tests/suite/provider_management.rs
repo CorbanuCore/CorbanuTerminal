@@ -20,6 +20,7 @@ use wiremock::matchers::path;
 use crate::support::chat_ready::session_configured;
 use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
+use crate::support::thread_title::is_thread_title_request;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -51,6 +52,11 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     settings.insert("model".into(), "gpt-5.6-sol".into());
     settings.insert("model_provider".into(), "openai".into());
     settings.insert("model_reasoning_effort".into(), "low".into());
+    // Upstream offers GPT-6 Sol over gpt-5.6-sol at startup; record that notice as seen.
+    settings.insert(
+        "notice".into(),
+        toml::from_str::<toml::Value>("model_migrations.\"gpt-5.6-sol\" = \"gpt-6-sol\"")?,
+    );
     settings.insert("check_for_update_on_startup".into(), false.into());
     fs::write(&config_path, toml::to_string(&config)?)?;
     Mock::given(method("POST"))
@@ -137,7 +143,9 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     let requests = fixture.server.received_requests().await.unwrap_or_default();
     let requests = requests
         .iter()
-        .filter(|request| request.url.path() == "/v1/responses")
+        .filter(|request| {
+            request.url.path() == "/v1/responses" && !is_thread_title_request(&request.body)
+        })
         .collect::<Vec<_>>();
     ensure!(requests.len() == 2, "expected one request per process");
     for request in requests {
@@ -173,9 +181,16 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
                 .context("native input")?
                 .iter()
                 .any(|item| item["type"] == "additional_tools"
-                    && item["tools"]
-                        .as_array()
-                        .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "exec")))
+                    && item["tools"].as_array().is_some_and(|tools| {
+                        // Upstream now groups the tools in a `functions` namespace.
+                        tools.iter().any(|tool| {
+                            tool["name"] == "exec"
+                                || (tool["type"] == "namespace"
+                                    && tool["tools"].as_array().is_some_and(|nested| {
+                                        nested.iter().any(|tool| tool["name"] == "exec")
+                                    }))
+                        })
+                    }))
         );
         for unsupported in [
             "temperature",
@@ -225,7 +240,8 @@ async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
     wait_session_configured(pane)?;
     for _ in 0..2 {
         open_model_picker(pane)?;
-        pane.wait_stable_contains("[Ambient]", READY_TIMEOUT)?;
+        // Upstream draws the active tab as a filled cell, not `[label]`; its subtitle names it.
+        pane.wait_stable_contains("Ambient coding plan", READY_TIMEOUT)?;
         let capture = pane.wait_stable_contains("Ambient GLM 5.2", READY_TIMEOUT)?;
         ensure!(
             !capture.contains("Kimi K2.7"),
@@ -480,7 +496,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     capture_success("noncurrent-inactive", &fixture, pane, &[&canary])?;
     close_manager(pane)?;
     open_model_picker(pane)?;
-    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    pane.wait_stable_contains(OTHER_TAB_SUBTITLE, READY_TIMEOUT)?;
     let inactive_model_count = numbered_selection_row_count(&pane.capture_viewport()?);
     pane.send_key(TmuxKey::Escape)?;
     wait_chat_ready(pane)?;
@@ -494,7 +510,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     open_manager(pane)?;
     inspect_provider(pane, "PF54 Managed", "Inactive")?;
     open_model_picker(pane)?;
-    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    pane.wait_stable_contains(OTHER_TAB_SUBTITLE, READY_TIMEOUT)?;
     ensure!(
         numbered_selection_row_count(&pane.capture_viewport()?) == inactive_model_count,
         "inactive provider changed picker membership across restart"
@@ -507,7 +523,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     pane.wait_stable_contains("Enabled · configured", READY_TIMEOUT)?;
     close_manager(pane)?;
     open_model_picker(pane)?;
-    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    pane.wait_stable_contains(OTHER_TAB_SUBTITLE, READY_TIMEOUT)?;
     pane.wait_stable_until(
         "reactivated provider picker membership",
         READY_TIMEOUT,
@@ -874,10 +890,32 @@ fn numbered_selection_row_count(capture: &str) -> usize {
         .count()
 }
 
+/// Upstream's account/read discovers a ChatGPT login's workspace before the TUI starts, and
+/// bootstrap fails without it. The origin must be HTTPS, so it names a host that cannot resolve
+/// (`.invalid`): a request routed there fails instead of leaving the machine.
+async fn mount_workspace_routing(server: &MockServer, account_id: &str) {
+    Mock::given(method("GET"))
+        .and(path("/backend-api/wham/accounts/check"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "accounts": [{
+                "id": account_id,
+                "workspace_backend_origin": "https://chatgpt.invalid",
+                "account_routing_override": "NO_CONSTRAINT"
+            }],
+            "default_account_id": account_id
+        })))
+        .mount(server)
+        .await;
+}
+
+/// The model picker's active "Other" tab. Upstream draws the active tab as a filled cell, not
+/// `[Other]`; its subtitle names it.
+const OTHER_TAB_SUBTITLE: &str = "Configured custom providers";
+
 fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
     pane.wait_stable_until("chat ready", READY_TIMEOUT, |capture| {
         chat_footer_visible(capture)
-            || (capture.contains("/model to change")
+            || (session_configured(capture)
                 && !capture.contains("Press enter to confirm or esc to go back"))
     })?;
     Ok(())
@@ -990,6 +1028,12 @@ model_provider = "{PRIMARY_PROVIDER}"
 cli_auth_credentials_store = "file"
 suppress_unstable_features_warning = true
 log_dir = "{}"
+# Upstream starts the shared daemon by default; this cargo-built binary has no package to
+# install one from, so startup would refuse (focus_palette covers that). Run embedded.
+features.daemon_auto_start = false
+# Upstream records its one-time screen-reader probe in config.toml on first start; record it
+# here so the config-equality checks see only the action under test.
+tui.screen_reader_detection_done = true
 
 [model_providers.{PRIMARY_PROVIDER}]
 name = "PF54 Primary"

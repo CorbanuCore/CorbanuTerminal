@@ -1,6 +1,7 @@
 pub(crate) mod chat_ready;
 pub(crate) mod file_hash;
 pub(crate) mod secret_scan;
+pub(crate) mod thread_title;
 pub(crate) mod tmux;
 mod tmux_artifacts;
 mod tmux_command;
