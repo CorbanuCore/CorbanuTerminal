@@ -9,9 +9,12 @@ use anyhow::Result;
 use anyhow::ensure;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_protocol::MemoryVersion;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::SessionMeta;
+use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
 use core_test_support::responses;
 use std::fs;
@@ -31,16 +34,26 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
     }
     let repo = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
-    for (level, cancel_pending) in [
-        ("permissive", false),
-        ("moderate", false),
-        ("aggressive", false),
-        ("permissive", true),
+    // `None` is a fresh profile, which upstream now starts on the v2 memory
+    // pipeline (its own `memories_v2` store). Explicit v1 is what existing
+    // profiles with a `memories` folder keep using.
+    for (level, cancel_pending, pinned) in [
+        ("permissive", false, None),
+        ("moderate", false, None),
+        ("aggressive", false, None),
+        ("permissive", true, None),
+        ("permissive", false, Some(MemoryVersion::V1)),
+        ("moderate", false, Some(MemoryVersion::V1)),
     ] {
-        let case = if cancel_pending {
-            "cancel-pending"
-        } else {
-            level
+        let version = pinned.unwrap_or(MemoryVersion::V2);
+        let case = match (cancel_pending, pinned) {
+            (true, _) => "cancel-pending".to_string(),
+            (false, None) => level.to_string(),
+            (false, Some(_)) => format!("{level}-v1"),
+        };
+        let pinned_version = match pinned {
+            Some(pinned) => format!("version = {}\n", serde_json::to_string(&pinned)?),
+            None => String::new(),
         };
         let mut input_events = Vec::new();
         let home = tempdir()?;
@@ -48,16 +61,21 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         Mock::given(wiremock::matchers::method("POST"))
             .respond_with(move |request: &wiremock::Request| {
                 let body = String::from_utf8_lossy(&request.body);
-                let text = if body.contains(CANARY) {
+                // Answer in the requested version's schema: only v1 asks for `raw_memory`.
+                let text = if !body.contains(CANARY) {
+                    "foreground fixture complete"
+                } else if body.contains("raw_memory") {
                     r#"{"raw_memory":"synthetic extracted result","rollout_summary":"synthetic summary","rollout_slug":"fixture"}"#
-                } else { "foreground fixture complete" };
+                } else {
+                    r#"{"rollout_summary":"synthetic summary","rollout_slug":"fixture"}"#
+                };
                 let response = ResponseTemplate::new(200).insert_header("content-type", "text/event-stream")
                     .set_body_string(responses::sse(vec![responses::ev_response_created("fixture"),
                         responses::ev_assistant_message("fixture-message", text), responses::ev_completed("fixture")]));
                 if cancel_pending && body.contains(CANARY) { response.set_delay(Duration::from_secs(30)) } else { response }
             }).mount(&server).await;
         let config = format!(
-            "model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\nsqlite = true\nmemories = true\nbroker_model_auth = false\n[memories]\ngenerate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
+            "model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\ndaemon_auto_start = false\nsqlite = true\nmemories = true\nbroker_model_auth = false\n[memories]\n{pinned_version}generate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
             server.uri(),
             home.path().join("logs"),
             serde_json::to_string(&repo.display().to_string())?
@@ -96,7 +114,27 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                 .into(),
             ),
         };
-        fs::write(&rollout, format!("{}\n", serde_json::to_string(&line)?))?;
+        // Memory extraction reads only rollouts that start with session metadata,
+        // as every recorded session does.
+        let header = RolloutLine {
+            timestamp: timestamp.to_rfc3339(),
+            ordinal: None,
+            item: RolloutItem::SessionMeta(Box::new(SessionMetaLine {
+                meta: SessionMeta {
+                    id: source,
+                    ..Default::default()
+                },
+                git: None,
+            })),
+        };
+        fs::write(
+            &rollout,
+            format!(
+                "{}\n{}\n",
+                serde_json::to_string(&header)?,
+                serde_json::to_string(&line)?
+            ),
+        )?;
         let mut metadata =
             codex_state::ThreadMetadataBuilder::new(source, rollout, timestamp, SessionSource::Cli);
         metadata.cwd = repo.clone();
@@ -107,6 +145,8 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         metadata.first_user_message = Some(CANARY.into());
         db.upsert_thread(&metadata).await?;
         db.set_thread_memory_mode(source, "enabled").await?;
+        // Stage-one outputs live in the selected version's store.
+        let memories = db.memories_for_version(version).await?;
         let tmux = TmuxServer::start(&format!("memory_policy_{case}"))?;
         tmux.register_artifact("codex-tui.log", home.path().join("logs/codex-tui.log"));
         let session = tmux.new_session(
@@ -133,10 +173,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         )?;
         let deadline = tokio::time::Instant::now() + TIMEOUT;
         loop {
-            let outputs = db
-                .memories()
-                .list_stage1_outputs_for_global(/*n*/ 10)
-                .await?;
+            let outputs = memories.list_stage1_outputs_for_global(/*n*/ 10).await?;
             let log =
                 fs::read_to_string(home.path().join("logs/codex-tui.log")).unwrap_or_default();
             let done = if cancel_pending {
@@ -175,7 +212,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         );
         if level != "permissive" {
             ensure!(
-                db.memories()
+                memories
                     .list_stage1_outputs_for_global(/*n*/ 10)
                     .await?
                     .is_empty(),
@@ -201,7 +238,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         session.wait_for_exit(TIMEOUT)?;
         if cancel_pending {
             ensure!(
-                db.memories()
+                memories
                     .list_stage1_outputs_for_global(/*n*/ 10)
                     .await?
                     .is_empty(),
@@ -255,7 +292,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                 root.join(format!("{case}-outcomes.txt")),
                 format!(
                     "canary_requests={canaries}\nstage1_outputs={}\n",
-                    db.memories()
+                    memories
                         .list_stage1_outputs_for_global(/*n*/ 10)
                         .await?
                         .len()

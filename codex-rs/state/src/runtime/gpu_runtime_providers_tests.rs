@@ -261,3 +261,68 @@ async fn plaintext_remote_http_endpoint_is_rejected() {
         .expect_err("remote plaintext endpoint must fail");
     assert!(error.to_string().contains("HTTPS or loopback"));
 }
+
+/// #2723: config loading's read-only reader returns what the runtime lists,
+/// and refuses a state database with migrations this build doesn't know.
+#[tokio::test]
+async fn read_only_overlay_reader_matches_runtime_and_refuses_foreign_databases() {
+    let home = std::env::temp_dir().join(format!("gpu-overlay-ro-{}", uuid::Uuid::new_v4()));
+    let runtime = StateRuntime::init_for_testing(home.clone(), "test-provider".to_string())
+        .await
+        .expect("initialize state");
+    runtime
+        .create_gpu_rental(&params("rental-ro"), NOW_MS)
+        .await
+        .expect("create rental");
+    set_state(&runtime, "rental-ro", GpuRentalState::Ready, NOW_MS).await;
+    assert!(
+        runtime
+            .upsert_gpu_runtime_provider(
+                &GpuRuntimeProviderUpsert {
+                    rental_id: "rental-ro".to_string(),
+                    provider_id: "gpu-rental-ro".to_string(),
+                    base_url: "https://rental.example.invalid/v1".to_string(),
+                    model_id: "pinned/model".to_string(),
+                    wire_api: "chat".to_string(),
+                    health: "ready".to_string(),
+                    display_hourly_microusd: 1_000_000,
+                    maximum_context_tokens: 65_536,
+                    catalog_sequence: 1,
+                },
+                NOW_MS + 1,
+            )
+            .await
+            .expect("ready upsert")
+    );
+    let sqlite = SqliteConfig::new_for_testing(home.as_path().abs());
+    let timeout = std::time::Duration::from_secs(2);
+
+    let read = sqlite
+        .read_gpu_runtime_providers(timeout)
+        .await
+        .expect("read-only overlay");
+    assert_eq!(read.len(), 1);
+    assert_eq!(
+        read,
+        runtime.list_gpu_runtime_providers().await.expect("list")
+    );
+
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(9_999_i64)
+    .bind("foreign migration")
+    .bind(true)
+    .bind(vec![1_u8, 2, 3, 4])
+    .bind(1_i64)
+    .execute(runtime.pool.as_ref())
+    .await
+    .expect("insert foreign migration record");
+    let err = sqlite
+        .read_gpu_runtime_providers(timeout)
+        .await
+        .expect_err("a database with foreign migrations is refused");
+    assert!(err.to_string().contains("foreign migrations"), "{err}");
+
+    runtime.close().await;
+}

@@ -41,6 +41,7 @@ use codex_app_server_protocol::ThreadSectionMoveResponse;
 use codex_config::types::WindowsSandboxModeToml;
 use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::ThreadIdleCause;
+use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_protocol::AgentPath;
 use codex_protocol::SanitizedGitUrl;
 use codex_protocol::config_types::MultiAgentMode;
@@ -980,14 +981,29 @@ impl ThreadRequestProcessor {
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        // Like thread/start, rebuild the session on a fresh task stack. Polled from
+        // the request dispatcher's large frame, the reload overflowed debug Windows'
+        // 8 MiB test stack (#2277).
+        let processor = self.clone();
+        let revert_request_id = request_id.clone();
+        let revert = async move {
+            processor
+                .thread_revert_response(
+                    &revert_request_id,
+                    params,
+                    app_server_client_name,
+                    app_server_client_version,
+                )
+                .await
+        };
+        // Task-locals do not cross the spawn; carry the request's storage originator.
+        // Boxed so the scope wrapper does not copy the large revert future on the stack.
+        let revert = AuthStorageOriginator::current().scope(Box::pin(revert));
         let (response, thread_id) = self
-            .thread_revert_response(
-                &request_id,
-                params,
-                app_server_client_name,
-                app_server_client_version,
-            )
-            .await?;
+            .background_tasks
+            .spawn(revert.instrument(tracing::Span::current()))
+            .await
+            .map_err(|_| internal_error("thread revert task stopped before completing"))??;
         self.outgoing.send_response(request_id, response).await;
         self.outgoing
             .send_server_notification(ServerNotification::ThreadReverted(

@@ -11,9 +11,12 @@ use anyhow::Result;
 use anyhow::ensure;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_protocol::MemoryVersion;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::SessionMeta;
+use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
 use serde_json::Value;
 use serde_json::json;
@@ -286,6 +289,9 @@ check_for_update_on_startup = false
 suppress_unstable_features_warning = true
 log_dir = {:?}
 [features]
+# Upstream starts the shared daemon by default; this cargo-built binary has no package to
+# install one from. Run embedded.
+daemon_auto_start = false
 sqlite = true
 memories = true
 code_mode_host = false
@@ -373,7 +379,27 @@ animations = false
             .into(),
         ),
     };
-    fs::write(&rollout, format!("{}\n", serde_json::to_string(&line)?))?;
+    // Memory extraction reads only rollouts that start with session metadata,
+    // as every recorded session does.
+    let header = RolloutLine {
+        timestamp: timestamp.to_rfc3339(),
+        ordinal: None,
+        item: RolloutItem::SessionMeta(Box::new(SessionMetaLine {
+            meta: SessionMeta {
+                id: source,
+                ..Default::default()
+            },
+            git: None,
+        })),
+    };
+    fs::write(
+        &rollout,
+        format!(
+            "{}\n{}\n",
+            serde_json::to_string(&header)?,
+            serde_json::to_string(&line)?
+        ),
+    )?;
     let mut metadata =
         codex_state::ThreadMetadataBuilder::new(source, rollout, timestamp, SessionSource::Cli);
     metadata.cwd = repo.clone();
@@ -382,6 +408,9 @@ animations = false
     metadata.first_user_message = Some(CANARY.into());
     db.upsert_thread(&metadata).await?;
     db.set_thread_memory_mode(source, "enabled").await?;
+    // A fresh profile starts on upstream's v2 memory pipeline, whose stage-one
+    // outputs live in the separate `memories_v2` store.
+    let memories = db.memories_for_version(MemoryVersion::V2).await?;
     let tmux = TmuxServer::start("memory-human")?;
     let spec = |name| {
         SessionSpec::new(
@@ -420,8 +449,7 @@ animations = false
     loop {
         let routes = routing(&a, &b).await;
         let canaries = routes.iter().filter(|r| r["kind"] == "memory").count();
-        let outputs = db
-            .memories()
+        let outputs = memories
             .list_stage1_outputs_for_global(/*n*/ 100)
             .await?
             .iter()

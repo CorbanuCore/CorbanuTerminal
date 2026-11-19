@@ -11,6 +11,28 @@ use tree_sitter::Parser;
 /// at. The accepted CST shapes intentionally cover only common literal command forms; rare
 /// PowerShell syntax and value-conversion cases stay opaque.
 pub(crate) fn try_parse_powershell_commands(script: &str) -> Option<Vec<Vec<String>>> {
+    try_parse_powershell_command_words(script).map(|commands| {
+        commands
+            .into_iter()
+            .map(|command| command.into_iter().map(|word| word.text).collect())
+            .collect()
+    })
+}
+
+/// A word of a lowered command, and how it was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LoweredWord {
+    pub(crate) text: String,
+    /// Written bare (`-Path`, `foo`), not quoted: PowerShell reads only a
+    /// bare word starting with `-` as a parameter name.
+    pub(crate) bare: bool,
+    /// A bare word with a backtick escape in it.
+    pub(crate) escaped: bool,
+}
+
+/// [`try_parse_powershell_commands`] with how each word was written (D729
+/// (A): only a bare word names a parameter).
+pub(crate) fn try_parse_powershell_command_words(script: &str) -> Option<Vec<Vec<LoweredWord>>> {
     lower_with_tree_sitter(script).ok()
 }
 
@@ -57,12 +79,14 @@ pub(crate) fn powershell_restrictive_prefixes(script: &str) -> Vec<Vec<String>> 
                         .filter(|rest| rest.starts_with(char::is_whitespace))
                 })
                 .map_or(text, str::trim_start);
-            lower_command_text_with_prefix(text, true).ok()
+            lower_command_text_with_prefix(text, true)
+                .ok()
+                .map(|words| words.into_iter().map(|word| word.text).collect())
         })
         .collect()
 }
 
-fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<String>>, String> {
+fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<LoweredWord>>, String> {
     // PowerShell treats these Unicode characters as syntax aliases even when tree-sitter leaves
     // them inside generic tokens. Keep that whole spelling family opaque rather than guessing at
     // whether a quote or dash is structural in a particular position.
@@ -119,13 +143,13 @@ fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<String>>, String> {
     if commands.iter().any(|command| {
         command
             .first()
-            .is_some_and(|word| word.eq_ignore_ascii_case("using"))
+            .is_some_and(|word| word.text.eq_ignore_ascii_case("using"))
     }) {
         return Err("using declarations require the PowerShell AST oracle".to_string());
     }
     if commands
         .iter()
-        .any(|command| command.is_empty() || command.iter().any(String::is_empty))
+        .any(|command| command.is_empty() || command.iter().any(|word| word.text.is_empty()))
     {
         return Err("empty lowered command or word".to_string());
     }
@@ -371,14 +395,14 @@ fn source_is_covered_by_commands(script: &str, command_ranges: &[std::ops::Range
     range_index == command_ranges.len() && !needs_command && paren_depth == 0
 }
 
-fn lower_command_text(command_text: &str) -> Result<Vec<String>, String> {
+fn lower_command_text(command_text: &str) -> Result<Vec<LoweredWord>, String> {
     lower_command_text_with_prefix(command_text, false)
 }
 
 fn lower_command_text_with_prefix(
     command_text: &str,
     partial: bool,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<LoweredWord>, String> {
     // This is literal argv lowering, not safe/dangerous classification. Quoting and escapes are
     // decoded only for forms whose runtime value is statically known.
     let mut words = Vec::new();
@@ -400,6 +424,7 @@ fn lower_command_text_with_prefix(
             break;
         }
         let lowered = (|| {
+            let start = index;
             let (word, next, is_bare) = if chars[index] == '\'' {
                 let (word, next) = parse_single_quoted(&chars, index)?;
                 (word, next, false)
@@ -410,6 +435,7 @@ fn lower_command_text_with_prefix(
                 let (word, next) = parse_bare_word(&chars, index)?;
                 (word, next, true)
             };
+            let escaped = is_bare && chars[start..next].contains(&'`');
             index = next;
             if index < chars.len() && !chars[index].is_whitespace() && chars[index] != '#' {
                 return Err("adjacent/concatenated command elements".to_string());
@@ -420,7 +446,11 @@ fn lower_command_text_with_prefix(
             if is_bare {
                 reject_unsupported_bare_word(&word)?;
             }
-            Ok(word)
+            Ok(LoweredWord {
+                text: word,
+                bare: is_bare,
+                escaped,
+            })
         })();
         match lowered {
             Ok(word) => words.push(word),

@@ -25,7 +25,7 @@ fn tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths() -> 
     for (level, width) in [("permissive", 120), ("moderate", 40), ("aggressive", 80)] {
         let home = tempdir()?;
         let config = format!(
-            "model = \"gpt-5.6-terra\"\nmodel_provider = \"openai\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
+            "model = \"gpt-5.6-terra\"\nmodel_provider = \"openai\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nnotice.model_migrations.\"gpt-5.6-terra\" = \"gpt-6-sol\"\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\nscreen_reader_detection_done = true\n",
             serde_json::to_string(&repo.display().to_string())?
         );
         fs::write(home.path().join("config.toml"), &config)?;
