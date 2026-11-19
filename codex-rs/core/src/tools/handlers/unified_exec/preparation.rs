@@ -95,6 +95,11 @@ impl PreparedExecCommand {
                     },
                     prefix_rule: self.prefix_rule.clone(),
                     allow_prefix_rules: step.turn.allow_prefix_rules(),
+                    cwd: if environment.environment.is_remote() {
+                        None
+                    } else {
+                        self.cwd.to_abs_path().ok()
+                    },
                 },
                 configured_shell,
                 command_platform,
