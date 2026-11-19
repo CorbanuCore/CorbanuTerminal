@@ -80,7 +80,10 @@ jobs:
     needs: packages
     if: ${{ needs.packages.outputs.packages != '[]' }}
     runs-on: windows-2022
-    timeout-minutes: 60
+    # codex-app-server needs ~37 minutes for a cold build of its helper binaries
+    # and tests, then ~27 minutes of tests; 60 cancelled it before it finished
+    # (#2742, #2729).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
