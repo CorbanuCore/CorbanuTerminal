@@ -447,7 +447,7 @@ fn sec_win_1896_elevated_command_cannot_edit_the_records_folder() {
                 system32_exe("cmd.exe").display().to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script_path.display().to_string(),
+                format!("\"{}\"", script_path.display()),
             ],
             cwd: &workspace,
             env_map: std::env::vars().collect(),

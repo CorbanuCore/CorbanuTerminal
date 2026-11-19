@@ -1397,7 +1397,7 @@ fn run_legacy_delete_fixture(
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script.display().to_string(),
+                format!("\"{}\"", script.display()),
             ],
             workspace.as_path(),
             env_map,
@@ -1522,7 +1522,7 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script.display().to_string(),
+                format!("\"{}\"", script.display()),
             ],
             workspace.as_path(),
             with_session_temp(codex_home.path(), env_map),
@@ -1625,7 +1625,7 @@ fn legacy_workspace_write_cannot_move_ancestor_of_nested_carve_out() {
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script.display().to_string(),
+                format!("\"{}\"", script.display()),
             ],
             workspace.as_path(),
             with_session_temp(codex_home.path(), env_map),
@@ -1769,7 +1769,7 @@ fn run_legacy_script(
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script_path.display().to_string(),
+                format!("\"{}\"", script_path.display()),
             ],
             workspace,
             env_map,
@@ -2602,7 +2602,7 @@ fn legacy_delete_child_denies_are_removed_after_the_session() {
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script.display().to_string(),
+                format!("\"{}\"", script.display()),
             ],
             workspace.as_path(),
             with_session_temp(codex_home.path(), env_map),
@@ -3515,6 +3515,10 @@ mod command_identity;
 
 #[path = "ctrl_c_tests.rs"]
 mod ctrl_c;
+
+/// D730 (#2702): `cmd.exe /C` command lines reach cmd and the program as written.
+#[path = "cmd_line_tests.rs"]
+mod cmd_line;
 
 /// #1770: a command's own token keeps it out of folders any user may write to.
 #[path = "token_boundary_tests.rs"]

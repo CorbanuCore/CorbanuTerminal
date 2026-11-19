@@ -35,7 +35,7 @@ fn write_probe_script(dir: &Path, existing: &Path, new: &Path) -> Vec<String> {
         system32_exe("cmd.exe").display().to_string(),
         "/d".to_string(),
         "/c".to_string(),
-        script.display().to_string(),
+        format!("\"{}\"", script.display()),
     ]
 }
 
@@ -217,7 +217,7 @@ fn sec_win_d377_command_cannot_turn_its_temp_folder_into_a_link() {
         system32_exe("cmd.exe").display().to_string(),
         "/d".to_string(),
         "/c".to_string(),
-        script.display().to_string(),
+        format!("\"{}\"", script.display()),
     ];
     let value = temp.path().display().to_string();
     let env = [("TEMP", value.clone()), ("TMP", value)];
@@ -295,7 +295,7 @@ fn sec_win_d377_old_leftovers_in_temp_are_taken_for_the_user() {
             system32_exe("cmd.exe").display().to_string(),
             "/d".to_string(),
             "/c".to_string(),
-            script.display().to_string(),
+            format!("\"{}\"", script.display()),
         ]
     };
     // A temp folder secured like a user's, with the grant older setups left
