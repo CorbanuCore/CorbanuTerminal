@@ -112,7 +112,11 @@ async fn failures_for(commands: Vec<Vec<String>>, rule_sets: &[&str]) -> Vec<Str
 /// Asks (or refuses where the rule is forbidden), with no amendment; with
 /// approvals off, refused. Sync (D691): where a forbidden rule could match,
 /// a fresh human decision; a prompt rule alone asks as on main.
-pub(super) fn acceptable(rules: &str, result: &ExecApprovalRequirement, approvals_off: bool) -> bool {
+pub(super) fn acceptable(
+    rules: &str,
+    result: &ExecApprovalRequirement,
+    approvals_off: bool,
+) -> bool {
     match result {
         ExecApprovalRequirement::Forbidden { .. } => rules != PROMPT || approvals_off,
         ExecApprovalRequirement::NeedsHumanApproval { .. } => rules != PROMPT && !approvals_off,
