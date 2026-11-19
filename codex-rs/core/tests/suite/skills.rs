@@ -494,7 +494,9 @@ async fn idle_user_turn_includes_skill_instructions_in_the_first_request() -> Re
     Ok(())
 }
 
+#[cfg(unix)]
 const HOME_SKILLS_SUBPROCESS_ENV_VAR: &str = "CODEX_HARNESS_HOME_SKILLS_SUBPROCESS";
+#[cfg(unix)]
 const HOME_SKILLS_TEST_NAME: &str = "suite::skills::harness_skips_the_user_home_skills_root";
 
 /// #888: the test harness never reads the developer's own `$HOME/.agents/skills`.

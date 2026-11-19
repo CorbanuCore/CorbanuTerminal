@@ -1,6 +1,7 @@
 use super::*;
 use codex_protocol::config_types::ShellEnvironmentPolicy;
 use codex_shell_command::shell_detect::ShellType;
+#[cfg(unix)]
 use codex_shell_command::shell_snapshot::{
     SnapshotCaptureOptions, SnapshotStartup, snapshot_capture_script,
 };
