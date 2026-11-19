@@ -829,12 +829,32 @@ fn can_change_descendants(event: &Event) -> bool {
     )
 }
 
-/// Identity of the file or directory at `path`, if it can be opened.
+/// Identity of the file or directory at `path` (device and inode), read
+/// from its metadata without opening it, so a FIFO cannot block.
+#[cfg(unix)]
+fn path_identity(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = std::fs::metadata(path).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (metadata.dev(), metadata.ino()).hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+/// Identity of the file or directory at `path` (volume serial number and
+/// file index), if it can be opened. The handle is opened with backup
+/// semantics and full sharing and closed at once.
+#[cfg(windows)]
 fn path_identity(path: &Path) -> Option<u64> {
     let handle = same_file::Handle::from_path(path).ok()?;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     handle.hash(&mut hasher);
     Some(hasher.finish())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn path_identity(_path: &Path) -> Option<u64> {
+    None
 }
 
 fn is_mutating_event(event: &Event) -> bool {
@@ -945,6 +965,7 @@ fn changed_path_for_matched_path(
     let requested = &subscriber_watch.requested;
     if event_path == matched.path {
         subscriber_watch_state.last_exists = matched.path.exists();
+        subscriber_watch_state.identity = path_identity(&matched.path);
         return Some(requested.path.clone());
     }
     if matched.path.starts_with(event_path) {

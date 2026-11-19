@@ -654,7 +654,7 @@ async fn ancestor_content_change_reports_deleted_or_replaced_watch() {
         }
     );
 
-    // Deleted.
+    // Deleted, then recreated: both reported.
     std::fs::remove_dir(&skills_dir).expect("remove skills dir");
     assert_eq!(
         ancestor_change().await,
@@ -662,6 +662,77 @@ async fn ancestor_content_change_reports_deleted_or_replaced_watch() {
             paths: vec![home.clone()],
         }
     );
+    // The deleted root's watch fell back to `home`, which reports the root.
+    std::fs::create_dir(&skills_dir).expect("recreate skills dir again");
+    assert_eq!(
+        ancestor_change().await,
+        FileWatcherEvent {
+            paths: vec![skills_dir.clone()],
+        }
+    );
+
+    // Unchanged since the last event: skipped, so the next event received is
+    // a sentinel below the root.
+    raw_tx
+        .send(Ok(notify_event(
+            EventKind::Modify(ModifyKind::Any),
+            vec![home.clone()],
+        )))
+        .expect("send ancestor event");
+    let sentinel = skills_dir.join("SKILL.md");
+    raw_tx
+        .send(Ok(notify_event(
+            EventKind::Modify(ModifyKind::Any),
+            vec![sentinel.clone()],
+        )))
+        .expect("send sentinel event");
+    let event = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("sentinel event timeout")
+        .expect("sentinel event");
+    assert_eq!(
+        event,
+        FileWatcherEvent {
+            paths: vec![sentinel],
+        }
+    );
+}
+
+/// Reading a watched path's identity never opens it, so a FIFO at the path
+/// cannot block registration or event handling.
+#[cfg(unix)]
+#[tokio::test]
+async fn fifo_watch_does_not_block_ancestor_events() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let home = temp_dir.path().join("home");
+    std::fs::create_dir(&home).expect("create home");
+    let fifo = home.join("skills");
+    let status = std::process::Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("run mkfifo");
+    assert!(status.success(), "mkfifo failed");
+
+    let watcher = Arc::new(FileWatcher::noop());
+    let (subscriber, rx) = watcher.add_subscriber();
+    let _registration = subscriber.register_path(fifo.clone(), /*recursive*/ false);
+    let mut rx = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
+    let (raw_tx, raw_rx) = mpsc::unbounded_channel();
+    watcher.spawn_event_loop_for_test(raw_rx);
+
+    for kind in [
+        EventKind::Modify(ModifyKind::Any),
+        EventKind::Remove(notify::event::RemoveKind::Any),
+    ] {
+        raw_tx
+            .send(Ok(notify_event(kind, vec![home.clone()])))
+            .expect("send ancestor event");
+    }
+    let event = timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("event loop blocked")
+        .expect("ancestor event");
+    assert_eq!(event, FileWatcherEvent { paths: vec![home] });
 }
 
 /// A content change to an ancestor still reports a missing watched path
