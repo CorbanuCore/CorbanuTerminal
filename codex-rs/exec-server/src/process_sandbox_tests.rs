@@ -792,14 +792,19 @@ async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: Win
     )
     .await;
 
-    // D355 promotes either selection to the elevated backend when proxy
-    // enforcement is required. Both cases must retain the restricting SID.
+    // D355 selects the elevated backend when proxy enforcement is required;
+    // the request still carries the original configured sandbox level.
+    // Both cases must retain the proxy enforcement flag and restricting SID.
     let mut prepared = prepared.expect("managed networking prepares an elevated Windows sandbox");
     let spawn = prepared
         .windows_sandbox_spawn_request()
         .expect("Windows sandbox spawn request");
-    assert_eq!(spawn.windows_sandbox_level, WindowsSandboxLevel::Elevated);
+    assert_eq!(spawn.windows_sandbox_level, windows_sandbox_level);
     assert!(spawn.proxy_enforced);
+    assert!(codex_sandboxing::windows_sandbox_uses_elevated_backend(
+        spawn.windows_sandbox_level,
+        spawn.proxy_enforced,
+    ));
     assert!(spawn.network_proxy_restricting_sid.is_some());
     prepared
         .network_proxy_handle
