@@ -932,7 +932,9 @@ mod tests {
             ),
         ]);
         let sandbox_context = crate::FileSystemSandboxContext {
-            windows_sandbox_selection: codex_file_system::WindowsSandboxSelection::RestrictedToken,
+            // Read denials require the elevated backend; keep testing how the
+            // accepted wrapper request binds this relative denial to its cwd.
+            windows_sandbox_selection: codex_file_system::WindowsSandboxSelection::Elevated,
             ..sandbox_context_with_cwd(&policy, cwd_uri)
         };
         selected.close().expect("remove selected directory");
