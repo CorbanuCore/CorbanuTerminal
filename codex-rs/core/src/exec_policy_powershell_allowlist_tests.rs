@@ -37,7 +37,8 @@ async fn decide_remote(
                 prefix_rule: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd: None,
-                env: None,
+                // A remote environment, as unified exec gives it.
+                env: Some(&std::collections::HashMap::new()),
             },
             &shell,
             DangerousCommandPlatform::Windows,
@@ -367,7 +368,8 @@ mod local {
                             ExecApprovalRequirement::NeedsApproval {
                                 proposed_execpolicy_amendment: None,
                                 ..
-                            } | ExecApprovalRequirement::Forbidden { .. }
+                            } | ExecApprovalRequirement::NeedsHumanApproval { .. }
+                                | ExecApprovalRequirement::Forbidden { .. }
                         ),
                         "{shell} {script} {permission_profile:?}: {asked:?}"
                     );

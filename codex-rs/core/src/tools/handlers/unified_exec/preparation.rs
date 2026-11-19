@@ -75,6 +75,10 @@ impl PreparedExecCommand {
             Some("windows") | Some(_) => DangerousCommandPlatform::Windows,
             None => DangerousCommandPlatform::host(),
         };
+        // D729 (A): a remote command's environment is not this host's; only
+        // its being remote matters (see `ExecApprovalRequest::env`).
+        let remote = environment.environment.is_remote();
+        let remote_env = std::collections::HashMap::new();
         session
             .services
             .exec_policy
@@ -95,14 +99,14 @@ impl PreparedExecCommand {
                     },
                     prefix_rule: self.prefix_rule.clone(),
                     allow_prefix_rules: step.turn.allow_prefix_rules(),
-                    cwd: if environment.environment.is_remote() {
+                    cwd: if remote {
                         None
                     } else {
                         self.cwd.to_abs_path().ok()
                     },
                     // Sync: the command's environment is built after approval;
-                    // its shell's `PATH` is looked for in Corbanu's.
-                    env: None,
+                    // a local shell's `PATH` is looked for in Corbanu's.
+                    env: remote.then_some(&remote_env),
                 },
                 configured_shell,
                 command_platform,

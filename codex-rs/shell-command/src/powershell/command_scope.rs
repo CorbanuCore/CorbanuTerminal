@@ -30,6 +30,9 @@ thread_local! {
 /// programs with.
 #[derive(Debug, Clone)]
 pub struct PowershellCommandScope {
+    /// Sync: whether there is a command to check; otherwise (heuristics,
+    /// tests) names are not looked up, as outside a scope.
+    checked: bool,
     /// Whether the command runs on this host (not a remote environment).
     local: bool,
     /// Whether the allowlist applies: a prompt or forbidden rule exists, which
@@ -59,10 +62,26 @@ impl PowershellCommandScope {
             None => std::env::var(name).ok(),
         };
         Self {
+            checked: true,
             local: cwd.is_some(),
             allowlist: true,
             path: var("PATH").map(Into::into),
             extensions: var("PATHEXT"),
+            documents: None,
+        }
+    }
+
+    /// Sync: no command to check (heuristics, tests): names are not looked up,
+    /// as outside a scope, and only whether the allowlist applies is set, so
+    /// the approval path reads scripts alike with or without a command
+    /// (D733).
+    pub fn unchecked() -> Self {
+        Self {
+            checked: false,
+            local: false,
+            allowlist: true,
+            path: None,
+            extensions: None,
             documents: None,
         }
     }
@@ -128,7 +147,7 @@ pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     if programs.is_empty() && cmdlets.is_empty() {
         return true;
     }
-    let Some(scope) = current_scope() else {
+    let Some(scope) = current_scope().filter(|scope| scope.checked) else {
         return true;
     };
     if !scope.local {
@@ -144,7 +163,7 @@ pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
 /// running elsewhere finds none; outside a scope, Corbanu's `PATH` is looked
 /// in, as main's parser looks in its own.
 pub(crate) fn program_on_path(name: &str) -> bool {
-    let lookup = match current_scope() {
+    let lookup = match current_scope().filter(|scope| scope.checked) {
         Some(scope) if !scope.local => return false,
         Some(scope) => PathLookup::new(scope.path.as_deref(), scope.extensions.as_deref()),
         None => PathLookup::new(
@@ -163,7 +182,7 @@ pub(crate) fn program_on_path(name: &str) -> bool {
 /// cannot be read, one may. Outside a scope none is looked for, as names are
 /// not (see [`names_resolve`]).
 pub(crate) fn profile_may_exist(shell: &str, kind: PowershellKind) -> bool {
-    let Some(scope) = current_scope() else {
+    let Some(scope) = current_scope().filter(|scope| scope.checked) else {
         return false;
     };
     if !scope.local {

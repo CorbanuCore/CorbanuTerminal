@@ -332,8 +332,11 @@ pub(crate) struct ExecApprovalRequest<'a> {
     /// local is used, for finding batch files (`exec_policy_wrappers`).
     pub(crate) cwd: Option<AbsolutePathBuf>,
     /// D729 (A): the command's environment, where its shell finds programs
-    /// (`PATH`, `PATHEXT`); `None`: Corbanu's (sync: the approval is decided
-    /// before the command's environment is built).
+    /// (`PATH`, `PATHEXT`); `None`: Corbanu's. As on main, `cwd` `None` with
+    /// `env` given is a remote environment, and both `None` is no command to
+    /// check (heuristics, tests). Sync: the approval is decided before the
+    /// command's environment is built, so a local command gives `None` and a
+    /// remote one an empty environment (only its being remote matters).
     pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 
@@ -474,32 +477,36 @@ impl ExecPolicyManager {
     /// D729 (A): while the returned guard lives, PowerShell scripts are read
     /// as those of `req`'s command, on this host (its `PATH`, a profile) or
     /// another, with the allowlist only where a prompt or forbidden rule
-    /// exists (D733). Sync: on any host, since a Windows executor's scripts
-    /// are read on any (#2671); only a Windows host runs one locally. The
-    /// guard is not `Send`: hold it only where nothing awaits.
+    /// exists (D733). Where there is no command to check (see
+    /// [`ExecApprovalRequest::env`]) names are not looked up. Sync: on any
+    /// host, since a Windows executor's scripts are read on any (#2671); only
+    /// a Windows host runs one locally. The guard is not `Send`: hold it only
+    /// where nothing awaits.
     pub(super) fn powershell_command_scope(
         &self,
         req: &ExecApprovalRequest<'_>,
         command_platform: DangerousCommandPlatform,
         live_aggressive: bool,
     ) -> codex_shell_command::powershell::PowershellCommandScopeGuard {
+        use codex_shell_command::powershell::PowershellCommandScope;
         let exec_policy = self.current_for_environment_at(
             req.environment_policy,
             req.allow_prefix_rules,
             live_aggressive,
         );
         let local_windows = cfg!(windows) && req.cwd.is_some();
-        codex_shell_command::powershell::enter_powershell_command_scope(
-            codex_shell_command::powershell::PowershellCommandScope::new(
-                req.cwd.as_ref().filter(|_| local_windows),
-                req.env,
-            )
-            .with_documents(local_windows.then(dirs::document_dir).flatten())
-            .with_allowlist(wrappers::any_strict_rule(
+        let scope = if req.cwd.is_none() && req.env.is_none() {
+            PowershellCommandScope::unchecked()
+        } else {
+            PowershellCommandScope::new(req.cwd.as_ref().filter(|_| local_windows), req.env)
+                .with_documents(local_windows.then(dirs::document_dir).flatten())
+        };
+        codex_shell_command::powershell::enter_powershell_command_scope(scope.with_allowlist(
+            wrappers::any_strict_rule(
                 exec_policy.as_ref(),
                 &exec_policy_match_options(command_platform),
-            )),
-        )
+            ),
+        ))
     }
 
     async fn create_exec_approval_requirement_for_command_platform(
