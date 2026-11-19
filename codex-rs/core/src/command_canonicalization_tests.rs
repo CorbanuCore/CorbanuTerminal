@@ -86,3 +86,18 @@ fn preserves_non_shell_commands() {
     let command = vec!["cargo".to_string(), "fmt".to_string()];
     assert_eq!(canonicalize_command_for_approval(&command), command);
 }
+
+/// #2699: Windows runs a stream-spelled PowerShell's stream, not PowerShell:
+/// its approval keys on its literal argv, never on the script an approved
+/// `pwsh -Command` shares.
+#[test]
+fn stream_spelled_powershell_keeps_its_argv() {
+    for shell in ["pwsh.exe:x.exe", "powershell.exe::$DATA", "pwsh.~1"] {
+        let command = vec![
+            shell.to_string(),
+            "-Command".to_string(),
+            "Write-Host hi".to_string(),
+        ];
+        assert_eq!(canonicalize_command_for_approval(&command), command);
+    }
+}

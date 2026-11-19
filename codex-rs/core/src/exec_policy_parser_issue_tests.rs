@@ -8,6 +8,9 @@
 //! outside the minimal lexical set (any here-document or here-string), or
 //! one using a builtin that defines or runs code (`hash`, `alias`, `trap`,
 //! `enable`, `mapfile`), asks whenever a prompt or forbidden rule exists.
+#[path = "exec_policy_powershell_stream_tests.rs"]
+mod stream_tests;
+
 use super::*;
 use pretty_assertions::assert_eq;
 
