@@ -375,7 +375,7 @@ async fn a_working_directory_parameter_makes_writes_ask() {
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
             cwd: Some(AbsolutePathBuf::from_absolute_path(&workspace).expect("absolute cwd")),
-            env: None,
+            env: Some(&command_env()),
         })
         .await;
     assert!(

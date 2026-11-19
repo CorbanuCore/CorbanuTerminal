@@ -198,7 +198,11 @@ async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
             cwd: Some(AbsolutePathBuf::from_absolute_path(workspace.path()).expect("absolute")),
-            env: None,
+            // A Windows `PATH`, whatever the test runner's.
+            env: Some(&std::collections::HashMap::from([(
+                "Path".to_string(),
+                r"C:\Windows\System32".to_string(),
+            )])),
         })
         .await;
     assert_eq!(

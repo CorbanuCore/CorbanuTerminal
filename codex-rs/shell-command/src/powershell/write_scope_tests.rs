@@ -202,7 +202,8 @@ fn names_resolve_as_powershell_finds_them_on_path() {
     let lookup = |path: Vec<std::path::PathBuf>| {
         PathLookup::new(
             Some(std::env::join_paths(path).expect("PATH").as_os_str()),
-            Some(".COM;.EXE;.BAT;.CMD"),
+            // Lower case: a test folder may be case-sensitive, Windows is not.
+            Some(".com;.exe;.bat;.cmd"),
         )
     };
     let local = lookup(vec![dir.path().to_path_buf()]);

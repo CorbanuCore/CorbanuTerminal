@@ -237,23 +237,13 @@ struct PathLookup {
 
 impl PathLookup {
     fn new(path: Option<&std::ffi::OsStr>, pathext: Option<&str>) -> Self {
-        // An entry rooted at the current drive (`/usr/bin`, as Bazel and MSYS
-        // write it) is read on the system drive.
-        let system_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        // An entry rooted at the command's drive (`/usr/bin`, `\\tools`) is
+        // not looked in, as a relative one.
         let dirs = path
             .map(std::env::split_paths)
             .into_iter()
             .flatten()
             .filter(|dir| !dir.as_os_str().is_empty())
-            .map(|dir| {
-                let text = dir.to_string_lossy().into_owned();
-                let rooted = matches!(text.as_bytes(), [b'/' | b'\\', second, ..] if *second != b'/' && *second != b'\\');
-                if rooted && cfg!(windows) {
-                    std::path::PathBuf::from(format!("{system_drive}{text}"))
-                } else {
-                    dir
-                }
-            })
             .map(|dir| {
                 // Never a network folder (`\\server\share`, `//server`): looking
                 // there before approval would reach out to it.
