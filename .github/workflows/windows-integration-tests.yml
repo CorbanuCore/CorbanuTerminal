@@ -80,7 +80,10 @@ jobs:
     needs: packages
     if: ${{ needs.packages.outputs.packages != '[]' }}
     runs-on: windows-2022
-    timeout-minutes: 60
+    # The sync branch's codex-app-server leg builds codex-cli too and runs about
+    # 1,570 tests (~27 minutes after a 26-38 minute build), so 60 minutes timed
+    # out before its summary (#2277).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
