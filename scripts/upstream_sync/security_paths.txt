@@ -1,7 +1,6 @@
 codex-rs/linux-sandbox/
 codex-rs/windows-sandbox-rs/
 codex-rs/network-proxy/
-third_party/rama-dns/
 codex-rs/sandboxing/
 codex-rs/execpolicy/
 codex-rs/execpolicy-legacy/
@@ -143,6 +142,10 @@ scripts/test_security_platform_self_test.py
 .github/actions/windows-code-sign/
 .github/actions/setup-akv-pkcs11-codesigning/
 .github/scripts/macos-signing/
+third_party/rama-dns/
+.github/scripts/cargo_deny.py
+.github/scripts/test_cargo_deny.py
+.github/scripts/fixtures/cargo-deny-*.jsonl
 codex-rs/analytics/src/reducer.rs
 codex-rs/app-server-client/src/lib.rs
 codex-rs/app-server-protocol/schema/json/ServerNotification.json
