@@ -1383,6 +1383,11 @@ impl UnifiedExecProcessManager {
                         request.sandbox_permissions
                     },
                     prefix_rule: request.prefix_rule.clone(),
+                    cwd: if request.turn_environment.environment.is_remote() {
+                        None
+                    } else {
+                        cwd.to_abs_path().ok()
+                    },
                 },
                 live_aggressive,
             )

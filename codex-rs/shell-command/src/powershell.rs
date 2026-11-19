@@ -10,6 +10,11 @@ use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
 mod cli;
+mod write_scope;
+
+pub use write_scope::PowershellWriteScope;
+pub use write_scope::PowershellWriteScopeGuard;
+pub use write_scope::enter_powershell_write_scope;
 
 /// Prefixed command for powershell shell calls to request UTF-8 console output.
 pub const UTF8_OUTPUT_PREFIX: &str =
@@ -160,6 +165,19 @@ pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> Powe
     };
     match parse_with_powershell_ast(parser, script) {
         PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
+        // D729 (A): a script that writes is read in full only where its writes stay
+        // where the current scope lets them (`write_scope`); otherwise in part.
+        PowershellParseOutcome::Writes {
+            commands,
+            writes,
+            protected,
+        } => {
+            if write_scope::writes_allowed(&writes, &protected) {
+                PowershellScriptRead::Commands(commands)
+            } else {
+                PowershellScriptRead::Partial(commands)
+            }
+        }
         PowershellParseOutcome::Partial(commands) => PowershellScriptRead::Partial(commands),
         PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => {
             PowershellScriptRead::NotPlain

@@ -332,6 +332,10 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) windows_sandbox_level: WindowsSandboxLevel,
     pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) prefix_rule: Option<Vec<String>>,
+    /// D729 (A): the local directory the command runs in, where a PowerShell
+    /// script may write and still be read in full; `None` (a remote
+    /// environment, or unknown) reads every script that writes in part.
+    pub(crate) cwd: Option<AbsolutePathBuf>,
 }
 
 impl ExecPolicyManager {
@@ -445,7 +449,19 @@ impl ExecPolicyManager {
             windows_sandbox_level,
             sandbox_permissions,
             prefix_rule,
+            cwd,
         } = req;
+        // D729 (A): where a PowerShell script read below may write. The guard
+        // is not `Send`: nothing below awaits.
+        #[cfg(windows)]
+        let _write_scope = cwd.as_ref().map(|cwd| {
+            codex_shell_command::powershell::enter_powershell_write_scope(powershell_write_scope(
+                &permission_profile,
+                cwd,
+            ))
+        });
+        #[cfg(not(windows))]
+        let _ = cwd;
         let exec_policy = self.current_for(live_aggressive);
         let ExecPolicyCommands {
             commands,
@@ -1326,6 +1342,26 @@ fn program_key(token: &str) -> Option<String> {
         .find_map(|suffix| name.strip_suffix(suffix))
         .unwrap_or(&name);
     (!name.is_empty()).then(|| name.to_string())
+}
+
+/// D729 (A): the roots a PowerShell script may write in and still be read in
+/// full: the sandbox's writable roots, or under full access those a
+/// workspace-write session would have.
+#[cfg(windows)]
+fn powershell_write_scope(
+    permission_profile: &PermissionProfile,
+    cwd: &AbsolutePathBuf,
+) -> codex_shell_command::powershell::PowershellWriteScope {
+    let policy = permission_profile.file_system_sandbox_policy();
+    let policy = if policy.has_full_disk_write_access() {
+        PermissionProfile::workspace_write().file_system_sandbox_policy()
+    } else {
+        policy
+    };
+    codex_shell_command::powershell::PowershellWriteScope::new(
+        cwd,
+        policy.get_writable_roots_with_cwd(cwd.as_path()),
+    )
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

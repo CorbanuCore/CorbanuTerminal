@@ -11,15 +11,21 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
+# An "ok" reading whose commands write files also lists, as "writes", the literal paths
+# they write and, as "protected", the folders PowerShell and Windows run code from; a
+# "partial" reading may name its "cause".
 #
 # "unsupported" is intentional: it means the script parsed successfully, but the AST
 # included constructs that we conservatively refuse to lower into argv-like command words.
 # The Rust side treats that the same way as an unsafe command.
 
 # Use BOM-free UTF-8 on the protocol stream so Rust sees clean JSON lines with no
-# leading BOM bytes on the first response.
+# leading BOM bytes on the first response. The loader (powershell_parser.rs) reads this
+# script from the first line of stdin with `$stdin`, which requests then continue on.
 $utf8 = [System.Text.UTF8Encoding]::new($false)
-$stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $false)
+if ($null -eq $stdin) {
+    $stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $false)
+}
 $stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
 $stdout.AutoFlush = $true
 
@@ -105,7 +111,21 @@ function Invoke-ParseRequest {
         return Get-PartialCommands $RequestId $ast
     }
 
-    return @{ id = $RequestId; status = 'ok'; commands = $commands }
+    # D729 (A): only allowlisted cmdlets and native programs (powershell_allowlist.ps1).
+    $review = Get-D729Review $ast
+    if ($null -ne $review.cause) {
+        $partial = Get-PartialCommands $RequestId $ast
+        $partial.cause = $review.cause
+        return $partial
+    }
+
+    $response = @{ id = $RequestId; status = 'ok'; commands = $commands }
+    # Writes the Rust side checks against the writable roots and the protected folders.
+    if ($review.writes.Count -gt 0) {
+        $response.writes = [string[]]@($review.writes)
+        $response.protected = [string[]]@($D729Protected)
+    }
+    return $response
 }
 
 # Only literal command ASTs contribute restrictions. Never execute source, and

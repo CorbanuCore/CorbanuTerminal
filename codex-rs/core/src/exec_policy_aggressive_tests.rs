@@ -87,6 +87,7 @@ async fn requirement(
                 windows_sandbox_level: WindowsSandboxLevel::Disabled,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                cwd: None,
             },
             live_aggressive,
         )
@@ -327,6 +328,7 @@ async fn issue_626_note_names_only_suspended_rules() {
                 windows_sandbox_level: WindowsSandboxLevel::Disabled,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                cwd: None,
             },
             /*live_aggressive*/ true,
         )
@@ -371,6 +373,7 @@ async fn issue_626_rejection_names_the_suspended_rule() {
                 },
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
+                cwd: None,
             },
             /*live_aggressive*/ true,
         )

@@ -138,6 +138,7 @@ async fn cmd_scripts_are_refused_under_aggressive_with_approvals_off() {
                         windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
                         sandbox_permissions: SandboxPermissions::UseDefault,
                         prefix_rule: Some(command.clone()),
+                        cwd: None,
                     },
                     /*live_aggressive*/ true,
                 )
