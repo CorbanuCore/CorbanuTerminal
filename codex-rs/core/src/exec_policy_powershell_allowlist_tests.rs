@@ -173,6 +173,12 @@ fn unread_scripts() -> Vec<String> {
         "Get-Process | Export-Csv -Path p.csv".into(),
         "Compress-Archive -Path a.txt -DestinationPath a.zip".into(),
         "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile x.html".into(),
+        // #2709 review r4: Windows PowerShell's web cmdlets also write `file:`
+        // addresses, so neither is on the allowlist; a switch given a value.
+        "Invoke-RestMethod -Uri file:///C:/ws/node.cmd -Method Put -Body '@git push'; pnpm --version".into(),
+        "Invoke-WebRequest -UseBasicParsing:0 -Uri https://example.com/".into(),
+        "Invoke-RestMethod -Uri https://example.com/x.json".into(),
+        "Get-ChildItem -Force:0".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
@@ -254,8 +260,6 @@ async fn allowlisted_forms_stay_precise() {
             "Select-String -Path README.md -Pattern x",
             "Microsoft.PowerShell.Management\\Get-ChildItem -Force",
             "Get-ChildItem -ErrorAction SilentlyContinue",
-            "Invoke-RestMethod -Uri https://example.com/x.json",
-            "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x",
             r"Set-Location src; Get-ChildItem",
             // File-system dynamic parameters, also for a path that does not exist.
             r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",

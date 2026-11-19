@@ -74,15 +74,12 @@ Add-D729 'select-string', 'measure-object', 'select-object', 'sort-object', 'gro
 Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-ciminstance',
     'get-wmiobject', 'get-eventlog', 'get-computerinfo', 'test-connection', 'get-job', 'wait-job',
     'receive-job', 'remove-job', 'stop-job'
-# Network, to the output only (Windows PowerShell's Invoke-WebRequest also needs
-# -UseBasicParsing).
-Add-D729 'invoke-webrequest', 'invoke-restmethod' -Excluded 'OutFile', 'SessionVariable', 'StatusCodeVariable', 'ResponseHeadersVariable'
 Add-D729 'set-location', 'push-location', 'pop-location'
 # No cmdlet that writes, copies, moves, renames, removes or downloads files (Set-Content,
-# Out-File, New-Item, Copy-Item, Invoke-WebRequest -OutFile, …): where such a write lands
-# can depend on what earlier commands of the script create, which a reading before it
-# runs cannot see (#2709 review). A script using one is read in part and asks under strict
-# rules.
+# Out-File, New-Item, Copy-Item, Invoke-WebRequest, Invoke-RestMethod, …): where such a
+# write lands can depend on what earlier commands of the script create, which a reading
+# before it runs cannot see, and Windows PowerShell's web cmdlets also write `file:`
+# addresses (#2709 review). A script using one is read in part and asks under strict rules.
 # Common parameters that set variables or prompt.
 $D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm')
 # By name or number (Inquire is 3, Suspend 5, Break 6).
@@ -195,6 +192,10 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
             $canonical = Resolve-D729Parameter $element.ParameterName $table
             if ($null -eq $canonical) { return "unknown or ambiguous parameter -$($element.ParameterName): $target" }
             if ($D729Banned -contains $canonical -or $entry.x -contains $canonical) { return "excluded parameter -${canonical}: $target" }
+            # A switch given a value (`-Force:0`) may be turned off: only bare switches.
+            if ($null -ne $element.Argument -and $info.Parameters.ContainsKey($canonical) -and $info.Parameters[$canonical].SwitchParameter) {
+                return "switch given a value -${canonical}: $target"
+            }
             # Dynamic parameters are set aside before binding: the binder knows them
             # only for a path that exists when the script is read.
             if ($entry.d.ContainsKey($canonical)) {
@@ -220,9 +221,6 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
         if ($null -ne $value -and ((Test-D729NotLiteral $value) -or $D729ActionValues -notcontains $value.ToLowerInvariant())) {
             return "excluded parameter value -${action}: $target"
         }
-    }
-    if ($target -eq 'invoke-webrequest' -and -not $D729Core -and -not $binding.BoundParameters.ContainsKey('UseBasicParsing')) {
-        return 'Invoke-WebRequest without -UseBasicParsing'
     }
     return $null
 }
