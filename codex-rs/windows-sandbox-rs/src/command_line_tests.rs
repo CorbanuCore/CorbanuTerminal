@@ -438,15 +438,27 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
         "start\\..\\x.exe",
         "cmd.exe+x",
         " cmd.exe",
-        // cmd may end a command name at any whitespace (#2718 review r2).
+        "cmd.exe ",
+        "C:cmd",
+        // Not a plain path: cmd may cut a command name from it at any
+        // whitespace or other character (#2718 review r2).
         "C:\\Windows\\System32\\cmd.exe\u{0B}",
         "cmd\u{0C}",
         "cmd.exe\u{A0}",
         "cmd\u{FF}x",
-        // Windows drops `.` and resolves `..` components.
+        "npm\tx",
+        "x=y",
+        "@x",
+        "C:\\Program Files (x86)\\x\\tool.exe",
+        "C:\\Users\\Jos\u{e9}\\tool.exe",
+        // A `.`, `..` or empty component can make Windows read another one
+        // as the file name.
         "C:\\Windows\\System32\\cmd.exe\\.",
         "C:\\Windows\\System32\\cmd.exe\\x\\..",
         "cmd.exe\\",
+        ".\\tool.exe",
+        "C:\\a\\\\cmd.exe",
+        "",
     ] {
         for arg in [
             "a\"b", "%PATH%", "!x!", "a^b", "a&b", "a|b", "a<b", "a>b", "(x", "x)", "a\nb", "a\rb",
@@ -496,6 +508,8 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
         "C:\\cmds\\x.exe",
         "C:\\Program Files\\Git\\cmd\\git.exe",
         "C:\\Start Menu\\start\\x.exe",
+        "\\\\server\\share\\x-y_z.exe",
+        "\\tools\\x.exe",
     ] {
         let items = ["cmd", "/c", program, "a&b"];
         assert_eq!(
@@ -526,7 +540,8 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
         bin.join("git.exe"),
         quoted.join("yarn.bat"),
         cwd.join("local.cmd"),
-        cwd.join("sub").join("rel.bat"),
+        // `sub\rel.bat` in `sub` on Windows; a file of that name elsewhere.
+        cwd.join("sub\\rel.bat"),
     ] {
         std::fs::write(file, "@echo off\r\n").expect("write");
     }
@@ -544,13 +559,8 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
         ["cmd", "/c", "Shout", "a&b"],
         ["cmd", "/c", "yarn", "%X%"],
         ["cmd", "/c", "C:npm", "a&b"],
-        // The command name cmd may cut from the token (#2718 review r2).
-        ["cmd", "/c", "npm\u{0B}", "a&b"],
-        ["cmd", "/c", "npm/x", "a&b"],
-        ["cmd", "/c", "npm+x", "a&b"],
-        ["cmd", "/c", "npm[x", "a&b"],
         ["cmd", "/c", "local", "a|b"],
-        ["cmd", "/c", "sub/rel", "!x!"],
+        ["cmd", "/c", "sub\\rel", "!x!"],
     ] {
         let error = format!("{:#}", run(&items).expect_err("must be refused"));
         assert!(
@@ -558,14 +568,24 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
             "{items:?}: {error}"
         );
     }
-    let rel = cwd.join("sub").join("rel").display().to_string();
-    assert!(
-        format!(
+    // Whatever cmd might cut from a token that isn't a plain path (`npm+x`,
+    // `npm<VT>`) is refused before any lookup.
+    for program in ["npm\u{0B}", "npm/x", "npm+x", "npm[x"] {
+        let error = format!(
             "{:#}",
-            run(&["cmd", "/c", &rel, "(x)"]).expect_err("refused")
-        )
-        .contains("batch file")
+            run(&["cmd", "/c", program, "a&b"]).expect_err("must be refused")
+        );
+        assert!(error.contains("plain path"), "{program:?}: {error}");
+    }
+    // An absolute path (plain on Windows; elsewhere its `/` refuses it).
+    let rel = cwd.join("sub\\rel").display().to_string();
+    let error = format!(
+        "{:#}",
+        run(&["cmd", "/c", &rel, "(x)"]).expect_err("refused")
     );
+    if cfg!(windows) {
+        assert!(error.contains("batch file"), "{error}");
+    }
     // Plain arguments, and programs with no batch file, still run.
     assert_eq!(
         run(&["cmd", "/c", "npm", "install", "two words"]).expect("ok"),

@@ -30,9 +30,11 @@
 //! - A program that hands its arguments to cmd again re-parses them after
 //!   cmd removed the escapes (#2718): a nested `cmd`, the `start`, `if` and
 //!   `for` builtins, and a name cmd resolves through PATHEXT to a batch file
-//!   (`npm` for `npm.cmd`). With separate arguments, such a program is refused when an
-//!   argument contains anything cmd acts on. Other programs that start a
-//!   shell on their arguments (PowerShell, `runas`, ...) are not recognized.
+//!   (`npm` for `npm.cmd`). With separate arguments, such a program is
+//!   refused when an argument contains anything cmd acts on, and so is any
+//!   program token that isn't a plain path, from which cmd might cut such a
+//!   name. Other programs that start a shell on their arguments (PowerShell,
+//!   `runas`, ...) are not recognized.
 
 use anyhow::Result;
 use anyhow::bail;
@@ -164,84 +166,54 @@ fn check_batch_arguments(argv: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Whether cmd may end a command name at `c`: whitespace (for cmd that
-/// includes VT, FF and 0xFF), control characters, and `/ + [ ] , ; =`.
-fn ends_command_name(c: char) -> bool {
-    c.is_whitespace()
-        || c.is_control()
-        || c == '\u{FF}'
-        || matches!(c, '/' | '+' | '[' | ']' | ',' | ';' | '=')
+/// A program token cmd reads as one plain file name: ASCII letters and
+/// digits, `_ - . \ :`, and spaces (a token with a space is quoted for cmd),
+/// with no `.` or `..` component and no empty one after a leading `\`
+/// prefix. cmd may split any other token into a command name and more
+/// (#2718: `cmd.exe/c`, `cmd<VT>`, `npm+x`), so with an argument cmd acts on
+/// such a program is refused, without modelling cmd's parser.
+fn is_plain_program_token(program: &str) -> bool {
+    program
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '\\' | ':' | ' '))
+        && !program
+            .trim_start_matches('\\')
+            .split('\\')
+            .any(|component| component.trim_matches(['.', ' ']).is_empty())
 }
 
-/// The command name cmd may read from the start of `text`.
-fn command_name(text: &str) -> &str {
-    text.trim_start_matches(ends_command_name)
-        .split(ends_command_name)
-        .next()
-        .unwrap_or_default()
-}
-
-/// A program token that makes cmd parse the following arguments as a command
-/// line again (#2718): a nested `cmd`, or the `start`, `if` or `for` builtin,
-/// which run a command taken from them (`if 1==1 cmd /c x a&b`). `call` is
-/// refused separately.
+/// A plain program token (see [`is_plain_program_token`]) that makes cmd
+/// parse the following arguments as a command line again (#2718): a nested
+/// `cmd`, or the `start`, `if` or `for` builtin, which run a command taken
+/// from them (`if 1==1 cmd /c x a&b`). `call` is refused separately.
 ///
-/// cmd reads a builtin from the start of the token, up to the first of
-/// several characters (`start/b`, `if/i`, `start\..\x`); the first non-empty
-/// part counts (`@start`). The nested cmd is the file the last `\` component
-/// names; each `/`-separated piece of it counts (`cmd.exe/c`,
-/// `c:/windows/system32/cmd.exe`), read as [`program_file_name`] reads it and
-/// cut where cmd may end a command name (`cmd.exe<VT>`). A directory named
-/// `cmd` (Git's `Git\cmd\git.exe`) doesn't count, unless the path has an
-/// empty, `.` or `..` component, which can make Windows read another
-/// component as the file name (`cmd.exe\.`): then every component counts.
+/// A builtin is the first non-empty part of the token, split at `\ : .` and
+/// spaces (`start.`, `if\x`). The nested cmd is the file the last component
+/// names, read as [`program_file_name`] reads it; a directory named `cmd`
+/// (Git's `Git\cmd\git.exe`) doesn't count.
 fn is_reparsing_program(program: &str) -> bool {
     let lower = program.to_ascii_lowercase();
     let builtin = lower
-        .split(|c: char| ends_command_name(c) || matches!(c, '\\' | ':' | '.' | '(' | ')' | '@'))
+        .split(['\\', ':', '.', ' '])
         .find(|part| !part.is_empty())
         .unwrap_or_default();
     if matches!(builtin, "start" | "if" | "for") {
         return true;
     }
-    let components: Vec<&str> = lower.split('\\').collect();
-    let odd_path = components
-        .iter()
-        .any(|component| component.trim_matches(['.', ' ']).is_empty());
-    let names = if odd_path {
-        &components[..]
-    } else {
-        &components[components.len() - 1..]
-    };
-    names.iter().any(|component| {
-        component.split('/').any(|piece| {
-            let name = program_file_name(piece);
-            matches!(
-                command_name(&name).trim_end_matches(['.', ' ']),
-                "cmd" | "cmd.exe"
-            )
-        })
-    })
+    matches!(program_file_name(&lower).trim_start(), "cmd" | "cmd.exe")
 }
 
-/// Whether cmd could resolve `program` through PATHEXT to a batch file: a
-/// `<program>.bat` or `<program>.cmd` (either case, or as PATHEXT spells it)
-/// in the working directory or a directory on any spelling of the child's
-/// PATH (for a bare name), or next to the given path. Any match counts, even
-/// one an earlier executable would shadow, and these extensions are tried
-/// whatever PATHEXT says. A drive-relative program (`C:npm`) is resolved by
-/// the child against its own directory on that drive and always counts.
-/// Anything but a missing file counts too, so a failure only refuses more
-/// (a PATH entry on a drive that isn't ready refuses every bare name). A
-/// file created after the launch isn't seen. Both the whole token and the
-/// command name cmd may cut from it (`npm<VT>`, `npm/x`) are looked up.
+/// Whether cmd could resolve the plain program token `program` through
+/// PATHEXT to a batch file: a `<program>.bat` or `<program>.cmd` (either
+/// case, or as PATHEXT spells it) in the working directory or a directory on
+/// any spelling of the child's PATH (for a bare name), or next to the given
+/// path. Any match counts, even one an earlier executable would shadow, and
+/// these extensions are tried whatever PATHEXT says. A drive-relative
+/// program (`C:npm`) is resolved by the child against its own directory on
+/// that drive and always counts. Anything but a missing file counts too, so
+/// a failure only refuses more (a PATH entry on a drive that isn't ready
+/// refuses every bare name). A file created after the launch isn't seen.
 fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
-    let name = command_name(program);
-    resolves_through_pathext(program, env, cwd)
-        || (!name.is_empty() && name != program && resolves_through_pathext(name, env, cwd))
-}
-
-fn resolves_through_pathext(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
     let bytes = program.as_bytes();
     if bytes.len() >= 2
         && bytes[0].is_ascii_alphabetic()
@@ -402,6 +374,11 @@ impl CmdInvocation {
         // PATHEXT gets the arguments with the escapes removed and parses
         // them again.
         if let Some(arg) = args.iter().find(|arg| arg.contains(CMD_ACTIVE)) {
+            if !is_plain_program_token(program) {
+                bail!(
+                    "cmd.exe could read {program:?} as a program that would re-parse its arguments; only a plain path (ASCII letters, digits, `_ - . \\ :` and spaces) may take {arg:?} (#2718)"
+                );
+            }
             if is_reparsing_program(program) {
                 bail!(
                     "a nested cmd.exe, START, IF or FOR would re-parse its arguments: {program:?} {arg:?} (#2718)"
