@@ -165,6 +165,20 @@ async fn tmpdir_uses_command_environment_over_rpc(
     std::fs::write(&outside, "original")?;
     let command_temp_file = command_temp.join("outside-session.txt");
     std::fs::write(&command_temp_file, "original")?;
+    // Use a batch fixture, as the native D377 probes do: quotes in an inline
+    // /C argument are escaped by the launcher before cmd.exe interprets them.
+    let probe_name = "probe-session-temp.cmd";
+    std::fs::write(
+        root.path().join(probe_name),
+        concat!(
+            "@echo off\r\n",
+            "echo CHILD-TEMP:%TEMP%\r\n",
+            "echo allowed>\"%TEMP%\\allowed.txt\"\r\n",
+            "echo modified>%COMMAND_TEMP_FILE%\r\n",
+            "echo modified>%OUTSIDE_FILE%\r\n",
+            "exit /b 0\r\n",
+        ),
+    )?;
     let server = common::exec_server::exec_server_with_env(
         [
             ("TEMP", server_temp.as_os_str()),
@@ -227,7 +241,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 "/D".to_owned(),
                 "/S".to_owned(),
                 "/C".to_owned(),
-                r#"echo CHILD-TEMP:%TEMP% & echo allowed>"%TEMP%\allowed.txt" & echo modified>%COMMAND_TEMP_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0"#.to_owned(),
+                probe_name.to_owned(),
             ],
             cwd,
             env_policy: Some(ExecEnvPolicy {
@@ -289,7 +303,10 @@ async fn tmpdir_uses_command_environment_over_rpc(
     }
     assert_eq!(
         (
-            std::fs::read_to_string(actual_temp.join("allowed.txt"))?
+            std::fs::read_to_string(actual_temp.join("allowed.txt"))
+                .with_context(|| format!(
+                    "read private TEMP child {actual_temp:?}; stderr={stderr:?}"
+                ))?
                 .trim_end()
                 .to_owned(),
             std::fs::read_to_string(outside)?
