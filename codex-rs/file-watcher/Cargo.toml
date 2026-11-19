@@ -14,6 +14,7 @@ workspace = true
 
 [dependencies]
 notify = { workspace = true }
+same-file = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tracing = { workspace = true, features = ["log"] }
 

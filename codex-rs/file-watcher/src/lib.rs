@@ -3,6 +3,8 @@
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -77,6 +79,11 @@ struct SubscriberWatchState {
     /// Whether the requested path existed the last time an ancestor event was
     /// handled. This preserves delete notifications for fallback watches.
     last_exists: bool,
+    /// Identity (device and inode, or volume and file index) of the requested
+    /// path the last time it existed, as seen at registration or by an
+    /// ancestor event. Corbanu (#2728): an ancestor content change is ignored
+    /// only while this is unchanged, so a replaced path is still reported.
+    identity: Option<u64>,
     /// Whether this watch started from a missing path. Such watches normalize
     /// ancestor create/delete events back to `requested`.
     fallback: bool,
@@ -466,6 +473,7 @@ impl FileWatcher {
                             actual: registration.actual.clone(),
                             count: 1,
                             last_exists: registration.key.matched.path.exists(),
+                            identity: path_identity(&registration.key.matched.path),
                             fallback: registration.fallback,
                         });
                         registration.actual.clone()
@@ -806,11 +814,12 @@ impl FileWatcher {
     }
 }
 
-/// Whether `event` can change what lies below its paths: a create, remove,
-/// rename or unknown change. A data or metadata change to a directory itself
-/// cannot. Windows reports such a change for a directory whenever an entry
-/// inside it changes, for example when `config.toml` is written next to a
-/// watched `skills` root (#2728).
+/// Whether `event` can change what lies below its paths. Creates, removes and
+/// renames (and non-`Modify` kinds) can; every other `Modify` kind, including
+/// notify's unspecified `Any` and `Other`, is treated as a change to the
+/// directory's own data or metadata. Windows reports `Modify(Any)` for a
+/// directory whenever an entry inside it changes, for example when
+/// `config.toml` is written next to a watched `skills` root (#2728).
 fn can_change_descendants(event: &Event) -> bool {
     !matches!(
         event.kind,
@@ -818,6 +827,14 @@ fn can_change_descendants(event: &Event) -> bool {
             ModifyKind::Any | ModifyKind::Data(_) | ModifyKind::Metadata(_) | ModifyKind::Other
         )
     )
+}
+
+/// Identity of the file or directory at `path`, if it can be opened.
+fn path_identity(path: &Path) -> Option<u64> {
+    let handle = same_file::Handle::from_path(path).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    handle.hash(&mut hasher);
+    Some(hasher.finish())
 }
 
 fn is_mutating_event(event: &Event) -> bool {
@@ -933,9 +950,21 @@ fn changed_path_for_matched_path(
     if matched.path.starts_with(event_path) {
         let now_exists = matched.path.exists();
         // Corbanu (#2728): a data or metadata change to an ancestor directory
-        // cannot affect a watched path that existed before and still exists;
-        // changes below that path arrive as events for the path itself.
-        if !descendants_may_change && now_exists && subscriber_watch_state.last_exists {
+        // cannot affect a watched path that existed before and is still the
+        // same file or directory; changes below it arrive as events for the
+        // path itself. A replaced path (Windows drops the old path's watch
+        // without an event) has a new identity and is still reported.
+        let identity = if now_exists {
+            path_identity(&matched.path)
+        } else {
+            None
+        };
+        let unchanged = now_exists
+            && subscriber_watch_state.last_exists
+            && identity.is_some()
+            && identity == subscriber_watch_state.identity;
+        subscriber_watch_state.identity = identity;
+        if !descendants_may_change && unchanged {
             return None;
         }
         if subscriber_watch_state.fallback {

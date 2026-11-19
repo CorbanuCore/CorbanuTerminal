@@ -567,26 +567,40 @@ async fn ancestor_content_change_does_not_notify_existing_child_watch() {
     let mut rx = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
     let (raw_tx, raw_rx) = mpsc::unbounded_channel();
     watcher.spawn_event_loop_for_test(raw_rx);
+    let send = |kind: EventKind, path: &Path| {
+        raw_tx
+            .send(Ok(notify_event(kind, vec![path.to_path_buf()])))
+            .expect("send raw event");
+    };
 
     for kind in [
         EventKind::Modify(ModifyKind::Any),
         EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
         EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)),
+        EventKind::Modify(ModifyKind::Other),
     ] {
-        raw_tx
-            .send(Ok(notify_event(kind, vec![home.clone()])))
-            .expect("send ancestor content event");
-        let blocked = timeout(TEST_THROTTLE_INTERVAL * 2, rx.recv()).await;
-        assert!(blocked.is_err(), "{kind:?} on an ancestor notified");
+        send(kind, &home);
     }
+    // One loop handles raw events in order: if any ancestor event leaked, it
+    // would arrive with or before this sentinel below the root.
+    let sentinel = skills_dir.join("SKILL.md");
+    send(EventKind::Modify(ModifyKind::Any), &sentinel);
+    let event = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("sentinel event timeout")
+        .expect("sentinel event");
+    assert_eq!(
+        event,
+        FileWatcherEvent {
+            paths: vec![sentinel],
+        }
+    );
 
     for kind in [
         EventKind::Modify(ModifyKind::Name(notify::event::RenameMode::Any)),
         EventKind::Remove(notify::event::RemoveKind::Any),
     ] {
-        raw_tx
-            .send(Ok(notify_event(kind, vec![home.clone()])))
-            .expect("send ancestor structural event");
+        send(kind, &home);
         let event = timeout(Duration::from_secs(1), rx.recv())
             .await
             .expect("ancestor structural event timeout")
@@ -599,22 +613,53 @@ async fn ancestor_content_change_does_not_notify_existing_child_watch() {
             "{kind:?}"
         );
     }
+}
 
-    // Changes below the watched root still arrive.
-    raw_tx
-        .send(Ok(notify_event(
-            EventKind::Modify(ModifyKind::Any),
-            vec![skills_dir.join("SKILL.md")],
-        )))
-        .expect("send child event");
-    let event = timeout(Duration::from_secs(1), rx.recv())
-        .await
-        .expect("child event timeout")
-        .expect("child event");
+/// A content change to an ancestor is still reported when the watched root
+/// was deleted, or replaced by another directory at the same path (Windows
+/// drops a deleted directory's watch without an event).
+#[tokio::test]
+async fn ancestor_content_change_reports_deleted_or_replaced_watch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let home = temp_dir.path().join("home");
+    let skills_dir = home.join("skills");
+    std::fs::create_dir_all(&skills_dir).expect("create skills dir");
+
+    let watcher = Arc::new(FileWatcher::noop());
+    let (subscriber, rx) = watcher.add_subscriber();
+    let _registration = subscriber.register_path(skills_dir.clone(), /*recursive*/ true);
+    let mut rx = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
+    let (raw_tx, raw_rx) = mpsc::unbounded_channel();
+    watcher.spawn_event_loop_for_test(raw_rx);
+    let mut ancestor_change = async || {
+        raw_tx
+            .send(Ok(notify_event(
+                EventKind::Modify(ModifyKind::Any),
+                vec![home.clone()],
+            )))
+            .expect("send ancestor event");
+        timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("ancestor event timeout")
+            .expect("ancestor event")
+    };
+
+    // Replaced: the old directory is kept under another name.
+    std::fs::rename(&skills_dir, home.join("skills.old")).expect("rename skills dir");
+    std::fs::create_dir(&skills_dir).expect("recreate skills dir");
     assert_eq!(
-        event,
+        ancestor_change().await,
         FileWatcherEvent {
-            paths: vec![skills_dir.join("SKILL.md")],
+            paths: vec![home.clone()],
+        }
+    );
+
+    // Deleted.
+    std::fs::remove_dir(&skills_dir).expect("remove skills dir");
+    assert_eq!(
+        ancestor_change().await,
+        FileWatcherEvent {
+            paths: vec![home.clone()],
         }
     );
 }
