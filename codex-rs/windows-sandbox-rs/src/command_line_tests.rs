@@ -294,3 +294,70 @@ fn crt_quoting_is_unchanged() {
         assert_eq!(crt_split(&quote_crt_arg(text)), vec![(*text).to_string()]);
     }
 }
+
+#[test]
+fn cmd_spellings_windows_accepts_are_recognized() {
+    for program in [
+        "cmd.exe.",
+        "cmd.exe ",
+        "cmd.exe. .",
+        "C:\\Windows\\System32\\cmd.exe::$DATA",
+        "C:cmd.exe",
+        "c:/windows/system32/CMD",
+    ] {
+        let serialized = line(&[program, "/c", "dump.exe", "a&b"]);
+        assert!(
+            serialized.ends_with("/s /c \"dump.exe a^&b\""),
+            "{program:?} -> {serialized}"
+        );
+    }
+}
+
+#[test]
+fn call_is_refused_with_separate_arguments() {
+    let none = HashMap::new();
+    for program in ["call", "CALL", "call.", "call:x", "Call\\prog.exe"] {
+        assert!(
+            refused(&["cmd", "/c", program, "prog.exe", "%SECRET%"], &none).contains("CALL"),
+            "{program:?}"
+        );
+    }
+    // Other names starting with the same letters are programs.
+    assert_eq!(
+        line(&["cmd", "/c", "callme.exe", "a&b"]),
+        "cmd /d /v:off /s /c \"callme.exe a^&b\""
+    );
+    // As a typed command line, CALL keeps its cmd meaning.
+    assert_eq!(
+        line(&["cmd", "/c", "call prog.exe %X%"]),
+        "cmd /d /v:off /s /c \"call prog.exe %X%\""
+    );
+}
+
+#[test]
+fn batch_files_refuse_what_cmd_would_act_on() {
+    let none = HashMap::new();
+    for program in ["x.bat", "C:\\s\\X.CMD", "x.bat.", "x.cmd::$DATA"] {
+        for arg in [
+            "a\" & calc & \"",
+            "a&calc",
+            "%PATH%",
+            "!x!",
+            "a|b",
+            "(x)",
+            "a^b",
+            "a\nb",
+        ] {
+            assert!(
+                refused(&[program, arg], &none).contains("batch file"),
+                "{program:?} {arg:?}"
+            );
+        }
+    }
+    assert!(refused(&["C:\\a&b\\x.bat", "plain"], &none).contains("batch file"));
+    // Plain arguments keep the CRT join.
+    assert_eq!(
+        line(&["C:\\scripts\\x.bat", "plain", "two words", ""]),
+        "C:\\scripts\\x.bat plain \"two words\" \"\""
+    );
+}

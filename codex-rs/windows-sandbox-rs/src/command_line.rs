@@ -12,14 +12,20 @@
 //!   contract, `cmd /c <script>`). It is passed verbatim as
 //!   `/d /v:off /s /c "<line>"`: with `/S` cmd removes only the first and the
 //!   last quote character, which are the ones added here, so cmd parses
-//!   exactly the caller's text, as if typed. `/D` skips registry AutoRun
-//!   commands and `/V:OFF` keeps `!` literal unless the caller chose `/V`.
+//!   exactly the caller's text, as if typed (so a script path with spaces
+//!   must be quoted, as when typed). `/D` skips registry AutoRun commands and
+//!   `/V:OFF` keeps `!` literal unless the caller chose `/V`.
 //! - Several elements are a program and its arguments. Each is CRT-quoted and
 //!   every cmd metacharacter is escaped with `^`, so no quote ever opens for
 //!   cmd, no operator or redirection takes effect, no `%VAR%` or `!VAR!` is
 //!   expanded, and the program receives each argument byte for byte.
 //!
-//! Anything this can't serialize faithfully is refused rather than guessed.
+//! - A batch file started directly also runs through cmd, on the CRT-joined
+//!   line, so its arguments may not contain anything cmd acts on.
+//!
+//! Anything this can't serialize faithfully is refused rather than guessed,
+//! including `CALL` as the program, which expands and re-parses its
+//! arguments once more.
 
 use anyhow::Result;
 use anyhow::bail;
@@ -78,6 +84,12 @@ pub(crate) fn sandbox_command_line(
     argv: &[String],
     env: &HashMap<String, String>,
 ) -> Result<String> {
+    if argv
+        .first()
+        .is_some_and(|program| is_batch_program(program))
+    {
+        check_batch_arguments(argv)?;
+    }
     match cmd_invocation(argv)? {
         Some(cmd) => cmd.serialize(argv, env),
         None => Ok(argv
@@ -97,9 +109,39 @@ struct CmdInvocation {
     delayed_expansion: Option<bool>,
 }
 
+/// The file name Windows resolves `program` to, lowercased: without a drive
+/// prefix, an alternate data stream (`::$DATA`) or the trailing dots and
+/// spaces Windows ignores.
+fn program_file_name(program: &str) -> String {
+    let mut name = program.rsplit(['\\', '/']).next().unwrap_or(program);
+    if name.as_bytes().get(1) == Some(&b':') && name.as_bytes()[0].is_ascii_alphabetic() {
+        name = &name[2..];
+    }
+    let name = name.split(':').next().unwrap_or(name);
+    name.trim_end_matches(['.', ' ']).to_ascii_lowercase()
+}
+
 fn is_cmd_program(program: &str) -> bool {
-    let name = program.rsplit(['\\', '/']).next().unwrap_or(program);
-    name.eq_ignore_ascii_case("cmd") || name.eq_ignore_ascii_case("cmd.exe")
+    matches!(program_file_name(program).as_str(), "cmd" | "cmd.exe")
+}
+
+/// A batch file: `CreateProcess*` runs it through cmd, which parses its
+/// command line.
+fn is_batch_program(program: &str) -> bool {
+    let name = program_file_name(program);
+    name.ends_with(".bat") || name.ends_with(".cmd")
+}
+
+/// cmd parses a batch file's CRT-joined command line, and how Windows hands
+/// it over can strip quotes, so any character cmd acts on is refused.
+fn check_batch_arguments(argv: &[String]) -> Result<()> {
+    const ACTIVE: [char; 13] = [
+        '"', '%', '!', '^', '&', '|', '<', '>', '(', ')', '\r', '\n', '\0',
+    ];
+    if let Some(arg) = argv.iter().find(|arg| arg.contains(ACTIVE)) {
+        bail!("a batch file argument can't contain cmd.exe metacharacters: {arg:?} (#2702)");
+    }
+    Ok(())
 }
 
 /// Recognizes `cmd[.exe] [/switch ...] /C|/K|/R [command ...]`. Returns `None`
@@ -216,6 +258,17 @@ impl CmdInvocation {
         // The program token is quoted unless it is a plain name: cmd treats
         // a leading `@` `:` `(` and the delimiters `,;=` there specially, and
         // a `%` must be followed by a character of its own argument.
+        // `call` runs a second expansion and quote pass over its arguments.
+        let call = program
+            .get(..4)
+            .is_some_and(|head| head.eq_ignore_ascii_case("call"))
+            && !program[4..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if call {
+            bail!("cmd.exe CALL would expand and re-parse its arguments (#2702)");
+        }
         let plain_program = program
             .chars()
             .next()

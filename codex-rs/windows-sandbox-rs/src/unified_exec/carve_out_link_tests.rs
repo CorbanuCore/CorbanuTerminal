@@ -58,7 +58,7 @@ pub(super) fn run_script(
                 "C:\\Windows\\System32\\cmd.exe".to_string(),
                 "/d".to_string(),
                 "/c".to_string(),
-                script_path.display().to_string(),
+                format!("\"{}\"", script_path.display()),
             ],
             workspace,
             // The caller's `TEMP`/`TMP`, if it gives them, else the home's.

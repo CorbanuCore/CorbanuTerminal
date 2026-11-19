@@ -141,6 +141,26 @@ fn check(backend: Backend, tty: bool, home: &SandboxHome) {
         assert_eq!(exit_code, 0, "{label} argv: stdout={stdout:?}");
         assert_eq!(read_dump(&dump, &stdout), arguments, "{label} argv");
 
+        // A program path with spaces, given as its own element.
+        let spaced = root.path().join("dir with space");
+        fs::create_dir_all(&spaced).expect("create spaced dir");
+        let spaced_exe = spaced.join("dump copy.exe");
+        fs::copy(test_exe(), &spaced_exe).expect("copy the test exe");
+        let dump = root.path().join("spaced.json");
+        let spaced_arguments = vec!["a&b".to_string(), "x\" & echo INJECTED>injected.txt & rem \"".to_string()];
+        let mut argv = vec![
+            cmd(),
+            "/c".to_string(),
+            spaced_exe.display().to_string(),
+            "--exact".to_string(),
+            DUMP_ENTRY.to_string(),
+            format!("{DUMP_ARG}{}", dump.display()),
+        ];
+        argv.extend(spaced_arguments.iter().cloned());
+        let (stdout, exit_code) = run(backend, root.path(), home.path(), argv, tty).await;
+        assert_eq!(exit_code, 0, "{label} spaced program: stdout={stdout:?}");
+        assert_eq!(read_dump(&dump, &stdout), spaced_arguments, "{label} spaced program");
+
         // One element after /c: a command line cmd parses as typed.
         // %VAR% expands (inside quotes, so its `&` stays literal) and
         // `!VAR!` doesn't (delayed expansion off).
