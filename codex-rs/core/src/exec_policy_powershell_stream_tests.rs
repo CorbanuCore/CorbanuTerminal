@@ -80,35 +80,44 @@ fn stream_spelled_powershell_is_not_lowered() {
 }
 
 /// With no prompt or forbidden rule, the unread script is not judged
-/// dangerous either: the command asks (refused with approvals off), as an
-/// uncertain launcher does on a Windows host, never with an amendment.
+/// dangerous either: a stream-spelled PowerShell (as this host's reader
+/// names PowerShell) asks at the top level and behind a launcher (refused
+/// with approvals off), as an uncertain launcher does on a Windows host,
+/// never with an amendment. Scripts read for restrictions only (nested in
+/// bash or PowerShell) keep their earlier behaviour there, and ask under
+/// strict rules (above).
 #[tokio::test]
 async fn stream_spelled_powershell_asks_without_strict_rules() {
     const ALLOW_STATUS: &str = r#"prefix_rule(pattern=["git", "status"], decision="allow")"#;
     let mut failures = Vec::new();
-    for script in ["Remove-Item -Recurse -Force C:\\x", "git status"] {
-        for command in stream_forms(script) {
-            // cmd.exe scripts are unread for any rule only (#2704).
-            if command[0] == "cmd.exe" {
-                continue;
-            }
-            for rules in ["", ALLOW_STATUS] {
-                let results = windows_requirements(&command, rules).await;
-                let last = results.len() - 1;
-                for (mode, result) in results.into_iter().enumerate() {
-                    let ok = if mode == last {
-                        matches!(result, ExecApprovalRequirement::Forbidden { .. })
-                    } else {
-                        matches!(
-                            result,
-                            ExecApprovalRequirement::NeedsApproval {
-                                proposed_execpolicy_amendment: None,
-                                ..
-                            }
-                        )
-                    };
-                    if !ok {
-                        failures.push(format!("{rules:?} mode {mode} {command:?}: {result:?}"));
+    for &shell in STREAM_SHELLS {
+        if !codex_shell_command::powershell::is_powershell_program(shell) {
+            continue;
+        }
+        for script in ["Remove-Item -Recurse -Force C:\\x", "git status"] {
+            for command in [
+                argv(&[shell, "-Command", script]),
+                argv(&[shell, "-NoProfile", "-c", script]),
+                argv(&["env", shell, "-Command", script]),
+            ] {
+                for rules in ["", ALLOW_STATUS] {
+                    let results = windows_requirements(&command, rules).await;
+                    let last = results.len() - 1;
+                    for (mode, result) in results.into_iter().enumerate() {
+                        let ok = if mode == last {
+                            matches!(result, ExecApprovalRequirement::Forbidden { .. })
+                        } else {
+                            matches!(
+                                result,
+                                ExecApprovalRequirement::NeedsApproval {
+                                    proposed_execpolicy_amendment: None,
+                                    ..
+                                }
+                            )
+                        };
+                        if !ok {
+                            failures.push(format!("{rules:?} mode {mode} {command:?}: {result:?}"));
+                        }
                     }
                 }
             }
