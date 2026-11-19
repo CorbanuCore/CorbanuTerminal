@@ -229,11 +229,13 @@ pub(crate) async fn check_resume_before_onboarding(
     selection: &resume_picker::SessionSelection,
     config: &Config,
     recorded: &RecordedProviderAccount,
-    default_openai: OpenAiAuthMetadata,
+    default_openai: Option<OpenAiAuthMetadata>,
 ) -> (StartupProviderResolution, Option<String>) {
+    // `None`: the app server's status does not describe the default OpenAI
+    // login (#2778); `resolve` discovers it locally.
     let openai = |config: &Config| {
         if codex_model_provider::named_sign_in_account(&config.model_provider).is_some() {
-            OpenAiAuthMetadata::Account
+            Some(OpenAiAuthMetadata::Account)
         } else {
             default_openai
         }
@@ -248,13 +250,12 @@ pub(crate) async fn check_resume_before_onboarding(
         };
         thread_config = recorded_provider_config(config, recorded, model);
         if thread_config.is_none() {
-            let resolution = crate::startup_provider::resolve(config, Some(openai(config))).await;
+            let resolution = crate::startup_provider::resolve(config, openai(config)).await;
             return (resolution, Some(unknown_recorded_provider_error(recorded)));
         }
     }
     let check_config = thread_config.as_ref().unwrap_or(config);
-    let resolution =
-        crate::startup_provider::resolve(check_config, Some(openai(check_config))).await;
+    let resolution = crate::startup_provider::resolve(check_config, openai(check_config)).await;
     let refusal = resume_account_error(
         check_config,
         recorded,
