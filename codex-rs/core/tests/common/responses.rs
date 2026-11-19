@@ -1771,7 +1771,7 @@ pub async fn mount_response_sequence(
 ///   held by the provider instead.
 /// - Additionally, enforce symmetry: every `function_call`/`custom_tool_call`/
 ///   `tool_search_call` in the `input` must have a matching output entry.
-fn validate_request_body_invariants(request: &wiremock::Request) {
+pub fn validate_request_body_invariants(request: &wiremock::Request) {
     // Skip GET requests (e.g., /models)
     if request.method != "POST" || !request.url.path().ends_with("/responses") {
         return;
