@@ -53,7 +53,7 @@ fn fixture(name: &str) -> PathBuf {
         if bazel.is_file() {
             bazel
         } else {
-            // Wrapped Windows tests retain a Cargo-like crate working directory.
+            // Retain the original helper's crate-relative fallback.
             relative
         }
     }

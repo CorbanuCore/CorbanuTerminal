@@ -42,7 +42,7 @@ fn fixtures_dir() -> PathBuf {
         if bazel.is_dir() {
             bazel
         } else {
-            // Wrapped Windows tests retain a Cargo-like crate working directory.
+            // Retain the original helper's crate-relative fallback.
             PathBuf::from("tests/fixtures/d319_zip")
         }
     }
