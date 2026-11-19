@@ -5,10 +5,12 @@
 //! and nothing reaches the executor:
 //! - under Moderate and Aggressive, every command, by #1976's rule (D491,
 //!   `security::windows_unsandboxed::applies`);
-//! - under Permissive too, a command outside the known-safe list (`df -h /`),
-//!   by `exec_policy::render_decision_for_unmatched_command`
+//! - under Permissive too, every command no exec-policy rule allows, by
+//!   `exec_policy::render_decision_for_unmatched_command`
 //!   (`windows_managed_fs_restrictions_without_sandbox_backend`), as
-//!   "blocked by policy" when approvals are off.
+//!   "blocked by policy" when approvals are off. (Upstream rust-v0.167.0
+//!   removed the known-safe command list, #39630, so `uname`, `cat` and `ls`
+//!   are refused like `df`; #2729.)
 //!
 //! On other clients the same commands reach the executor.
 //!
@@ -61,8 +63,11 @@ fn expected_refusal(level: SecurityLevel, name: &str, cmd: &str) -> Option<Strin
     if level != SecurityLevel::Permissive {
         return Some(format!("Security level {name} refused this command"));
     }
-    // `df` is not on the known-safe list; `uname`, `cat` and `ls` are.
-    (cmd == "df -h /").then(|| format!("`/bin/bash -lc '{cmd}'` rejected: blocked by policy"))
+    // #2729: upstream has no known-safe list any more (#39630); no rule
+    // allows any of these commands.
+    Some(format!(
+        "`/bin/bash -lc '{cmd}'` rejected: blocked by policy"
+    ))
 }
 
 /// A fake Linux executor: answers `initialize` and `environment/info`,

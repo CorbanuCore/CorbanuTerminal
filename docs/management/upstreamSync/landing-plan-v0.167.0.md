@@ -39,17 +39,36 @@ Supporting records: `$HOME/.corbanu-workers/astra-synccore7.result.md`, `$W/astr
 
 ### CLI and open sync PRs
 
-Only **two open PRs target sync** at the cut: [#2274](https://github.com/CorbanuCore/CorbanuTerminal/pull/2274) and [#2122](https://github.com/CorbanuCore/CorbanuTerminal/pull/2122), both drafts. #2454 and #2471 have merged.
+Only **two open PRs targeted sync** at the cut: [#2274](https://github.com/CorbanuCore/CorbanuTerminal/pull/2274) and [#2122](https://github.com/CorbanuCore/CorbanuTerminal/pull/2122). #2454 and #2471 have merged.
 
-**#2274 — owner: sync-compile5 / CLI maintainer, with the remaining sandbox row reserved for contributors until about November 21.** That date ends the hold; it is not a promised completion date. The remaining row has no named contributor in the ledger. The coordinator should confirm ownership then, without duplicating contributor work.
+**#2274 — CLI (update 2026-11-19, sync-cli).** Travis ended the contributor hold early (~06:55Z). No outside contributor had claimed `cli/src/debug_sandbox.rs`, so maintainers finished it.
 
-- Resolve `cli/src/debug_sandbox.rs` and its D541 MXC contract. With `--sandbox-state-json`, `use_mxc=true` must select MXC and run `refuse_mxc_without_corbanu_protections`; `false` must never select MXC and must refuse if the child's config would select it. Prove the false-state/configured-MXC refusal.
-- Merge the current sync base into #2274 and resolve its two ledger conflicts without restoring obsolete pre-split rows. Its other eight CLI conflict rows are prepared; the current head is `1a1042a556907cfeb86a3559d3c9ba7d100cf1f9`.
-- Apply **accepted D620: remove the OpenAI desktop-app doctor rows**. This is deferred implementation, not a pending decision. Read and regenerate doctor/help/worktree snapshots with agreed per-binary names and Corbanu wording.
-- Replace the diagnostic upstream `debug_sandbox.rs` stand-in with the real resolved file and run actual CLI clippy/tests on macOS, Linux and Windows. The November 15 stand-in run passed library 15/15, but each binary had roughly 7–11 snapshot failures and integrations had **21 failures**: app-server 3, daemon startup 4, daemon package 1, cloud config 1, doctor enterprise/path 4, features 1, login 2, NFS migration 1, nested launch 1, provider accounts 1, worktree 2. These are stale diagnostic counts, neither final-head results nor additive to the core/app failure totals. The nested Aggressive cause was subsequently addressed under D621; rerun it.
-- Rerun #2423's `tmux_resume_last_notice_keeps_provider_searched_before_onboarding`, the 58 TUI integration failures, the 22 core/app helper failures and the 24 core/13 app exclusions. Address review follow-ups, including new nested-command classification coverage. Get a fresh exact-head Opus review and corbanu-security approval; the earlier approval does not cover the finished CLI.
+- **Done in #2274** (head `dacef485872eaa3cfe39d9098561b6159320d714`; Opus r2 APPROVE and corbanu-security approval on that SHA):
+  - Merged the current sync base and resolved `cli/src/main.rs` (main's `model` subcommand) and the two ledgers (the split main ledger with the 8 prepared rows ticked).
+  - Resolved `debug_sandbox.rs`.
+  - Implemented **D541 (a)** in `select_windows_sandbox_type`:
+    - With `--sandbox-state-json`, `use_mxc=true` selects MXC, and every MXC selection runs `refuse_mxc_without_corbanu_protections`.
+    - `use_mxc=false` never selects MXC and refuses when the child config would select it.
+    - Tests prove it on Linux and macOS (unit and real-config cases) and on native Windows (real binary).
+  - main.rs unit tests now run once (`codex` binary), so the per-binary snapshot copies are gone.
+- **Gates:** `codex-cli` builds and `clippy --tests -D warnings` is clean on Linux (glitch, Rust 1.99.1), macOS and Windows (native `sync-package-ci`). All 9 CLI-owner ledger rows are resolved.
+- **Follow-up PR** (integration-test fixes, **D620** desktop-app update rows dropped, this update):
+  - Linux `codex-cli`: 629 passed / 23 failed / 1 ignored, before one further snapshot fix. The November 15 stand-in had 21 integration failures plus 7–11 unit failures per binary.
+  - Unit tests: all pass.
+- **Remaining failures and causes:** [#2728](https://github.com/CorbanuCore/CorbanuTerminal/issues/2728).
+  - 12 are D564 updater tests.
+  - 4 are daemon-startup TUI text.
+  - 3 come from the state runtime that config load opens ([#2723](https://github.com/CorbanuCore/CorbanuTerminal/issues/2723)).
+  - 1 is the Bedrock logout pair check.
+  - 2 are the worktree `forced_login_method` case.
+  - Several are Windows harness-only (`RUST_BACKTRACE=1`).
+- **TUI `tests/all.rs` on glitch:** 83 passed / 41 failed (was 65/58). #2423's `tmux_resume_last_notice_keeps_provider_searched_before_onboarding` was rerun and still fails: the helper waits for the old `/model to change` header. Owner: sync TUI maintainer, via #2728.
+- **Pre-existing, non-CLI:** `repo-checks` fmt-check fails on `core/src/context/provenance.rs` on every sync PR ([#2724](https://github.com/CorbanuCore/CorbanuTerminal/issues/2724)).
+- **Still to rerun now that the CLI builds:**
+  - The 22 core/app helper failures, the 24 core / 13 app exclusions, and Bazel.
+  - The Windows codex-core job requested by main merges #10/#11. It runs on #2274 itself (`windows-integration-tests / codex-core`).
 
-**#2122 — owner: sync test-isolation maintainer, after #2274.** It prepares full CLI helpers for `codex-mcp` and `codex-rmcp-client`. Its eight Python wrapper tests pass, but four MCP cases remain CLI-blocked (three `streamable_http_remote` cases and `binding::tests::sandbox_executable_requires_local_stdio_and_a_full_cli`). Merge sync into the draft, qualify the isolated packages on all three platforms, review the exact head and merge. Do not enable eager helper builds while the CLI remains broken. The four cases are a separate package inventory, not additional core-suite failures.
+**#2122 — owner: sync test-isolation maintainer; unblocked (#2274 merged as `dacadfcc4a`).** It prepares full CLI helpers for `codex-mcp` and `codex-rmcp-client`. Its eight Python wrapper tests pass, but four MCP cases remain CLI-blocked (three `streamable_http_remote` cases and `binding::tests::sandbox_executable_requires_local_stdio_and_a_full_cli`). Merge sync into the draft, qualify the isolated packages on all three platforms, review the exact head and merge. The CLI now builds, so the helper build can be enabled; the CLI test failures that remain (#2728) are outside the MCP packages. The four cases are a separate package inventory, not additional core-suite failures.
 
 ### Owner decisions
 

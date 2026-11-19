@@ -87,8 +87,9 @@ fn login_with_api_key_reads_stdin_and_writes_auth_json() -> Result<()> {
         .args(["login", "status"])
         .assert()
         .success();
+    // Main's status line (the key's fingerprint when one is recorded).
     insta::assert_snapshot!(String::from_utf8_lossy(&status.get_output().stderr), @r"
-    API key configured - ***
+    Logged in using an API key - API key configured
     Authentication is checked when you send a request.
     ");
 

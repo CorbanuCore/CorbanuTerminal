@@ -239,6 +239,11 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
             // command under these levels, and file tools with #1976's wording
             // (#2049); not this test's concern.
             let client_refuses = cfg!(windows) && level != SecurityLevel::Permissive;
+            // Under Permissive with approvals off, a Windows client without its
+            // sandbox refuses every command no exec-policy rule allows (#2049's
+            // `render_decision_for_unmatched_command`); upstream rust-v0.167.0
+            // removed the known-safe list that let `echo` through (#39630, #2729).
+            let client_blocks = cfg!(windows) && level == SecurityLevel::Permissive;
             let command = run(level, host, Call::Command).await?;
             let startup_notice = command.warnings.iter().any(|warning| {
                 warning.contains("agent commands and file tools are refused")
@@ -264,11 +269,12 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                         .reached
                         .iter()
                         .any(|method| method.starts_with("process/start"))
-            } else if client_refuses {
-                !command
-                    .reached
-                    .iter()
-                    .any(|method| method.starts_with("process/start"))
+            } else if client_refuses || client_blocks {
+                (!client_blocks || command.output.contains("rejected: blocked by policy"))
+                    && !command
+                        .reached
+                        .iter()
+                        .any(|method| method.starts_with("process/start"))
             } else {
                 command
                     .reached

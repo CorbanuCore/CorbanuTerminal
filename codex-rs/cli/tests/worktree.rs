@@ -677,7 +677,7 @@ trust_level = "trusted"
                 .flat_map(|metric| metric["sum"]["dataPoints"].as_array().into_iter().flatten())
                 .next()
                 .context("codex.tui.start data point")?;
-            assert_eq!(point["asInt"], 1);
+            assert_eq!(otlp_int(point), Some(1));
             let tags = point["attributes"]
                 .as_array()
                 .context("codex.tui.start attributes")?
@@ -730,7 +730,7 @@ trust_level = "trusted"
                 .collect::<Vec<_>>();
             assert_eq!(observations.len(), 2);
             for observation in observations {
-                assert_eq!(observation["asInt"], 1);
+                assert_eq!(otlp_int(observation), Some(1));
                 let observation_tags = observation["attributes"]
                     .as_array()
                     .context("observation attributes")?
@@ -986,4 +986,12 @@ trust_level = "trusted"
         "{output}"
     );
     Ok(())
+}
+
+/// OTLP/JSON encodes int64 as a string (opentelemetry-proto 0.33, which the
+/// sync carries from main); older exporters wrote a number.
+fn otlp_int(point: &serde_json::Value) -> Option<i64> {
+    point["asInt"]
+        .as_i64()
+        .or_else(|| point["asInt"].as_str()?.parse().ok())
 }
