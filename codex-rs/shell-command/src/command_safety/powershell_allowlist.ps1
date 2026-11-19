@@ -3,11 +3,11 @@
 #
 # A script whose every command is literal is read as plain only when every command is
 #   (1) a cmdlet on the allowlist below (by name, a default alias, or qualified by its own
-#       system module), whose parameters all resolve, none excluded, and whose writes stay
-#       on plain file-system paths (the Rust side then checks them against the writable
-#       roots), or
-#   (2) a native program, whose argv PowerShell passes as written (no `"`, no empty word,
-#       no word with a space that ends in `\`). The Rust side also checks batch files.
+#       system module) that writes no file, whose parameters all resolve, none excluded,
+#       and (for a module's cmdlet) that no program on the command's `PATH` shadows, or
+#   (2) a native program found on the command's `PATH` (the Rust side checks), whose argv
+#       PowerShell passes as written (no `"`, no empty word, no word with a space that ends
+#       in `\`, no `-name:value`). The Rust side also checks batch files.
 # Anything else (another cmdlet or function, an unknown Verb-Noun name that could load a
 # module, a script file) makes the script read in part: its literal commands still add
 # prompts and refusals, and its remainder asks whenever a prompt or forbidden rule exists.
@@ -44,13 +44,13 @@ foreach ($name in $functionText.Split(',')) { $D729Functions[$name] = $true }
 foreach ($letter in [char[]]'abcdefghijklmnopqrstuvwxyz') { $D729Functions["${letter}:"] = $true }
 
 # The allowlist: cmdlets whose parameters cannot run code once every argument is a literal.
-#   x: excluded parameters; w: what it writes (see Add-D729Writes);
+#   x: excluded parameters;
 #   d: file-system dynamic parameters (1 takes a value, 0 is a switch), set aside before
 #      binding.
 $D729Allow = @{}
 function Add-D729 {
-    param([string[]]$Names, [string[]]$Excluded = @(), [string]$Writes = $null, [hashtable]$Dynamic = @{})
-    foreach ($name in $Names) { $D729Allow[$name] = @{ x = $Excluded; w = $Writes; d = $Dynamic } }
+    param([string[]]$Names, [string[]]$Excluded = @(), [hashtable]$Dynamic = @{})
+    foreach ($name in $Names) { $D729Allow[$name] = @{ x = $Excluded; d = $Dynamic } }
 }
 # Read-only provider and file-system queries.
 Add-D729 'get-childitem' -Dynamic @{ Attributes = 1; Directory = 0; File = 0; Hidden = 0; ReadOnly = 0; System = 0; FollowSymlink = 0 }
@@ -70,36 +70,19 @@ Add-D729 'select-string', 'measure-object', 'select-object', 'sort-object', 'gro
     'get-variable', 'get-alias', 'get-history', 'get-random', 'get-date', 'new-timespan', 'get-culture',
     'get-uiculture', 'get-host', 'get-timezone', 'get-uptime', 'start-sleep', 'clear-host', 'get-verb',
     'set-strictmode', 'get-clipboard', 'set-clipboard'
-Add-D729 'tee-object' -Excluded 'Variable' -Writes 'file'
 # System queries (no method calls).
 Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-ciminstance',
     'get-wmiobject', 'get-eventlog', 'get-computerinfo', 'test-connection', 'get-job', 'wait-job',
     'receive-job', 'remove-job', 'stop-job'
-# Network (Windows PowerShell's Invoke-WebRequest also needs -UseBasicParsing).
-Add-D729 'invoke-webrequest', 'invoke-restmethod' -Excluded 'SessionVariable', 'StatusCodeVariable', 'ResponseHeadersVariable' -Writes 'outfile'
-# File writes, checked by path.
-# An alternate data stream (`-Stream`) is not a path the Rust side can check.
-Add-D729 'set-content', 'add-content' -Excluded 'Stream' -Writes 'paths' -Dynamic @{ Encoding = 1; NoNewline = 0; AsByteStream = 0 }
-Add-D729 'clear-content' -Excluded 'Stream' -Writes 'paths'
-Add-D729 'remove-item' -Excluded 'Stream' -Writes 'remove'
-Add-D729 'set-item', 'clear-item', 'set-itemproperty', 'new-itemproperty', 'remove-itemproperty',
-    'rename-itemproperty', 'export-csv', 'export-clixml' -Writes 'paths'
-Add-D729 'out-file' -Writes 'file'
-Add-D729 'new-item', 'mkdir' -Writes 'newitem'
-# -Container:$false copies a folder's contents rather than the folder.
-Add-D729 'copy-item' -Excluded 'Container' -Writes 'copy'
-Add-D729 'move-item' -Writes 'move'
-Add-D729 'rename-item' -Writes 'rename'
-# Not Expand-Archive: an archive's entries can name paths outside its destination.
-Add-D729 'compress-archive' -Writes 'dest'
-Add-D729 'set-location', 'push-location', 'pop-location' -Writes 'location'
-
-# Writers whose input from the pipeline binds only as content, never to a path or stream
-# (Set-Content can bind `-Stream` by property name); any other writer asks after the first
-# command of a pipeline, where a path could come from its input.
-$D729ContentWriters = @{
-    'out-file' = $true; 'tee-object' = $true; 'export-csv' = $true; 'export-clixml' = $true
-}
+# Network, to the output only (Windows PowerShell's Invoke-WebRequest also needs
+# -UseBasicParsing).
+Add-D729 'invoke-webrequest', 'invoke-restmethod' -Excluded 'OutFile', 'SessionVariable', 'StatusCodeVariable', 'ResponseHeadersVariable'
+Add-D729 'set-location', 'push-location', 'pop-location'
+# No cmdlet that writes, copies, moves, renames, removes or downloads files (Set-Content,
+# Out-File, New-Item, Copy-Item, Invoke-WebRequest -OutFile, …): where such a write lands
+# can depend on what earlier commands of the script create, which a reading before it
+# runs cannot see (#2709 review). A script using one is read in part and asks under strict
+# rules.
 # Common parameters that set variables or prompt.
 $D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm')
 # By name or number (Inquire is 3, Suspend 5, Break 6).
@@ -113,19 +96,6 @@ foreach ($name in @($D729Allow.Keys)) {
     $info = Get-Command -Name $name -CommandType Cmdlet, Function -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -ne $info) { $D729Info[$name] = $info }
 }
-
-# Paths PowerShell or Windows run code from: module and profile folders, `PATH`. The Rust
-# side refuses a write into one of them or above one, wherever the writable roots are.
-$D729Protected = [System.Collections.ArrayList]::new()
-foreach ($dir in @(([string]$env:PSModulePath).Split(';') + ([string]$env:Path).Split(';'))) {
-    if (-not [string]::IsNullOrWhiteSpace($dir)) { $null = $D729Protected.Add($dir) }
-}
-$documents = [Environment]::GetFolderPath('MyDocuments')
-if ($documents) {
-    $null = $D729Protected.Add([IO.Path]::Combine($documents, 'WindowsPowerShell'))
-    $null = $D729Protected.Add([IO.Path]::Combine($documents, 'PowerShell'))
-}
-$null = $D729Protected.Add($PSHOME)
 
 # The profile scripts a console shell of this edition runs unless given -NoProfile; if
 # PowerShell does not say, assume one exists.
@@ -254,98 +224,6 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     if ($target -eq 'invoke-webrequest' -and -not $D729Core -and -not $binding.BoundParameters.ContainsKey('UseBasicParsing')) {
         return 'Invoke-WebRequest without -UseBasicParsing'
     }
-    if (-not $entry.w) { return $null }
-    if ($entry.w -eq 'location') {
-        $state.location = $true
-        return $null
-    }
-    if ($index -gt 0 -and -not $D729ContentWriters.ContainsKey($target)) { return "path from pipeline input: $target" }
-    return (Add-D729Writes $binding $target $entry.w $state)
-}
-
-# The last part of a path (`a\b.txt` gives `b.txt`); $null where there is none or it is
-# `.` or `..` (`s\.git\.` names `.git` once Windows normalises it).
-function Get-D729Leaf([string]$path) {
-    $leaf = $path.Split([char[]]'\/')[-1]
-    if ([string]::IsNullOrEmpty($leaf) -or $leaf.Trim('. ').Length -eq 0) { return $null }
-    return $leaf
-}
-
-# The paths a writer writes and removes, added to $state; a cause if one is not literal.
-function Add-D729Writes($binding, [string]$target, [string]$kind, $state) {
-    $paths = @()
-    $removes = @()
-    foreach ($name in 'Path', 'LiteralPath', 'FilePath') {
-        $value = Get-D729Bound $binding $name
-        if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
-        if ($null -ne $value) { $paths += $value }
-    }
-    switch ($kind) {
-        'paths' { }
-        'file' { }
-        'remove' {
-            $removes = $paths
-            $paths = @()
-            if ($removes.Count -eq 0) { return "writer path not given: $target" }
-        }
-        'outfile' {
-            $value = Get-D729Bound $binding 'OutFile'
-            if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
-            # Without -OutFile it writes nothing.
-            if ($null -eq $value) { return $null }
-            # PowerShell 7.4+ names the file after the URI when -OutFile is a folder: only a
-            # file name with an extension, and the Rust side checks it is no folder.
-            $leaf = Get-D729Leaf $value
-            if ($null -eq $leaf -or $leaf -notmatch '.\.[^.]+$') { return "download target is not a file name: $target" }
-            $paths = @($value)
-            $null = $state.files.Add([string]$value)
-        }
-        'newitem' {
-            $type = Get-D729Bound $binding 'ItemType'
-            if (Test-D729NotLiteral $type) { return "item type is not literal: $target" }
-            # The file-system provider matches an item type by prefix: only a prefix of
-            # File or Directory, never of a link or junction.
-            if ($null -ne $type -and -not ($type -match '^[A-Za-z]+$' -and ('file'.StartsWith($type.ToLowerInvariant()) -or 'directory'.StartsWith($type.ToLowerInvariant())))) {
-                return "item type other than a file or directory: $target"
-            }
-            if ($paths.Count -eq 0) { $paths = @('.') }
-            $name = Get-D729Bound $binding 'Name'
-            if (Test-D729NotLiteral $name) { return "item name is not literal: $target" }
-            if ($null -ne $name) { $paths = @($paths | ForEach-Object { $_ + '\' + $name }) }
-        }
-        { $_ -in 'copy', 'move' } {
-            # The destination, and the item named like each source inside it (it may be a
-            # folder: `Copy-Item s\.git .` writes `.\.git`). A move also removes its sources.
-            $sources = $paths
-            if ($sources.Count -eq 0) { return "writer path not given: $target" }
-            $destination = Get-D729Bound $binding 'Destination'
-            if (Test-D729NotLiteral $destination) { return "writer path is not literal: $target" }
-            if ($null -eq $destination) { $destination = '.' }
-            $paths = @($destination)
-            foreach ($source in $sources) {
-                $leaf = Get-D729Leaf $source
-                if ($null -eq $leaf) { return "source has no name: $target" }
-                $paths += $destination + '\' + $leaf
-            }
-            if ($kind -eq 'move') { $removes = $sources }
-        }
-        'rename' {
-            $newName = Get-D729Bound $binding 'NewName'
-            if ((Test-D729NotLiteral $newName) -or $null -eq $newName) { return "new name is not literal: $target" }
-            if ($newName.IndexOfAny([char[]]'\/:') -ge 0) { return "new name holds a path: $target" }
-            $removes = $paths
-            $paths = @($paths | ForEach-Object { $_ + '\..\' + $newName })
-        }
-        'dest' {
-            $destination = Get-D729Bound $binding 'DestinationPath'
-            if (Test-D729NotLiteral $destination) { return "writer path is not literal: $target" }
-            if ($null -eq $destination) { return "writer path not given: $target" }
-            $paths = @($destination)
-        }
-    }
-    if ($paths.Count -eq 0 -and $removes.Count -eq 0) { return "writer path not given: $target" }
-    foreach ($path in $paths) { $null = $state.writes.Add([string]$path) }
-    foreach ($path in $removes) { $null = $state.removes.Add([string]$path) }
     return $null
 }
 
@@ -395,16 +273,12 @@ function Find-D729Program([string]$name) {
     return $null -ne $found
 }
 
-# For a script read as literal commands: what the Rust side must check (paths it writes
-# and removes, program names, module cmdlets), or why it is read in part.
+# For a script read as literal commands: what the Rust side must check (program names,
+# module cmdlets), or why it is read in part.
 function Get-D729Review($ast) {
     $state = @{
-        location = $false
-        writes = [System.Collections.ArrayList]::new()
-        removes = [System.Collections.ArrayList]::new()
         programs = [System.Collections.ArrayList]::new()
         cmdlets = [System.Collections.ArrayList]::new()
-        files = [System.Collections.ArrayList]::new()
     }
     foreach ($pipeline in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] }, $true)) {
         $index = 0
@@ -416,8 +290,6 @@ function Get-D729Review($ast) {
             $index++
         }
     }
-    # A relative path written after the location changed is not where it reads.
-    if ($state.location -and ($state.writes.Count + $state.removes.Count) -gt 0) { return @{ cause = 'writes after a location change' } }
     $state.cause = $null
     return $state
 }

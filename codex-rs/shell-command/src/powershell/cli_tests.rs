@@ -49,7 +49,6 @@ fn command_joins_every_remaining_argument() {
                 },
                 plain: true,
                 no_profile: false,
-                working_directory: false,
             },
             "{shell}"
         );
@@ -83,7 +82,6 @@ fn single_script_argument_is_borrowed() {
             },
             plain: true,
             no_profile: true,
-            working_directory: false,
         }
     );
 }
@@ -396,31 +394,26 @@ fn no_script_is_interactive() {
 }
 
 #[test]
-fn no_profile_and_working_directory_are_recorded() {
-    let read_flags = |line: &[&str]| {
+fn no_profile_is_recorded() {
+    let no_profile = |line: &[&str]| {
         let command = words(line);
-        let invocation = read(&command, PowershellKind::of(line[0]));
-        (invocation.no_profile, invocation.working_directory)
+        read(&command, PowershellKind::of(line[0])).no_profile
     };
-    assert_eq!(read_flags(&["pwsh", "-nop", "-c", "x"]), (true, false));
-    assert_eq!(
-        read_flags(&["powershell.exe", "-NoProfile", "-Command", "x"]),
-        (true, false)
-    );
-    assert_eq!(
-        read_flags(&["pwsh", "-c", "x", "-NoProfile"]),
-        (false, false)
-    );
-    assert_eq!(
-        read_flags(&["pwsh", "-wd", "C:\\", "-c", "x"]),
-        (false, true)
-    );
-    assert_eq!(
-        read_flags(&["pwsh", "-WorkingDirectory", "C:\\", "-nop", "-c", "x"]),
-        (true, true)
-    );
-    assert_eq!(
-        read_flags(&["powershell.exe", "-Command", "x"]),
-        (false, false)
-    );
+    assert!(no_profile(&["pwsh", "-nop", "-c", "x"]));
+    assert!(no_profile(&[
+        "powershell.exe",
+        "-NoProfile",
+        "-Command",
+        "x"
+    ]));
+    assert!(no_profile(&[
+        "pwsh",
+        "-WorkingDirectory",
+        "C:\\",
+        "-nop",
+        "-c",
+        "x"
+    ]));
+    assert!(!no_profile(&["pwsh", "-c", "x", "-NoProfile"]));
+    assert!(!no_profile(&["powershell.exe", "-Command", "x"]));
 }

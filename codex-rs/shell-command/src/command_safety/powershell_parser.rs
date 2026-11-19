@@ -66,18 +66,6 @@ pub(crate) fn parse_with_powershell_ast(
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PowershellParseOutcome {
     Commands(Vec<Vec<String>>),
-    /// D729 (A): commands that write `writes` and remove `removes` (literal
-    /// paths, as written), with the folders PowerShell and Windows run code
-    /// from (`protected`). Read in full only where every path stays inside
-    /// the writable roots and outside `protected` (see `write_scope`).
-    Writes {
-        commands: Vec<Vec<String>>,
-        writes: Vec<String>,
-        removes: Vec<String>,
-        /// Written paths that must be files, not folders (`-OutFile`).
-        files: Vec<String>,
-        protected: Vec<String>,
-    },
     Partial(Vec<Vec<String>>),
     Unsupported,
     /// The parser answered that it could not parse the script.
@@ -303,17 +291,9 @@ struct PowershellParserResponse {
     status: String,
     commands: Option<Vec<Vec<String>>>,
     #[serde(default)]
-    writes: Option<Vec<String>>,
-    #[serde(default)]
-    removes: Option<Vec<String>>,
-    #[serde(default)]
-    protected: Option<Vec<String>>,
-    #[serde(default)]
     programs: Option<Vec<String>>,
     #[serde(default)]
     cmdlets: Option<Vec<String>>,
-    #[serde(default)]
-    files: Option<Vec<String>>,
     /// Why the script is read in part (diagnostics only).
     #[serde(default, rename = "cause")]
     _cause: Option<String>,
@@ -339,19 +319,7 @@ impl PowershellParserResponse {
                 ) {
                     return PowershellParseOutcome::Partial(commands);
                 }
-                let writes = self.writes.unwrap_or_default();
-                let removes = self.removes.unwrap_or_default();
-                if writes.is_empty() && removes.is_empty() {
-                    PowershellParseOutcome::Commands(commands)
-                } else {
-                    PowershellParseOutcome::Writes {
-                        commands,
-                        writes,
-                        removes,
-                        files: self.files.unwrap_or_default(),
-                        protected: self.protected.unwrap_or_default(),
-                    }
-                }
+                PowershellParseOutcome::Commands(commands)
             }
             "partial" => self
                 .commands
@@ -403,36 +371,24 @@ mod tests {
     }
 
     #[test]
-    fn parser_process_lists_writes_and_reads_unlisted_commands_in_part() {
+    fn parser_process_reads_unlisted_commands_in_part() {
         let Some(powershell) = try_find_powershell_executable_blocking() else {
             return;
         };
         let powershell = powershell.as_path().to_str().unwrap();
         let mut parser = PowershellParserProcess::spawn(powershell).unwrap();
 
-        let PowershellParseOutcome::Writes {
-            commands,
-            writes,
-            removes,
-            protected,
-            ..
-        } = parser
-            .parse("New-Item -Path build -Name notes.txt -Value x; Rename-Item a.txt b.txt")
-            .unwrap()
-        else {
-            panic!("writes");
-        };
-        assert_eq!(commands.len(), 2);
+        // D729 (A): no cmdlet that writes files is on the allowlist.
         assert_eq!(
-            writes,
-            vec![
-                "build\\notes.txt".to_string(),
-                "a.txt\\..\\b.txt".to_string(),
-            ]
+            parser.parse("Set-Content -Path out.txt -Value x").unwrap(),
+            PowershellParseOutcome::Partial(vec![vec![
+                "Set-Content".into(),
+                "-Path".into(),
+                "out.txt".into(),
+                "-Value".into(),
+                "x".into(),
+            ]])
         );
-        assert_eq!(removes, vec!["a.txt".to_string()]);
-        assert!(!protected.is_empty());
-
         // D729 (A): not on the allowlist, so read in part.
         assert_eq!(
             parser.parse("Get-Command git; git status").unwrap(),

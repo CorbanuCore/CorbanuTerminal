@@ -332,14 +332,13 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) windows_sandbox_level: WindowsSandboxLevel,
     pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) prefix_rule: Option<Vec<String>>,
-    /// D729 (A): the local directory the command runs in, where a PowerShell
-    /// script may write and still be read in full; `None` (a remote
-    /// environment, or unknown) reads every script that writes in part, and
-    /// with `env` given (a remote environment) every script that runs a
-    /// program or module cmdlet too.
+    /// D729 (A): the local directory the command runs in; `None` with `env`
+    /// given is a remote environment, whose PowerShell scripts that run a
+    /// program or module cmdlet are read in part (this host cannot find their
+    /// names). Both `None`: no command to check (heuristics, tests).
     pub(crate) cwd: Option<AbsolutePathBuf>,
     /// D729 (A): the command's environment, where its shell finds programs
-    /// and modules (`PATH`, `PATHEXT`, `PSModulePath`); `None`: Corbanu's.
+    /// (`PATH`, `PATHEXT`); `None`: Corbanu's.
     pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 
@@ -457,15 +456,15 @@ impl ExecPolicyManager {
             cwd,
             env,
         } = req;
-        // D729 (A): where a PowerShell script read below may write. The guard
-        // is not `Send`: nothing below awaits.
+        // D729 (A): the command whose PowerShell script is read below (where
+        // its shell finds programs). The guard is not `Send`: nothing below
+        // awaits.
         #[cfg(windows)]
-        let _write_scope =
-            (cwd.is_some() || env.is_some()).then(|| {
-                codex_shell_command::powershell::enter_powershell_write_scope(
-                    powershell_write_scope(&permission_profile, cwd.as_ref(), env),
-                )
-            });
+        let _command_scope = (cwd.is_some() || env.is_some()).then(|| {
+            codex_shell_command::powershell::enter_powershell_command_scope(
+                codex_shell_command::powershell::PowershellCommandScope::new(cwd.as_ref(), env),
+            )
+        });
         #[cfg(not(windows))]
         let _ = (cwd, env);
         let exec_policy = self.current_for(live_aggressive);
@@ -1350,32 +1349,6 @@ fn program_key(token: &str) -> Option<String> {
         .find_map(|suffix| name.strip_suffix(suffix))
         .unwrap_or(&name);
     (!name.is_empty()).then(|| name.to_string())
-}
-
-/// D729 (A): the roots a PowerShell script may write in and still be read in
-/// full: the sandbox's writable roots, or under full access those a
-/// workspace-write session would have.
-#[cfg(windows)]
-fn powershell_write_scope(
-    permission_profile: &PermissionProfile,
-    cwd: Option<&AbsolutePathBuf>,
-    env: Option<&std::collections::HashMap<String, String>>,
-) -> codex_shell_command::powershell::PowershellWriteScope {
-    let Some(cwd) = cwd else {
-        // A remote environment: nothing on this host to look at.
-        return codex_shell_command::powershell::PowershellWriteScope::new(None, Vec::new(), env);
-    };
-    let policy = permission_profile.file_system_sandbox_policy();
-    let policy = if policy.has_full_disk_write_access() {
-        PermissionProfile::workspace_write().file_system_sandbox_policy()
-    } else {
-        policy
-    };
-    codex_shell_command::powershell::PowershellWriteScope::new(
-        Some(cwd),
-        policy.get_writable_roots_with_cwd(cwd.as_path()),
-        env,
-    )
 }
 
 /// Whether commands of this origin are a PowerShell script's.

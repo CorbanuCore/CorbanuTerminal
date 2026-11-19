@@ -1,7 +1,7 @@
 //! D729 (A), #2661: on Windows a PowerShell script is read in full only when every
-//! command is an allowlisted cmdlet (writing only inside the writable roots, away from
-//! module, profile and `PATH` folders) or a native program. Anything else asks whenever
-//! a prompt or forbidden rule exists, and is refused with approvals off.
+//! command is an allowlisted cmdlet (none writes files) or a native program found on the
+//! command's `PATH`. Anything else asks whenever a prompt or forbidden rule exists, and is
+//! refused with approvals off.
 use super::*;
 
 const GIT_PUSH_FORBIDDEN: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
@@ -158,6 +158,21 @@ fn unread_scripts() -> Vec<String> {
         "Set-Content -Path node.cmd -Value '@git push'; pnpm --version".into(),
         r"Copy-Item C:\Windows\System32\cmd.exe x.exe; .\x.exe /c git push".into(),
         r#"ConvertFrom-Json '{"Stream":"x"}' | Set-Content -Path a.txt"#.into(),
+        // D729 (A) after #2709 review r3: no cmdlet that writes, copies, moves,
+        // renames, removes or downloads files is on the allowlist.
+        "Set-Content -Path out.txt -Value x".into(),
+        "Add-Content -Path out.txt -Value x".into(),
+        "Out-File -FilePath log.txt -InputObject x".into(),
+        "New-Item -ItemType Directory -Force -Path build".into(),
+        "mkdir build".into(),
+        "Copy-Item -Path a.txt -Destination b.txt".into(),
+        "Move-Item -Path a.txt -Destination b.txt".into(),
+        "Rename-Item -Path a.txt -NewName b.txt".into(),
+        "Remove-Item -Path a.txt".into(),
+        "Write-Output x | Tee-Object -FilePath log.txt".into(),
+        "Get-Process | Export-Csv -Path p.csv".into(),
+        "Compress-Archive -Path a.txt -DestinationPath a.zip".into(),
+        "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile x.html".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
@@ -238,19 +253,10 @@ async fn allowlisted_forms_stay_precise() {
             "git status; git log -1 --oneline",
             "Select-String -Path README.md -Pattern x",
             "Microsoft.PowerShell.Management\\Get-ChildItem -Force",
-            "Set-Content -Path out.txt -Value x",
-            "Set-Content -Encoding utf8 out.txt x",
-            "New-Item -ItemType Directory -Force -Path build",
-            "New-Item -ItemType f -Path build -Name notes.txt -Value x",
-            "Get-Content a.txt | Out-File -FilePath b.txt",
-            "Copy-Item -Path a.txt -Destination b.txt",
-            "Rename-Item -Path a.txt -NewName b.txt",
             "Get-ChildItem -ErrorAction SilentlyContinue",
-            "Write-Output x | Out-File -FilePath log.txt -Append",
-            "Set-Content -Path \"out.txt\" -Value \"x y\"",
-            "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile x.html",
             "Invoke-RestMethod -Uri https://example.com/x.json",
-            "Compress-Archive -Path a.txt -DestinationPath a.zip",
+            "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x",
+            r"Set-Location src; Get-ChildItem",
             // File-system dynamic parameters, also for a path that does not exist.
             r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",
             r"Get-Content -LiteralPath 'C:\does not\exist.txt' -Raw",
@@ -289,105 +295,4 @@ async fn allowlisted_forms_stay_precise() {
             );
         }
     }
-}
-
-#[tokio::test]
-async fn writes_outside_the_workspace_or_above_protected_folders_ask() {
-    let (_parent, workspace) = workspace();
-    let home = home();
-    let home_path = Path::new(&home);
-    for shell in shells() {
-        // Inside the workspace: read in full.
-        let inside = decide_in(
-            shell,
-            "Set-Content -Path out.txt -Value x",
-            &workspace,
-            AskForApproval::OnRequest,
-            PermissionProfile::Disabled,
-        )
-        .await;
-        assert!(
-            matches!(inside, ExecApprovalRequirement::Skip { .. }),
-            "{inside:?}"
-        );
-        // Outside every root, and (with the home folder as the workspace) into or
-        // above the module and profile folders.
-        for (cwd, script) in [
-            (
-                workspace.as_path(),
-                r"Set-Content -Path C:\Windows\Temp\x.txt -Value x".to_string(),
-            ),
-            (
-                workspace.as_path(),
-                r"Set-Content -Path ..\x.txt -Value x".to_string(),
-            ),
-            (
-                workspace.as_path(),
-                "Set-Content -Path .git\\hooks\\pre-commit -Value x".to_string(),
-            ),
-            (
-                home_path,
-                r"Set-Content -Path Documents\WindowsPowerShell\x.ps1 -Value x".to_string(),
-            ),
-            (
-                home_path,
-                r"Copy-Item -Recurse -Path pkg -Destination Documents".to_string(),
-            ),
-            (
-                home_path,
-                "Expand-Archive -Path a.zip -DestinationPath .".to_string(),
-            ),
-        ] {
-            let result = decide_in(
-                shell,
-                &script,
-                cwd,
-                AskForApproval::OnRequest,
-                PermissionProfile::Disabled,
-            )
-            .await;
-            assert!(
-                matches!(
-                    result,
-                    ExecApprovalRequirement::NeedsApproval {
-                        proposed_execpolicy_amendment: None,
-                        ..
-                    }
-                ),
-                "{shell} {script}: {result:?}"
-            );
-        }
-    }
-}
-
-#[tokio::test]
-async fn a_working_directory_parameter_makes_writes_ask() {
-    let (_parent, workspace) = workspace();
-    if !shells().contains(&"pwsh.exe") {
-        return;
-    }
-    let command = vec![
-        "pwsh.exe".to_string(),
-        "-NoProfile".to_string(),
-        "-WorkingDirectory".to_string(),
-        documents(),
-        "-Command".to_string(),
-        "Set-Content -Path out.txt -Value x".to_string(),
-    ];
-    let result = ExecPolicyManager::new(policy_from_src(Some(GIT_PUSH_FORBIDDEN)))
-        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
-            command: &command,
-            approval_policy: AskForApproval::OnRequest,
-            permission_profile: PermissionProfile::Disabled,
-            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
-            sandbox_permissions: SandboxPermissions::UseDefault,
-            prefix_rule: None,
-            cwd: Some(AbsolutePathBuf::from_absolute_path(&workspace).expect("absolute cwd")),
-            env: Some(&command_env()),
-        })
-        .await;
-    assert!(
-        matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
-        "{result:?}"
-    );
 }

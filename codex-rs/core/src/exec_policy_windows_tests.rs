@@ -175,43 +175,28 @@ fn writable_windows_policy_without_sandbox_backend_still_requires_approval() {
 
 #[tokio::test]
 async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
-    let inner_command = vec![
-        "Remove-Item".to_string(),
-        "test".to_string(),
-        "-Force".to_string(),
-    ];
-    let command = vec![
-        "powershell.exe".to_string(),
-        "-NoProfile".to_string(),
-        "-Command".to_string(),
-        "Remove-Item test -Force".to_string(),
-    ];
-    // D729 (A): a script that writes is read in full where its writes stay
-    // inside the workspace it runs in.
-    let workspace = tempfile::tempdir().expect("tempdir");
-    let requirement = ExecPolicyManager::new(Arc::new(Policy::empty()))
-        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
-            command: &command,
+    // D729 (A): `Remove-Item` writes files, so it is not on the allowlist and
+    // the script is read in part: it asks, with no amendment for its argv.
+    assert_exec_approval_requirement_for_command(
+        ExecApprovalRequirementScenario {
+            policy_src: None,
+            command: vec![
+                "powershell.exe".to_string(),
+                "-NoProfile".to_string(),
+                "-Command".to_string(),
+                "Remove-Item test -Force".to_string(),
+            ],
             approval_policy: AskForApproval::OnRequest,
             permission_profile: PermissionProfile::Disabled,
-            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
-            cwd: Some(AbsolutePathBuf::from_absolute_path(workspace.path()).expect("absolute")),
-            // A Windows `PATH`, whatever the test runner's.
-            env: Some(&std::collections::HashMap::from([(
-                "Path".to_string(),
-                r"C:\Windows\System32".to_string(),
-            )])),
-        })
-        .await;
-    assert_eq!(
-        requirement,
+        },
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(inner_command)),
-        }
-    );
+            proposed_execpolicy_amendment: None,
+        },
+    )
+    .await;
 }
 
 /// #2524 (D688): Windows runs PowerShell under any spelling of its name, so
