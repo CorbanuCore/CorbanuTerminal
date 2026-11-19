@@ -2,9 +2,11 @@ use super::*;
 use codex_protocol::config_types::ShellEnvironmentPolicy;
 use codex_shell_command::shell_detect::ShellType;
 #[cfg(unix)]
-use codex_shell_command::shell_snapshot::{
-    SnapshotCaptureOptions, SnapshotStartup, snapshot_capture_script,
-};
+use codex_shell_command::shell_snapshot::SnapshotCaptureOptions;
+#[cfg(unix)]
+use codex_shell_command::shell_snapshot::SnapshotStartup;
+#[cfg(unix)]
+use codex_shell_command::shell_snapshot::snapshot_capture_script;
 use pretty_assertions::assert_eq;
 
 fn filtered(raw: &str, scan: &ModelScan) -> Result<String> {
