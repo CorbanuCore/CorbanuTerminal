@@ -421,20 +421,19 @@ async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
             "{script:?}: {result:?}"
         );
     }
-    // D713 reads parameter expansions as arguments: these run nothing a
-    // rule matches (`printf` reads no number from them).
-    for script in [
-        "printf '%s\\n' \"$x\" | sort",
-        "printf '%s: %d\\n' \"$name\" 3",
-    ] {
+    // D713 reads parameter expansions as arguments: this runs nothing a
+    // rule matches (`printf` reads no number from it).
+    let result = check("printf '%s\\n' \"$x\" | sort", FORBID, /*mode*/ 0).await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::Skip { .. }),
+        "{result:?}"
+    );
+    // A numeric slot may get a word known only at run time, or, where one
+    // vanishes or splits (zsh drops an empty `$x`), any argument after it.
+    for script in ["printf '%d\\n' \"$x\"", "printf '%s: %d\\n' \"$name\" 3"] {
         let result = check(script, FORBID, /*mode*/ 0).await;
-        assert!(
-            matches!(result, ExecApprovalRequirement::Skip { .. }),
-            "{script:?}: {result:?}"
-        );
+        assert!(asks(&result), "{script:?}: {result:?}");
     }
-    let result = check("printf '%d\\n' \"$x\"", FORBID, /*mode*/ 0).await;
-    assert!(asks(&result), "{result:?}");
 }
 
 #[tokio::test]

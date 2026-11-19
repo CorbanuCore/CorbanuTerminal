@@ -354,7 +354,8 @@ fn minimal_set_refuses_more_than_the_tree() {
         "echo \"$HOME\" \"${HOME}\"",
         "for f in *.rs; do wc -l \"$f\"; done",
     ] {
-        assert!(!read_script(script).fails_closed(), "{script:?}");
+        let read = super::read_script_as(script, super::ScriptShell::Posix);
+        assert!(!read.fails_closed(), "{script:?}");
     }
 }
 

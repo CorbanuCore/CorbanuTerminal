@@ -1,14 +1,22 @@
 //! D713: the forms the minimal lexical set reads precisely besides its
 //! literal list, and the shapes around them that still fail closed (ask
-//! whenever a prompt or forbidden rule exists).
+//! whenever a prompt or forbidden rule exists). Scripts are read as bash
+//! runs them unless a test says otherwise.
 
+use super::ScriptShell;
 use super::read_script;
+use super::read_script_as;
+use super::shell_lc_script_read;
 use pretty_assertions::assert_eq;
+
+fn read_posix(script: &str) -> super::ScriptRead {
+    read_script_as(script, ScriptShell::Posix)
+}
 
 /// The script's commands as text, `?` for a word known only at run time;
 /// `None` where the script fails closed.
 fn commands(script: &str) -> Option<Vec<String>> {
-    let read = read_script(script);
+    let read = read_posix(script);
     (!read.fails_closed()).then(|| {
         read.commands
             .iter()
@@ -33,7 +41,7 @@ fn assert_read(cases: &[(&str, &[&str])]) {
 
 fn assert_fails_closed(scripts: &[&str]) {
     for script in scripts {
-        assert!(read_script(script).fails_closed(), "{script:?}");
+        assert!(read_posix(script).fails_closed(), "{script:?}");
     }
 }
 
@@ -72,6 +80,8 @@ fn expansions_that_run_code_or_name_the_command_fail_closed() {
         "true && $cmd push",
         "if true; then $cmd; fi",
         "x+=1 $cmd",
+        "2>/dev/null $cmd push",
+        "true; 2>&1 ${cmd} push",
         // Not an assignment: bash runs `1=…` as a command.
         "1=$x push",
         // zsh subscripts, which evaluate arithmetic.
@@ -259,6 +269,15 @@ fn tests_other_shells_or_operators_read_differently_fail_closed() {
         "[[ -v x ]]",
         "[[ $x -eq 1 ]]",
         "[ x -gt 0 ]",
+        // Review round 1: `[` operands are expanded as file names, which `[`
+        // may read as operators (a file named `-v`).
+        "[ * ]",
+        "[ ! * ]",
+        "[ -n x* ]",
+        "[ -f a?b ]",
+        "[ x = a^b ]",
+        "[ x = a#b ]",
+        "[ -f \\* ]",
         // A test is all of its command.
         "[ x ] y",
         "[[ x ]] y",
@@ -286,4 +305,49 @@ fn a_line_starting_with_a_backslash_fails_closed() {
         ("true; \\git push", &["true", "git push"]),
         ("true\n \\git push", &["true", "git push"]),
     ]);
+}
+
+/// Review round 1: with options a user may set in zsh's startup files, an
+/// unquoted parameter or substitution becomes a pattern whose qualifiers
+/// run code (`glob_subst`: `x='*(e:cmd:)'; echo $x`; `glob_assign`:
+/// `y=$x`), or splits into words. Where zsh (or a shell not known) runs
+/// the script, only quoted ones are read.
+#[test]
+fn unquoted_expansions_fail_closed_where_zsh_may_run_them() {
+    let argv =
+        |shell: &str, script: &str| vec![shell.to_string(), "-lc".to_string(), script.to_string()];
+    for script in [
+        "x='*(e:git push:)'; echo $x",
+        "echo ${x#a}",
+        "y=$x",
+        "x=$(git rev-parse HEAD)",
+        "echo `pwd`",
+        "for f in $(ls); do wc -l \"$f\"; done",
+        "[[ -n $x ]]",
+        "set -- '*(e:git push:)'; echo $1",
+        "echo \"$(echo $x)\"",
+    ] {
+        assert!(read_script(script).fails_closed(), "{script:?}");
+        for shell in ["zsh", "/bin/zsh", "ksh", "fish"] {
+            let read = shell_lc_script_read(&argv(shell, script));
+            assert!(
+                read.is_none_or(|read| read.fails_closed()),
+                "{shell} {script:?}"
+            );
+        }
+        for shell in ["bash", "/bin/sh", "sh"] {
+            let read = shell_lc_script_read(&argv(shell, script)).expect(shell);
+            assert!(!read.fails_closed(), "{shell} {script:?}");
+        }
+    }
+    // Quoted, arithmetic and `$?`-like values are read for zsh too.
+    for script in [
+        "echo \"$HOME\" \"${x:-a}\" \"$(git rev-parse HEAD)\" \"`pwd`\"",
+        "echo $((1 + 2)) $? $#",
+        "[ -n \"$x\" ] && [[ \"$x\" == y ]]",
+    ] {
+        assert!(!read_script(script).fails_closed(), "{script:?}");
+        let read = shell_lc_script_read(&argv("zsh", script)).expect("zsh");
+        assert!(!read.fails_closed(), "{script:?}");
+    }
 }

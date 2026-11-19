@@ -48,8 +48,15 @@
 //!   are fixed: `[ "$x" ]`, `[ -n "$x" ]` (unary operators that test text
 //!   or a file), `[ "$x" = "$y" ]` (`=` `!=` `-nt` `-ot` `-ef`), each
 //!   optionally after `!`. A quoted operand may not read as an operator
-//!   (`"-v"`), and `[` takes no `==`. The reader checks the operators
+//!   (`"-v"`), and `[` takes no `==` and no wildcards (it would read a
+//!   file named `-v` as an operator). The reader checks the operators
 //!   themselves (`-v`, arithmetic).
+//!
+//! Where zsh (or a shell not known) runs the script, a parameter or command
+//! substitution outside double quotes fails closed: options a user's
+//! startup files may set (`glob_subst`, `glob_assign`) make its value a
+//! pattern whose qualifiers run code (`*(e:cmd:)`), and `sh_word_split`
+//! splits it. bash, sh and dash read it (`ScriptShell`).
 
 use super::script_read::runs_code_from_variable;
 
@@ -58,6 +65,15 @@ const MAX_DEPTH: usize = 8;
 
 /// Whether `script` lies within the minimal set (see the module docs).
 pub(super) fn lexically_safe(script: &str) -> bool {
+    lexical_read(script).0
+}
+
+/// Whether `script` lies within the minimal set, and whether a parameter
+/// or command substitution in it lies outside double quotes, where zsh
+/// options a user may set (`glob_subst`, `glob_assign`, `sh_word_split`)
+/// make its value a pattern whose qualifiers run code (`*(e:cmd:)`) or
+/// split it into several words.
+pub(super) fn lexical_read(script: &str) -> (bool, bool) {
     let mut lexer = Lexer {
         bytes: script.as_bytes(),
         at: 0,
@@ -68,8 +84,10 @@ pub(super) fn lexically_safe(script: &str) -> bool {
         test: None,
         dquote: false,
         expanded: false,
+        unquoted: false,
     };
-    lexer.script() && lexer.at == lexer.bytes.len()
+    let safe = lexer.script() && lexer.at == lexer.bytes.len();
+    (safe, lexer.unquoted)
 }
 
 /// What ends the script being lexed.
@@ -106,6 +124,9 @@ struct Lexer<'a> {
     dquote: bool,
     /// The current word holds an expansion added under D713.
     expanded: bool,
+    /// Some parameter or command substitution lies outside double quotes,
+    /// where zsh's `glob_subst` would take its value for a pattern.
+    unquoted: bool,
 }
 
 const WORD_BYTES: &[u8] = b"_-./,:@%+=~*?!^]#";
@@ -330,12 +351,18 @@ impl Lexer<'_> {
                 // a comment; inside a substitution, bash 3.2 may take it for
                 // one anywhere.
                 b'#' if self.at == start || self.substituted() => return false,
+                // `[` operands are expanded as file names, which `[` may read
+                // as operators (a file named `-v`); `^` and `#` are wildcards
+                // under zsh's `extended_glob`.
+                b'*' | b'?' | b'^' | b'#' if self.test == Some(Test::Single) => return false,
                 b'<' | b'>' => {
                     let descriptor = self.bytes[start..self.at].iter().all(u8::is_ascii_digit);
                     if !descriptor || self.at == start || self.test.is_some() {
                         return false;
                     }
-                    break;
+                    // A redirection's descriptor: the next word may still be
+                    // the command's name (`2>/dev/null $cmd`).
+                    return true;
                 }
                 // zsh expands `""=git` to git's path.
                 b'=' if self.at > start && matches!(self.bytes[self.at - 1], b'\'' | b'"') => {
@@ -507,6 +534,7 @@ impl Lexer<'_> {
                         return false;
                     }
                     self.expanded |= test == Some(Test::Single);
+                    self.unquoted |= !self.dquote;
                 }
                 self.at += 2;
                 self.expansion_ends()
@@ -518,6 +546,7 @@ impl Lexer<'_> {
                 self.at += 1;
                 self.name();
                 self.expanded = true;
+                self.unquoted |= !self.dquote;
                 self.expansion_ends()
             }
             Some(b'{') if test != Some(Test::Single) || self.dquote => self.braced(),
@@ -623,6 +652,7 @@ impl Lexer<'_> {
         }
         self.at += 1;
         self.expanded = true;
+        self.unquoted |= !self.dquote;
         // zsh subscripts `${x}[…]` too.
         !self.current().is_some_and(|byte| b"[({'".contains(&byte))
     }
@@ -657,7 +687,7 @@ impl Lexer<'_> {
         if self.current() == Some(b')') {
             return false;
         }
-        self.nested(Close::Paren, b')')
+        self.nested(Close::Paren, /*end*/ b')')
     }
 
     /// `` ` … ` ``: a script of the same set without quotes, escapes or
@@ -670,7 +700,7 @@ impl Lexer<'_> {
         if self.current() == Some(b'`') {
             return false;
         }
-        self.nested(Close::Backquote, b'`')
+        self.nested(Close::Backquote, /*end*/ b'`')
     }
 
     /// Lexes the script of a substitution up to `end`, which it consumes.
@@ -705,6 +735,7 @@ impl Lexer<'_> {
         }
         self.at += 1;
         self.expanded = true;
+        self.unquoted |= !self.dquote;
         true
     }
 

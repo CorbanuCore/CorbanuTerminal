@@ -924,8 +924,8 @@ fn reading_gate_approval(level: SecurityLevel) -> AskForApproval {
 
 /// Approves the script-reading prompt [`reading_gate_approval`] expects
 /// under Aggressive for `script`, asserting it was raised exactly when the
-/// script lies outside the minimal lexical set (and that no other level
-/// asks); any other approval request (a sandbox retry) is denied, so the
+/// script, as the user's shell runs it, lies outside the minimal lexical
+/// set (and that no other level asks); any other approval request (a sandbox retry) is denied, so the
 /// sandbox still decides.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 async fn approve_reading_gate(
@@ -967,7 +967,11 @@ async fn approve_reading_gate(
     // Exactly the one prompt for a script outside the minimal set under
     // Aggressive (the Linux and macOS variants differ), none otherwise.
     let expected = level == SecurityLevel::Aggressive
-        && codex_shell_command::bash::read_script(script).fails_closed();
+        && codex_shell_command::bash::shell_lc_script_read(
+            &codex_core::shell::default_user_shell()
+                .derive_exec_args(script, /*use_login_shell*/ true),
+        )
+        .is_none_or(|read| read.fails_closed());
     assert_eq!(
         gate_prompts,
         usize::from(expected),

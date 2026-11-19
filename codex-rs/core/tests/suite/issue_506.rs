@@ -88,7 +88,11 @@ async fn run(level: SecurityLevel, confirm: bool, command: Command) -> anyhow::R
     // approvals and approve the prompt (the loop below); the sandbox still
     // decides.
     let reading_gate = level == SecurityLevel::Aggressive
-        && codex_shell_command::bash::read_script(&command).fails_closed();
+        && codex_shell_command::bash::shell_lc_script_read(
+            &codex_core::shell::default_user_shell()
+                .derive_exec_args(&command, /*use_login_shell*/ true),
+        )
+        .is_none_or(|read| read.fails_closed());
     let approval_policy = if reading_gate {
         AskForApproval::OnRequest
     } else {
