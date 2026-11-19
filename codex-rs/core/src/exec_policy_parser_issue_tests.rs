@@ -481,3 +481,173 @@ async fn powershell_check_keeps_refusals_of_read_scripts() {
         }
     }
 }
+
+/// #2671: `command` checked for a Windows executor on this host, in each
+/// mode of [`requirements`] that applies there; Aggressive with approvals
+/// off last.
+async fn windows_requirements(command: &[String], rules: &str) -> Vec<ExecApprovalRequirement> {
+    let mut results = Vec::new();
+    for (approval_policy, permission_profile, live_aggressive) in [
+        (
+            AskForApproval::OnRequest,
+            PermissionProfile::Disabled,
+            false,
+        ),
+        (
+            AskForApproval::OnRequest,
+            PermissionProfile::workspace_write(),
+            false,
+        ),
+        (AskForApproval::Never, PermissionProfile::read_only(), true),
+    ] {
+        results.push(
+            ExecPolicyManager::new(policy_from_src(Some(rules)))
+                .create_exec_approval_requirement_for_command_platform(
+                    ExecApprovalRequest {
+                        command,
+                        approval_policy,
+                        permission_profile,
+                        environment_policy: None,
+                        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: Some(command.to_vec()),
+                        allow_prefix_rules: AllowPrefixRules::Honor,
+                    },
+                    DangerousCommandPlatform::Windows,
+                    live_aggressive,
+                )
+                .await,
+        );
+    }
+    results
+}
+
+/// #2671: a host that is not Windows, checking commands for a Windows
+/// executor, reads PowerShell however Windows spells it (case, `.exe`,
+/// trailing dots and spaces, `\` paths), exactly as the plain spelling
+/// reads; and a launcher, shell or PowerShell spelled so that no rule reads
+/// it as one (`\\?\` paths, 8.3 short names, streams, `SUDO` or `BASH.EXE`
+/// off Windows; `\\?\UNC\`, `//?/`) asks whenever a prompt or forbidden
+/// rule exists, behind a launcher too. On a Windows host the same holds.
+#[tokio::test]
+async fn issue_2671_windows_executor_reads_respelled_shells_on_any_host() {
+    let read = [
+        "PWSH",
+        "PWSH.EXE",
+        "Pwsh.Exe",
+        "PowerShell.exe",
+        "POWERSHELL.EXE. ",
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\PowerShell.EXE",
+        r"C:\Program Files\PowerShell\7\PWSH.EXE",
+        r"C:\PS\pwsh.exe",
+        r"C:pwsh",
+        "D:/PS/Pwsh",
+        r"\\?\C:\PS\PWSH.EXE",
+        r"\\.\C:\PS\PWSH",
+    ];
+    let unread = [
+        r"\\?\C:\PS\PWSH",
+        r"\\?\C:\PS\PWSH.EXE.",
+        r"\\?\UNC\srv\share\PWSH",
+        "//?/C:/PS/PWSH",
+        "PWSH~1.EXE",
+        r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE",
+        "pwsh.exe::$DATA",
+    ];
+    let mut failures = Vec::new();
+    for shell in read.iter().chain(&unread) {
+        for flag in ["-Command", "-c"] {
+            let command = argv(&[shell, "-NoProfile", flag, "git push"]);
+            for rules in [FORBID, PROMPT] {
+                let results = windows_requirements(&command, rules).await;
+                let last = results.len() - 1;
+                for (mode, result) in results.into_iter().enumerate() {
+                    if !acceptable(rules, &result, mode == last) {
+                        failures.push(format!("{rules} mode {mode} {command:?}: {result:?}"));
+                    }
+                }
+            }
+        }
+    }
+    // Read precisely: a harmless script decides as the plain spelling's.
+    for shell in read {
+        let plain = if shell.to_ascii_lowercase().contains("pwsh") {
+            "pwsh.exe"
+        } else {
+            "powershell.exe"
+        };
+        for script in ["git status", "git push"] {
+            let command = argv(&[shell, "-Command", script]);
+            let plain_command = argv(&[plain, "-Command", script]);
+            for rules in [FORBID, PROMPT] {
+                let kinds = |results: Vec<ExecApprovalRequirement>| {
+                    results
+                        .iter()
+                        .map(std::mem::discriminant)
+                        .collect::<Vec<_>>()
+                };
+                if kinds(windows_requirements(&command, rules).await)
+                    != kinds(windows_requirements(&plain_command, rules).await)
+                {
+                    failures.push(format!("{rules} {command:?} decides unlike {plain}"));
+                }
+            }
+        }
+    }
+    // Launchers and shells Windows spells another way.
+    for command in [
+        argv(&["SUDO", "git", "push"]),
+        argv(&["Env.EXE", "git", "push"]),
+        argv(&[r"C:\Tools\sudo.exe", "git", "push"]),
+        argv(&[r"C:\Git\bin\BASH.EXE", "-c", "git push"]),
+        argv(&["Bash.exe", "-lc", "git push"]),
+        argv(&["BUSYBO~1.EXE", "sh", "-c", "git push"]),
+        argv(&["env", "PWSH.EXE", "-Command", "git push"]),
+        argv(&["env", "A=1", r"\\?\C:\PS\PWSH", "-c", "git push"]),
+        argv(&["env", "A=1", r"\\?\UNC\srv\share\PWSH", "-c", "git push"]),
+    ] {
+        for rules in [FORBID, PROMPT] {
+            let results = windows_requirements(&command, rules).await;
+            let last = results.len() - 1;
+            for (mode, result) in results.into_iter().enumerate() {
+                if !acceptable(rules, &result, mode == last) {
+                    failures.push(format!("{rules} mode {mode} {command:?}: {result:?}"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// #2671: a POSIX executor may be macOS, whose names fold case, so a
+/// PowerShell spelled `PWSH` asks there on any host, as `pwsh` does.
+#[tokio::test]
+async fn issue_2671_posix_executor_powershell_folds_case_on_any_host() {
+    let mut failures = Vec::new();
+    for shell in ["PWSH", "/usr/local/bin/PowerShell", "pwsh"] {
+        let command = argv(&[shell, "-c", "git push"]);
+        for rules in [FORBID, PROMPT] {
+            let result = ExecPolicyManager::new(policy_from_src(Some(rules)))
+                .create_exec_approval_requirement_for_command_platform(
+                    ExecApprovalRequest {
+                        command: &command,
+                        approval_policy: AskForApproval::OnRequest,
+                        permission_profile: PermissionProfile::Disabled,
+                        environment_policy: None,
+                        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: Some(command.clone()),
+                        allow_prefix_rules: AllowPrefixRules::Honor,
+                    },
+                    DangerousCommandPlatform::Posix,
+                    /*live_aggressive*/ false,
+                )
+                .await;
+            if !acceptable(rules, &result, /*approvals_off*/ false) {
+                failures.push(format!("{rules} {command:?}: {result:?}"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

@@ -1801,6 +1801,79 @@ mod pf_27_s05 {
         assert_eq!(denial(&response), Some("unknown_credential"));
     }
 
+    /// SMQ-2: a held key copied into another variable (exact, a header, an
+    /// embedded or non-Unicode value, one copy inside another) is removed
+    /// from the environment commands inherit; other variables stay, and a
+    /// short placeholder key matches nothing. A broker that cannot check
+    /// fails closed and removes nothing.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn smq2_env_copies_of_held_keys_are_removed_and_fail_closed() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let pid = std::process::id();
+        let key = format!("sk-smq2-held-{:016x}", rand::random::<u64>());
+        let bound = || binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
+        let credential = broker.register(bound(), &key).expect("register");
+        // A local-server placeholder: shorter than ENV_COPY_MIN_KEY_BYTES.
+        let placeholder = broker.register(bound(), "local").expect("register");
+        let name = |suffix: &str| format!("SMQ2_{suffix}_{pid}");
+        let (exact, header, embedded, safe, path) = (
+            name("EXACT"),
+            name("AUTH_HEADER"),
+            name("EMBEDDED"),
+            name("SAFE"),
+            name("PATH"),
+        );
+        let set = crate::credential_broker::env_scrub::set_env_var_for_test;
+        set(&exact, &key);
+        set(&header, &format!("Bearer {key}"));
+        set(&embedded, &format!("url=https://x.test/?k={key}&v=1"));
+        set(&safe, "ordinary value");
+        set(&path, "/usr/local/bin:/bin");
+        let mut expected = vec![header, embedded, exact];
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt as _;
+            let raw = name("RAW");
+            let mut bytes = vec![0xff, b' '];
+            bytes.extend_from_slice(key.as_bytes());
+            let _writes = crate::credential_broker::env_scrub::env_write_lock();
+            // SAFETY: a test-unique variable, serialized with `take_env_var`.
+            unsafe { std::env::set_var(&raw, std::ffi::OsString::from_vec(bytes)) };
+            expected.push(raw);
+        }
+        expected.sort();
+
+        let mut taken: Vec<String> = broker
+            .take_env_copies()
+            .expect("checked")
+            .into_iter()
+            .filter(|taken| taken.ends_with(&format!("_{pid}")))
+            .collect();
+        taken.sort();
+        assert_eq!(taken, expected);
+        for removed in &expected {
+            assert_eq!(std::env::var_os(removed), None, "{removed}");
+        }
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+        assert_eq!(std::env::var(&path).as_deref(), Ok("/usr/local/bin:/bin"));
+
+        let late = name("LATE");
+        set(&late, &format!("Bearer {key}"));
+        broker.kill_for_test();
+        assert_eq!(
+            broker.take_env_copies(),
+            Err(ModelCredentialBrokerError::Unavailable)
+        );
+        // Nothing is removed when the check fails; the caller refuses the broker.
+        assert!(std::env::var_os(&late).is_some());
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+        drop((credential, placeholder));
+        for name in [&late, &safe, &path] {
+            drop(crate::credential_broker::env_scrub::take_env_var(name));
+        }
+    }
+
     /// The vault lock is created before containment (so a vault first
     /// created later in the session is still usable) and is never reached
     /// through a symlink.

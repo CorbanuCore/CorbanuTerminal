@@ -14,7 +14,10 @@ use super::work;
 /// own directory, so the same program reads the script, where `words` runs
 /// PowerShell on Windows under a spelling the reader does not know. `None`
 /// for any other command and where the reader reads `words` already.
-#[cfg(windows)]
+/// Sync (#2671): used wherever a command is checked for a Windows executor,
+/// on any host. Where this host's reader does not know that path (a `\`
+/// path off Windows), the shell is spelled by its file name alone
+/// (`pwsh.exe`), which reads the same command line.
 pub(crate) fn policy_powershell_script(words: &[String]) -> Option<Vec<String>> {
     respelled(words, names::NameCase::Windows)
 }
@@ -51,7 +54,10 @@ fn respelled(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
             _ => 0,
         },
     };
-    let shell = format!("{}{name}.exe", &path[..dir_end]);
+    let mut shell = format!("{}{name}.exe", &path[..dir_end]);
+    if !codex_shell_command::powershell::is_powershell_program(&shell) {
+        shell = format!("{name}.exe");
+    }
     if shell == *program {
         return None;
     }
@@ -71,6 +77,12 @@ mod tests {
         line.iter().map(ToString::to_string).collect()
     }
 
+    /// `on_windows` where this host's reader knows `\\` paths, else the
+    /// file name alone (#2671: a host checking for a Windows executor).
+    fn host<'a>(on_windows: &'a str, elsewhere: &'a str) -> Option<&'a str> {
+        Some(if cfg!(windows) { on_windows } else { elsewhere })
+    }
+
     #[test]
     fn powershell_respells_only_on_windows() {
         for (program, expected) in [
@@ -80,9 +92,12 @@ mod tests {
             ("POWERSHELL.EXE. ", Some("powershell.exe")),
             (
                 r"C:\Windows\System32\WindowsPowerShell\v1.0\POWERSHELL.EXE",
-                Some(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
+                host(
+                    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                    "powershell.exe",
+                ),
             ),
-            (r"C:PWSH", Some("C:pwsh.exe")),
+            (r"C:PWSH", host("C:pwsh.exe", "pwsh.exe")),
             ("D:/PS/Pwsh", Some("D:/PS/pwsh.exe")),
             // Spellings the reader knows already, and other programs.
             ("pwsh", None),
@@ -92,7 +107,19 @@ mod tests {
             ("powershell.exe. ", None),
             ("PWSH.com", None),
             ("pwshx", None),
-            (r"\\?\C:\PS\PWSH.EXE", Some(r"\\?\C:\PS\pwsh.exe")),
+            // #2671: off Windows the reader knows no `\` path.
+            (
+                r"C:\PS\pwsh.exe",
+                if cfg!(windows) {
+                    None
+                } else {
+                    Some("pwsh.exe")
+                },
+            ),
+            (
+                r"\\?\C:\PS\PWSH.EXE",
+                host(r"\\?\C:\PS\pwsh.exe", "pwsh.exe"),
+            ),
             (r"\\?\C:\PS\PWSH.EXE.", None),
             (r"\\?\C:\PS\pwsh.exe ", None),
             (r"\\?\C:\PS\PWSH", None),
