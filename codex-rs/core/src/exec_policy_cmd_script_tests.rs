@@ -67,13 +67,15 @@ async fn decide(
     .await
 }
 
+/// Asked, with no amendment: sync (D691) asks for a fresh human decision
+/// where a forbidden or prompt-user rule could match.
 fn asked(result: &ExecApprovalRequirement) -> bool {
     matches!(
         result,
         ExecApprovalRequirement::NeedsApproval {
             proposed_execpolicy_amendment: None,
             ..
-        }
+        } | ExecApprovalRequirement::NeedsHumanApproval { .. }
     )
 }
 
