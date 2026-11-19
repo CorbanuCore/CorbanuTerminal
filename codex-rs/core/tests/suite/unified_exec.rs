@@ -1399,12 +1399,12 @@ async fn unified_exec_runs_unelevated_managed_network_on_the_elevated_windows_sa
         .function_call_output(call_id);
     let output =
         extract_output_text(&output_item).expect("tool call should include model-visible text");
-    // `whoami` prints `HOST\user`; with managed networking the command must run
-    // as the firewall-restricted offline sandbox user.
+    // With managed networking the command must run as the firewall-restricted
+    // offline sandbox user (`whoami` prints the bare name in its session, or
+    // `HOST\user`).
     let ran_as_offline_user = output.lines().any(|line| {
-        line.trim()
-            .to_ascii_lowercase()
-            .ends_with("\\codexsandboxoffline")
+        let line = line.trim().to_ascii_lowercase();
+        line == "codexsandboxoffline" || line.ends_with("\\codexsandboxoffline")
     });
     assert!(
         ran_as_offline_user
