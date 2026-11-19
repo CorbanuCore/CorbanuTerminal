@@ -19,6 +19,7 @@ use super::ARCHIVED_SESSIONS_SUBDIR;
 use super::SESSIONS_SUBDIR;
 use super::compression;
 use crate::protocol::EventMsg;
+use crate::reverse_jsonl_scanner::parse_jsonl_record;
 use crate::state_db;
 use codex_file_search as file_search;
 use codex_protocol::ThreadId;
@@ -1127,7 +1128,7 @@ async fn read_head_summary(path: &Path, head_limit: usize) -> io::Result<HeadTai
         }
         lines_scanned += 1;
 
-        let parsed: Result<RolloutLine, _> = serde_json::from_str(trimmed);
+        let parsed: Result<RolloutLine, _> = parse_jsonl_record(trimmed.as_bytes());
         let rollout_line = match parsed {
             Ok(rollout_line) => rollout_line,
             Err(_) => {
@@ -1232,7 +1233,7 @@ pub async fn read_head_for_summary(path: &Path) -> io::Result<Vec<serde_json::Va
         if trimmed.is_empty() {
             continue;
         }
-        if let Ok(rollout_line) = serde_json::from_str::<RolloutLine>(trimmed) {
+        if let Ok(rollout_line) = parse_jsonl_record::<RolloutLine>(trimmed.as_bytes()) {
             match rollout_line.item {
                 RolloutItem::SessionMeta(session_meta_line) => {
                     if let Ok(value) = serde_json::to_value(session_meta_line) {
@@ -1288,7 +1289,7 @@ pub async fn read_session_meta_line(path: &Path) -> io::Result<SessionMetaLine> 
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(rollout_line) = serde_json::from_str::<RolloutLine>(trimmed) else {
+        let Ok(rollout_line) = parse_jsonl_record::<RolloutLine>(trimmed.as_bytes()) else {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
                 crate::recorder::reject_unknown_thread_history_mode(&value)?;
             }
