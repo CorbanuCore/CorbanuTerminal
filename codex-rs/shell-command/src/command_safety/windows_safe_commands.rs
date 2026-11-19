@@ -210,20 +210,14 @@ mod tests {
         };
 
         let pwsh: String = pwsh.as_path().to_str().unwrap().into();
-        // D729 (A): a program PowerShell does not find on `PATH` may be a
-        // module's command loaded on use, so only an installed `rg` reads in
-        // full.
-        assert_eq!(
-            is_safe_command_windows(&[
-                pwsh.clone(),
-                "-NoLogo".to_string(),
-                "-NoProfile".to_string(),
-                "-Command".to_string(),
-                "rg --files-with-matches foo | Measure-Object | Select-Object -ExpandProperty Count"
-                    .to_string()
-            ]),
-            which::which("rg").is_ok()
-        );
+        assert!(is_safe_command_windows(&[
+            pwsh.clone(),
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-Command".to_string(),
+            "rg --files-with-matches foo | Measure-Object | Select-Object -ExpandProperty Count"
+                .to_string()
+        ]));
 
         assert!(is_safe_command_windows(&[
             pwsh.clone(),

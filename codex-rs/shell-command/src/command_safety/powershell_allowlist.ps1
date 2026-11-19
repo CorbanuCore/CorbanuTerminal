@@ -372,11 +372,20 @@ function Get-D729CommandCause($commandAst, [int]$index, $state) {
     }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }
     if ($lower -match '\.[^.]*$' -and $lower -notmatch '\.(exe|com|cmd|bat)$') { return "script file: $name" }
-    # A name PowerShell does not find as a program on `PATH` may be a module's command or
-    # alias, or `Get-<name>`, loaded on use: the Rust side requires each to be a program on
-    # the command's `PATH`.
+    # A Verb-Noun name this process does not find as a program on `PATH` is a module's
+    # command (`ForEach-Object`, `Set-Alias`, `Get-ScheduledTask`, or one a command wrote).
+    if ($lower -match '^[a-z]+-[a-z]' -and -not (Find-D729Program $lower)) { return "command not on the allowlist: $lower" }
+    # Any other name PowerShell does not find as a program on the command's `PATH` may
+    # be a module's command or alias, or `Get-<name>`, loaded on use: the Rust side
+    # requires each to be a program there.
     $null = $state.programs.Add($lower)
     return (Get-D729NativeCause $commandAst)
+}
+
+# Whether this process's `PATH` holds a program named $name.
+function Find-D729Program([string]$name) {
+    $found = Get-Command -Name ([System.Management.Automation.WildcardPattern]::Escape($name)) -CommandType Application -ErrorAction SilentlyContinue
+    return $null -ne $found
 }
 
 # For a script read as literal commands: what the Rust side must check (paths it writes
