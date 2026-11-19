@@ -17,12 +17,13 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn; Before /compact) --
-00:additional_tools/developer (3; hash=470cdba07bb052d4):
-        - namespace/functions; hash=519613face70a46f
+00:additional_tools/developer (3; hash=a05b70b25b4775e2):
+        - namespace/functions; hash=24c67b828ea5c7d1
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
@@ -113,12 +114,13 @@ Settings:
 ## Window 2 (after request 2: input diverged at item 07)
 Settings: unavailable (items only)
 -- request 3 (items; Stored replacement before next turn) --
-00:additional_tools/developer (3; hash=470cdba07bb052d4):
-        - namespace/functions; hash=519613face70a46f
+00:additional_tools/developer (3; hash=a05b70b25b4775e2):
+        - namespace/functions; hash=24c67b828ea5c7d1
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
@@ -205,12 +207,13 @@ Settings: unavailable (items only)
 ## Window 3 (after request 3)
 Settings: same as window 1
 -- request 4 (turn; First turn after /compact) --
-00:additional_tools/developer (3; hash=470cdba07bb052d4):
-        - namespace/functions; hash=519613face70a46f
+00:additional_tools/developer (3; hash=a05b70b25b4775e2):
+        - namespace/functions; hash=24c67b828ea5c7d1
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext

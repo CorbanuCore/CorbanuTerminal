@@ -16,12 +16,13 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (request) --
-00:additional_tools/developer (3; hash=2320d8ed48c7fd19):
-        - namespace/functions; hash=4632d3a1ba395836
+00:additional_tools/developer (3; hash=1a50f3b0fda4662b):
+        - namespace/functions; hash=a2f23b099a841748
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
