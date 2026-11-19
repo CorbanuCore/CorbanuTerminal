@@ -207,6 +207,8 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
                     effective_additional_permissions.sandbox_permissions
                 },
                 prefix_rule,
+                cwd: (!turn_environment.environment.is_remote()).then(|| exec_params.cwd.clone()),
+                env: Some(&exec_params.env),
             },
             live_aggressive,
         )

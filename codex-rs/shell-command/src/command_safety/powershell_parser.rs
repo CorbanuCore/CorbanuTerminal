@@ -17,6 +17,23 @@ use std::sync::Mutex;
 use std::sync::PoisonError;
 
 const POWERSHELL_PARSER_SCRIPT: &str = include_str!("powershell_parser.ps1");
+/// D729 (A): the commands a script may hold and still be read in full.
+const POWERSHELL_ALLOWLIST_SCRIPT: &str = include_str!("powershell_allowlist.ps1");
+
+/// The command line starts this loader, which reads the parser (too long for a command
+/// line) from the first line of stdin. Module autoloading is off and the system modules
+/// it uses are loaded from PowerShell's own install folder, so no module from a folder
+/// a command could write runs in the parser (D729, #2661).
+const POWERSHELL_PARSER_LOADER: &str = r#"$ProgressPreference = 'SilentlyContinue'
+$PSModuleAutoLoadingPreference = 'None'
+foreach ($m in 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Archive', 'CimCmdlets') {
+    $p = [System.IO.Path]::Combine($PSHOME, 'Modules', $m, $m + '.psd1')
+    if ([System.IO.File]::Exists($p)) { Import-Module -Name $p -ErrorAction SilentlyContinue }
+}
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+$stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $false)
+. ([scriptblock]::Create($utf8.GetString([Convert]::FromBase64String($stdin.ReadLine()))))
+"#;
 
 /// Cache one long-lived parser process per executable path so repeated safety checks reuse
 /// PowerShell startup work while still consulting the real parser every time.
@@ -29,14 +46,32 @@ const POWERSHELL_PARSER_SCRIPT: &str = include_str!("powershell_parser.ps1");
 /// outside the sandbox; callers pass a trusted PowerShell
 /// ([`crate::powershell::trusted_powershell_parser`]), never a command's own
 /// `argv[0]`.
-pub(crate) fn parse_with_powershell_ast(executable: &str, script: &str) -> PowershellParseOutcome {
+///
+/// D729 (A): `reading` says whether the allowlist applies (see [`ParserReading`]).
+pub(crate) fn parse_with_powershell_ast(
+    executable: &str,
+    script: &str,
+    reading: ParserReading,
+) -> PowershellParseOutcome {
     static PARSER_PROCESSES: LazyLock<Mutex<HashMap<String, PowershellParserProcess>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
 
     let mut parser_processes = PARSER_PROCESSES
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    parse_with_cached_process(&mut parser_processes, executable, script)
+    parse_with_cached_process(&mut parser_processes, executable, script, reading)
+}
+
+/// How the trusted parser reads a script.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ParserReading {
+    /// The literal commands alone (known-safe classification).
+    Literal,
+    /// D729 (A): also the allowlist, so a script with any other command is
+    /// read in part (prompt/forbidden rule matching). `no_profile`: the shell
+    /// runs with `-NoProfile`; otherwise a script is read in full only where
+    /// no profile script exists.
+    Allowlist { no_profile: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,6 +89,7 @@ fn parse_with_cached_process(
     parser_processes: &mut HashMap<String, PowershellParserProcess>,
     executable: &str,
     script: &str,
+    reading: ParserReading,
 ) -> PowershellParseOutcome {
     // `powershell.exe` and `pwsh.exe` do not accept the same language surface, so each
     // executable keeps its own parser process and request stream.
@@ -71,7 +107,7 @@ fn parse_with_cached_process(
         let Some(parser_process) = parser_processes.get_mut(&parser_key) else {
             return PowershellParseOutcome::Unavailable;
         };
-        let parse_result = parser_process.parse(script);
+        let parse_result = parser_process.parse_request(script, reading);
         match parse_result {
             Ok(outcome) => return outcome,
             Err(_) if attempt == 0 => {
@@ -95,10 +131,19 @@ fn encode_powershell_base64(script: &str) -> String {
     BASE64_STANDARD.encode(utf16)
 }
 
-fn encoded_parser_script() -> &'static str {
+fn encoded_parser_loader() -> &'static str {
     static ENCODED: LazyLock<String> =
-        LazyLock::new(|| encode_powershell_base64(POWERSHELL_PARSER_SCRIPT));
+        LazyLock::new(|| encode_powershell_base64(POWERSHELL_PARSER_LOADER));
     &ENCODED
+}
+
+/// The first line the loader reads: the allowlist, then the parser, as base64 UTF-8.
+fn parser_script_line() -> &'static str {
+    static LINE: LazyLock<String> = LazyLock::new(|| {
+        let script = format!("{POWERSHELL_ALLOWLIST_SCRIPT}\n{POWERSHELL_PARSER_SCRIPT}");
+        format!("{}\n", BASE64_STANDARD.encode(script))
+    });
+    &LINE
 }
 
 struct PowershellParserProcess {
@@ -118,13 +163,13 @@ impl PowershellParserProcess {
                 "-NoProfile",
                 "-NonInteractive",
                 "-EncodedCommand",
-                encoded_parser_script(),
+                encoded_parser_loader(),
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
-        let stdin = match take_child_stdin(&mut child) {
+        let mut stdin = match take_child_stdin(&mut child) {
             Ok(stdin) => stdin,
             Err(error) => {
                 kill_child(&mut child);
@@ -138,6 +183,13 @@ impl PowershellParserProcess {
                 return Err(error);
             }
         };
+        if let Err(error) = stdin
+            .write_all(parser_script_line().as_bytes())
+            .and_then(|()| stdin.flush())
+        {
+            kill_child(&mut child);
+            return Err(error);
+        }
         Ok(Self {
             child,
             stdin,
@@ -146,10 +198,25 @@ impl PowershellParserProcess {
         })
     }
 
+    #[cfg(all(test, windows))]
     fn parse(&mut self, script: &str) -> std::io::Result<PowershellParseOutcome> {
+        self.parse_request(script, ParserReading::Allowlist { no_profile: true })
+    }
+
+    fn parse_request(
+        &mut self,
+        script: &str,
+        reading: ParserReading,
+    ) -> std::io::Result<PowershellParseOutcome> {
+        let (allowlist, no_profile) = match reading {
+            ParserReading::Literal => (false, false),
+            ParserReading::Allowlist { no_profile } => (true, no_profile),
+        };
         let request = PowershellParserRequest {
             id: self.next_request_id,
             payload: encode_powershell_base64(script),
+            no_profile,
+            allowlist,
         };
         self.next_request_id = self.next_request_id.wrapping_add(1);
         let mut request_json = serialize_request(&request)?;
@@ -229,6 +296,10 @@ fn deserialize_response(response_line: &str) -> std::io::Result<PowershellParser
 struct PowershellParserRequest {
     id: u64,
     payload: String,
+    #[serde(rename = "noProfile")]
+    no_profile: bool,
+    /// D729 (A): apply the allowlist; otherwise the literal reading alone.
+    allowlist: bool,
 }
 
 #[derive(Deserialize)]
@@ -237,21 +308,37 @@ struct PowershellParserResponse {
     id: u64,
     status: String,
     commands: Option<Vec<Vec<String>>>,
+    #[serde(default)]
+    programs: Option<Vec<String>>,
+    #[serde(default)]
+    cmdlets: Option<Vec<String>>,
+    /// Why the script is read in part (diagnostics only).
+    #[serde(default, rename = "cause")]
+    _cause: Option<String>,
 }
 
 impl PowershellParserResponse {
     fn into_outcome(self) -> PowershellParseOutcome {
         match self.status.as_str() {
-            "ok" => self
-                .commands
-                .filter(|commands| {
+            "ok" => {
+                let Some(commands) = self.commands.filter(|commands| {
                     !commands.is_empty()
                         && commands
                             .iter()
                             .all(|cmd| !cmd.is_empty() && cmd.iter().all(|word| !word.is_empty()))
-                })
-                .map(PowershellParseOutcome::Commands)
-                .unwrap_or(PowershellParseOutcome::Unsupported),
+                }) else {
+                    return PowershellParseOutcome::Unsupported;
+                };
+                // D729 (A): each program found on the command's `PATH`, no
+                // module cmdlet shadowed there; else read in part.
+                if !crate::powershell::names_resolve(
+                    &self.programs.unwrap_or_default(),
+                    &self.cmdlets.unwrap_or_default(),
+                ) {
+                    return PowershellParseOutcome::Partial(commands);
+                }
+                PowershellParseOutcome::Commands(commands)
+            }
             "partial" => self
                 .commands
                 .filter(|commands| commands.iter().all(|command| !command.is_empty()))
@@ -298,6 +385,44 @@ mod tests {
                 vec!["Write-Output".to_string(), "foo".to_string()],
                 vec!["Measure-Object".to_string()],
             ]),
+        );
+    }
+
+    #[test]
+    fn parser_process_reads_unlisted_commands_in_part() {
+        let Some(powershell) = try_find_powershell_executable_blocking() else {
+            return;
+        };
+        let powershell = powershell.as_path().to_str().unwrap();
+        let mut parser = PowershellParserProcess::spawn(powershell).unwrap();
+
+        // D729 (A): no cmdlet that writes files is on the allowlist.
+        assert_eq!(
+            parser.parse("Set-Content -Path out.txt -Value x").unwrap(),
+            PowershellParseOutcome::Partial(vec![vec![
+                "Set-Content".into(),
+                "-Path".into(),
+                "out.txt".into(),
+                "-Value".into(),
+                "x".into(),
+            ]])
+        );
+        // D729 (A): not on the allowlist, so read in part.
+        assert_eq!(
+            parser.parse("Get-Command git; git status").unwrap(),
+            PowershellParseOutcome::Partial(vec![
+                vec!["Get-Command".into(), "git".into()],
+                vec!["git".into(), "status".into()],
+            ])
+        );
+        assert_eq!(
+            parser
+                .parse("Get-ChildItem -File -Recurse | Select-Object -First 3")
+                .unwrap(),
+            PowershellParseOutcome::Commands(vec![
+                vec!["Get-ChildItem".into(), "-File".into(), "-Recurse".into()],
+                vec!["Select-Object".into(), "-First".into(), "3".into()],
+            ])
         );
     }
 

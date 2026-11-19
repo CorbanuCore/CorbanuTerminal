@@ -332,6 +332,14 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) windows_sandbox_level: WindowsSandboxLevel,
     pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) prefix_rule: Option<Vec<String>>,
+    /// D729 (A): the local directory the command runs in; `None` with `env`
+    /// given is a remote environment, whose PowerShell scripts that run a
+    /// program or module cmdlet are read in part (this host cannot find their
+    /// names). Both `None`: no command to check (heuristics, tests).
+    pub(crate) cwd: Option<AbsolutePathBuf>,
+    /// D729 (A): the command's environment, where its shell finds programs
+    /// (`PATH`, `PATHEXT`); `None`: Corbanu's.
+    pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 
 impl ExecPolicyManager {
@@ -445,8 +453,32 @@ impl ExecPolicyManager {
             windows_sandbox_level,
             sandbox_permissions,
             prefix_rule,
+            cwd,
+            env,
         } = req;
         let exec_policy = self.current_for(live_aggressive);
+        let match_options = MatchOptions {
+            resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way.
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
+        };
+        // D729 (A): the command whose PowerShell script is read below (where
+        // its shell finds programs), with the allowlist only where a prompt or
+        // forbidden rule exists (D733). The guard is not `Send`: nothing below
+        // awaits.
+        #[cfg(windows)]
+        let _command_scope = (cwd.is_some() || env.is_some()).then(|| {
+            codex_shell_command::powershell::enter_powershell_command_scope(
+                codex_shell_command::powershell::PowershellCommandScope::new(cwd.as_ref(), env)
+                    .with_allowlist(wrappers::any_strict_rule(
+                        exec_policy.as_ref(),
+                        &match_options,
+                    )),
+            )
+        });
+        #[cfg(not(windows))]
+        let _ = (cwd, env);
         let ExecPolicyCommands {
             commands,
             used_complex_parsing,
@@ -474,12 +506,6 @@ impl ExecPolicyManager {
                     command_origin,
                 },
             )
-        };
-        let match_options = MatchOptions {
-            resolve_host_executables: true,
-            // D692: forbidden and prompt rules match the program name in
-            // any case where this platform finds programs that way.
-            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
         // Keep heredoc prefix parsing for rule evaluation so existing
         // allow/prompt/forbidden rules still apply, but avoid auto-derived

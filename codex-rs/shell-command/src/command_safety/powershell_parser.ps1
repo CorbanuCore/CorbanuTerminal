@@ -11,20 +11,29 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
+# A request may say "allowlist": true (D729 A: read in part unless every command is
+# allowlisted; otherwise the literal commands alone, for known-safe classification) and
+# "noProfile": true (the shell runs with -NoProfile). An allowlist "ok" reading
+# also lists what the Rust side checks (D729 A): "programs" (names that must be programs
+# on the command's PATH) and "cmdlets" (module cmdlets no program on it may shadow); a
+# "partial" reading may name its "cause".
 #
 # "unsupported" is intentional: it means the script parsed successfully, but the AST
 # included constructs that we conservatively refuse to lower into argv-like command words.
 # The Rust side treats that the same way as an unsafe command.
 
 # Use BOM-free UTF-8 on the protocol stream so Rust sees clean JSON lines with no
-# leading BOM bytes on the first response.
+# leading BOM bytes on the first response. The loader (powershell_parser.rs) reads this
+# script from the first line of stdin with `$stdin`, which requests then continue on.
 $utf8 = [System.Text.UTF8Encoding]::new($false)
-$stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $false)
+if ($null -eq $stdin) {
+    $stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $false)
+}
 $stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
 $stdout.AutoFlush = $true
 
 function Invoke-ParseRequest {
-    param($RequestId, $Source)
+    param($RequestId, $Source, $NoProfile, $Allowlist)
 
     $tokens = $null
     $errors = $null
@@ -105,7 +114,29 @@ function Invoke-ParseRequest {
         return Get-PartialCommands $RequestId $ast
     }
 
-    return @{ id = $RequestId; status = 'ok'; commands = $commands }
+    # Known-safe classification reads the literal commands alone (D733).
+    if (-not $Allowlist) { return @{ id = $RequestId; status = 'ok'; commands = $commands } }
+
+    # D729 (A): only allowlisted cmdlets and native programs (powershell_allowlist.ps1),
+    # in a shell no profile script ran in first (it can change aliases, functions, the
+    # location and the environment the tables assume).
+    $review = Get-D729Review $ast
+    if ($null -eq $review.cause -and -not $NoProfile -and (Test-D729Profile)) {
+        $review = @{ cause = 'a profile script may run first' }
+    }
+    if ($null -ne $review.cause) {
+        $partial = Get-PartialCommands $RequestId $ast
+        $partial.cause = $review.cause
+        return $partial
+    }
+
+    # What the Rust side checks: program names (each found on the command's `PATH`) and
+    # module cmdlets (none shadowed by a program or script on it).
+    $response = @{ id = $RequestId; status = 'ok'; commands = $commands }
+    foreach ($key in 'programs', 'cmdlets') {
+        if ($review[$key].Count -gt 0) { $response[$key] = [string[]]@($review[$key]) }
+    }
+    return $response
 }
 
 # Only literal command ASTs contribute restrictions. Never execute source, and
@@ -309,5 +340,5 @@ while (($requestLine = $stdin.ReadLine()) -ne $null) {
         continue
     }
 
-    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source)
+    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source -NoProfile ($request.noProfile -eq $true) -Allowlist ($request.allowlist -eq $true))
 }

@@ -4,12 +4,19 @@ use std::sync::OnceLock;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
 
+use crate::command_safety::ParserReading;
 use crate::command_safety::PowershellParseOutcome;
 use crate::command_safety::parse_with_powershell_ast;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
 mod cli;
+mod command_scope;
+
+pub use command_scope::PowershellCommandScope;
+pub use command_scope::PowershellCommandScopeGuard;
+pub use command_scope::enter_powershell_command_scope;
+pub(crate) use command_scope::names_resolve;
 
 macro_rules! utf8_output_prefix {
     () => {
@@ -170,24 +177,42 @@ pub enum PowershellScriptRead {
 /// runs before approval, outside the sandbox.
 pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellScriptRead> {
     let (shell, invocation) = read_invocation(command)?;
+    // D729 (A): the allowlist only where a prompt or forbidden rule exists
+    // (D733); otherwise the literal reading, as before.
+    let reading = if command_scope::allowlist_applies() {
+        ParserReading::Allowlist {
+            no_profile: invocation.no_profile,
+        }
+    } else {
+        ParserReading::Literal
+    };
     match invocation.run {
-        cli::Run::Command { script, .. } => Some(read_script_with_trusted_parser(shell, &script)),
-        cli::Run::Encoded(script) => Some(read_script_with_trusted_parser(shell, &script)),
+        cli::Run::Command { script, .. } => Some(read_script(shell, &script, reading)),
+        cli::Run::Encoded(script) => Some(read_script(shell, &script, reading)),
         cli::Run::File(words) => Some(PowershellScriptRead::File(words.to_vec())),
         cli::Run::Unreadable => Some(PowershellScriptRead::Unreadable),
         cli::Run::Interactive => Some(PowershellScriptRead::Unreadable),
     }
 }
 
+/// Parse `script` the way known-safe classification reads it
+/// (`windows_safe_commands`): the trusted parser's literal commands, without
+/// D729 (A)'s allowlist, which decides only prompt/forbidden rule matches
+/// (D733: issue_2050's Permissive contract is unchanged).
+#[cfg(windows)]
+pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
+    read_script(shell, script, ParserReading::Literal)
+}
+
 /// Parse `script`, written for the PowerShell named `shell`, with the
 /// trusted PowerShell of the same kind; `shell` itself is never started.
-pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
+fn read_script(shell: &str, script: &str, reading: ParserReading) -> PowershellScriptRead {
     let Some(parser) =
         trusted_powershell_parser(PowershellKind::of(shell)).and_then(|parser| parser.to_str())
     else {
         return PowershellScriptRead::Unreadable;
     };
-    match parse_with_powershell_ast(parser, script) {
+    match parse_with_powershell_ast(parser, script, reading) {
         PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
         PowershellParseOutcome::Partial(commands) => PowershellScriptRead::Partial(commands),
         PowershellParseOutcome::Unsupported | PowershellParseOutcome::Failed => {

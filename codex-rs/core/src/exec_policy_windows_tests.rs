@@ -175,12 +175,8 @@ fn writable_windows_policy_without_sandbox_backend_still_requires_approval() {
 
 #[tokio::test]
 async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
-    let inner_command = vec![
-        "Remove-Item".to_string(),
-        "test".to_string(),
-        "-Force".to_string(),
-    ];
-
+    // D729 (A): `Remove-Item` writes files, so it is not on the allowlist and
+    // the script is read in part: it asks, with no amendment for its argv.
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
             policy_src: None,
@@ -197,7 +193,7 @@ async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
         },
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(inner_command)),
+            proposed_execpolicy_amendment: None,
         },
     )
     .await;

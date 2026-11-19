@@ -82,6 +82,8 @@ async fn aggressive_never(command: &[String], rules: &str) -> ExecApprovalRequir
                 },
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: Some(command.to_vec()),
+                cwd: None,
+                env: None,
             },
             /*live_aggressive*/ true,
         )
@@ -323,7 +325,8 @@ async fn parser_issue_controls_stay_precise() {
 /// read, so each asks as an unread script.
 #[tokio::test]
 async fn issue_2601_powershell_name_rebinding_and_code_asks() {
-    // The trusted parser reads the reproducer in full, as plain commands.
+    // D729 (A): `Set-Alias` is not on the allowlist, so the trusted parser
+    // reads the reproducer in part; its literal commands still restrict.
     #[cfg(windows)]
     {
         use codex_shell_command::powershell::PowershellScriptRead;
@@ -335,7 +338,7 @@ async fn issue_2601_powershell_name_rebinding_and_code_asks() {
                 "-Command",
                 "Set-Alias f git; f push"
             ])),
-            Some(PowershellScriptRead::Commands(vec![
+            Some(PowershellScriptRead::Partial(vec![
                 argv(&["Set-Alias", "f", "git"]),
                 argv(&["f", "push"]),
             ]))

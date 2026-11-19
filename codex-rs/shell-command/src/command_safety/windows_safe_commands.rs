@@ -46,7 +46,8 @@ fn try_parse_powershell_command_sequence(command: &[String]) -> Option<Vec<Vec<S
 /// Tokenizes an inline PowerShell script and delegates to the command splitter.
 ///
 /// #2546 (D553): a trusted PowerShell of the same kind parses the script;
-/// `executable` itself is never started.
+/// `executable` itself is never started. D729 (A) does not apply here: its
+/// partial reading decides only prompt/forbidden rule matches (D733).
 fn parse_powershell_script(executable: &str, script: &str) -> Option<Vec<Vec<String>>> {
     match read_script_with_trusted_parser(executable, script) {
         PowershellScriptRead::Commands(commands) => Some(commands),
