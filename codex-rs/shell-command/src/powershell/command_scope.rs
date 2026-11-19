@@ -22,6 +22,10 @@ thread_local! {
 pub struct PowershellCommandScope {
     /// Whether the command runs on this host (not a remote environment).
     local: bool,
+    /// Whether the allowlist applies: a prompt or forbidden rule exists, which
+    /// a script read in part might hide a command from (D733: otherwise the
+    /// literal reading, as before D729).
+    allowlist: bool,
     path: Option<std::ffi::OsString>,
     extensions: Option<String>,
 }
@@ -43,10 +47,23 @@ impl PowershellCommandScope {
         };
         Self {
             local: cwd.is_some(),
+            allowlist: true,
             path: var("PATH").map(Into::into),
             extensions: var("PATHEXT"),
         }
     }
+
+    /// Whether the allowlist applies (default: yes); see [`Self::allowlist`].
+    pub fn with_allowlist(mut self, allowlist: bool) -> Self {
+        self.allowlist = allowlist;
+        self
+    }
+}
+
+/// Whether scripts read on this thread are read with the allowlist: yes
+/// outside a scope (no command to check, as in tests).
+pub(crate) fn allowlist_applies() -> bool {
+    current_scope().is_none_or(|scope| scope.allowlist)
 }
 
 fn current_scope() -> Option<Rc<PowershellCommandScope>> {

@@ -47,12 +47,11 @@ $stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $f
 /// ([`crate::powershell::trusted_powershell_parser`]), never a command's own
 /// `argv[0]`.
 ///
-/// D729 (A): `no_profile` says the shell runs with `-NoProfile`; otherwise a
-/// script is read in full only where no profile script exists.
+/// D729 (A): `reading` says whether the allowlist applies (see [`ParserReading`]).
 pub(crate) fn parse_with_powershell_ast(
     executable: &str,
     script: &str,
-    no_profile: bool,
+    reading: ParserReading,
 ) -> PowershellParseOutcome {
     static PARSER_PROCESSES: LazyLock<Mutex<HashMap<String, PowershellParserProcess>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -60,7 +59,19 @@ pub(crate) fn parse_with_powershell_ast(
     let mut parser_processes = PARSER_PROCESSES
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    parse_with_cached_process(&mut parser_processes, executable, script, no_profile)
+    parse_with_cached_process(&mut parser_processes, executable, script, reading)
+}
+
+/// How the trusted parser reads a script.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ParserReading {
+    /// The literal commands alone (known-safe classification).
+    Literal,
+    /// D729 (A): also the allowlist, so a script with any other command is
+    /// read in part (prompt/forbidden rule matching). `no_profile`: the shell
+    /// runs with `-NoProfile`; otherwise a script is read in full only where
+    /// no profile script exists.
+    Allowlist { no_profile: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,7 +89,7 @@ fn parse_with_cached_process(
     parser_processes: &mut HashMap<String, PowershellParserProcess>,
     executable: &str,
     script: &str,
-    no_profile: bool,
+    reading: ParserReading,
 ) -> PowershellParseOutcome {
     // `powershell.exe` and `pwsh.exe` do not accept the same language surface, so each
     // executable keeps its own parser process and request stream.
@@ -96,7 +107,7 @@ fn parse_with_cached_process(
         let Some(parser_process) = parser_processes.get_mut(&parser_key) else {
             return PowershellParseOutcome::Unavailable;
         };
-        let parse_result = parser_process.parse_request(script, no_profile);
+        let parse_result = parser_process.parse_request(script, reading);
         match parse_result {
             Ok(outcome) => return outcome,
             Err(_) if attempt == 0 => {
@@ -189,18 +200,23 @@ impl PowershellParserProcess {
 
     #[cfg(all(test, windows))]
     fn parse(&mut self, script: &str) -> std::io::Result<PowershellParseOutcome> {
-        self.parse_request(script, /*no_profile*/ true)
+        self.parse_request(script, ParserReading::Allowlist { no_profile: true })
     }
 
     fn parse_request(
         &mut self,
         script: &str,
-        no_profile: bool,
+        reading: ParserReading,
     ) -> std::io::Result<PowershellParseOutcome> {
+        let (allowlist, no_profile) = match reading {
+            ParserReading::Literal => (false, false),
+            ParserReading::Allowlist { no_profile } => (true, no_profile),
+        };
         let request = PowershellParserRequest {
             id: self.next_request_id,
             payload: encode_powershell_base64(script),
             no_profile,
+            allowlist,
         };
         self.next_request_id = self.next_request_id.wrapping_add(1);
         let mut request_json = serialize_request(&request)?;
@@ -282,6 +298,8 @@ struct PowershellParserRequest {
     payload: String,
     #[serde(rename = "noProfile")]
     no_profile: bool,
+    /// D729 (A): apply the allowlist; otherwise the literal reading alone.
+    allowlist: bool,
 }
 
 #[derive(Deserialize)]

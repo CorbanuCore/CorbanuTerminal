@@ -456,18 +456,29 @@ impl ExecPolicyManager {
             cwd,
             env,
         } = req;
+        let exec_policy = self.current_for(live_aggressive);
+        let match_options = MatchOptions {
+            resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way.
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
+        };
         // D729 (A): the command whose PowerShell script is read below (where
-        // its shell finds programs). The guard is not `Send`: nothing below
+        // its shell finds programs), with the allowlist only where a prompt or
+        // forbidden rule exists (D733). The guard is not `Send`: nothing below
         // awaits.
         #[cfg(windows)]
         let _command_scope = (cwd.is_some() || env.is_some()).then(|| {
             codex_shell_command::powershell::enter_powershell_command_scope(
-                codex_shell_command::powershell::PowershellCommandScope::new(cwd.as_ref(), env),
+                codex_shell_command::powershell::PowershellCommandScope::new(cwd.as_ref(), env)
+                    .with_allowlist(wrappers::any_strict_rule(
+                        exec_policy.as_ref(),
+                        &match_options,
+                    )),
             )
         });
         #[cfg(not(windows))]
         let _ = (cwd, env);
-        let exec_policy = self.current_for(live_aggressive);
         let ExecPolicyCommands {
             commands,
             used_complex_parsing,
@@ -495,12 +506,6 @@ impl ExecPolicyManager {
                     command_origin,
                 },
             )
-        };
-        let match_options = MatchOptions {
-            resolve_host_executables: true,
-            // D692: forbidden and prompt rules match the program name in
-            // any case where this platform finds programs that way.
-            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE,
         };
         // Keep heredoc prefix parsing for rule evaluation so existing
         // allow/prompt/forbidden rules still apply, but avoid auto-derived

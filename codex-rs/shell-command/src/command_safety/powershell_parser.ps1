@@ -11,7 +11,9 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
-# A request may say "noProfile": true (the shell runs with -NoProfile). An "ok" reading
+# A request may say "allowlist": true (D729 A: read in part unless every command is
+# allowlisted; otherwise the literal commands alone, for known-safe classification) and
+# "noProfile": true (the shell runs with -NoProfile). An allowlist "ok" reading
 # also lists what the Rust side checks (D729 A): "programs" (names that must be programs
 # on the command's PATH) and "cmdlets" (module cmdlets no program on it may shadow); a
 # "partial" reading may name its "cause".
@@ -31,7 +33,7 @@ $stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
 $stdout.AutoFlush = $true
 
 function Invoke-ParseRequest {
-    param($RequestId, $Source, $NoProfile)
+    param($RequestId, $Source, $NoProfile, $Allowlist)
 
     $tokens = $null
     $errors = $null
@@ -111,6 +113,9 @@ function Invoke-ParseRequest {
     if ($commands -eq $null) {
         return Get-PartialCommands $RequestId $ast
     }
+
+    # Known-safe classification reads the literal commands alone (D733).
+    if (-not $Allowlist) { return @{ id = $RequestId; status = 'ok'; commands = $commands } }
 
     # D729 (A): only allowlisted cmdlets and native programs (powershell_allowlist.ps1),
     # in a shell no profile script ran in first (it can change aliases, functions, the
@@ -335,5 +340,5 @@ while (($requestLine = $stdin.ReadLine()) -ne $null) {
         continue
     }
 
-    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source -NoProfile ($request.noProfile -eq $true))
+    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source -NoProfile ($request.noProfile -eq $true) -Allowlist ($request.allowlist -eq $true))
 }
