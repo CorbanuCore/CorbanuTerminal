@@ -44,12 +44,14 @@ use core_test_support::startup::STARTUP_TIMEOUT;
 use core_test_support::startup::expect_startup;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
+use futures::FutureExt;
 use futures::SinkExt;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
 use std::fs;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -867,7 +869,7 @@ async fn serve_exec_with_pushed_events(
 #[test_case(PushedExecScenario::ReplayGap, ManagedNetworkScenario::None, false ; "truncated_event_replay")]
 #[test_case(PushedExecScenario::Complete, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "managed_network_uses_executor_proxy_launch")]
 #[test_case(PushedExecScenario::CredentialMasking, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "credential_masking_launches_on_supported_executor")]
-#[test_case(PushedExecScenario::CredentialMaskingCustomProvidersUnsupported, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "configured_credential_provider_warns_and_runs_on_old_executor")]
+#[test_case(PushedExecScenario::CredentialMaskingCustomProvidersUnsupported, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "configured_credential_provider_is_rejected_at_config_load")]
 #[test_case(PushedExecScenario::CredentialMaskingUnsupported, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "credential_masking_warns_and_runs_unsupported_executor")]
 #[test_case(PushedExecScenario::CredentialMaskingUnsupportedShell, ManagedNetworkScenario::Enabled { policy_callbacks: true }, false ; "credential_masking_warns_and_runs_unsupported_shell")]
 #[test_case(PushedExecScenario::Complete, ManagedNetworkScenario::Enabled { policy_callbacks: false }, false ; "strict_managed_allowlist_omits_policy_callbacks")]
@@ -1178,6 +1180,29 @@ timeout = 900
             config.bypass_hook_trust = true;
         }
     });
+    if matches!(
+        scenario,
+        PushedExecScenario::CredentialMaskingCustomProvidersUnsupported
+    ) {
+        // D612 (#2629): Corbanu's credential engine does not broker configured
+        // providers, so config load refuses one instead of running unmasked.
+        // The test harness panics when the config fails to load.
+        let error = match AssertUnwindSafe(builder.build(&server))
+            .catch_unwind()
+            .await
+        {
+            Ok(Ok(_)) => anyhow::bail!("a config with an unbrokered credential provider loaded"),
+            Ok(Err(error)) => format!("{error:#}"),
+            Err(panic) => panic.downcast_ref::<String>().cloned().unwrap_or_default(),
+        };
+        assert!(
+            error.contains("unsupported network proxy credential provider `vendor` (VENDOR_TOKEN)"),
+            "{error}"
+        );
+        // No turn runs, so drop the mounted responses and their expected calls.
+        server.reset().await;
+        return Ok(());
+    }
     let test = expect_startup(builder.build(&server)).await;
 
     let turn_permission_profile = if managed_network_configured {
@@ -1829,11 +1854,6 @@ timeout = 900
                 PushedExecScenario::CredentialMaskingUnsupportedShell
             ) {
                 insta::assert_snapshot!(warning.message, @"Credential masking is unavailable for shell `sh` on environment `remote`. This command will run with unmasked credentials.");
-            } else if matches!(
-                scenario,
-                PushedExecScenario::CredentialMaskingCustomProvidersUnsupported
-            ) {
-                insta::assert_snapshot!(warning.message, @"Credential masking is unavailable for this network proxy configuration on environment `remote`. This command will run with unmasked credentials.");
             } else {
                 insta::assert_snapshot!(warning.message, @"Credential masking is unavailable on environment `remote` because its exec-server does not support it. This command will run with unmasked credentials.");
             }

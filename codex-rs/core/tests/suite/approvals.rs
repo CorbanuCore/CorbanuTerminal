@@ -2794,7 +2794,6 @@ async fn shell_startup_credentials_are_brokered(
     const REAL_GITHUB_TOKEN: &str =
         "ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const CUSTOM_HOST: &str = "api.custom.example";
-    const REAL_CUSTOM_TOKEN: &str = "custom_abcdefghijklmnopqrstuvwx";
     let request_extra_permissions = shell_mode == "additional_permissions";
     let approval_policy = if request_extra_permissions {
         AskForApproval::OnRequest
@@ -2827,7 +2826,6 @@ async fn shell_startup_credentials_are_brokered(
         format!(
             "export GH_HOST='{GH_HOST}'\n\
              if [[ ! -o login ]]; then export GH_ENTERPRISE_TOKEN='{REAL_GITHUB_TOKEN}'; fi\n\
-             export CUSTOM_API_KEY='{REAL_CUSTOM_TOKEN}'\n\
              export CUSTOM_HOST='{CUSTOM_HOST}'\n\
              export APP_SETTING EXCLUDED_SETTING\n\
              export AUTH_HEADER=\"Bearer $GH_ENTERPRISE_TOKEN\"\n\
@@ -2863,7 +2861,7 @@ async fn shell_startup_credentials_are_brokered(
         codex_utils_cargo_bin::write_executable(
             &path,
             &format!(
-                "#!/bin/sh\nexport GH_ENTERPRISE_TOKEN='{REAL_GITHUB_TOKEN}'\nexport CUSTOM_API_KEY='{REAL_CUSTOM_TOKEN}'\nexport AUTH_HEADER=\"Bearer $GH_ENTERPRISE_TOKEN\"\nexec {} \"$@\"\n",
+                "#!/bin/sh\nexport GH_ENTERPRISE_TOKEN='{REAL_GITHUB_TOKEN}'\nexport AUTH_HEADER=\"Bearer $GH_ENTERPRISE_TOKEN\"\nexec {} \"$@\"\n",
                 shlex::try_quote(&zsh_path)?
             ),
         )?;
@@ -2881,11 +2879,6 @@ permissions = {{ brokered = {{ extends = ":workspace", network = {{ enabled = tr
 [features.network_proxy]
 enabled = true
 credential_broker = true
-
-[features.network_proxy.credentials.custom]
-env = ["CUSTOM_API_KEY"]
-patterns = ["custom_[a-z]{{24}}"]
-url_prefix_from_env = "CUSTOM_HOST"
 
 [shell_environment_policy.set]
 ZDOTDIR = "{}"
@@ -2920,14 +2913,12 @@ ZDOTDIR = "{}"
                 EnvironmentVariablePattern::new_case_insensitive("CUSTOM_HOST"),
             );
         } else if shell_mode == "filtered_startup" {
-            config.permissions.shell_environment_policy.exclude.extend([
+            config.permissions.shell_environment_policy.exclude.push(
                 EnvironmentVariablePattern::new_case_insensitive("GH_ENTERPRISE_TOKEN"),
-                EnvironmentVariablePattern::new_case_insensitive("CUSTOM_API_KEY"),
-            ]);
+            );
         } else if shell_mode == "startup_override" {
             config.permissions.shell_environment_policy.r#set.extend([
                 ("GH_ENTERPRISE_TOKEN".to_string(), String::new()),
-                ("CUSTOM_API_KEY".to_string(), String::new()),
                 ("AUTH_HEADER".to_string(), "enterprise-header".to_string()),
             ]);
         }
@@ -2962,7 +2953,7 @@ ZDOTDIR = "{}"
         workdir
     };
     let call_id = "shell-brokered-github-credential";
-    let command = r#"printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$GH_HOST" "$GH_ENTERPRISE_TOKEN" "$CUSTOM_HOST" "$CUSTOM_API_KEY" "$CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE" "$PWD" "$BROKERED_STARTUP_CWD" "${LOGIN_SNAPSHOT_READY-unset}" "$AUTH_HEADER""#;
+    let command = r#"printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' "$GH_HOST" "$GH_ENTERPRISE_TOKEN" "$CUSTOM_HOST" "$CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE" "$PWD" "$BROKERED_STARTUP_CWD" "${LOGIN_SNAPSHOT_READY-unset}" "$AUTH_HEADER""#;
     let command = format!(
         "APP_SETTING=production; EXCLUDED_SETTING=denied; [ \"$(/usr/bin/printenv APP_SETTING)\" = production ] || exit 1; if /usr/bin/printenv EXCLUDED_SETTING >/dev/null; then exit 1; fi; {command}"
     );
@@ -3084,17 +3075,17 @@ ZDOTDIR = "{}"
             ]),
         );
     }
+    // D612 (#2629): Corbanu refuses configured providers it cannot broker at
+    // config load, so this test no longer configures a custom provider.
     assert!(!result.stdout.contains(REAL_GITHUB_TOKEN));
-    assert!(!result.stdout.contains(REAL_CUSTOM_TOKEN));
     let values = result.stdout.lines().collect::<Vec<_>>();
-    assert_eq!(values.len(), 9, "unexpected command output: {result:?}");
+    assert_eq!(values.len(), 8, "unexpected command output: {result:?}");
     assert_eq!(values[0], GH_HOST);
     assert_ne!(values[1], REAL_GITHUB_TOKEN);
     if global_startup {
         assert_eq!(values[1], "");
-        assert_eq!(values[3], "");
         assert_eq!(
-            values[8],
+            values[7],
             if shell_mode == "startup_override" {
                 "enterprise-header"
             } else {
@@ -3104,9 +3095,8 @@ ZDOTDIR = "{}"
     } else {
         assert!(values[1].starts_with("ghp_"));
         assert_eq!(values[1].len(), REAL_GITHUB_TOKEN.len());
-        assert!(values[3].starts_with("custom_"));
-        assert_eq!(values[3].len(), REAL_CUSTOM_TOKEN.len());
-        assert_eq!(values[8], format!("Bearer {}", values[1]));
+        // #2721 (D732) removes copies of held keys, such as `Bearer <key>`.
+        assert_eq!(values[7], "");
     }
     assert_eq!(
         values[2],
@@ -3116,11 +3106,10 @@ ZDOTDIR = "{}"
             CUSTOM_HOST
         }
     );
-    assert_ne!(values[3], REAL_CUSTOM_TOKEN);
-    assert_eq!(values[4], "1");
+    assert_eq!(values[3], "1");
+    assert_eq!(PathBuf::from(values[4]), fs::canonicalize(&workdir)?);
     assert_eq!(PathBuf::from(values[5]), fs::canonicalize(&workdir)?);
-    assert_eq!(PathBuf::from(values[6]), fs::canonicalize(&workdir)?);
-    assert_eq!(values[7], if login { "ready" } else { "unset" });
+    assert_eq!(values[6], if login { "ready" } else { "unset" });
     assert!(
         !outside_path.exists(),
         "shell snapshot startup wrote outside the command sandbox"
@@ -3131,10 +3120,6 @@ ZDOTDIR = "{}"
     assert!(
         !snapshot.contains(REAL_GITHUB_TOKEN),
         "shell snapshot persisted a real GitHub credential"
-    );
-    assert!(
-        !snapshot.contains(REAL_CUSTOM_TOKEN),
-        "shell snapshot persisted a real configured credential"
     );
 
     Ok(())
@@ -3168,7 +3153,6 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
 
     const REAL_GITHUB_TOKEN: &str =
         "ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const REAL_CUSTOM_TOKEN: &str = "custom_abcdefghijklmnopqrstuvwx";
 
     let Some(bash) = codex_core::shell::get_shell(codex_core::shell::ShellType::Bash) else {
         return Ok(());
@@ -3188,11 +3172,7 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
              EOF\n}\nexport -f brokered_heredoc\n"
                 .to_string()
         } else {
-            let mut startup = "shopt -s extglob expand_aliases\nexport CORP_REGION=west\ncorp_auth() { case \"$CORP_REGION\" in @(west|east)) printf '%s\\n' \"$CORP_REGION\" \"$GH_TOKEN\" ;; esac; }\nalias corp_login=corp_auth\n".to_string();
-            if mode == "flat_managed" {
-                startup.push_str(&format!("export CUSTOM_API_KEY='{REAL_CUSTOM_TOKEN}'\n"));
-            }
-            startup
+            "shopt -s extglob expand_aliases\nexport CORP_REGION=west\ncorp_auth() { case \"$CORP_REGION\" in @(west|east)) printf '%s\\n' \"$CORP_REGION\" \"$GH_TOKEN\" ;; esac; }\nalias corp_login=corp_auth\n".to_string()
         },
     )?;
 
@@ -3205,10 +3185,12 @@ async fn brokered_shell_snapshot_fallback(mode: &'static str) -> Result<()> {
         | "flat_yolo_profile_transition"
         | "flat_yolo_unnamed_transition"
         | "flat_yolo_legacy_transition" => "credential_masking = true, network_proxy = true",
+        // D612 (#2629): a provider may only name sources Corbanu brokers; this
+        // one names the built-in GH_TOKEN, which the hardened engine masks.
         "flat_managed" => concat!(
             "credential_masking = true, network_proxy = { enabled = false, ",
-            "credentials = { custom = { env = [\"CUSTOM_API_KEY\"], ",
-            "patterns = [\"custom_[a-z]{24}\"], ",
+            "credentials = { custom = { env = [\"GH_TOKEN\"], ",
+            "patterns = [\"ghp_[A-Za-z0-9]{36}\"], ",
             "url_prefixes = [\"https://custom.example.test\"] } } }",
         ),
         "flat_no_proxy" | "flat_policy_without_proxy" => "credential_masking = true",
@@ -3390,9 +3372,7 @@ GH_TOKEN = "{REAL_GITHUB_TOKEN}"
         format!(
             "cat {snapshot_dir}/*.sh > captured-snapshot && brokered_heredoc && printf '%s\\n' \"$GH_TOKEN\""
         )
-    } else if mode == "flat_managed" {
-        "corp_login && printf '%s\\n' \"$CUSTOM_API_KEY\"".to_string()
-    } else if matches!(mode, "enabled" | "flat_feature") {
+    } else if matches!(mode, "enabled" | "flat_feature" | "flat_managed") {
         "corp_login".to_string()
     } else {
         "printenv GH_TOKEN".to_string()
@@ -3570,16 +3550,10 @@ GH_TOKEN = "{REAL_GITHUB_TOKEN}"
     if matches!(mode, "enabled" | "flat_feature" | "flat_managed") {
         assert_eq!(result.exit_code, Some(0), "command failed: {result:?}");
         let values = result.stdout.lines().collect::<Vec<_>>();
-        assert_eq!(values.len(), if mode == "flat_managed" { 3 } else { 2 });
+        assert_eq!(values.len(), 2);
         assert_eq!(values[0], "west");
         assert!(values[1].starts_with("ghp_"));
         assert_ne!(values[1], REAL_GITHUB_TOKEN);
-        if mode == "flat_managed" {
-            // D353/D354 keep configured providers off under the hardened broker.
-            // Their variables are withheld, rather than restored as upstream dummies.
-            assert_eq!(values[2], "");
-            assert_ne!(values[2], REAL_CUSTOM_TOKEN);
-        }
         return Ok(());
     }
     assert_eq!(

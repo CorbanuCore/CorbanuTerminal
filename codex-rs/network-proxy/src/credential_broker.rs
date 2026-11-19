@@ -95,6 +95,7 @@ pub use environment::is_credential_broker_provider_env_key;
 pub(crate) use environment::marked_credential_dummy_env_keys;
 pub use provider_config::CredentialAuthMethod;
 pub use provider_config::CredentialProviderConfig;
+pub use provider_config::reject_unbrokered_credential_providers;
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
 /// Marker listing the brokered variables as (name, dummy placeholder) pairs;
