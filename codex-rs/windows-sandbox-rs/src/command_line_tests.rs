@@ -70,6 +70,22 @@ fn crt_split(text: &str) -> Vec<String> {
 /// would act on: a `%` that could start an expansion of an existing name,
 /// or an unescaped quote, operator, redirection, parenthesis or `!`.
 fn cmd_unescape(text: &str) -> String {
+    // A program token in real quotes: literal to cmd, but for `%`.
+    let (program, text) = match text.strip_prefix('"') {
+        Some(rest) => {
+            let (program, rest) = rest.split_once('"').expect("closing program quote");
+            assert!(
+                !program.contains('%'),
+                "a `%` in the quoted program {program:?}"
+            );
+            (format!("\"{program}\""), rest)
+        }
+        None => (String::new(), text),
+    };
+    program + &cmd_unescape_rest(text)
+}
+
+fn cmd_unescape_rest(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     for (index, c) in chars.iter().enumerate() {
         if *c == '%' {
@@ -239,12 +255,26 @@ fn several_elements_reach_the_program_unchanged() {
 #[test]
 fn awkward_program_tokens_are_quoted() {
     for program in [
-        "@prog", ":prog", "(prog", "a,b.exe", "a=b.exe", "a;b.exe", "p%x%.exe", "a b.exe",
+        "@prog",
+        ":prog",
+        "(prog",
+        "a,b.exe",
+        "a=b.exe",
+        "a;b.exe",
+        "a b.exe",
+        "C:\\Program Files (x86)\\a&b\\x.exe",
     ] {
         let items = ["cmd", "/c", program, "arg"];
         let handed_on = cmd_unescape(cmd_tail(&line(&items)));
         assert!(handed_on.starts_with('"'), "{program:?} -> {handed_on}");
         assert_eq!(crt_split(&handed_on), argv(&items[2..]));
+    }
+    let none = HashMap::new();
+    for program in ["p%x%.exe", "p\"q.exe"] {
+        assert!(
+            refused(&["cmd", "/c", program, "arg"], &none).contains("program"),
+            "{program:?}"
+        );
     }
     // Builtins stay bare so cmd still finds them.
     assert_eq!(

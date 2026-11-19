@@ -255,9 +255,6 @@ impl CmdInvocation {
         {
             bail!("cmd.exe variable {name:?} would defeat `%` escaping (#2702)");
         }
-        // The program token is quoted unless it is a plain name: cmd treats
-        // a leading `@` `:` `(` and the delimiters `,;=` there specially, and
-        // a `%` must be followed by a character of its own argument.
         // `call` runs a second expansion and quote pass over its arguments.
         let call = program
             .get(..4)
@@ -269,14 +266,32 @@ impl CmdInvocation {
         if call {
             bail!("cmd.exe CALL would expand and re-parse its arguments (#2702)");
         }
+        // cmd finds the program by its own rules: a caret-escaped quote
+        // doesn't group a path with spaces there, so the program token gets
+        // real quotes unless it is a plain name (cmd treats a leading `@`
+        // `:` `(` and the delimiters `,;=` there specially). Inside those
+        // quotes everything but `%` is literal, and paths hold no quotes.
+        if program.contains(['"', '%']) {
+            bail!("a cmd.exe program can't contain `\"` or `%`: {program:?} (#2702)");
+        }
         let plain_program = program
             .chars()
             .next()
             .is_some_and(|c| c.is_alphanumeric() || matches!(c, '\\' | '.' | '_'))
-            && !program.contains([' ', '\t', '"', ',', ';', '=', '%']);
-        let mut quoted = vec![quote_crt(program, !plain_program)];
-        quoted.extend(args.iter().map(|arg| quote_crt(arg, arg.contains('%'))));
-        Ok(caret_escape(&quoted.join(" ")))
+            && !program.contains([' ', '\t', ',', ';', '=']);
+        let program = if plain_program {
+            caret_escape(program)
+        } else {
+            format!("\"{program}\"")
+        };
+        let args = args
+            .iter()
+            .map(|arg| caret_escape(&quote_crt(arg, arg.contains('%'))))
+            .collect::<Vec<_>>();
+        Ok(std::iter::once(program)
+            .chain(args)
+            .collect::<Vec<_>>()
+            .join(" "))
     }
 }
 
@@ -285,7 +300,8 @@ impl CmdInvocation {
 /// A `%` is followed by a caret, which escapes the next character: percent
 /// expansion runs before caret removal and must never see a variable name it
 /// could resolve. Callers make sure each `%` has a following character in
-/// its own argument (a closing quote at least).
+/// its own argument (a closing quote at least), and escape each argument
+/// separately.
 fn caret_escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     let mut escaped_by_previous = false;
