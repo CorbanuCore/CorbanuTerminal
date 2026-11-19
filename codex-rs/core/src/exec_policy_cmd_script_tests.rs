@@ -248,6 +248,8 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
         // the command's folder, or one a script creates first.
         r".\build '&git push'",
         r"C:\p\x '&git push'",
+        // Behind a launcher.
+        r"env .\build '&git push'",
         // A script that changes `PATH` or `PATHEXT` first changes which file
         // a bare name runs (`gradlew` as `C:\repo\gradlew.bat`).
         r"Set-Item env:PATH C:\repo; gradlew '&git push'",
@@ -258,13 +260,25 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
         r"Set-Item Microsoft.PowerShell.Core\Environment::PATH C:\repo; gradlew '&git push'",
     ] {
         let command = argv(&["powershell.exe", "-NoProfile", "-Command", script]);
-        for profile in [
-            PermissionProfile::Disabled,
-            PermissionProfile::workspace_write(),
-        ] {
-            let result = decide(rules, &command, AskForApproval::OnRequest, profile.clone()).await;
-            assert!(asked(&result), "{script} {profile:?}: {result:?}");
-            let result = decide(rules, &command, AskForApproval::Never, profile).await;
+        let mut commands = vec![command];
+        if script == r".\build '&git push'" {
+            // The same PowerShell script nested in bash.
+            commands.push(argv(&[
+                "bash",
+                "-c",
+                r#"powershell.exe -NoProfile -Command ".\build '&git push'""#,
+            ]));
+        }
+        for (command, profile) in commands.iter().flat_map(|command| {
+            [
+                PermissionProfile::Disabled,
+                PermissionProfile::workspace_write(),
+            ]
+            .map(|profile| (command, profile))
+        }) {
+            let result = decide(rules, command, AskForApproval::OnRequest, profile.clone()).await;
+            assert!(asked(&result), "{command:?} {profile:?}: {result:?}");
+            let result = decide(rules, command, AskForApproval::Never, profile).await;
             assert!(
                 matches!(result, ExecApprovalRequirement::Forbidden { .. }),
                 "{script}: {result:?}"

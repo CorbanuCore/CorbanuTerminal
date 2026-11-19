@@ -499,6 +499,8 @@ impl ExecPolicyManager {
             exec_policy.as_ref(),
             &commands,
             /*read_own_scripts*/ true,
+            // #2704: PowerShell finds the programs of its script's commands.
+            command_from_powershell(command_origin),
             &exec_policy_fallback,
             &match_options,
         );
@@ -526,28 +528,6 @@ impl ExecPolicyManager {
             }
             evaluation.matched_rules.extend(literal);
         }
-        // #2704: a command of the PowerShell script whose program PowerShell
-        // may run as a batch file cmd.exe re-reads (`pnpm` found as
-        // `pnpm.cmd`, `.\build`) given cmd.exe's special characters asks
-        // where a strict rule exists.
-        #[cfg(windows)]
-        let unread_script_prompts = if command_origin == ExecPolicyCommandOrigin::PowerShell
-            && wrappers::any_strict_rule(exec_policy.as_ref(), &match_options)
-            && let Some(batch) = commands
-                .iter()
-                .find(|command| wrappers::runs_unread_cmd_script(command, /*powershell*/ true))
-        {
-            evaluation
-                .matched_rules
-                .push(RuleMatch::HeuristicsRuleMatch {
-                    command: batch.clone(),
-                    decision: Decision::Prompt,
-                });
-            evaluation.decision = evaluation.decision.max(Decision::Prompt);
-            true
-        } else {
-            unread_script_prompts
-        };
         // #2548: a script outside the minimal lexical set that was checked
         // as its one command (a here-document) asks where a strict rule
         // exists, as one read in part does.
@@ -1348,6 +1328,18 @@ fn program_key(token: &str) -> Option<String> {
         .find_map(|suffix| name.strip_suffix(suffix))
         .unwrap_or(&name);
     (!name.is_empty()).then(|| name.to_string())
+}
+
+/// Whether commands of this origin are a PowerShell script's.
+#[cfg(windows)]
+fn command_from_powershell(origin: ExecPolicyCommandOrigin) -> bool {
+    origin == ExecPolicyCommandOrigin::PowerShell
+}
+
+/// Elsewhere no PowerShell script is read into commands.
+#[cfg(not(windows))]
+fn command_from_powershell(_origin: ExecPolicyCommandOrigin) -> bool {
+    false
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

@@ -226,7 +226,8 @@ pub(crate) fn check_with_wrappers_and_folded(
     options: &MatchOptions,
 ) -> (Evaluation, Vec<RuleMatch>) {
     let checked = check(
-        policy, commands, /*read_own_scripts*/ true, fallback, options,
+        policy, commands, /*read_own_scripts*/ true, /*from_powershell*/ false, fallback,
+        options,
     );
     (checked.evaluation, checked.folded)
 }
@@ -243,7 +244,8 @@ pub(crate) fn check_executed_with_wrappers_and_folded(
     options: &MatchOptions,
 ) -> (Evaluation, Vec<RuleMatch>) {
     let checked = check(
-        policy, commands, /*read_own_scripts*/ false, fallback, options,
+        policy, commands, /*read_own_scripts*/ false, /*from_powershell*/ false,
+        fallback, options,
     );
     (checked.evaluation, checked.folded)
 }
@@ -275,10 +277,13 @@ struct Pending {
 /// Where a word is known only at run time (#2543), launchers read this.
 const UNKNOWN_WORD: &str = "\0";
 
+/// `from_powershell`: `commands` are a PowerShell script's (#2704: their
+/// programs are found as PowerShell finds them).
 pub(crate) fn check(
     policy: &Policy,
     commands: &[Vec<String>],
     read_own_scripts: bool,
+    from_powershell: bool,
     fallback: &impl Fn(&[String]) -> Decision,
     options: &MatchOptions,
 ) -> Checked {
@@ -306,7 +311,7 @@ pub(crate) fn check(
                 item.powershell,
             ),
             None => match next.next() {
-                Some(command) => (command, 0, false, &CommandStdin::Inherited, false),
+                Some(command) => (command, 0, false, &CommandStdin::Inherited, from_powershell),
                 None => break,
             },
         };
