@@ -48,7 +48,16 @@ async fn tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route() 
     let tmux = fixture.tmux()?;
     let session = tmux.new_session(fixture.session("pf58-apps-origin"))?;
     let pane = session.primary_pane();
-    pane.wait_stable_contains("MCP startup incomplete", READY_TIMEOUT)?;
+    // MCP startup failures are listed in the warnings view (F2) behind the
+    // footer's warning count, no longer printed in the transcript.
+    pane.wait_stable_contains("1 warning · f2 to view", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::F2)?;
+    pane.wait_stable_until("Apps startup warning", READY_TIMEOUT, |capture| {
+        capture.contains("MCP · codex_apps")
+            && capture.contains("HTTP 403: {\"error\":\"synthetic untrusted Apps endpoint\"}")
+    })?;
+    // Keep the warning and leave the view.
+    pane.send_literal("k")?;
     wait_chat_ready(pane)?;
     submit_and_wait(
         pane,

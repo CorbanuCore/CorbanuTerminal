@@ -1752,16 +1752,21 @@ async fn run_ratatui_app(
     // Corbanu: onboarding follows the provider the launch resolves to (the provider
     // picker), not only the OpenAI login. PF-84-S06: a named OpenAI sign-in account was
     // checked before startup (it holds a sign-in), so the default login's state does not apply.
+    // #2728: account/read describes the app server's own provider. A running
+    // server on a provider that doesn't use the OpenAI login (for example one
+    // started with another `model_provider`) reports no account, which says
+    // nothing about this launch's OpenAI login; keep local discovery then.
+    let server_reports_openai_login = startup_account.is_none() || requires_openai_auth;
     let openai_metadata_for = |provider: &codex_model_provider_info::ModelProviderInfo| {
         if codex_model_provider::named_sign_in_account(provider).is_some() {
-            codex_login::OpenAiAuthMetadata::Account
+            Some(codex_login::OpenAiAuthMetadata::Account)
         } else {
-            startup_provider::openai_metadata(login_status)
+            server_reports_openai_login.then(|| startup_provider::openai_metadata(login_status))
         }
     };
     let mut startup_provider = startup_provider::resolve(
         &initial_config,
-        Some(openai_metadata_for(&initial_config.model_provider)),
+        openai_metadata_for(&initial_config.model_provider),
     )
     .await;
 
