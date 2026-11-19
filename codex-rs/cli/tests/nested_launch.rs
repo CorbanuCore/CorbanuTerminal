@@ -309,25 +309,20 @@ async fn pass_mode_runs_exec_with_aggressive_enforced() -> Result<()> {
     );
     assert!(!outside_file.exists(), "a write outside the folder ran");
     assert!(!stderr.contains("Example Domain"), "{stderr}");
-    // Main's exec declined approval requests; upstream's exec refuses them
-    // ("... is not supported in exec mode") before the command runs.
-    let refused_in_exec =
-        stderr.contains("command execution approval is not supported in exec mode");
-    // With main's exec the vault read ran inside the sandbox and failed
-    // (Seatbelt's message; Linux runners may lack a working sandbox); with
-    // upstream's exec it is refused before it runs. Either way the vault value
-    // never reached the model (asserted above).
-    if cfg!(target_os = "macos") {
-        assert!(
-            stderr.contains("Operation not permitted") || refused_in_exec,
-            "{stderr}"
-        );
+    // On this branch each of the three commands asks for an approval that
+    // exec rejects ("... is not supported in exec mode"), so none of them
+    // runs. Otherwise (as on main) the vault read ran inside the sandbox and
+    // failed (Seatbelt's message; Linux runners may lack a working sandbox)
+    // and the other two were declined.
+    let refused = stderr
+        .matches("command execution approval is not supported in exec mode")
+        .count();
+    if refused < 3 {
+        if cfg!(target_os = "macos") {
+            assert!(stderr.contains("Operation not permitted"), "{stderr}");
+        }
+        assert!(stderr.contains("declined in"), "{stderr}");
     }
-    // The other two needed an approval nobody can give.
-    assert!(
-        stderr.contains("declined in") || refused_in_exec,
-        "{stderr}"
-    );
     Ok(())
 }
 

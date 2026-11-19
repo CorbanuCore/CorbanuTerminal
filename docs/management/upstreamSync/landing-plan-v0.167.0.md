@@ -68,7 +68,7 @@ Only **two open PRs targeted sync** at the cut: [#2274](https://github.com/Corba
   - The 22 core/app helper failures, the 24 core / 13 app exclusions, and Bazel.
   - The Windows codex-core job requested by main merges #10/#11. It runs on #2274 itself (`windows-integration-tests / codex-core`).
 
-**#2122 — owner: sync test-isolation maintainer; unblocked once #2274 merges.** It prepares full CLI helpers for `codex-mcp` and `codex-rmcp-client`. Its eight Python wrapper tests pass, but four MCP cases remain CLI-blocked (three `streamable_http_remote` cases and `binding::tests::sandbox_executable_requires_local_stdio_and_a_full_cli`). Merge sync into the draft, qualify the isolated packages on all three platforms, review the exact head and merge. Do not enable eager helper builds while the CLI remains broken. The four cases are a separate package inventory, not additional core-suite failures.
+**#2122 — owner: sync test-isolation maintainer; unblocked (#2274 merged as `dacadfcc4a`).** It prepares full CLI helpers for `codex-mcp` and `codex-rmcp-client`. Its eight Python wrapper tests pass, but four MCP cases remain CLI-blocked (three `streamable_http_remote` cases and `binding::tests::sandbox_executable_requires_local_stdio_and_a_full_cli`). Merge sync into the draft, qualify the isolated packages on all three platforms, review the exact head and merge. The CLI now builds, so the helper build can be enabled; the CLI test failures that remain (#2728) are outside the MCP packages. The four cases are a separate package inventory, not additional core-suite failures.
 
 ### Owner decisions
 
