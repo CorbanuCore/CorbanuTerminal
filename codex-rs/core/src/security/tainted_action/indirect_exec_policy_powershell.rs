@@ -108,8 +108,18 @@ mod tests {
             ("PWSH.com", None),
             ("pwshx", None),
             // #2671: off Windows the reader knows no `\` path.
-            (r"C:\PS\pwsh.exe", if cfg!(windows) { None } else { Some("pwsh.exe") }),
-            (r"\\?\C:\PS\PWSH.EXE", host(r"\\?\C:\PS\pwsh.exe", "pwsh.exe")),
+            (
+                r"C:\PS\pwsh.exe",
+                if cfg!(windows) {
+                    None
+                } else {
+                    Some("pwsh.exe")
+                },
+            ),
+            (
+                r"\\?\C:\PS\PWSH.EXE",
+                host(r"\\?\C:\PS\pwsh.exe", "pwsh.exe"),
+            ),
             (r"\\?\C:\PS\PWSH.EXE.", None),
             (r"\\?\C:\PS\pwsh.exe ", None),
             (r"\\?\C:\PS\PWSH", None),

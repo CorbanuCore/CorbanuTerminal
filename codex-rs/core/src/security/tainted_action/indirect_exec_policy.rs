@@ -352,9 +352,8 @@ pub(crate) fn windows_names_unread(words: &[String]) -> bool {
     }
     let here = policy_wrapper_commands_for(words, names::PLATFORM);
     let there = policy_wrapper_commands_for(words, windows);
-    let open_end = |wrappers: &PolicyWrapperCommands| {
-        wrappers.open.as_ref().map(|open| open.known_end)
-    };
+    let open_end =
+        |wrappers: &PolicyWrapperCommands| wrappers.open.as_ref().map(|open| open.known_end);
     here.starts != there.starts
         || here.uncertain != there.uncertain
         || here.approval_only != there.approval_only
