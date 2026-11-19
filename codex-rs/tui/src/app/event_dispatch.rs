@@ -3301,6 +3301,7 @@ impl App {
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
             }
+            #[cfg(test)]
             AppEvent::ApplyModelSelection { model, effort } => {
                 if app_server.thread_params_mode().settings_owner()
                     == ThreadSettingsOwner::Server
