@@ -213,6 +213,12 @@ fn is_reparsing_program(program: &str) -> bool {
 /// that drive and always counts. Anything but a missing file counts too, so
 /// a failure only refuses more (a PATH entry on a drive that isn't ready
 /// refuses every bare name). A file created after the launch isn't seen.
+///
+/// The name is looked up as given: cmd doesn't trim trailing dots or spaces
+/// before it tries the extensions, so `npm.`, `"npm "` and `"npm ."` don't
+/// find `npm.cmd` (checked natively on Windows 11 build 26200, #2745). A
+/// spelled-out extension with trailing dots or spaces (`"npm.cmd "`) runs
+/// and is caught by [`is_batch_program`].
 fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
     let bytes = program.as_bytes();
     if bytes.len() >= 2
@@ -376,7 +382,7 @@ impl CmdInvocation {
         if let Some(arg) = args.iter().find(|arg| arg.contains(CMD_ACTIVE)) {
             if !is_plain_program_token(program) {
                 bail!(
-                    "cmd.exe could read {program:?} as a program that would re-parse its arguments; only a plain path (ASCII letters, digits, `_ - . \\ :` and spaces) may take {arg:?} (#2718)"
+                    "cmd.exe could read {program:?} as a program that would re-parse its arguments; only a plain path (ASCII letters, digits, `_ - . \\ :` and spaces, with no empty, `.` or `..` component) may take {arg:?} (#2718)"
                 );
             }
             if is_reparsing_program(program) {

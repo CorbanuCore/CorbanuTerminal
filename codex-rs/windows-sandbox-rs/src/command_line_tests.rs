@@ -577,15 +577,32 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
         );
         assert!(error.contains("plain path"), "{program:?}: {error}");
     }
-    // An absolute path (plain on Windows; elsewhere its `/` refuses it).
+    // An empty component is named in the refusal (#2745).
+    let error = format!(
+        "{:#}",
+        run(&["cmd", "/c", "bin\\\\npm", "a&b"]).expect_err("must be refused")
+    );
+    assert!(error.contains("no empty, `.` or `..` component"), "{error}");
+    // A spelled-out extension with trailing dots or spaces runs the batch
+    // file; cmd doesn't trim a bare `npm.` before PATHEXT (#2745).
+    for program in ["npm.cmd.", "npm.cmd ", "npm.CMD. ."] {
+        let error = format!(
+            "{:#}",
+            run(&["cmd", "/c", program, "a&b"]).expect_err("must be refused")
+        );
+        assert!(error.contains("batch file"), "{program:?}: {error}");
+    }
+    // An absolute path is refused either way: as a batch file, or as a
+    // path that isn't plain (`/` off Windows, an 8.3 or non-ASCII TEMP).
     let rel = cwd.join("sub\\rel").display().to_string();
     let error = format!(
         "{:#}",
         run(&["cmd", "/c", &rel, "(x)"]).expect_err("refused")
     );
-    if cfg!(windows) {
-        assert!(error.contains("batch file"), "{error}");
-    }
+    assert!(
+        error.contains("batch file") || error.contains("plain path"),
+        "{error}"
+    );
     // Plain arguments, and programs with no batch file, still run.
     assert_eq!(
         run(&["cmd", "/c", "npm", "install", "two words"]).expect("ok"),
