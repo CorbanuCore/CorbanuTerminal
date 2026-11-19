@@ -628,45 +628,57 @@ fn cmd_rereads(arg: &str) -> bool {
 }
 
 /// Whether `program` (Windows file name `name`) may run as a batch file:
-/// named `.cmd` or `.bat`, or on Windows any program not named `.exe` or
-/// `.com` and not found as one on `PATH` the way PowerShell finds a bare
-/// name (`pnpm` as `pnpm.cmd`). A path (`.\build`, `C:\p\x`) or a name
-/// not found may be a batch file the command's folder holds or a script
-/// creates first.
+/// named `.cmd` or `.bat`, or on Windows a path not named `.exe` or `.com`
+/// (`.\build`, `C:\p\x`: the command's folder may hold a batch file, or
+/// a script may create one first), or a bare name PowerShell finds on
+/// `PATH` as a batch file (`pnpm` as `pnpm.cmd`).
 fn may_be_batch_file(program: &str, name: &str) -> bool {
     name.ends_with(".cmd")
         || name.ends_with(".bat")
-        || (cfg!(windows) && !found_as_program(program))
+        || (cfg!(windows) && windows_batch_file(program))
 }
 
-/// Whether `program` is a bare name PowerShell finds on `PATH` as an
-/// `.exe` or `.com` file, or is named as one. Only absolute local `PATH`
-/// folders are looked in, never a folder the command names; a relative or
-/// network folder before the match leaves it unknown.
-fn found_as_program(program: &str) -> bool {
+/// See [`may_be_batch_file`]. A bare name is looked for only in absolute
+/// local `PATH` folders, never in a folder the command names, and only the
+/// first match counts, as PowerShell takes it; a relative or network `PATH`
+/// folder before a match leaves it unknown (yes). A bare name found nowhere
+/// does not run unless a command first writes it into a `PATH` folder.
+fn windows_batch_file(program: &str) -> bool {
+    windows_batch_file_in(
+        program,
+        std::env::var_os("PATH"),
+        std::env::var("PATHEXT").ok(),
+    )
+}
+
+/// [`windows_batch_file`] with `PATH` and `PATHEXT` given.
+pub(super) fn windows_batch_file_in(
+    program: &str,
+    path: Option<std::ffi::OsString>,
+    extensions: Option<String>,
+) -> bool {
     let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
     if lower.ends_with(".exe") || lower.ends_with(".com") {
-        return true;
+        return false;
     }
     if program.contains(['/', '\\', ':', '.']) {
-        return false;
+        return true;
     }
-    let Some(path) = std::env::var_os("PATH") else {
+    let Some(path) = path else {
         return false;
     };
-    let extensions = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    let extensions = extensions.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
     for dir in std::env::split_paths(&path) {
-        let text = dir.to_string_lossy();
-        if !dir.is_absolute() || text.starts_with(['\\', '/']) {
-            return false;
+        if !dir.is_absolute() || dir.to_string_lossy().starts_with(['\\', '/']) {
+            return true;
         }
         for extension in extensions
             .split(';')
             .filter(|extension| !extension.is_empty())
         {
             if dir.join(format!("{program}{extension}")).is_file() {
-                return extension.eq_ignore_ascii_case(".exe")
-                    || extension.eq_ignore_ascii_case(".com");
+                return extension.eq_ignore_ascii_case(".cmd")
+                    || extension.eq_ignore_ascii_case(".bat");
             }
         }
     }

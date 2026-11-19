@@ -40,12 +40,11 @@ fn unread_cmd_forms() -> Vec<Vec<String>> {
         argv(&["env", "cmd", "/c", "git push"]),
     ];
     if cfg!(windows) {
-        // A program that may be a batch file: a path (the command's folder,
-        // or a file a script creates first), or a name not found on `PATH`.
+        // A path that may be a batch file: in the command's folder, or a
+        // file a script creates first.
         forms.extend([
             argv(&[r".\build", "&git push"]),
             argv(&[r"C:\p\x", "&git push"]),
-            argv(&["zz-d729-not-on-path", "&git push"]),
         ]);
     }
     forms
@@ -269,4 +268,30 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
             );
         }
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("zz-tool.cmd"), "@echo %*").expect("write");
+    std::fs::write(dir.path().join("zz-exe.exe"), "").expect("write");
+    let other = tempfile::tempdir().expect("tempdir");
+    std::fs::write(other.path().join("zz-exe.cmd"), "@echo %*").expect("write");
+    let path = |dirs: &[&Path]| Some(std::env::join_paths(dirs).expect("PATH"));
+    let found =
+        |program: &str, dirs: &[&Path]| wrappers::windows_batch_file_in(program, path(dirs), None);
+    // The first match on `PATH` counts.
+    assert!(found("zz-tool", &[dir.path()]));
+    assert!(!found("zz-exe", &[dir.path(), other.path()]));
+    assert!(found("zz-exe", &[other.path(), dir.path()]));
+    // Not found: it cannot run unless written into a `PATH` folder first.
+    assert!(!found("zz-missing", &[dir.path()]));
+    // A relative or network folder before a match: unknown.
+    assert!(found("zz-exe", &[Path::new("bin"), dir.path()]));
+    assert!(found("zz-exe", &[Path::new(r"\\server\share"), dir.path()]));
+    // Named or given as a path.
+    assert!(!found("tool.exe", &[]));
+    assert!(found(r".\zz-exe", &[dir.path()]));
+    assert!(found(r"C:\p\x", &[]));
 }
