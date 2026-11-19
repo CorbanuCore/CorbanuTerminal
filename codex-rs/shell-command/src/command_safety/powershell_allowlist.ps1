@@ -43,17 +43,6 @@ if ($D729Core) {
 foreach ($name in $functionText.Split(',')) { $D729Functions[$name] = $true }
 foreach ($letter in [char[]]'abcdefghijklmnopqrstuvwxyz') { $D729Functions["${letter}:"] = $true }
 
-# Standard verbs: an unknown Verb-Noun name may load a module of that name.
-$D729Verbs = @{}
-foreach ($type in @(
-    [System.Management.Automation.VerbsCommon], [System.Management.Automation.VerbsCommunications],
-    [System.Management.Automation.VerbsData], [System.Management.Automation.VerbsDiagnostic],
-    [System.Management.Automation.VerbsLifecycle], [System.Management.Automation.VerbsOther],
-    [System.Management.Automation.VerbsSecurity]
-)) {
-    foreach ($field in $type.GetFields()) { $D729Verbs[([string]$field.GetValue($null)).ToLowerInvariant()] = $true }
-}
-
 # The allowlist: cmdlets whose parameters cannot run code once every argument is a literal.
 #   x: excluded parameters; w: what it writes (see Get-D729Writes);
 #   d: file-system dynamic parameters (1 takes a value, 0 is a switch).
@@ -321,13 +310,29 @@ function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
         if ($lower -match '\.(exe|com)$') { return (Get-D729NativeCause $commandAst) }
         return "script or module-qualified command: $name"
     }
+    if ($lower.IndexOfAny([char[]]'*?[]`') -ge 0) { return "command name holds a wildcard: $name" }
     $target = $lower
     if ($D729Aliases.ContainsKey($lower)) { $target = $D729Aliases[$lower] }
-    if ($D729Allow.ContainsKey($target)) { return (Get-D729CmdletCause $commandAst $target $index $writes $state) }
+    if ($D729Allow.ContainsKey($target)) {
+        # PowerShell finds a cmdlet it has not loaded yet only after a program or script
+        # of that name on `PATH` (`Get-Content.ps1`).
+        if (Find-D729OnPath $target -Scripts) { return "program or script on PATH named like a cmdlet: $target" }
+        return (Get-D729CmdletCause $commandAst $target $index $writes $state)
+    }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }
-    if ($lower -match '^([a-z]+)-[a-z0-9]' -and $D729Verbs.ContainsKey($Matches[1])) { return "command not on the allowlist: $lower" }
     if ($lower -match '\.[^.]*$' -and $lower -notmatch '\.(exe|com|cmd|bat)$') { return "script file: $name" }
+    # A name PowerShell does not find as a program on `PATH` may load a module that
+    # exports it (`ForEach-Object`, `Get-ScheduledTask`, or a module a command wrote).
+    if (-not (Find-D729OnPath $lower)) { return "command not on the allowlist or PATH: $lower" }
     return (Get-D729NativeCause $commandAst)
+}
+
+# Whether `PATH` holds a program (or with -Scripts also a script) named $name.
+function Find-D729OnPath([string]$name, [switch]$Scripts) {
+    $types = [System.Management.Automation.CommandTypes]::Application
+    if ($Scripts) { $types = $types -bor [System.Management.Automation.CommandTypes]::ExternalScript }
+    $found = Get-Command -Name ([System.Management.Automation.WildcardPattern]::Escape($name)) -CommandType $types -ErrorAction SilentlyContinue
+    return $null -ne $found
 }
 
 # For a script read as literal commands: $null and its writes, or why it is read in part.

@@ -180,27 +180,33 @@ async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
         "test".to_string(),
         "-Force".to_string(),
     ];
-
-    assert_exec_approval_requirement_for_command(
-        ExecApprovalRequirementScenario {
-            policy_src: None,
-            command: vec![
-                "powershell.exe".to_string(),
-                "-NoProfile".to_string(),
-                "-Command".to_string(),
-                "Remove-Item test -Force".to_string(),
-            ],
+    let command = vec![
+        "powershell.exe".to_string(),
+        "-NoProfile".to_string(),
+        "-Command".to_string(),
+        "Remove-Item test -Force".to_string(),
+    ];
+    // D729 (A): a script that writes is read in full where its writes stay
+    // inside the workspace it runs in.
+    let workspace = tempfile::tempdir().expect("tempdir");
+    let requirement = ExecPolicyManager::new(Arc::new(Policy::empty()))
+        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+            command: &command,
             approval_policy: AskForApproval::OnRequest,
             permission_profile: PermissionProfile::Disabled,
+            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
-        },
+            cwd: Some(AbsolutePathBuf::from_absolute_path(workspace.path()).expect("absolute")),
+        })
+        .await;
+    assert_eq!(
+        requirement,
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
             proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(inner_command)),
-        },
-    )
-    .await;
+        }
+    );
 }
 
 /// #2524 (D688): Windows runs PowerShell under any spelling of its name, so
