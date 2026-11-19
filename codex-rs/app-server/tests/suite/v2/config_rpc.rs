@@ -1916,8 +1916,45 @@ model = "gpt-old"
     Ok(())
 }
 
+/// D612 (#2629): Corbanu's credential engine brokers only its built-in
+/// credential variables, so a write that leaves a provider naming any other
+/// variable is refused with config load's error, and nothing is saved.
+async fn expect_unbrokered_provider_refused(
+    app_server: &mut TestAppServer,
+    id: i64,
+    codex_home: &TempDir,
+    unchanged: &str,
+) -> Result<()> {
+    let error: JSONRPCError = timeout(
+        DEFAULT_READ_TIMEOUT,
+        app_server.read_stream_until_error_message(RequestId::Integer(id)),
+    )
+    .await??;
+    assert_eq!(
+        error
+            .error
+            .data
+            .as_ref()
+            .and_then(|data| data.get("config_write_error_code")),
+        Some(&json!("configValidationError"))
+    );
+    assert!(
+        error
+            .error
+            .message
+            .contains("unsupported network proxy credential provider `"),
+        "{}",
+        error.error.message
+    );
+    assert_eq!(
+        std::fs::read_to_string(codex_home.path().join("config.toml"))?,
+        unchanged
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_provider_write_reports_source_displacement() -> Result<()> {
+async fn config_provider_writes_are_refused_while_flags_name_unbrokered_sources() -> Result<()> {
     let codex_home = TempDir::new()?;
     write_config(&codex_home, "")?;
     let mut app_server = TestAppServer::builder()
@@ -1934,85 +1971,42 @@ async fn config_provider_write_reports_source_displacement() -> Result<()> {
         .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
         .await?;
 
-    let mut provider = json!({
+    // The session flags' provider stays in the effective config, so every
+    // provider write is refused (D612), whatever the user layer gets.
+    let provider = json!({
         "env": ["VENDOR_PASSWORD"],
         "patterns": ["^pin_[a-z]{8}$"],
         "url_prefixes": ["https://user.example"],
         "auth": ["bearer"],
     });
-    for (suffix, value, overridden) in [
-        ("", provider.clone(), true),
-        (".url_prefixes", json!(["https://updated.example"]), true),
-        (".env", json!(["OTHER_PASSWORD"]), false),
+    for (suffix, value) in [
+        ("", provider),
+        (".url_prefixes", json!(["https://updated.example"])),
+        (".env", json!(["OTHER_PASSWORD"])),
     ] {
         let write_id = app_server
             .send_config_value_write_request(ConfigValueWriteParams {
                 file_path: None,
                 key_path: format!("features.network_proxy.credentials.user_provider{suffix}"),
-                value: value.clone(),
+                value,
                 merge_strategy: MergeStrategy::Upsert,
                 expected_version: None,
             })
             .await?;
-        let write: ConfigWriteResponse =
-            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(write_id)).await??;
-        let expected = overridden.then_some((ConfigLayerSource::SessionFlags, json!(null)));
-        assert_eq!(
-            (
-                write.status,
-                write
-                    .overridden_metadata
-                    .map(|meta| { (meta.overriding_layer.name, meta.effective_value) })
-            ),
-            (
-                if overridden {
-                    WriteStatus::OkOverridden
-                } else {
-                    WriteStatus::Ok
-                },
-                expected,
-            ),
-        );
-
-        if let Some(field) = suffix.strip_prefix('.') {
-            provider[field] = value;
-        }
-        let saved: toml::Value = toml::from_str(&std::fs::read_to_string(
-            codex_home.path().join("config.toml"),
-        )?)?;
-        assert_eq!(
-            serde_json::to_value(
-                &saved["features"]["network_proxy"]["credentials"]["user_provider"]
-            )?,
-            provider,
-        );
-        let read_id = app_server
-            .send_config_read_request(ConfigReadParams {
-                include_layers: false,
-                cwd: None,
-            })
-            .await?;
-        let read: ConfigReadResponse =
-            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(read_id)).await??;
-        assert_eq!(
-            read.config.additional["features"]["network_proxy"]["credentials"].get("user_provider"),
-            (!overridden).then_some(&provider),
-        );
+        expect_unbrokered_provider_refused(&mut app_server, write_id, &codex_home, "").await?;
     }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_provider_field_removal_uses_higher_same_id_definition() -> Result<()> {
+async fn config_provider_field_removal_is_refused_for_unbrokered_sources() -> Result<()> {
     let codex_home = TempDir::new()?;
-    write_config(
-        &codex_home,
-        r#"[features.network_proxy.credentials.vendor]
+    let initial = r#"[features.network_proxy.credentials.vendor]
 env = ["VENDOR_PASSWORD"]
 patterns = ["^pin_[a-z]{8}$"]
 url_prefixes = ["https://fixed.example"]
-"#,
-    )?;
+"#;
+    write_config(&codex_home, initial)?;
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .with_args(&[
@@ -2030,32 +2024,9 @@ url_prefixes = ["https://fixed.example"]
             expected_version: None,
         })
         .await?;
-    let write: ConfigWriteResponse =
-        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
-    assert_eq!(write.status, WriteStatus::OkOverridden);
-
-    let saved: toml::Value = toml::from_str(&std::fs::read_to_string(
-        codex_home.path().join("config.toml"),
-    )?)?;
-    assert_eq!(
-        serde_json::to_value(&saved["features"]["network_proxy"]["credentials"]["vendor"])?,
-        json!({ "env": ["VENDOR_PASSWORD"], "patterns": ["^pin_[a-z]{8}$"] }),
-    );
-    let id = app_server
-        .send_config_read_request(ConfigReadParams {
-            include_layers: false,
-            cwd: None,
-        })
-        .await?;
-    let read: ConfigReadResponse =
-        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
-    assert_eq!(
-        read.config.additional["features"]["network_proxy"]["credentials"]["vendor"],
-        json!({
-            "env": ["VENDOR_PASSWORD"], "patterns": ["^pin_[a-z]{8}$"],
-            "url_prefixes": ["https://fixed.example"], "auth": [],
-        }),
-    );
+    // The higher same-ID definition completes the provider, but its source
+    // isn't one Corbanu brokers (D612).
+    expect_unbrokered_provider_refused(&mut app_server, id, &codex_home, initial).await?;
     Ok(())
 }
 
@@ -2175,80 +2146,20 @@ url_prefixes = ["https://api.vendor.example"]
             reload_user_config: false,
         })
         .await?;
-    let written: ConfigWriteResponse =
-        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
-    assert_eq!(written.status, WriteStatus::Ok);
-    let id = app_server
-        .send_config_read_request(ConfigReadParams {
-            include_layers: false,
-            cwd: None,
-        })
-        .await?;
-    let read: ConfigReadResponse =
-        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
-    assert_eq!(
-        read.config.additional["features"]["network_proxy"]["credentials"],
-        json!({
-            "z_new": { "env": ["VENDOR_PASSWORD"], "patterns": ["^pin_[a-z]{8}$"], "url_prefix_from_env": "VENDOR_ENDPOINT", "url_prefixes": [], "auth": [] },
-        })
-    );
+    // The complete replacement passes remapping validation, but its source
+    // isn't one Corbanu brokers (D612).
+    expect_unbrokered_provider_refused(&mut app_server, id, &codex_home, initial).await?;
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_provider_upsert_persists_displaced_siblings() -> Result<()> {
+async fn config_provider_upserts_naming_unbrokered_sources_are_refused() -> Result<()> {
     let upsert = |path: &str, value| ConfigEdit {
         key_path: format!("features.network_proxy.credentials{path}"),
         value,
         merge_strategy: MergeStrategy::Upsert,
     };
-    for (mut edits, remapped_source) in [
-        (
-            vec![upsert(".z_new", json!({ "env": ["VENDOR_PASSWORD"] }))],
-            None,
-        ),
-        (vec![upsert(".z_new.env", json!(["VENDOR_PASSWORD"]))], None),
-        (
-            vec![upsert(
-                "",
-                json!({ "z_new": { "env": ["VENDOR_PASSWORD"] } }),
-            )],
-            None,
-        ),
-        (
-            vec![upsert(
-                "",
-                json!({
-                    "a_old": { "env": ["NEW_PASSWORD"] },
-                    "z_new": { "env": ["VENDOR_PASSWORD"] },
-                }),
-            )],
-            Some("NEW_PASSWORD"),
-        ),
-        (
-            vec![
-                upsert(".z_new.env", json!(["VENDOR_PASSWORD"])),
-                upsert(".a_old.env", json!(["OTHER_PASSWORD"])),
-            ],
-            Some("OTHER_PASSWORD"),
-        ),
-        (
-            vec![
-                upsert(".z_new", json!({ "env": ["VENDOR_PASSWORD"] })),
-                ConfigEdit {
-                    key_path: "model".to_string(),
-                    value: json!("gpt-test"),
-                    merge_strategy: MergeStrategy::Replace,
-                },
-                upsert("", json!({ "a_old": { "env": ["OTHER_PASSWORD"] } })),
-            ],
-            Some("OTHER_PASSWORD"),
-        ),
-    ] {
-        let codex_home = TempDir::new()?;
-        write_config(
-            &codex_home,
-            r#"[features.network_proxy]
+    let initial = r#"[features.network_proxy]
 enabled = true
 credential_broker = true
 
@@ -2263,30 +2174,44 @@ env = ["OTHER_PASSWORD"]
 patterns = ["^new_[a-z]{8}$"]
 url_prefixes = ["https://new.example"]
 auth = ["bearer"]
-"#,
-        )?;
+"#;
+    // Each upsert remaps sources Corbanu doesn't broker between providers;
+    // the providers keep naming them, so the write is refused (D612).
+    for mut edits in [
+        vec![upsert(".z_new", json!({ "env": ["VENDOR_PASSWORD"] }))],
+        vec![upsert(".z_new.env", json!(["VENDOR_PASSWORD"]))],
+        vec![upsert(
+            "",
+            json!({ "z_new": { "env": ["VENDOR_PASSWORD"] } }),
+        )],
+        vec![upsert(
+            "",
+            json!({
+                "a_old": { "env": ["NEW_PASSWORD"] },
+                "z_new": { "env": ["VENDOR_PASSWORD"] },
+            }),
+        )],
+        vec![
+            upsert(".z_new.env", json!(["VENDOR_PASSWORD"])),
+            upsert(".a_old.env", json!(["OTHER_PASSWORD"])),
+        ],
+        vec![
+            upsert(".z_new", json!({ "env": ["VENDOR_PASSWORD"] })),
+            ConfigEdit {
+                key_path: "model".to_string(),
+                value: json!("gpt-test"),
+                merge_strategy: MergeStrategy::Replace,
+            },
+            upsert("", json!({ "a_old": { "env": ["OTHER_PASSWORD"] } })),
+        ],
+    ] {
+        let codex_home = TempDir::new()?;
+        write_config(&codex_home, initial)?;
         let mut app_server = TestAppServer::builder()
             .with_codex_home(codex_home.path())
             .without_auto_env()
             .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
             .await?;
-
-        let mut expected = json!({
-            "z_new": {
-                "auth": ["bearer"],
-                "env": ["VENDOR_PASSWORD"],
-                "patterns": ["^new_[a-z]{8}$"],
-                "url_prefixes": ["https://new.example"],
-            }
-        });
-        if let Some(source) = remapped_source {
-            expected["a_old"] = json!({
-                "auth": ["token"],
-                "env": [source],
-                "patterns": ["^old_[a-z]{8}$"],
-                "url_prefixes": ["https://old.example"],
-            });
-        }
 
         let write_id = if edits.len() == 1 {
             let edit = edits.pop().unwrap();
@@ -2309,26 +2234,7 @@ auth = ["bearer"]
                 })
                 .await?
         };
-        let write: ConfigWriteResponse =
-            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(write_id)).await??;
-        assert_eq!(write.status, WriteStatus::Ok);
-
-        let read_id = app_server
-            .send_config_read_request(ConfigReadParams {
-                include_layers: false,
-                cwd: None,
-            })
-            .await?;
-        let read: ConfigReadResponse =
-            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(read_id)).await??;
-        assert_eq!(
-            read.config.additional["features"]["network_proxy"]["credentials"],
-            expected
-        );
-        assert_eq!(
-            read.origins["features.network_proxy.credentials.z_new.env.0"].version,
-            write.version
-        );
+        expect_unbrokered_provider_refused(&mut app_server, write_id, &codex_home, initial).await?;
     }
     Ok(())
 }

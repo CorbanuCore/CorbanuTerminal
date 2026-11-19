@@ -37,6 +37,7 @@ use codex_core::path_utils;
 use codex_core::path_utils::SymlinkWritePaths;
 use codex_core::path_utils::resolve_symlink_write_paths;
 use codex_core::path_utils::write_atomically;
+use codex_features::FeatureToml;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::protocol::AskForApproval;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -507,6 +508,7 @@ impl ConfigManager {
                     &updated_layers,
                 )
             })
+            .and_then(|()| reject_unbrokered_credential_providers(&effective))
             .map_err(|err| {
                 ConfigManagerError::write(
                     ConfigWriteErrorCode::ConfigValidationError,
@@ -906,6 +908,25 @@ fn validate_config(value: &TomlValue) -> anyhow::Result<()> {
         anyhow::bail!(
             "approval_policy = \"untrusted\" is no longer supported; remove this setting"
         );
+    }
+    Ok(())
+}
+
+/// Runs config load's check for credential providers Corbanu can't broker (D612,
+/// #2629) on the config a write would produce, so the write is refused with the
+/// same error instead of being saved and failing the next load. Unlike load, it
+/// refuses them whether or not the providers are in use yet: a later feature
+/// toggle or permission profile switch would make the saved config fail.
+fn reject_unbrokered_credential_providers(effective: &TomlValue) -> anyhow::Result<()> {
+    let config = ConfigToml::try_from(effective.clone())?;
+    if let Some(FeatureToml::Config(network_proxy)) = config
+        .features
+        .as_ref()
+        .and_then(|features| features.network_proxy.as_ref())
+        && let Some(credentials) = network_proxy.credentials.as_ref()
+    {
+        codex_network_proxy::reject_unbrokered_credential_providers(credentials)
+            .map_err(anyhow::Error::msg)?;
     }
     Ok(())
 }
