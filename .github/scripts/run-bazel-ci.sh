@@ -382,7 +382,25 @@ if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
 fi
 
 bazel_console_log="$(mktemp)"
-trap 'rm -- "$bazel_console_log"' EXIT
+bazel_resource_sampler_pid=""
+cleanup_bazel_ci() {
+  local original_status=$?
+  if [[ -n "$bazel_resource_sampler_pid" ]]; then
+    # Only the child started below; never search for or stop other processes.
+    kill "$bazel_resource_sampler_pid" 2>/dev/null || true
+    wait "$bazel_resource_sampler_pid" 2>/dev/null || true
+  fi
+  rm -- "$bazel_console_log" || true
+  return "$original_status"
+}
+trap cleanup_bazel_ci EXIT
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${RUNNER_OS:-}" == "Linux" ]]; then
+  # stderr is deliberate: SDK callers parse stdout. Diagnostics never change
+  # the foreground Bazel command, its signals, status, or retry policy.
+  python3 "$(dirname "${BASH_SOURCE[0]}")/bazel_resource_sampler.py" "$$" &
+  bazel_resource_sampler_pid=$!
+fi
 
 bazel_run_args=(
   "${bazel_args[@]}"

@@ -115,7 +115,14 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
     mount_workspace_routing(&fixture.server, "pf58-account").await;
     let auth: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(fixture.home.path().join("auth.json"))?)?;
-    let rejection = Mock::given(method("POST"))
+    // The old token stays rejected for the whole test, so a request after
+    // recovery that still used it would fail. Not `mount_as_scoped` for the
+    // refresh rejection: wiremock 0.6.5 sorts mounted mocks by priority on
+    // every request but deactivates a dropped scoped mock by its registration
+    // index, so dropping a prioritized guard switched off an unrelated mock
+    // (the workspace-routing check above) and the post-login account read got
+    // a 404. A switch retires it instead.
+    Mock::given(method("POST"))
         .and(wiremock::matchers::path_regex(".*/responses"))
         .and(wiremock::matchers::header(
             "authorization",
@@ -126,16 +133,18 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
                 .set_body_json(serde_json::json!({"error":{"code":"token_expired"}})),
         )
         .with_priority(1)
-        .mount_as_scoped(&fixture.server)
+        .mount(&fixture.server)
         .await;
-    let refresh_rejection = Mock::given(method("POST"))
+    let refresh_rejected = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    Mock::given(method("POST"))
+        .and(WhileActive(refresh_rejected.clone()))
         .and(path("/oauth/token"))
         .respond_with(
             ResponseTemplate::new(401)
                 .set_body_json(serde_json::json!({"error":{"code":"refresh_token_reused"}})),
         )
         .with_priority(2)
-        .mount_as_scoped(&fixture.server)
+        .mount(&fixture.server)
         .await;
     let tmux = fixture.tmux()?;
     let session = tmux.new_session(fixture.session("pf58-openai-account"))?;
@@ -158,16 +167,13 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
     pane.send_literal("r")?;
     select_label(pane, "Sign in to OpenAI again")?;
     pane.wait_stable_contains("OpenAI account login", READY_TIMEOUT)?;
-    drop(rejection);
-    drop(refresh_rejection);
+    refresh_rejected.store(false, std::sync::atomic::Ordering::SeqCst);
     Mock::given(method("POST"))
         .and(path("/oauth/token"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "access_token":"pf58-new-account-token", "refresh_token":"pf58-new-refresh",
             "id_token":auth["tokens"]["id_token"], "token_type":"Bearer", "expires_in":3600
         })))
-        // Scoped mock removal is asynchronous; the new exchange must win even
-        // while the old refresh-rejection guard is being removed.
         .with_priority(1)
         .mount(&fixture.server)
         .await;
@@ -178,7 +184,7 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
     wait_manager_row(pane, fixture.home.path(), "OpenAI", "Enabled · configured")?;
     close_manager(pane)?;
-    let _response = responses::mount_sse_once(
+    let recovered = responses::mount_sse_once(
         &fixture.server,
         response("PF58 account recovered without restart"),
     )
@@ -189,6 +195,16 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
         "PF58 account recovered without restart",
     )?;
     ensure_authorization_seen(&fixture.server, "pf58-new-account-token").await?;
+    // The post-login account check also carries the new token; the recovered
+    // model request itself must use it.
+    let recovered = recovered.requests();
+    ensure!(
+        !recovered.is_empty()
+            && recovered.iter().all(|request| {
+                request.header("authorization").as_deref() == Some("Bearer pf58-new-account-token")
+            }),
+        "recovered model request did not use the new account token"
+    );
     let config: toml::Value = toml::from_str(&fs::read_to_string(config_path)?)?;
     ensure!(config["model_provider"].as_str() == Some("openai"));
     ensure!(config["model"].as_str() == Some("fixture-model"));
@@ -310,4 +326,13 @@ async fn tmux_reauth_environment_guidance_does_not_offer_vault_override() -> Res
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
     Ok(())
+}
+
+/// Matches only while the switch is on; turning it off retires the mock at once.
+struct WhileActive(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl wiremock::Match for WhileActive {
+    fn matches(&self, _request: &wiremock::Request) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
 }

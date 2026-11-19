@@ -326,3 +326,57 @@ async fn read_only_overlay_reader_matches_runtime_and_refuses_foreign_databases(
 
     runtime.close().await;
 }
+
+/// #2728: while another connection holds the state database's write lock,
+/// the read-only overlay reader (including its migration check) waits at most
+/// its own `busy_timeout`, not SQLite's default 5 s per configuration load.
+#[tokio::test]
+async fn read_only_overlay_reader_waits_only_its_busy_timeout_for_a_locked_database() {
+    let home = tempfile::tempdir().expect("temp dir");
+    let sqlite = SqliteConfig::new_for_testing(home.path().abs());
+    let path = sqlite.state_db_path();
+    let pool = sqlite
+        .open_read_write_pool(&path)
+        .await
+        .expect("open state database");
+    let mut writer = pool.acquire().await.expect("writer connection");
+    sqlx::query("CREATE TABLE synthetic_history (id INTEGER)")
+        .execute(&mut *writer)
+        .await
+        .expect("create table");
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode=DELETE")
+        .fetch_one(&mut *writer)
+        .await
+        .expect("journal mode");
+    // Only DELETE journaling makes the write lock block readers.
+    assert_eq!(journal_mode, "delete");
+    sqlx::query("BEGIN EXCLUSIVE")
+        .execute(&mut *writer)
+        .await
+        .expect("take write lock");
+
+    let started = std::time::Instant::now();
+    let result = sqlite
+        .read_gpu_runtime_providers(std::time::Duration::from_millis(200))
+        .await;
+    let elapsed = started.elapsed();
+    assert!(
+        result.is_err(),
+        "the locked database cannot be read: {result:?}"
+    );
+    // The read waited for the lock (at least one busy timeout) and gave up
+    // within its own bound (about two: the open and the first query).
+    assert!(
+        elapsed >= std::time::Duration::from_millis(200),
+        "the read did not wait for the write lock: {elapsed:?}, {result:?}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(3),
+        "waited {elapsed:?} for the write lock"
+    );
+
+    sqlx::query("ROLLBACK")
+        .execute(&mut *writer)
+        .await
+        .expect("release write lock");
+}

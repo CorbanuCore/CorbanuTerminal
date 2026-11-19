@@ -1752,16 +1752,21 @@ async fn run_ratatui_app(
     // Corbanu: onboarding follows the provider the launch resolves to (the provider
     // picker), not only the OpenAI login. PF-84-S06: a named OpenAI sign-in account was
     // checked before startup (it holds a sign-in), so the default login's state does not apply.
+    // #2728: account/read describes the app server's own provider. A running
+    // server on a provider that doesn't use the OpenAI login (for example one
+    // started with another `model_provider`) reports no account, which says
+    // nothing about this launch's OpenAI login; keep local discovery then.
+    let server_reports_openai_login = startup_account.is_none() || requires_openai_auth;
     let openai_metadata_for = |provider: &codex_model_provider_info::ModelProviderInfo| {
         if codex_model_provider::named_sign_in_account(provider).is_some() {
-            codex_login::OpenAiAuthMetadata::Account
+            Some(codex_login::OpenAiAuthMetadata::Account)
         } else {
-            startup_provider::openai_metadata(login_status)
+            server_reports_openai_login.then(|| startup_provider::openai_metadata(login_status))
         }
     };
     let mut startup_provider = startup_provider::resolve(
         &initial_config,
-        Some(openai_metadata_for(&initial_config.model_provider)),
+        openai_metadata_for(&initial_config.model_provider),
     )
     .await;
 
@@ -1842,7 +1847,8 @@ async fn run_ratatui_app(
                             selected,
                             &initial_config,
                             &recorded,
-                            startup_provider::openai_metadata(login_status),
+                            server_reports_openai_login
+                                .then(|| startup_provider::openai_metadata(login_status)),
                         )
                         .await;
                         startup_provider = resolution;
@@ -1868,11 +1874,18 @@ async fn run_ratatui_app(
     let requires_provider_onboarding = startup_provider.requires_provider_onboarding;
     let default_login_forced_method =
         startup_provider::default_login_forced_method(&initial_config);
+    // #2778: the onboarding gates judge the default OpenAI login, which a
+    // server on another provider does not report.
+    let default_login_status = startup_provider::default_login_status(
+        server_reports_openai_login,
+        login_status,
+        startup_provider.openai,
+    );
     let should_show_onboarding = startup_provider::should_show_provider_onboarding(
         should_show_trust_screen_flag,
         requires_provider_onboarding,
         default_login_forced_method,
-        login_status,
+        default_login_status,
     );
     let mut startup_provider_resolution = Some(startup_provider);
 
@@ -1938,7 +1951,7 @@ async fn run_ratatui_app(
             || matches!(
                 default_login_forced_method,
                 Some(ForcedLoginMethod::Chatgpt)
-            ) && login_status == LoginStatus::NotAuthenticated;
+            ) && default_login_status == LoginStatus::NotAuthenticated;
         let bedrock_setup_enabled = should_show_provider_setup_wizard(
             login_status,
             requires_openai_auth,
@@ -1960,7 +1973,7 @@ async fn run_ratatui_app(
                 gcp_setup_enabled,
                 show_trust_screen: should_show_trust_screen_flag,
                 remote_project_trust: None,
-                login_status,
+                login_status: default_login_status,
                 app_server_target: app_server_target.clone(),
                 app_server_request_handle: app_server
                     .as_ref()

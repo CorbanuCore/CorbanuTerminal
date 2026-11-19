@@ -1099,9 +1099,12 @@ enabled = false
                     scenario,
                     PushedExecScenario::CredentialMaskingCustomProvidersUnsupported
                 ) {
+                    // D612 (#2629): config load refuses providers naming
+                    // sources Corbanu does not broker, so this one names a
+                    // built-in source (#2630).
                     r#"[features.network_proxy.credentials.vendor]
-env = ["VENDOR_TOKEN"]
-patterns = ["vendor_[a-z]{8}"]
+env = ["GH_TOKEN"]
+patterns = ["ghp_[A-Za-z0-9]{36}"]
 url_prefix_from_env = "VENDOR_BASE_URL"
 auth = ["bearer"]
 "#

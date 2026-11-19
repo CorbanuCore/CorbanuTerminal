@@ -105,6 +105,7 @@ pub use credential_broker::credential_broker_user_runtime_dir;
 pub use credential_broker::is_credential_broker_provider_env_key;
 #[cfg(any(unix, windows))]
 pub use credential_broker::model_auth;
+pub use credential_broker::reject_unbrokered_credential_providers;
 #[cfg(any(unix, windows))]
 pub use credential_broker::run_credential_broker_main;
 #[cfg(any(unix, windows))]

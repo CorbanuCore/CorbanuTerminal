@@ -480,7 +480,7 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
         NetworkSandboxPolicy::Restricted,
     );
     let command = concat!(
-        "echo allowed>%ALLOWED_FILE% 2>NUL & ",
+        "echo wrong>%PARENT_FILE% 2>NUL & ",
         "echo wrong>%OTHER_FILE% 2>NUL & ",
         "echo wrong>cwd.txt 2>NUL & ",
         "type %PUBLIC_FILE% 2>NUL & ",
@@ -490,12 +490,15 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
     );
     // Cover duplicate TEMP through Core and a lone mixed-case TMP through the
     // actual direct-spawn wrapper. In both cases the child's value must match its grant.
+    // D377 (#304): that grant is a private `corbanu-sandbox-tmp-*` child of the
+    // selected folder (`TEMP` wins over `Temp`, as in the child's environment
+    // block), never the selected folder itself.
     for direct_spawn in [false, true] {
         // As in the deny-read test below, put quoted paths in the environment
         // rather than in cmd /C's argument: the Win32 argv encoder escapes
         // literal argument quotes for CRT parsing, which cmd does not use.
         let mut env: HashMap<String, String> = [
-            ("ALLOWED_FILE", temp.join("allowed.txt")),
+            ("PARENT_FILE", temp.join("wrong.txt")),
             ("OTHER_FILE", other.join("wrong.txt")),
             ("PUBLIC_FILE", read_only.join("public.txt")),
             ("READONLY_FILE", read_only.join("wrong.txt")),
@@ -513,7 +516,13 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
             env.insert("TEMP".to_string(), temp.to_string_lossy().into_owned());
             "%TEMP%"
         };
-        let command = format!("echo CHILD-TEMP:{child_var} & {command}");
+        // The private folder's path has no spaces (its parent is the fixture's),
+        // so it is used unquoted; a broken redirect fails the read-back below.
+        let command = format!(
+            "echo CHILD-TEMP:%TEMP% & echo CHILD-TMP:%TMP% & \
+             echo TEMP-WRITE-OK>{child_var}\\allowed.txt & \
+             type {child_var}\\allowed.txt & {command}"
+        );
         let (exit_code, stdout, stderr) = if direct_spawn {
             let cwd_uri = PathUri::from_abs_path(&cwd);
             let request = SandboxManager::new().transform_for_direct_spawn(
@@ -582,13 +591,42 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
             exit_code, 0,
             "direct_spawn={direct_spawn}: {stdout} {stderr}"
         );
-        let expected_temp = format!("CHILD-TEMP:{}", temp.display());
-        assert!(
+        let child_value = |prefix: &str| {
             stdout
                 .lines()
-                .any(|line| line.trim().eq_ignore_ascii_case(&expected_temp)),
-            "child TEMP did not match granted directory, direct_spawn={direct_spawn}: {stdout} {stderr}"
+                .find_map(|line| line.trim().strip_prefix(prefix))
+                .map(PathBuf::from)
+                .with_context(|| format!("{prefix} line, direct_spawn={direct_spawn}: {stdout}"))
+        };
+        let child_temp = child_value("CHILD-TEMP:")?;
+        assert_eq!(
+            child_value("CHILD-TMP:")?,
+            child_temp,
+            "direct_spawn={direct_spawn}: TMP and TEMP must name the same session folder"
         );
+        assert_eq!(
+            std::fs::canonicalize(child_temp.parent().context("session temp parent")?)?,
+            std::fs::canonicalize(&temp)?,
+            "child TEMP is not a child of the granted directory, direct_spawn={direct_spawn}: {stdout} {stderr}"
+        );
+        assert!(
+            child_temp
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("corbanu-sandbox-tmp-")),
+            "child TEMP is not a D377 session folder, direct_spawn={direct_spawn}: {stdout} {stderr}"
+        );
+        assert!(
+            stdout.lines().any(|line| line.trim() == "TEMP-WRITE-OK"),
+            "write to the session temp folder failed, direct_spawn={direct_spawn}: {stdout} {stderr}"
+        );
+        if !direct_spawn {
+            // Core's session folder lives until this process ends it below.
+            assert_eq!(
+                std::fs::read_to_string(child_temp.join("allowed.txt"))?.trim(),
+                "TEMP-WRITE-OK"
+            );
+        }
         assert!(
             stdout.contains("READ-CONTROL"),
             "direct_spawn={direct_spawn}: {stdout} {stderr}"
@@ -597,11 +635,8 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
             !stdout.contains("SECRET-CONTROL"),
             "direct_spawn={direct_spawn}: {stdout} {stderr}"
         );
-        assert_eq!(
-            std::fs::read_to_string(temp.join("allowed.txt"))?.trim(),
-            "allowed"
-        );
         for path in [
+            temp.join("wrong.txt"),
             other.join("wrong.txt"),
             cwd.join("cwd.txt").into_path_buf(),
             read_only.join("wrong.txt"),
@@ -613,8 +648,15 @@ async fn windows_elevated_temp_only_core_and_direct_spawn_enforce_carveouts() ->
                 path.display()
             );
         }
-        std::fs::remove_file(temp.join("allowed.txt"))?;
+        // The ignored `Temp` spelling got no session folder either.
+        assert_eq!(
+            std::fs::read_dir(&other)?.count(),
+            0,
+            "direct_spawn={direct_spawn}: something was made in {}",
+            other.display()
+        );
     }
+    tokio::task::spawn_blocking(codex_windows_sandbox::end_session_temp_folders).await?;
     Ok(())
 }
 
@@ -1193,7 +1235,17 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
 
     // Re-enter real setup after corrupting this test's bookkeeping, then exercise
     // recovery through the same agent tool path rather than relying on a cached launch.
-    let state_path = codex_home.path().join(".sandbox/deny_read_acl_state.json");
+    // Corbanu keeps this bookkeeping where the sandbox's users cannot write it
+    // (#304, `deny_read_state.rs`); upstream's `.sandbox/deny_read_acl_state.json`
+    // is not read (#2729).
+    let state_path = codex_home
+        .path()
+        .join(".sandbox-secrets/deny_read_acl_rules.json");
+    assert!(
+        state_path.is_file(),
+        "the first launch should record its deny-read bookkeeping at {}",
+        state_path.display()
+    );
     std::fs::write(&state_path, b"malformed bookkeeping")?;
     let permission_profile = harness
         .test()
@@ -1209,14 +1261,14 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
         codex_home: codex_home.path().to_path_buf(),
     })
     .await?;
+    // Setup replaced the malformed bookkeeping. #304: a deny entry already on
+    // a file is not claimed again once its record is lost (it may be another
+    // session's), so it is never removed and the rebuilt record may be empty;
+    // the denies themselves must hold, which the command below checks.
     let rebuilt: serde_json::Value = serde_json::from_slice(&std::fs::read(&state_path)?)?;
-    let principals = rebuilt["principals"]
-        .as_object()
-        .expect("rebuilt principals");
     assert!(
-        principals
-            .values()
-            .any(|paths| paths.as_array().is_some_and(|paths| !paths.is_empty()))
+        rebuilt["principals"].is_object(),
+        "rebuilt deny-read bookkeeping: {rebuilt}"
     );
 
     std::fs::write(

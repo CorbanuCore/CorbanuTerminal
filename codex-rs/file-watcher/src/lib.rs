@@ -3,6 +3,8 @@
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +19,7 @@ use notify::EventKind;
 use notify::RecommendedWatcher;
 use notify::RecursiveMode;
 use notify::Watcher;
+use notify::event::ModifyKind;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::Notify;
@@ -76,6 +79,11 @@ struct SubscriberWatchState {
     /// Whether the requested path existed the last time an ancestor event was
     /// handled. This preserves delete notifications for fallback watches.
     last_exists: bool,
+    /// Identity (device and inode, or volume and file index) of the requested
+    /// path the last time it existed, as seen at registration or by an
+    /// ancestor event. Corbanu (#2728): an ancestor content change is ignored
+    /// only while this is unchanged, so a replaced path is still reported.
+    identity: Option<u64>,
     /// Whether this watch started from a missing path. Such watches normalize
     /// ancestor create/delete events back to `requested`.
     fallback: bool,
@@ -465,6 +473,7 @@ impl FileWatcher {
                             actual: registration.actual.clone(),
                             count: 1,
                             last_exists: registration.key.matched.path.exists(),
+                            identity: path_identity(&registration.key.matched.path),
                             fallback: registration.fallback,
                         });
                         registration.actual.clone()
@@ -690,7 +699,13 @@ impl FileWatcher {
                                 continue;
                             }
                             let inner = inner.as_ref().and_then(std::sync::Weak::upgrade);
-                            Self::notify_subscribers(&state, inner.as_ref(), &event.paths).await;
+                            Self::notify_subscribers(
+                                &state,
+                                inner.as_ref(),
+                                &event.paths,
+                                can_change_descendants(&event),
+                            )
+                            .await;
                         }
                         Some(Err(err)) => {
                             warn!("file watcher error: {err}");
@@ -708,6 +723,7 @@ impl FileWatcher {
         state: &RwLock<WatchState>,
         inner: Option<&Arc<Mutex<FileWatcherInner>>>,
         event_paths: &[PathBuf],
+        descendants_may_change: bool,
     ) {
         let subscribers_to_notify: Vec<(WatchSender, Vec<PathBuf>)> = {
             let mut state = state
@@ -725,6 +741,7 @@ impl FileWatcher {
                             subscriber_watch,
                             subscriber_watch_state,
                             event_path,
+                            descendants_may_change,
                         ) {
                             changed_paths.push(path);
                         }
@@ -767,7 +784,13 @@ impl FileWatcher {
 
     #[cfg(test)]
     pub(crate) async fn send_paths_for_test(&self, paths: Vec<PathBuf>) {
-        Self::notify_subscribers(&self.state, self.inner.as_ref(), &paths).await;
+        Self::notify_subscribers(
+            &self.state,
+            self.inner.as_ref(),
+            &paths,
+            /*descendants_may_change*/ true,
+        )
+        .await;
     }
 
     #[cfg(test)]
@@ -789,6 +812,49 @@ impl FileWatcher {
             .get(path)
             .map(|counts| (counts.non_recursive, counts.recursive))
     }
+}
+
+/// Whether `event` can change what lies below its paths. Creates, removes and
+/// renames (and non-`Modify` kinds) can; every other `Modify` kind, including
+/// notify's unspecified `Any` and `Other`, is treated as a change to the
+/// directory's own data or metadata. Windows reports `Modify(Any)` for a
+/// directory whenever an entry inside it changes, for example when
+/// `config.toml` is written next to a watched `skills` root (#2728).
+fn can_change_descendants(event: &Event) -> bool {
+    !matches!(
+        event.kind,
+        EventKind::Modify(
+            ModifyKind::Any | ModifyKind::Data(_) | ModifyKind::Metadata(_) | ModifyKind::Other
+        )
+    )
+}
+
+/// Identity of the file or directory at `path` (device and inode), read
+/// from its metadata without opening it, so a FIFO cannot block.
+#[cfg(unix)]
+fn path_identity(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = std::fs::metadata(path).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (metadata.dev(), metadata.ino()).hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+/// Identity of the file or directory at `path` (volume serial number and
+/// file index), if it can be opened. The handle is opened with backup
+/// semantics and full sharing and closed at once.
+#[cfg(windows)]
+fn path_identity(path: &Path) -> Option<u64> {
+    let handle = same_file::Handle::from_path(path).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    handle.hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn path_identity(_path: &Path) -> Option<u64> {
+    None
 }
 
 fn is_mutating_event(event: &Event) -> bool {
@@ -864,12 +930,14 @@ fn changed_path_for_event(
     subscriber_watch: &SubscriberWatchKey,
     subscriber_watch_state: &mut SubscriberWatchState,
     event_path: &Path,
+    descendants_may_change: bool,
 ) -> Option<PathBuf> {
     if let Some(path) = changed_path_for_matched_path(
         subscriber_watch,
         subscriber_watch_state,
         &subscriber_watch.matched,
         event_path,
+        descendants_may_change,
     ) {
         return Some(path);
     }
@@ -881,6 +949,7 @@ fn changed_path_for_event(
         subscriber_watch_state,
         &subscriber_watch.requested,
         event_path,
+        descendants_may_change,
     )
 }
 
@@ -891,14 +960,34 @@ fn changed_path_for_matched_path(
     subscriber_watch_state: &mut SubscriberWatchState,
     matched: &WatchPath,
     event_path: &Path,
+    descendants_may_change: bool,
 ) -> Option<PathBuf> {
     let requested = &subscriber_watch.requested;
     if event_path == matched.path {
         subscriber_watch_state.last_exists = matched.path.exists();
+        subscriber_watch_state.identity = path_identity(&matched.path);
         return Some(requested.path.clone());
     }
     if matched.path.starts_with(event_path) {
         let now_exists = matched.path.exists();
+        // Corbanu (#2728): a data or metadata change to an ancestor directory
+        // cannot affect a watched path that existed before and is still the
+        // same file or directory; changes below it arrive as events for the
+        // path itself. A replaced path (Windows drops the old path's watch
+        // without an event) has a new identity and is still reported.
+        let identity = if now_exists {
+            path_identity(&matched.path)
+        } else {
+            None
+        };
+        let unchanged = now_exists
+            && subscriber_watch_state.last_exists
+            && identity.is_some()
+            && identity == subscriber_watch_state.identity;
+        subscriber_watch_state.identity = identity;
+        if !descendants_may_change && unchanged {
+            return None;
+        }
         if subscriber_watch_state.fallback {
             let should_notify = now_exists || subscriber_watch_state.last_exists;
             subscriber_watch_state.last_exists = now_exists;

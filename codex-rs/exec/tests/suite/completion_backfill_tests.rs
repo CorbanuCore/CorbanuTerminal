@@ -11,9 +11,106 @@ const PARENT_PROMPT: &str = "spawn a child and wait for it";
 const CHILD_PROMPT: &str = "child: finish first";
 const SPAWN_CALL_ID: &str = "spawn-call";
 const WAIT_CALL_ID: &str = "wait-call";
+const LONG_PARENT_PROMPT: &str = "Produce a long turn";
+const FAILED_FORK_PROMPT: &str = "fail this forked turn";
 
-fn body_contains(request: &wiremock::Request, text: &str) -> bool {
-    std::str::from_utf8(&request.body).is_ok_and(|body| body.contains(text))
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StreamedUsageRoute {
+    ParentTurn,
+    ChildTurn,
+    ParentWait,
+    ParentCompletion,
+    Unmatched,
+}
+
+impl StreamedUsageRoute {
+    fn for_request(request: &wiremock::Request) -> Self {
+        serde_json::from_slice(&request.body).map_or(Self::Unmatched, |body| Self::for_body(&body))
+    }
+
+    fn for_body(body: &serde_json::Value) -> Self {
+        let items = body["input"].as_array();
+        let items = items.map(Vec::as_slice).unwrap_or_default();
+        let call = |id: &str| items.iter().any(|item| item["call_id"] == id);
+        let msg = |text: &str| items.iter().any(|item| message_contains(item, text));
+        if call(WAIT_CALL_ID) {
+            Self::ParentCompletion
+        } else if msg(CHILD_PROMPT) {
+            Self::ChildTurn
+        } else if call(SPAWN_CALL_ID) {
+            Self::ParentWait
+        } else if msg(PARENT_PROMPT) {
+            Self::ParentTurn
+        } else {
+            Self::Unmatched
+        }
+    }
+}
+
+fn message_contains(item: &serde_json::Value, needle: &str) -> bool {
+    item["type"] == "message" && item["content"].to_string().contains(needle)
+}
+
+struct StreamedUsageResponder {
+    parent: String,
+    child: String,
+    wait: String,
+    done: String,
+}
+
+impl wiremock::Respond for StreamedUsageResponder {
+    fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+        responses::validate_request_body_invariants(request);
+        match StreamedUsageRoute::for_request(request) {
+            StreamedUsageRoute::ParentTurn => responses::sse_response(self.parent.clone()),
+            StreamedUsageRoute::ChildTurn => responses::sse_response(self.child.clone()),
+            StreamedUsageRoute::ParentWait => responses::sse_response(self.wait.clone()),
+            StreamedUsageRoute::ParentCompletion => responses::sse_response(self.done.clone()),
+            StreamedUsageRoute::Unmatched => wiremock::ResponseTemplate::new(404),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FailedForkRoute {
+    ParentTurn,
+    FailedFork,
+    Unmatched,
+}
+
+impl FailedForkRoute {
+    fn for_request(request: &wiremock::Request) -> Self {
+        serde_json::from_slice(&request.body).map_or(Self::Unmatched, |body| Self::for_body(&body))
+    }
+
+    fn for_body(body: &serde_json::Value) -> Self {
+        let items = body["input"].as_array();
+        let items = items.map(Vec::as_slice).unwrap_or_default();
+        let msg = |text: &str| items.iter().any(|item| message_contains(item, text));
+        if msg(FAILED_FORK_PROMPT) {
+            Self::FailedFork
+        } else if msg(LONG_PARENT_PROMPT) {
+            Self::ParentTurn
+        } else {
+            Self::Unmatched
+        }
+    }
+}
+
+struct FailedForkResponder {
+    parent: String,
+    error: wiremock::ResponseTemplate,
+}
+
+impl wiremock::Respond for FailedForkResponder {
+    fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+        responses::validate_request_body_invariants(request);
+        match FailedForkRoute::for_request(request) {
+            FailedForkRoute::ParentTurn => responses::sse_response(self.parent.clone()),
+            FailedForkRoute::FailedFork => self.error.clone(),
+            FailedForkRoute::Unmatched => wiremock::ResponseTemplate::new(404),
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -31,6 +128,16 @@ async fn issue290_missing_child_usage_makes_the_aggregate_unknown() -> anyhow::R
     streamed_usage("none", /*child_tokens*/ None).await
 }
 
+#[test]
+fn streamed_usage_route_prefers_the_child_message_over_inherited_tool_calls() {
+    let body = json!({"input": [
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": CHILD_PROMPT}]},
+        {"type": "function_call", "call_id": SPAWN_CALL_ID, "name": "spawn_agent"},
+    ]});
+    let route = StreamedUsageRoute::for_body(&body);
+    assert_eq!(route, StreamedUsageRoute::ChildTurn);
+}
+
 async fn streamed_usage(fork_turns: &str, child_tokens: Option<i64>) -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -41,66 +148,49 @@ async fn streamed_usage(fork_turns: &str, child_tokens: Option<i64>) -> anyhow::
         "fork_turns": fork_turns,
     })
     .to_string();
-    let _parent_turn = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| body_contains(request, PARENT_PROMPT),
-        responses::sse(vec![
-            responses::ev_response_created("resp-parent-1"),
-            responses::ev_function_call_with_namespace(
-                SPAWN_CALL_ID,
-                "collaboration",
-                "spawn_agent",
-                &spawn_args,
-            ),
-            responses::ev_completed_with_tokens("resp-parent-1", /*total_tokens*/ 100),
-        ]),
-    )
-    .await;
-    let _child_turn = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| {
-            body_contains(request, CHILD_PROMPT) && !body_contains(request, SPAWN_CALL_ID)
+    let parent = responses::sse(vec![
+        responses::ev_response_created("resp-parent-1"),
+        responses::ev_function_call_with_namespace(
+            SPAWN_CALL_ID,
+            "collaboration",
+            "spawn_agent",
+            &spawn_args,
+        ),
+        responses::ev_completed_with_tokens("resp-parent-1", /*total_tokens*/ 100),
+    ]);
+    let child = responses::sse(vec![
+        responses::ev_response_created("resp-child"),
+        responses::ev_assistant_message("msg-child", "child done"),
+        match child_tokens {
+            Some(tokens) => responses::ev_completed_with_tokens("resp-child", tokens),
+            None => json!({"type": "response.completed", "response": {"id": "resp-child"}}),
         },
-        responses::sse(vec![
-            responses::ev_response_created("resp-child"),
-            responses::ev_assistant_message("msg-child", "child done"),
-            match child_tokens {
-                Some(tokens) => responses::ev_completed_with_tokens("resp-child", tokens),
-                None => json!({
-                    "type": "response.completed",
-                    "response": {"id": "resp-child"},
-                }),
-            },
-        ]),
-    )
-    .await;
-    let _parent_wait = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| {
-            body_contains(request, SPAWN_CALL_ID) && !body_contains(request, WAIT_CALL_ID)
-        },
-        responses::sse(vec![
-            responses::ev_response_created("resp-parent-2"),
-            responses::ev_function_call_with_namespace(
-                WAIT_CALL_ID,
-                "collaboration",
-                "wait_agent",
-                "{}",
-            ),
-            responses::ev_completed_with_tokens("resp-parent-2", /*total_tokens*/ 300),
-        ]),
-    )
-    .await;
-    let _parent_completion = responses::mount_sse_once_match(
-        &server,
-        |request: &wiremock::Request| body_contains(request, WAIT_CALL_ID),
-        responses::sse(vec![
-            responses::ev_response_created("resp-parent-3"),
-            responses::ev_assistant_message("msg-parent", "parent done"),
-            responses::ev_completed_with_tokens("resp-parent-3", /*total_tokens*/ 400),
-        ]),
-    )
-    .await;
+    ]);
+    let wait = responses::sse(vec![
+        responses::ev_response_created("resp-parent-2"),
+        responses::ev_function_call_with_namespace(
+            WAIT_CALL_ID,
+            "collaboration",
+            "wait_agent",
+            "{}",
+        ),
+        responses::ev_completed_with_tokens("resp-parent-2", /*total_tokens*/ 300),
+    ]);
+    let done = responses::sse(vec![
+        responses::ev_response_created("resp-parent-3"),
+        responses::ev_assistant_message("msg-parent", "parent done"),
+        responses::ev_completed_with_tokens("resp-parent-3", /*total_tokens*/ 400),
+    ]);
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path_regex(".*/responses$"))
+        .respond_with(StreamedUsageResponder {
+            parent,
+            child,
+            wait,
+            done,
+        })
+        .mount(&server)
+        .await;
 
     let test = test_codex_exec();
     let mock_provider = format!(
@@ -126,8 +216,46 @@ async fn streamed_usage(fork_turns: &str, child_tokens: Option<i64>) -> anyhow::
         ])
         .arg(PARENT_PROMPT)
         .output()?;
-    assert!(output.status.success(), "exec run failed: {output:?}");
-
+    let requests = server.received_requests().await.unwrap_or_default();
+    let routed_requests = requests
+        .iter()
+        .filter(|request| request.method == "POST" && request.url.path().ends_with("/responses"))
+        .map(|request| (StreamedUsageRoute::for_request(request), request))
+        .collect::<Vec<_>>();
+    let unmatched_body_report = routed_requests
+        .iter()
+        .filter(|(route, _)| *route == StreamedUsageRoute::Unmatched)
+        .map(|(_, request)| format!("{}\n", String::from_utf8_lossy(&request.body)))
+        .collect::<String>();
+    assert!(
+        output.status.success(),
+        "exec run failed: {output:?}\nunmatched request bodies:\n{unmatched_body_report}"
+    );
+    assert!(
+        routed_requests
+            .iter()
+            .all(|(_, request)| request.headers.get("content-encoding").is_none()),
+        "this fixture routes on raw request bodies, so compression must stay disabled"
+    );
+    assert!(
+        routed_requests
+            .iter()
+            .all(|(route, _)| *route != StreamedUsageRoute::Unmatched),
+        "every responses request must match a route: {unmatched_body_report}"
+    );
+    for route in [
+        StreamedUsageRoute::ParentTurn,
+        StreamedUsageRoute::ChildTurn,
+        StreamedUsageRoute::ParentWait,
+        StreamedUsageRoute::ParentCompletion,
+    ] {
+        assert!(
+            routed_requests
+                .iter()
+                .any(|(candidate, _)| *candidate == route),
+            "expected the {route:?} route to be hit"
+        );
+    }
     let stdout = String::from_utf8(output.stdout)?;
     if fork_turns == "all" {
         assert!(
@@ -227,12 +355,22 @@ async fn failed_fork_recovers_only_its_own_turn() -> anyhow::Result<()> {
     }
     events.push(responses::ev_assistant_message("answer", "parent done"));
     events.push(responses::ev_completed("parent"));
-    let _parent_response = responses::mount_sse_once(&server, responses::sse(events)).await;
+    let fork_error = wiremock::ResponseTemplate::new(400).set_body_json(json!({
+        "error": {"code": "model_not_found", "message": "Unknown model", "type": "invalid_request_error"}
+    }));
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path_regex(".*/responses$"))
+        .respond_with(FailedForkResponder {
+            parent: responses::sse(events),
+            error: fork_error,
+        })
+        .mount(&server)
+        .await;
     let parent = test
         .cmd_with_server(&server)
         .args(["--skip-git-repo-check", "--json", "--output-last-message"])
         .arg(&last_message)
-        .arg("Produce a long turn")
+        .arg(LONG_PARENT_PROMPT)
         .assert()
         .success();
     assert_eq!(std::fs::read_to_string(last_message)?, "parent done");
@@ -240,16 +378,43 @@ async fn failed_fork_recovers_only_its_own_turn() -> anyhow::Result<()> {
     let started: serde_json::Value = serde_json::from_str(stdout.lines().next().unwrap())?;
     let parent_id = started["thread_id"].as_str().expect("parent thread ID");
 
-    let error = wiremock::ResponseTemplate::new(400).set_body_json(json!({
-        "error": {"code": "model_not_found", "message": "Unknown model", "type": "invalid_request_error"}
-    }));
-    let _fork_response = responses::mount_response_once(&server, error).await;
     let fork = test
         .cmd_with_server(&server)
         .env("RUST_LOG", TRACE_REQUESTS)
-        .args(["--skip-git-repo-check", "--json", "fork", parent_id, "Fail"])
+        .args([
+            "--skip-git-repo-check",
+            "--json",
+            "fork",
+            parent_id,
+            FAILED_FORK_PROMPT,
+        ])
         .assert()
         .code(1);
+    let requests = server.received_requests().await.unwrap_or_default();
+    let routed_requests = requests
+        .iter()
+        .filter(|request| request.method == "POST" && request.url.path().ends_with("/responses"))
+        .map(|request| (FailedForkRoute::for_request(request), request))
+        .collect::<Vec<_>>();
+    let unmatched_body_report = routed_requests
+        .iter()
+        .filter(|(route, _)| *route == FailedForkRoute::Unmatched)
+        .map(|(_, request)| format!("{}\n", String::from_utf8_lossy(&request.body)))
+        .collect::<String>();
+    assert!(
+        routed_requests
+            .iter()
+            .all(|(route, _)| *route != FailedForkRoute::Unmatched),
+        "every responses request must match a route: {unmatched_body_report}"
+    );
+    for route in [FailedForkRoute::ParentTurn, FailedForkRoute::FailedFork] {
+        assert!(
+            routed_requests
+                .iter()
+                .any(|(candidate, _)| *candidate == route),
+            "expected the {route:?} route to be hit"
+        );
+    }
     let stdout = std::str::from_utf8(&fork.get_output().stdout)?;
     let terminal: serde_json::Value = serde_json::from_str(stdout.lines().last().unwrap())?;
     assert_eq!(

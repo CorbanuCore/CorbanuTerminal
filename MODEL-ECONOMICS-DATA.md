@@ -43,18 +43,25 @@ Batch are not priced: those attempts show "no price", never the Standard rate.
 | gpt-5.3-codex |  1.75 |  0.175 |            - | 14.00 | no  |
 | gpt-5.2       |  1.75 |  0.175 |            - | 14.00 | no  |
 
-GPT-5.6 Sol's rates are a promotion OpenAI offers "at least through November
-21, 2026". The model page calls them a 20% input and 33% output reduction
-(GPT-5.5 is 5.00 / 30.00) but states no Sol price after the promotion, so the
-catalogue states no Sol API price after 2026-11-21T23:59:59.999Z until the page
-is read again (the earliest reading of "through November 21"). Re-read
-2026-10-14 (#368): unchanged. GPT-6.1 Sol was added from the same page and
+GPT-5.6 Sol's rates are a promotion OpenAI says "is available until November
+30, 2026" (the model page and the pricing page, re-read 2026-11-19, #368; on
+2026-10-14 and 2026-10-28 they said "at least through November 21, 2026").
+The model page calls them a 20% input and 33% output reduction (GPT-5.5 is
+5.00 / 30.00) but states no Sol price after the promotion, so the catalogue
+states no Sol API price after 2026-11-29T23:59:59.999Z until the page is read
+again (the earliest reading of "until November 30", taken as UTC days). GPT-6.1
+Sol was added from the same page and
 developers.openai.com/api/docs/models/gpt-6.1-sol, read 2026-10-14; it is
 manual selection only, like GPT-6 Astra and Luna.
 `python3 scripts/check_price_calendars.py` warns 30 days before a stated price
 end, and fails 30 days before DeepSeek's off-peak holiday list runs out (the
 list covers through 31 December of its last year; dates come from the State
-Council's yearly holiday notice, which DeepSeek's page refers to).
+Council's yearly holiday notice, which DeepSeek's page refers to). The 2027
+dates are the weekday holidays in 国办发明电〔2026〕10号 (2026-11-05,
+www.gov.cn/zhengce/zhengceku/202611/content_7085102.htm), read 2026-11-19.
+Its make-up working days (2027-01-31, 02-14, 05-08, 09-26, 10-09) are all
+weekend days and stay off-peak, as 2026-09-20 and 2026-10-10 did: DeepSeek's
+page counts weekends as off-peak and says nothing about make-up days.
 
 Billing class:
 

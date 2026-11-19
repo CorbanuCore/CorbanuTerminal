@@ -9,6 +9,7 @@
 
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_core::config::Config;
+use codex_core::config::ConfigOverrides;
 use codex_core::config::edit::ConfigEdit;
 use codex_core::config::edit::ConfigEditsBuilder;
 use codex_login::AuthKeyringBackendKind;
@@ -189,9 +190,13 @@ async fn sign_in_to_config_server_and_reload_config(
     let bootstrap_auth = network.bind_bootstrap_auth(config.auth_config());
     let auth_route_config = bootstrap_auth.auth_route_config.clone();
     codex_cloud_config::ensure_config_server_login(bootstrap_auth, requirements).await?;
-    *config = crate::cloud_config::load_config(cli_config_overrides, Default::default())
-        .await
-        .map_err(|error| std::io::Error::other(format!("{error:#}")))?;
+    *config = crate::cloud_config::load_config_with_harness_overrides(
+        cli_config_overrides,
+        Default::default(),
+        credential_command_overrides(),
+    )
+    .await
+    .map_err(|error| std::io::Error::other(format!("{error:#}")))?;
     network.activate(config);
     config.application_auth_route_config = Some(auth_route_config);
     Ok(())
@@ -674,6 +679,30 @@ async fn load_managed_login_config_or_exit(cli_config_overrides: CliConfigOverri
     config
 }
 
+/// D737: credential-only commands (`login`, `logout`, `login status`, with or
+/// without `--account`) load configuration without the strict model/provider
+/// pair check, so credentials can be added, inspected or removed while the
+/// configured model is outside the selected provider's catalog. An
+/// incompatible pair falls back to the provider's default model for this
+/// command only; the configuration file is not changed. Every other command
+/// keeps the fail-closed check.
+fn credential_command_overrides() -> ConfigOverrides {
+    ConfigOverrides {
+        allow_provider_model_fallback: true,
+        ..Default::default()
+    }
+}
+
+pub(crate) async fn load_credential_command_config(
+    cli_overrides: Vec<(String, toml::Value)>,
+) -> std::io::Result<Config> {
+    Config::load_with_cli_overrides_and_harness_overrides(
+        cli_overrides,
+        credential_command_overrides(),
+    )
+    .await
+}
+
 async fn load_config_or_exit(cli_config_overrides: CliConfigOverrides) -> Config {
     let cli_overrides = match cli_config_overrides.parse_overrides() {
         Ok(v) => v,
@@ -683,7 +712,7 @@ async fn load_config_or_exit(cli_config_overrides: CliConfigOverrides) -> Config
         }
     };
 
-    match Config::load_with_cli_overrides(cli_overrides).await {
+    match load_credential_command_config(cli_overrides).await {
         Ok(config) => match config.auth_config().validate() {
             Ok(()) => config,
             Err(e) => {

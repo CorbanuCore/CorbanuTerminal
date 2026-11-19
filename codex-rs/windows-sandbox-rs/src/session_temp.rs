@@ -187,10 +187,14 @@ pub(crate) fn is_intact(dir: &Path, hold: &Hold) -> bool {
     same && now.metadata().is_ok_and(|meta| meta.is_dir()) && is_link(&now).is_ok_and(|link| !link)
 }
 
+/// `key`'s value under the spelling the child's environment block keeps
+/// (`process::ordered_env_entries`: the byte-wise first, so `TEMP` before
+/// `Temp`), never whichever spelling `HashMap` iteration meets first.
 fn env_value(env_map: &HashMap<String, String>, key: &str) -> Option<String> {
     env_map
         .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(key))
+        .filter(|(name, _)| name.eq_ignore_ascii_case(key))
+        .min_by(|a, b| a.0.cmp(b.0))
         .map(|(_, value)| value.clone())
 }
 
