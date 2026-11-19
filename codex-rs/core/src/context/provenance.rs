@@ -3,10 +3,10 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use super::ContextualUserFragment;
-use crate::security::ingress::AdmittedSource;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ContentItemKind;
 use codex_protocol::models::input_text;
+use crate::security::ingress::AdmittedSource;
 
 #[derive(Clone)]
 pub(crate) struct ProvenanceContext {

@@ -353,12 +353,12 @@ impl StepContext {
     }
 }
 
-#[path = "tests/d523_hook_origin_tests.rs"]
-mod d523_hook_origin_tests;
 #[path = "tests/d618_escalation_policy_tests.rs"]
 mod d618_escalation_policy_tests;
 #[path = "dynamic_tools_tests.rs"]
 mod dynamic_tools_tests;
+#[path = "tests/d523_hook_origin_tests.rs"]
+mod d523_hook_origin_tests;
 #[path = "tests/failed_deferred_input_carry_tests.rs"]
 mod failed_deferred_input_carry_tests;
 mod guardian_tests;

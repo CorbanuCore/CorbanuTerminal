@@ -292,48 +292,6 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
     }
 }
 
-#[cfg(windows)]
-#[test]
-fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    std::fs::write(dir.path().join("zz-tool.cmd"), "@echo %*").expect("write");
-    std::fs::write(dir.path().join("zz-exe.exe"), "").expect("write");
-    let other = tempfile::tempdir().expect("tempdir");
-    std::fs::write(other.path().join("zz-exe.cmd"), "@echo %*").expect("write");
-    let path = |dirs: &[&Path]| Some(std::env::join_paths(dirs).expect("PATH"));
-    let found =
-        |program: &str, dirs: &[&Path]| wrappers::windows_batch_file_in(program, path(dirs), None);
-    // The first match on `PATH` counts.
-    assert!(found("zz-tool", &[dir.path()]));
-    assert!(!found("zz-exe", &[dir.path(), other.path()]));
-    assert!(found("zz-exe", &[other.path(), dir.path()]));
-    // Not found: it cannot run unless written into a `PATH` folder first.
-    assert!(!found("zz-missing", &[dir.path()]));
-    // An empty entry names no folder.
-    assert!(!wrappers::windows_batch_file_in(
-        "zz-exe",
-        Some(std::ffi::OsString::from(format!(
-            ";{};",
-            dir.path().display()
-        ))),
-        None
-    ));
-    // Rooted at the command's drive (`/usr/bin`, `\tools`): unknown.
-    for path in ["/bin:/usr/bin:/usr/local/bin", r"\tools"] {
-        assert!(
-            wrappers::windows_batch_file_in("printf", Some(path.into()), None),
-            "{path}"
-        );
-    }
-    // A relative or network folder before a match: unknown.
-    assert!(found("zz-exe", &[Path::new("bin"), dir.path()]));
-    assert!(found("zz-exe", &[Path::new(r"\\server\share"), dir.path()]));
-    // Named or given as a path.
-    assert!(!found("tool.exe", &[]));
-    assert!(found(r".\zz-exe", &[dir.path()]));
-    assert!(found(r"C:\p\x", &[]));
-}
-
 #[tokio::test]
 async fn words_of_other_shells_are_not_looked_up_as_batch_files() {
     // bash runs its own programs (not through cmd.exe), and a command line
@@ -348,6 +306,73 @@ async fn words_of_other_shells_are_not_looked_up_as_batch_files() {
     ] {
         let result = decide(
             rules,
+            &command,
+            AskForApproval::OnRequest,
+            PermissionProfile::workspace_write(),
+        )
+        .await;
+        assert_eq!(shape(&result).0, "skip", "{command:?}: {result:?}");
+    }
+}
+
+/// Sync (#2671): a Windows executor's PowerShell is read on any host, so these
+/// run everywhere: the PowerShell commands that may run a batch file cmd.exe
+/// re-reads ask, also nested in bash, and are refused with approvals off.
+#[tokio::test]
+async fn windows_executor_powershell_batch_files_ask_on_any_host() {
+    let policy = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+    for script in [
+        "pnpm '&git push'",
+        r".\build '&git push'",
+        "env pnpm '&git push'",
+        "Set-Item env:PATH C:\\repo; gradlew '&git push'",
+        "tool.cmd 'a & git push'",
+        "cmd /c 'git push'",
+    ] {
+        for (approval_policy, refused) in [
+            (AskForApproval::OnRequest, false),
+            (AskForApproval::Never, true),
+        ] {
+            let command = argv(&["pwsh", "-Command", script]);
+            let shell = crate::shell::Shell {
+                shell_type: crate::shell::ShellType::PowerShell,
+                shell_path: std::path::PathBuf::from("pwsh"),
+            };
+            let manager = ExecPolicyManager::new(policy_from_src(Some(policy)));
+            let result = manager
+                .create_exec_approval_requirement_for_shell(
+                    ExecApprovalRequest {
+                        command: &command,
+                        approval_policy,
+                        permission_profile: PermissionProfile::Disabled,
+                        environment_policy: None,
+                        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: None,
+                        allow_prefix_rules: AllowPrefixRules::Honor,
+                    },
+                    &shell,
+                    DangerousCommandPlatform::Windows,
+                    /*live_aggressive*/ false,
+                )
+                .await;
+            if refused {
+                assert!(
+                    matches!(result, ExecApprovalRequirement::Forbidden { .. }),
+                    "{script}: {result:?}"
+                );
+            } else {
+                assert!(asked(&result), "{script}: {result:?}");
+            }
+        }
+    }
+    // A program named `.exe`, and a bash script's words, stay argv.
+    for command in [
+        argv(&["pwsh", "-Command", "git.exe log '--format=%H'"]),
+        argv(&["bash", "-lc", "printf '%s' x | cat"]),
+    ] {
+        let result = decide(
+            r#"prefix_rule(pattern=["secret-tool"], decision="forbidden")"#,
             &command,
             AskForApproval::OnRequest,
             PermissionProfile::workspace_write(),

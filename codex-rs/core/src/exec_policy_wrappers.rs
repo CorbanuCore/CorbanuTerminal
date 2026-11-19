@@ -793,66 +793,15 @@ fn may_be_batch_file(
             && windows_batch_file(program))
 }
 
-/// See [`may_be_batch_file`]. A bare name is looked for only in absolute
-/// local `PATH` folders, never in a folder the command names, and only the
-/// first match counts, as PowerShell takes it; a relative or network `PATH`
-/// folder before a match leaves it unknown (yes). A bare name found nowhere
-/// does not run unless a command first writes it into a `PATH` folder or
-/// changes `PATH` (a PowerShell command on the `env:` drive asks under
-/// strict rules, see `powershell_runs_code`). This is Corbanu's `PATH`: a
-/// user's `shell_environment_policy` can give the shell another one. A name
-/// named `.exe` or `.com` is not looked up: PowerShell may still find
-/// `x.exe.cmd` when `x.exe` is missing, which a command creating it could
-/// as well hold its commands in.
+/// See [`may_be_batch_file`]. Sync: the executor may be another host than
+/// this one (#2671; a remote environment reports only its platform), whose
+/// `PATH` this host cannot read, so any program not named `.exe` or `.com`
+/// may be a batch file there (`pnpm` as `pnpm.cmd`, `.\build` in the
+/// command's folder or created by the script first). Main looks a bare name
+/// up on this host's `PATH`.
 fn windows_batch_file(program: &str) -> bool {
-    // A Windows executor seen from another host (#2671): its `PATH` is not
-    // this one, so any name not named `.exe` or `.com` may be a batch file.
-    if !cfg!(windows) {
-        let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
-        return !(lower.ends_with(".exe") || lower.ends_with(".com"));
-    }
-    windows_batch_file_in(
-        program,
-        std::env::var_os("PATH"),
-        std::env::var("PATHEXT").ok(),
-    )
-}
-
-/// [`windows_batch_file`] with `PATH` and `PATHEXT` given.
-pub(super) fn windows_batch_file_in(
-    program: &str,
-    path: Option<std::ffi::OsString>,
-    extensions: Option<String>,
-) -> bool {
     let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
-    if lower.ends_with(".exe") || lower.ends_with(".com") {
-        return false;
-    }
-    if program.contains(['/', '\\', ':', '.']) {
-        return true;
-    }
-    let Some(path) = path else {
-        return false;
-    };
-    let extensions = extensions.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
-    // An empty entry (`a;;b`, a trailing `;`) names no folder. One rooted
-    // at the current drive (`\tools`, `/usr/bin`) depends on the command's
-    // drive: unknown.
-    for dir in std::env::split_paths(&path).filter(|dir| !dir.as_os_str().is_empty()) {
-        if !dir.is_absolute() || dir.to_string_lossy().starts_with(['\\', '/']) {
-            return true;
-        }
-        for extension in extensions
-            .split(';')
-            .filter(|extension| !extension.is_empty())
-        {
-            if dir.join(format!("{program}{extension}")).is_file() {
-                return extension.eq_ignore_ascii_case(".cmd")
-                    || extension.eq_ignore_ascii_case(".bat");
-            }
-        }
-    }
-    false
+    !(lower.ends_with(".exe") || lower.ends_with(".com"))
 }
 
 /// #2543: the prompt and forbidden rule matches of a script command with

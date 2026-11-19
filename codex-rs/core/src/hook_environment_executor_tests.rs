@@ -54,18 +54,12 @@ fn pf_27_s02_armed_hooks_never_use_a_login_shell() {
                 "true".to_string(),
             ];
             assert_eq!(
-                (
-                    argv(/*allow_login_shell*/ true),
-                    argv(/*allow_login_shell*/ false)
-                ),
+                (argv(/*allow_login_shell*/ true), argv(/*allow_login_shell*/ false)),
                 (login, plain.clone())
             );
             codex_protocol::secretless_launch::arm();
             assert_eq!(
-                (
-                    argv(/*allow_login_shell*/ true),
-                    argv(/*allow_login_shell*/ false)
-                ),
+                (argv(/*allow_login_shell*/ true), argv(/*allow_login_shell*/ false)),
                 (plain.clone(), plain)
             );
         },
