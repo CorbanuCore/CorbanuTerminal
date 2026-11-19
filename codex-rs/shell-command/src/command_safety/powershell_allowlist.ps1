@@ -63,13 +63,13 @@ Add-D729 'get-itemproperty', 'get-itempropertyvalue', 'resolve-path', 'convert-p
 # Text and object shaping (script blocks are never literal).
 Add-D729 'select-string', 'measure-object', 'select-object', 'sort-object', 'group-object',
     'where-object', 'get-unique', 'compare-object', 'format-table', 'format-list', 'format-wide',
-    'format-custom', 'format-hex', 'out-string', 'out-null', 'out-host', 'out-default', 'select-xml',
+    'format-custom', 'format-hex', 'out-string', 'out-null', 'out-host', 'out-default',
     'write-output', 'write-host', 'write-information', 'write-warning', 'write-error', 'write-verbose',
     'write-progress', 'convertto-json', 'convertfrom-json', 'convertto-csv', 'convertfrom-csv',
     'import-csv', 'convertto-xml', 'convertto-html', 'convertfrom-stringdata', 'get-member',
     'get-variable', 'get-alias', 'get-history', 'get-random', 'get-date', 'new-timespan', 'get-culture',
     'get-uiculture', 'get-host', 'get-timezone', 'get-uptime', 'start-sleep', 'clear-host', 'get-verb',
-    'set-strictmode', 'get-clipboard', 'set-clipboard'
+    'set-strictmode', 'get-clipboard'
 # System queries (no method calls).
 Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-ciminstance',
     'get-wmiobject', 'get-eventlog', 'get-computerinfo', 'test-connection', 'get-job', 'wait-job',
@@ -80,8 +80,10 @@ Add-D729 'set-location', 'push-location', 'pop-location'
 # write lands can depend on what earlier commands of the script create, which a reading
 # before it runs cannot see, and Windows PowerShell's web cmdlets also write `file:`
 # addresses (#2709 review). A script using one is read in part and asks under strict rules.
-# Common parameters that set variables or prompt.
-$D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm')
+# Common parameters that set variables or prompt, and parameters that reach another
+# computer or ask for credentials (`-ComputerName`, `-CimSession`, `-Credential`).
+$D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm',
+    'ComputerName', 'CimSession', 'Credential', 'Session')
 # By name or number (Inquire is 3, Suspend 5, Break 6).
 $D729ActionValues = @('silentlycontinue', 'stop', 'continue', 'ignore', '0', '1', '2', '4')
 $D729SystemModules = @('microsoft.powershell.management', 'microsoft.powershell.utility', 'microsoft.powershell.security',

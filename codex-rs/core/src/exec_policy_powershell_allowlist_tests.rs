@@ -179,6 +179,13 @@ fn unread_scripts() -> Vec<String> {
         "Invoke-WebRequest -UseBasicParsing:0 -Uri https://example.com/".into(),
         "Invoke-RestMethod -Uri https://example.com/x.json".into(),
         "Get-ChildItem -Force:0".into(),
+        // Self-audit after r4: nothing that stages text, reads XML (external
+        // entities), reaches another computer or asks for credentials.
+        "Set-Clipboard -Value 'git push'".into(),
+        "Select-Xml -Path a.xml -XPath /x".into(),
+        "Get-CimInstance -ClassName Win32_Process -ComputerName other".into(),
+        "Get-Process -ComputerName other".into(),
+        "Get-ChildItem -Path C:\\ -Credential user".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
