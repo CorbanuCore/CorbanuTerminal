@@ -2,7 +2,6 @@ name: tmux smoke
 
 on:
   pull_request:
-    branches-ignore: ["sync/**"] # sync-ci-mode
   push:
     branches: [main]
   workflow_dispatch:
