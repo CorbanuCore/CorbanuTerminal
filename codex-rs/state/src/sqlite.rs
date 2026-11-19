@@ -338,6 +338,42 @@ impl SqliteConfig {
                 .is_some_and(|legacy| self.home().join(legacy).exists())
     }
 
+    /// Read the GPU runtime provider overlay through a read-only connection to
+    /// the existing state database (#2723). Configuration loading uses this
+    /// instead of opening the state runtime, which would take the database
+    /// init lock, run migrations and create the other runtime databases before
+    /// commands such as `migrate-nfs-db` or `app-server --print-startup-config`
+    /// that must not touch them. Returns no providers when no state database
+    /// exists, and an error for a database with foreign migrations;
+    /// `busy_timeout` bounds the wait for a writer's lock on the query.
+    pub async fn read_gpu_runtime_providers(
+        &self,
+        busy_timeout: Duration,
+    ) -> anyhow::Result<Vec<crate::GpuRuntimeProvider>> {
+        let current = self.state_db_path();
+        let path = if current.exists() {
+            current
+        } else {
+            match STATE_DB
+                .legacy_filename
+                .map(|legacy| self.home().join(legacy))
+            {
+                Some(legacy) if legacy.exists() => legacy,
+                _ => return Ok(Vec::new()),
+            }
+        };
+        // As the runtime does before using a state database: refuse one whose
+        // applied migrations this build doesn't know (another distribution's
+        // or a newer build's database), whose rows were not written under
+        // this build's validation.
+        validate_applied_migrations(self, &path, &runtime_state_migrator()).await?;
+        let pool = self.open_read_only_pool(&path, Some(busy_timeout)).await?;
+        let providers =
+            crate::runtime::gpu_runtime_providers::list_gpu_runtime_providers_in(&pool).await;
+        pool.close().await;
+        providers
+    }
+
     /// Return the path to the logs database.
     pub fn logs_db_path(&self) -> PathBuf {
         self.logs_db_path_override.as_ref().map_or_else(

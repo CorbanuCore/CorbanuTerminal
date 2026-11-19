@@ -16,8 +16,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=9101c09e7c8da0ce):
-        - namespace/functions; hash=3f601df78f6d29a1
+00:additional_tools/developer (3; hash=db8c52a993e5dae6):
+        - namespace/functions; hash=f8c9116fa8833c76
           - function/exec_command
           - function/write_stdin
           - function/list_mcp_resources
@@ -28,7 +28,8 @@ Settings:
           - function/structured_edit
           - function/structured_write
           - function/view_image
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d5c929293c3a14e2
+          - function/list_models
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=7cc109bd0a430e07
           - function/close_agent
           - function/resume_agent
           - function/send_input
