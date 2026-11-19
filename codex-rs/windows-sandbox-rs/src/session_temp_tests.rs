@@ -73,6 +73,34 @@ fn has_write_allow(path: &Path, sid: &str) -> bool {
     }
 }
 
+// Two spellings of one key pick the spelling the command's environment block
+// keeps (`TEMP` before `Temp`), not whichever `HashMap` iteration meets first
+// (#2780). Each map has its own random hash seed, so a race would show within 32.
+#[test]
+fn duplicate_temp_spellings_pick_the_env_block_spelling() {
+    let kept = TempDir::new().expect("kept temp");
+    let dropped = TempDir::new().expect("dropped temp");
+    let kept_value = kept.path().to_str().expect("utf-8 temp").to_string();
+    for _ in 0..32 {
+        let env = HashMap::from([
+            (
+                "Temp".to_string(),
+                dropped.path().to_string_lossy().into_owned(),
+            ),
+            ("TEMP".to_string(), kept_value.clone()),
+        ]);
+        let block = crate::process::make_env_block(&env);
+        assert_eq!(
+            String::from_utf16(&block[..block.len() - 2]).expect("UTF-16 block"),
+            format!("TEMP={kept_value}")
+        );
+        assert_eq!(
+            configured_temp_folders(&env),
+            vec![kept.path().to_path_buf()]
+        );
+    }
+}
+
 // A child process gives the resolver a deterministic server environment without
 // changing the environment of concurrently running tests.
 #[test]
