@@ -149,6 +149,11 @@ impl RegistryFixture {
 async fn registration_retries_preserve_noise_identity_and_initialized_session(
     retry_status: u16,
 ) -> Result<()> {
+    // Initialization reports shared account setup state; keep provisioning by
+    // other Windows test processes from changing it between the two snapshots.
+    #[cfg(windows)]
+    let _account_guard =
+        codex_windows_sandbox_test_support::WindowsSandboxAccountTestGuard::acquire()?;
     let fixture = RegistryFixture::new(
         vec![retry_status, 200, retry_status, retry_status, 200],
         Duration::ZERO,
