@@ -36,12 +36,9 @@ impl TurnLifecycleContributor for StaleDenials {
 async fn terminal_turn_clears_extension_owned_denials() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
     let cwd = tempfile::tempdir()?;
-    let config = core_test_support::load_default_config_for_test_in(
-        &home,
-        Default::default(),
-        cwd.path(),
-    )
-    .await;
+    let config =
+        core_test_support::load_default_config_for_test_in(&home, Default::default(), cwd.path())
+            .await;
     let model = codex_core::test_support::construct_model_info_offline("gpt-5", &config);
     let mut extensions = ExtensionRegistryBuilder::<Config>::new();
     // Seed stale state before the production Guardian contributor runs its start hook.
