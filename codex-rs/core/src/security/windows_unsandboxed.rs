@@ -332,6 +332,27 @@ pub(crate) fn environment_file_refusal(
         .then(|| remote_file_refusal(level, &environment.selection.environment_id))
 }
 
+/// #2729 (sync): upstream raises a Windows file context's `Disabled`
+/// selection to the restricted-token sandbox
+/// (`tools::sandboxing::executor_windows_sandbox_selection`). A context
+/// carrying a refusal keeps main's `Disabled` selection instead, so the
+/// refusal is judged against the sandbox actually configured: locally (#1976,
+/// where the raise skipped the refusal) and against a remote executor's
+/// report (#2050, D510, where the raised selection read as confined and the
+/// request reached the executor).
+pub(crate) fn keep_configured_selection(
+    context: &mut codex_file_system::FileSystemSandboxContext,
+    environment: &crate::session::turn_context::TurnEnvironment,
+) {
+    if context.unsandboxed_refusal.is_some()
+        && environment.config().windows_sandbox_level == WindowsSandboxLevel::Disabled
+        && context.windows_sandbox_selection
+            == codex_file_system::WindowsSandboxSelection::RestrictedToken
+    {
+        context.windows_sandbox_selection = codex_file_system::WindowsSandboxSelection::Disabled;
+    }
+}
+
 /// What the inspector lists for a refused command or file access.
 pub(crate) const INSPECTED: &str = "an agent command or file tool without the Windows sandbox";
 

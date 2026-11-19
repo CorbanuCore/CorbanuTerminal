@@ -1589,6 +1589,7 @@ pub(crate) fn protect_file_tool_context(
         environment,
     ) {
         context.unsandboxed_refusal = Some(refusal);
+        crate::security::windows_unsandboxed::keep_configured_selection(&mut context, environment);
     }
     let Some(state) = session
         .services

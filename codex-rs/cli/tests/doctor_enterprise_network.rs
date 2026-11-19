@@ -220,7 +220,7 @@ async fn network_only_human_output() -> Result<()> {
         .output()?;
     let stdout = String::from_utf8(output.stdout)?;
     assert!(output.status.success(), "{stdout}");
-    insta::assert_snapshot!("network_only_human_output", stdout);
+    insta::assert_snapshot!("network_only_human_output", without_version(&stdout));
     Ok(())
 }
 
@@ -243,7 +243,10 @@ async fn network_only_config_failure_human_output() -> Result<()> {
     let file_row = Regex::new(r"(?m)^(      file +).+[\\/]config\.toml$")?;
     assert!(file_row.is_match(&stdout), "{stdout}");
     let stdout = file_row.replace_all(&stdout, "${1}<CODEX_HOME>/config.toml");
-    insta::assert_snapshot!("network_only_config_failure_human_output", stdout);
+    insta::assert_snapshot!(
+        "network_only_config_failure_human_output",
+        without_version(&stdout)
+    );
     Ok(())
 }
 
@@ -448,6 +451,15 @@ fn doctor_reports_macos_system_proxy_configuration_and_policy() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// The doctor header names this build's version (main's Corbanu Terminal
+/// version, not upstream's 0.0.0 dev version); keep snapshots release-stable.
+fn without_version(stdout: &str) -> String {
+    stdout.replace(
+        &format!("Doctor v{}", env!("CARGO_PKG_VERSION")),
+        "Doctor v<VERSION>",
+    )
 }
 
 #[cfg(target_os = "macos")]
