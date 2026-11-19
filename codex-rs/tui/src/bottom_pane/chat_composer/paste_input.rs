@@ -71,6 +71,16 @@ impl ChatComposer {
 
     /// Classify an explicit paste before integrating text shared with the buffered key path.
     pub fn handle_paste(&mut self, pasted: String) -> bool {
+        // D642: a bracketed paste following a held burst Enter continues the same draft.
+        let pasted = if let Some(prefix) = self
+            .draft
+            .paste_burst
+            .flush_pending_enter_before_paste(Instant::now())
+        {
+            format!("{prefix}{pasted}")
+        } else {
+            pasted
+        };
         self.flush_pending_paste_burst();
         self.note_sparkle_paste(&pasted);
         self.apply_paste(pasted)
@@ -224,6 +234,8 @@ impl ChatComposer {
             return false;
         }
 
+        // D642: a Tab after a held burst Enter proves the Enter was pasted too.
+        self.draft.paste_burst.continue_after_enter(now);
         self.handle_paste_burst_flush(now);
         if self
             .draft

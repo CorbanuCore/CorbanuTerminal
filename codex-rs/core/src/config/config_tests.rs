@@ -1,3 +1,6 @@
+#[path = "project_role_warning_tests.rs"]
+mod project_role_warning_tests;
+
 use crate::config::edit::ConfigEdit;
 use crate::config::edit::ConfigEditsBuilder;
 use crate::config::edit::apply_blocking;
@@ -1225,7 +1228,7 @@ async fn managed_residency_warns_about_provider_header_overrides_without_mutatin
 model_provider = "custom-openai"
 
 [model_providers.custom-openai]
-name = "OpenAI"
+name = "Custom OpenAI"
 http_headers = { "X-OpenAI-Internal-Codex-Residency" = "request-override", "x-provider-header" = "preserved" }
 env_http_headers = { "x-openai-internal-codex-residency" = "CODEX_TEST_UNSET_RESIDENCY_HEADER", "x-provider-env-header" = "CODEX_TEST_UNSET_PROVIDER_HEADER" }
 "#,
@@ -6722,7 +6725,8 @@ async fn sqlite_home_defaults_to_codex_home_for_workspace_write() -> std::io::Re
         ),
         (
             codex_home.path(),
-            codex_home.path().join("logs_2.sqlite"),
+            // Corbanu's logs database name (state/src/sqlite.rs).
+            codex_home.path().join("pfterminal_logs_2.sqlite"),
             &codex_home.path().join("log"),
         ),
     );
@@ -7012,11 +7016,8 @@ async fn permissive_security_state_preserves_existing_policy_resolution() -> std
     let codex_home = TempDir::new()?;
     for (approval_policy, sandbox_mode, network_access) in [
         (AskForApproval::OnRequest, SandboxMode::ReadOnly, false),
-        (
-            AskForApproval::UnlessTrusted,
-            SandboxMode::WorkspaceWrite,
-            true,
-        ),
+        // Upstream retired `untrusted` at config load (refused below either way).
+        (AskForApproval::OnRequest, SandboxMode::WorkspaceWrite, true),
         (AskForApproval::Never, SandboxMode::DangerFullAccess, true),
     ] {
         let base = ConfigToml {
@@ -7065,6 +7066,25 @@ async fn permissive_security_state_preserves_existing_policy_resolution() -> std
             with_permissive.permissions.network_sandbox_policy(),
             without_security.permissions.network_sandbox_policy()
         );
+    }
+    for security in [
+        None,
+        Some(codex_security_policy::SecuritySettings::new(
+            SecurityLevel::Permissive,
+        )),
+    ] {
+        let error = Config::load_from_base_config_with_overrides(
+            ConfigToml {
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                security,
+                ..Default::default()
+            },
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await
+        .expect_err("`untrusted` is refused with or without a security setting");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     }
     Ok(())
 }

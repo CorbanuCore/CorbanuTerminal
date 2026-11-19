@@ -6,7 +6,6 @@ use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
-use std::time::Instant;
 use tempfile::tempdir;
 
 #[test]
@@ -197,40 +196,104 @@ exit 1
 }
 
 #[test]
-fn system_bwrap_probe_times_out_without_reporting_a_warning() {
-    let fake_bwrap = write_fake_bwrap(
-        r#"#!/bin/sh
-sleep 1
-exit 0
-"#,
-    );
-    let fake_bwrap_path: &Path = fake_bwrap.as_ref();
-    let started_at = Instant::now();
+fn system_bwrap_probe_timeout_is_unknown_not_available() {
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
 
-    assert!(system_bwrap_has_user_namespace_access(
-        fake_bwrap_path,
-        Duration::from_millis(10),
-    ));
-    assert!(started_at.elapsed() < Duration::from_millis(500));
+    let (reader, _writer) = UnixStream::pair().expect("release pipe");
+    let mut command = Command::new("/bin/sh");
+    command
+        .args(["-c", "read -r release"])
+        .stdin(Stdio::from(OwnedFd::from(reader)));
+
+    // The shell cannot finish until the writer closes, so timeout classification
+    // does not depend on whether a short sleep wins a scheduling race.
+    assert_eq!(
+        command_user_namespace_probe(&mut command, Duration::ZERO),
+        UserNamespaceProbe::Unknown,
+    );
 }
 
 #[test]
 fn system_bwrap_probe_does_not_wait_for_descendants_holding_stderr_open() {
-    let fake_bwrap = write_fake_bwrap(
-        r#"#!/bin/sh
-echo 'No permissions to create a new namespace' >&2
-sleep 1 &
-exit 1
-"#,
-    );
-    let fake_bwrap_path: &Path = fake_bwrap.as_ref();
-    let started_at = Instant::now();
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::sync::mpsc;
 
-    assert!(!system_bwrap_has_user_namespace_access(
-        fake_bwrap_path,
-        Duration::from_millis(100),
-    ));
-    assert!(started_at.elapsed() < Duration::from_millis(500));
+    let (reader, writer) = UnixStream::pair().expect("release pipe");
+    let mut command = Command::new("/bin/sh");
+    command
+        .args([
+            "-c",
+            // Keep the descendant's input on fd 3: a background shell job may
+            // otherwise replace stdin with /dev/null. It retains stderr until
+            // the test releases it, even after the direct child has exited.
+            "exec 3<&0\necho 'No permissions to create a new namespace' >&2\n(read -r release <&3) &\nexit 1",
+        ])
+        .stdin(Stdio::from(OwnedFd::from(reader)));
+    let (sender, receiver) = mpsc::channel();
+    let probe = thread::spawn(move || {
+        let result = command_user_namespace_probe(&mut command, Duration::from_secs(5));
+        let _ = sender.send(result);
+    });
+
+    let result = receiver.recv_timeout(Duration::from_secs(10));
+    // Always release the descendant before joining, including on regression:
+    // a blocking stderr reader must not leave this test hung.
+    drop(writer);
+    probe.join().expect("probe thread");
+    assert_eq!(
+        result.expect("probe must finish while the descendant still holds stderr"),
+        UserNamespaceProbe::Denied,
+    );
+}
+
+#[test]
+fn system_bwrap_probe_spawn_failure_is_unknown_not_available() {
+    let dir = tempdir().expect("temp dir");
+    assert_eq!(
+        system_bwrap_user_namespace_probe(&dir.path().join("missing-bwrap"), Duration::ZERO),
+        UserNamespaceProbe::Unknown,
+    );
+}
+
+#[test]
+fn system_bwrap_probe_requires_success_to_report_available() {
+    for (script, expected) in [
+        ("exit 0", UserNamespaceProbe::Available),
+        ("exit 1", UserNamespaceProbe::Unknown),
+        (
+            "echo 'bwrap: Unknown option --argv0' >&2; exit 1",
+            UserNamespaceProbe::Unknown,
+        ),
+        (
+            "echo 'No permissions to create a new namespace' >&2; exit 1",
+            UserNamespaceProbe::Denied,
+        ),
+    ] {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", script]);
+        assert_eq!(
+            command_user_namespace_probe(&mut command, Duration::from_secs(5)),
+            expected,
+            "{script}",
+        );
+    }
+}
+
+#[test]
+fn system_bwrap_probe_executable_busy_deadline_is_unknown_not_available() {
+    let fake_bwrap = write_fake_bwrap("#!/bin/sh\nexit 0\n");
+    let fake_bwrap_path: &Path = fake_bwrap.as_ref();
+    let _writer = std::fs::OpenOptions::new()
+        .append(true)
+        .open(fake_bwrap_path)
+        .expect("hold executable open for writing");
+
+    assert_eq!(
+        system_bwrap_user_namespace_probe(fake_bwrap_path, Duration::ZERO),
+        UserNamespaceProbe::Unknown,
+    );
 }
 
 #[test]
@@ -596,9 +659,9 @@ exit 1
         drop(writer);
     });
 
-    assert!(!system_bwrap_has_user_namespace_access(
-        fake_bwrap_path,
-        SYSTEM_BWRAP_PROBE_TIMEOUT,
-    ));
+    assert_eq!(
+        system_bwrap_user_namespace_probe(fake_bwrap_path, SYSTEM_BWRAP_PROBE_TIMEOUT),
+        UserNamespaceProbe::Denied,
+    );
     release.join().expect("writer thread");
 }

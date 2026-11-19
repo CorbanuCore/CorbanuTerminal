@@ -95,7 +95,7 @@ pub(crate) fn new_warning_event(message: String) -> WarningHistoryCell {
     let style = crate::style::status_style(crate::style::StatusTone::Attention);
     WarningHistoryCell {
         server_version_notice: false,
-        visible_in_transcript: false,
+        visible_in_transcript: super::warnings::is_security_or_account_warning(&message),
         key: message.clone(),
         diagnostic: message.clone(),
         details: PrefixedWrappedHistoryCell::new(
@@ -107,6 +107,14 @@ pub(crate) fn new_warning_event(message: String) -> WarningHistoryCell {
 }
 
 pub(crate) fn new_usage_warning_event(message: String) -> WarningHistoryCell {
+    WarningHistoryCell {
+        visible_in_transcript: true,
+        ..new_warning_event(message)
+    }
+}
+
+/// A warning the user must see in the transcript, not only in the warnings list.
+pub(crate) fn new_transcript_warning_event(message: String) -> WarningHistoryCell {
     WarningHistoryCell {
         visible_in_transcript: true,
         ..new_warning_event(message)

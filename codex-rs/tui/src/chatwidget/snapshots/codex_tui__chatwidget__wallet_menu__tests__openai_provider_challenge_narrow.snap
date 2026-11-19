@@ -1,9 +1,8 @@
 ---
 source: tui/src/chatwidget/wallet_menu.rs
-assertion_line: 2178
+assertion_line: 2231
 expression: "crate::terminal_hyperlinks::strip_osc8(&rendered)"
 ---
-
   OpenAI account login
   Code: TEST-CODE
   Open:
@@ -13,6 +12,7 @@ expression: "crate::terminal_hyperlinks::strip_osc8(&rendered)"
   open this link on another device and
   enter the code.
 
+
 › 1. Cancel login
 
-  Press enter to confirm or esc to go ba
+  enter select · esc back

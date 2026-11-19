@@ -7,8 +7,9 @@
 //!   and the refusal says plainly that it isn't possible here;
 //! - a remembered exec-policy rule that would skip the sandbox is not
 //!   applied silently: the command runs inside it and the person is told;
-//! - "retry without sandbox?" is not offered after a sandbox denial, and the
-//!   person is told why;
+//! - "retry without sandbox?" is not offered after a sandbox denial. D639
+//!   accepted upstream's behaviour of offering no such retry at all here, so
+//!   no note about it is due (D716 dropped the earlier "told why" check);
 //! - the model's instructions say so.
 //!
 //! Nothing ends in "Protected launch refused". Moderate keeps its own
@@ -19,6 +20,7 @@
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 #![allow(clippy::expect_used)]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -64,7 +66,8 @@ static FIRST_HOME: std::sync::OnceLock<Arc<TempDir>> = std::sync::OnceLock::new(
 
 #[derive(Clone, Copy, Debug)]
 enum Route {
-    /// `shell_command` with `require_escalated`.
+    /// `exec_command` with `require_escalated` (formerly through `shell_command`,
+    /// which upstream removed).
     Escalated,
     /// `exec_command` (unified exec) with `require_escalated`.
     EscalatedExec,
@@ -132,7 +135,6 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
             if unified_exec {
-                config.use_experimental_unified_exec_tool = true;
                 config
                     .features
                     .enable(Feature::UnifiedExec)
@@ -152,9 +154,9 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
     let call = match route {
         Route::Escalated => ev_function_call(
             "call-0",
-            "shell_command",
+            "exec_command",
             &json!({
-                "command": command,
+                "cmd": command,
                 "sandbox_permissions": "require_escalated",
                 "justification": "This command writes outside the workspace. Do you want to allow it?",
             })
@@ -172,8 +174,8 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
         ),
         Route::Rule | Route::Retry | Route::Inside => ev_function_call(
             "call-0",
-            "shell_command",
-            &json!({ "command": command }).to_string(),
+            "exec_command",
+            &json!({ "cmd": command }).to_string(),
         ),
     };
     let mut responses = vec![sse(vec![
@@ -187,8 +189,8 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
             ev_response_created("call-1"),
             ev_function_call(
                 "call-1",
-                "shell_command",
-                &json!({ "command": command }).to_string(),
+                "exec_command",
+                &json!({ "cmd": command }).to_string(),
             ),
             ev_completed("call-1"),
         ]));
@@ -201,16 +203,13 @@ async fn run(level: SecurityLevel, route: Route) -> anyhow::Result<Run> {
     let captured = mount_sse_sequence(&server, responses).await;
     std::mem::forget(server);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "write the notes".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked = 0;
     let mut warnings = Vec::new();
@@ -289,7 +288,8 @@ async fn issue_739_permissive_under_protected_launch_offers_no_run_outside_the_s
         ),
         // Still no prompt, but inside the sandbox, and the person is told.
         (Permissive, Route::Rule, 0, false, None, Some(RULE_NOTE)),
-        (Permissive, Route::Retry, 1, false, None, Some(RETRY_NOTE)),
+        // D716: no retry is offered (D639), so no note either.
+        (Permissive, Route::Retry, 1, false, None, None),
         (Permissive, Route::Inside, 0, true, None, None),
         // #747: Moderate still asks (an approval lifts its protected-file
         // rules for that one command) and keeps the run in the sandbox.

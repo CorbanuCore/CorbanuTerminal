@@ -233,6 +233,8 @@ async fn hidden_shell_paste_queued_before_session_submits_literal_prompt() {
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     chat.thread_id = Some(ThreadId::new());
+    // D376 (#1748): startup input waits until the session is configured, which ends the queue.
+    chat.set_queue_submissions_until_session_configured(/*queue*/ false);
     chat.maybe_send_next_queued_input();
 
     assert_hidden_shell_payload_is_literal(op_rx.try_recv(), payload);

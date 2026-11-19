@@ -223,6 +223,7 @@ pub(crate) use title_setup::TerminalTitleSetupView;
 #[cfg(test)]
 pub(crate) use title_setup::preview_line_for_title_items;
 mod paste_burst;
+pub(crate) use paste_burst::key_continues_paste;
 mod pending_input_preview;
 mod pending_thread_approvals;
 mod picker_option;
@@ -812,6 +813,12 @@ impl BottomPane {
         self.view_stack.last().map(std::convert::AsRef::as_ref)
     }
 
+    /// The top view's active tab id, whatever its view id (tests only).
+    #[cfg(test)]
+    pub(crate) fn active_view_tab_id(&self) -> Option<&str> {
+        self.active_view().and_then(|view| view.active_tab_id())
+    }
+
     pub(crate) fn current_patch_approval(&self) -> Option<&ApplyPatchApprovalRequest> {
         self.view_stack
             .iter()
@@ -820,6 +827,7 @@ impl BottomPane {
     }
 
     fn push_view(&mut self, view: Box<dyn BottomPaneView>) {
+        self.cancel_pending_burst_submission();
         self.key_chord_reset_requested = true;
         self.view_stack.push(view);
         self.schedule_active_view_frame();
@@ -1238,6 +1246,7 @@ impl BottomPane {
     /// was received, but it does not decide whether the process should exit; `ChatWidget` owns the
     /// quit/interrupt state machine and uses the result to decide what happens next.
     pub(crate) fn on_ctrl_c(&mut self) -> CancellationEvent {
+        self.composer.cancel_pending_burst_submission();
         if self.warnings_active() {
             if let Some(view) = self.warnings_view.take() {
                 view.close();
@@ -1602,6 +1611,15 @@ impl BottomPane {
     #[cfg(test)]
     pub(crate) fn status_indicator_visible(&self) -> bool {
         self.status_widget().is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reset_status_indicator_timer_for_tests(&mut self, now: Instant) {
+        self.status_timer.reset_for_tests(now);
+        self.status
+            .as_mut()
+            .expect("status indicator should be visible")
+            .reset_header_timer_for_tests(now);
     }
 
     #[cfg(test)]
@@ -2698,6 +2716,22 @@ impl BottomPane {
         self.thread_id = Some(thread_id);
         self.composer
             .set_history_metadata(thread_id, log_id, entry_count);
+    }
+
+    pub(crate) fn cancel_pending_burst_submission(&mut self) {
+        self.composer.cancel_pending_burst_submission();
+        if let Some(questions) = &mut self.questions {
+            questions.cancel_pending_burst_enter();
+        }
+    }
+
+    pub(crate) fn take_burst_submission(&mut self, now: Instant) -> Option<InputResult> {
+        // Expanded async questions own input too (sync: upstream-only view).
+        if self.has_active_view() || self.questions.as_ref().is_some_and(|q| q.expanded) {
+            self.composer.cancel_pending_burst_submission();
+            return None;
+        }
+        self.composer.take_burst_submission(now)
     }
 
     pub(crate) fn flush_paste_burst_if_due(&mut self) -> bool {
@@ -4110,7 +4144,8 @@ mod tests {
 
     fn user_input_request() -> ToolRequestUserInputParams {
         ToolRequestUserInputParams {
-            thread_id: "thread-1".to_string(),
+            // Upstream answers on the request's thread, so it must parse as one.
+            thread_id: codex_protocol::ThreadId::new().to_string(),
             item_id: "call-1".to_string(),
             turn_id: "turn-1".to_string(),
             questions: vec![codex_app_server_protocol::ToolRequestUserInputQuestion {
@@ -4130,6 +4165,7 @@ mod tests {
                     },
                 ]),
             }],
+            is_blocking: true,
             auto_resolution_ms: None,
         }
     }
@@ -4138,7 +4174,10 @@ mod tests {
         std::iter::from_fn(|| rx.try_recv().ok()).any(|event| {
             matches!(
                 event,
-                AppEvent::CodexOp(crate::app_command::AppCommand::UserInputAnswer { .. })
+                AppEvent::SubmitThreadOp {
+                    op: crate::app_command::AppCommand::UserInputAnswer { .. },
+                    ..
+                }
             )
         })
     }

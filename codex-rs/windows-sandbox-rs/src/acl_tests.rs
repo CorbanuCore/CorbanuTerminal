@@ -223,10 +223,10 @@ fn d263_delete_deny_that_cannot_be_written_is_an_error() {
 /// Impersonates this process's own token with every privilege disabled on
 /// the current thread until dropped, so an elevated runner's privileges
 /// (such as restore) can't write a DACL the test made unwritable.
-struct WithoutPrivileges;
+pub(crate) struct WithoutPrivileges;
 
 impl WithoutPrivileges {
-    fn start() -> Self {
+    pub(crate) fn start() -> Self {
         // SAFETY: plain Win32 calls on the current thread; the token handle is
         // closed here and the impersonation ends in `drop`, also when an
         // assertion below fails.
@@ -403,4 +403,46 @@ fn dacl_sddl(path: &Path) -> String {
         LocalFree(sd as HLOCAL);
     }
     sddl
+}
+
+/// D609 (a) / #2562 (S3b row 566): with a junctioned `CODEX_HOME` (the default home moved
+/// elsewhere), Core adds the new-file deny on the home's real path, so a file created through
+/// the junction (a token refresh writing `auth.json`) still inherits it.
+#[test]
+fn d609_new_file_deny_on_the_resolved_home_covers_files_created_through_a_junction() {
+    let tmp = tempfile::tempdir().expect("dir");
+    let real = tmp.path().join("real-home");
+    let link = tmp.path().join("home-junction");
+    std::fs::create_dir(&real).expect("real home");
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    let cmd = std::path::PathBuf::from(system_root)
+        .join("System32")
+        .join("cmd.exe");
+    let output = std::process::Command::new(cmd)
+        .args(["/d", "/c", "mklink", "/J"])
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .expect("mklink");
+    assert!(
+        output.status.success(),
+        "mklink /J failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let resolved = dunce::canonicalize(&link).expect("resolve the junction");
+    assert_eq!(resolved, dunce::canonicalize(&real).expect("real path"));
+    let group = LocalSid::from_string(SANDBOX_GROUP).expect("group SID");
+    // SAFETY: valid SID and an existing directory.
+    unsafe {
+        assert!(add_deny_read_ace_for_new_files(&resolved, group.as_ptr()).expect("deny"));
+        assert!(has_exact_deny_read_ace_for_new_files(&real, Some(group.as_ptr())).expect("check"));
+    }
+    let refreshed = link.join("auth.json");
+    std::fs::write(&refreshed, "token").expect("file created through the junction");
+    assert!(
+        dacl_sddl(&real.join("auth.json")).contains(SANDBOX_GROUP),
+        "the refreshed file must inherit the deny: {}",
+        dacl_sddl(&real.join("auth.json"))
+    );
+    std::fs::remove_dir(&link).expect("remove the junction only");
 }

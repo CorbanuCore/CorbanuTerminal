@@ -155,6 +155,104 @@ fn only_the_followed_account_refreshes_the_list() {
     assert!(!manager.lists_for_provider(&openai));
 }
 
+#[test_case::test_case(false; "disabled")]
+#[test_case::test_case(true; "enabled")]
+#[tokio::test]
+async fn api_key_discovery_policy_survives_account_and_originator_changes(
+    enabled: bool,
+) -> anyhow::Result<()> {
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
+
+    let (home, _) = setup();
+    let auth = AuthManager::from_auth_for_testing_with_home(
+        CodexAuth::from_api_key("sk-fake-default-discovery"),
+        home.path().to_path_buf(),
+    );
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/catalog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(catalog()))
+        .expect(if enabled { 7_u64 } else { 0 })
+        .mount(&server)
+        .await;
+    let mut provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    provider.model_catalog_url = Some(format!("{}/catalog", server.uri()).into());
+    let manager = Arc::new(
+        AccountModelsManager::for_provider(
+            &provider,
+            auth,
+            home.path().to_path_buf(),
+            /*model_catalog*/ None,
+        )
+        .expect("account-aware manager"),
+    );
+    let before = manager
+        .for_originator("codex_work_cca")
+        .expect("originator before startup policy");
+    manager.set_api_key_model_discovery_enabled(enabled);
+    let after = manager
+        .for_originator("codex_work_web")
+        .expect("originator after startup policy");
+    let handles: [SharedModelsManager; 3] = [manager.clone(), before, after];
+    for account in [None, Some(work())] {
+        for handle in &handles {
+            handle.follow_sign_in_account(account.as_ref());
+            let models = handle
+                .raw_model_catalog(
+                    RefreshStrategy::Online,
+                    crate::test_support::default_http_client_factory(),
+                )
+                .await;
+            assert_eq!(
+                models.models.iter().any(|model| model.slug == API_MODEL),
+                enabled
+            );
+        }
+    }
+    assert!(manager.follow_sign_in_account(/*account*/ None));
+    let models = manager
+        .raw_model_catalog(
+            RefreshStrategy::Online,
+            crate::test_support::default_http_client_factory(),
+        )
+        .await;
+    assert_eq!(
+        models.models.iter().any(|model| model.slug == API_MODEL),
+        enabled
+    );
+    let authorizations = server
+        .received_requests()
+        .await
+        .expect("catalog requests")
+        .iter()
+        .map(|request| {
+            request.headers["authorization"]
+                .to_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    let expected = if enabled {
+        vec![
+            "Bearer sk-fake-default-discovery",
+            "Bearer sk-fake-default-discovery",
+            "Bearer sk-fake-default-discovery",
+            "Bearer sk-fake-work-models-0003",
+            "Bearer sk-fake-work-models-0003",
+            "Bearer sk-fake-work-models-0003",
+            "Bearer sk-fake-default-discovery",
+        ]
+    } else {
+        Vec::new()
+    };
+    assert_eq!(authorizations, expected);
+    Ok(())
+}
+
 /// A named account's list lives under its own directory; a name that is not
 /// path-safe is never cached, never outside it.
 #[test]
@@ -169,4 +267,51 @@ fn named_account_lists_have_their_own_cache_directory() {
         name: "../escape".to_string(),
     };
     assert_eq!(named_account_cache_dir(home.path(), &odd), None);
+}
+
+/// Upstream's originator catalogs (`codex_work_cca`, ...) under PF-84: an
+/// originator gets one handle, which starts on the account the default list
+/// follows and then follows its own sessions' account, apart from the default
+/// list. Other originators, an originator's handle, and a configured
+/// catalog (which has no originator partition) keep their handle.
+#[test]
+fn originator_catalogs_follow_their_own_sessions_account() {
+    let (home, default_auth) = setup();
+    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    assert!(
+        manager_for(&provider, &home, &default_auth)
+            .for_originator("codex_work_cca")
+            .is_none()
+    );
+    let manager = AccountModelsManager::for_provider(
+        &provider,
+        Arc::clone(&default_auth),
+        home.path().to_path_buf(),
+        /*model_catalog*/ None,
+    )
+    .expect("an OpenAI sign-in provider");
+    assert!(manager.for_originator("codex_cli_rs").is_none());
+    let work = manager
+        .for_originator("codex_work_cca")
+        .expect("an originator catalog");
+    assert!(Arc::ptr_eq(
+        &work,
+        &manager
+            .for_originator("codex_work_cca")
+            .expect("the same originator catalog")
+    ));
+    assert!(work.for_originator("codex_work_web").is_none());
+
+    assert!(work.follow_sign_in_account(Some(&self::work())));
+    assert!(!work.follow_sign_in_account(Some(&self::work())));
+    assert_eq!(manager.account(), None);
+    assert!(manager.follow_sign_in_account(Some(&self::work())));
+
+    // A new originator's handle starts on the default list's account.
+    let web = manager
+        .for_originator("codex_work_web")
+        .expect("an originator catalog");
+    assert!(!web.follow_sign_in_account(Some(&self::work())));
+    assert!(web.follow_sign_in_account(/*account*/ None));
+    assert_eq!(manager.account(), Some(self::work()));
 }

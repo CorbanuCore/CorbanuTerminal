@@ -5,6 +5,7 @@ use super::SnapshotStartup;
 use super::exports;
 use super::literals;
 use super::posix_env_path_expansion_function;
+use super::values;
 use crate::shell_detect::ShellType;
 use crate::shell_startup_script;
 use codex_protocol::shell_environment::CODEX_THREAD_ID_ENV_VAR;
@@ -39,13 +40,17 @@ pub struct SnapshotCaptureOptions {
 
 /// Returns a script that captures native state, aliases, and the requested export records.
 ///
+/// Corbanu #2314: it also captures every shell variable's raw value, unexported
+/// ones included, so the snapshot writer can omit exports that carry a
+/// credential under another name. The values travel only over the capture pipe.
+///
 /// Startup behavior is independent of how the captured records will be rendered.
 /// PowerShell and Command Prompt snapshots are not supported by the snapshot callers.
 pub fn snapshot_capture_script(
     shell_type: ShellType,
     options: SnapshotCaptureOptions,
 ) -> Option<String> {
-    capture_script(shell_type, options, Replay::Eval)
+    capture_script(shell_type, options, Replay::Eval, /*values*/ true)
 }
 
 /// Capture state for incremental sourcing. Parse options and aliases together so
@@ -62,6 +67,7 @@ pub fn snapshot_source_capture_script(
         } else {
             Replay::Source
         },
+        /*values*/ false,
     )
 }
 
@@ -74,6 +80,7 @@ fn capture_script(
     shell_type: ShellType,
     options: SnapshotCaptureOptions,
     replay: Replay,
+    capture_values: bool,
 ) -> Option<String> {
     let script = match shell_type {
         ShellType::Zsh => zsh_snapshot_script(options.startup),
@@ -97,6 +104,10 @@ fn capture_script(
                 Replay::Eval => "\\alias -L",
                 Replay::Source => "(\\setopt NO_RC_QUOTES; \\alias -L)",
             })
+            .replace(
+                "SNAPSHOT_VALUES",
+                &if capture_values { values::script(shell_type) } else { String::new() },
+            )
             .replace("SNAPSHOT_EXPORTS", &declarations)
             .replace(
                 "SNAPSHOT_DECLARATION_ENVIRONMENT",
@@ -146,6 +157,7 @@ SNAPSHOT_ZSH_ALIASES
 print ''
 SNAPSHOT_ALIASES_END
 printf '\0'
+SNAPSHOT_VALUES
 SNAPSHOT_EXPORTS
 printf '\0'
 SNAPSHOT_ENVIRONMENT
@@ -181,6 +193,7 @@ echo "# aliases $alias_count"
 echo ''
 SNAPSHOT_ALIASES_END
 printf '\0'
+SNAPSHOT_VALUES
 SNAPSHOT_EXPORTS
 printf '\0'
 SNAPSHOT_ENVIRONMENT
@@ -249,6 +262,7 @@ else
 fi
 SNAPSHOT_ALIASES_END
 printf '\0'
+SNAPSHOT_VALUES
 SNAPSHOT_EXPORTS
 printf '\0'
 SNAPSHOT_DECLARATION_ENVIRONMENT
@@ -269,6 +283,9 @@ pub struct CapturedSnapshot<'a> {
     pub(super) state: &'a str,
     pub(super) aliases: &'a str,
     pub(super) exports: Vec<CapturedExport<'a>>,
+    /// Corbanu #2314: raw shell variable values (exported or not) captured by
+    /// `snapshot_capture_script` after startup. `None` when not captured.
+    pub values: Option<Vec<(&'a str, Cow<'a, str>)>>,
     /// NUL-delimited environment entries from the same shell invocation.
     pub environment: &'a [u8],
 }
@@ -320,7 +337,8 @@ impl<'a> CapturedSnapshot<'a> {
         } else {
             None
         };
-        // state NUL aliases NUL (name NUL declaration NUL)* NUL environment.
+        // state NUL aliases NUL [#values NUL (name NUL value NUL)* NUL]
+        // (name NUL declaration NUL)* NUL environment.
         // POSIX sh additionally captures declaration values as a NUL-delimited environment.
         let state = take_record(&mut remaining)?;
         let marker = b"# Snapshot file";
@@ -329,6 +347,14 @@ impl<'a> CapturedSnapshot<'a> {
             .position(|part| part == marker)?;
         let state = std::str::from_utf8(&state[start..]).ok()?;
         let aliases = std::str::from_utf8(take_record(&mut remaining)?).ok()?;
+        let values = if remaining.starts_with(values::VALUES_MARKER)
+            && remaining.get(values::VALUES_MARKER.len()) == Some(&0)
+        {
+            remaining = &remaining[values::VALUES_MARKER.len() + 1..];
+            Some(values::parse(&mut remaining)?)
+        } else {
+            None
+        };
         let mut records = Vec::new();
         loop {
             let key = std::str::from_utf8(take_record(&mut remaining)?).ok()?;
@@ -377,6 +403,7 @@ impl<'a> CapturedSnapshot<'a> {
                     state,
                     aliases,
                     exports: records,
+                    values,
                     environment: remaining,
                 });
             }
@@ -454,7 +481,7 @@ impl<'a> CapturedSnapshot<'a> {
     }
 }
 
-fn take_record<'a>(remaining: &mut &'a [u8]) -> Option<&'a [u8]> {
+pub(super) fn take_record<'a>(remaining: &mut &'a [u8]) -> Option<&'a [u8]> {
     let boundary = remaining.iter().position(|byte| *byte == 0)?;
     let record = &remaining[..boundary];
     *remaining = &remaining[boundary + 1..];

@@ -123,8 +123,6 @@ use codex_config::types::ApprovalsReviewer;
 use codex_config::types::Notifications;
 use codex_connectors::AppInfo;
 use codex_features::Feature;
-#[cfg(test)]
-use codex_git_utils::CommitLogEntry;
 use codex_git_utils::current_branch_name;
 use codex_git_utils::get_git_repo_root;
 use codex_git_utils::local_git_branches;
@@ -160,12 +158,9 @@ use crossterm::event::KeyEventKind;
 use crossterm::event::KeyModifiers;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Color;
 use ratatui::style::Style;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
-#[cfg(test)]
-use ratatui::text::Text;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
@@ -415,7 +410,6 @@ use self::status_surfaces::CachedProjectRootName;
 mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;
 mod tokens;
-pub(crate) use self::tokens::TokenActivityView;
 pub(crate) use tokens::cost_command;
 mod tool_lifecycle;
 mod tool_requests;
@@ -637,9 +631,6 @@ pub(crate) struct ChatWidget {
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
     accounting_inspector: Option<tokens::Inspector>,
-    refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
-    completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
-    next_token_activity_request_id: u64,
     pending_rate_limit_reset_request_id: Option<u64>,
     pending_rate_limit_reset_idempotency_key: Option<String>,
     rate_limit_reset_picker_request_id: Option<u64>,
@@ -2258,7 +2249,8 @@ impl Drop for ChatWidget {
     }
 }
 
-const PLACEHOLDER: &str = "Ask Codex to do anything";
+// Corbanu branding, as the bottom pane's own default placeholder (upstream: "Ask Codex ...").
+const PLACEHOLDER: &str = "Ask Corbanu Terminal to do anything";
 const SIDE_PLACEHOLDER: &str = "Ask a follow-up question";
 
 // Extract the first bold (Markdown) element in the form **...** from `s`.

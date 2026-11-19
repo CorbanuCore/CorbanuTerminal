@@ -453,7 +453,7 @@ impl ChatWidget {
                     )
                 };
                 let actions: Vec<SelectionAction> = if requires_advanced_selection {
-                    let preset_for_action = preset.clone();
+                    let preset_for_action = preset;
                     vec![Box::new(move |tx| {
                         tx.send(AppEvent::OpenReasoningPopup {
                             model: preset_for_action.clone(),
@@ -469,7 +469,7 @@ impl ChatWidget {
                     self.model_selection_actions(
                         model.clone(),
                         provider,
-                        Some(preset.default_reasoning_effort.clone()),
+                        Some(preset.default_reasoning_effort),
                         should_prompt_plan_mode_scope,
                     )
                 };
@@ -763,7 +763,7 @@ impl ChatWidget {
                 Vec::new(),
                 tabs,
                 initial_tab_id,
-                Some(Self::model_picker_tabbed_footer_hint_line()),
+                Some(self.model_picker_tabbed_footer_hint_line()),
             )
         } else {
             let items = provider_items
@@ -839,7 +839,7 @@ impl ChatWidget {
         {
             display_name = format!("{display_name} via {provider}");
         }
-        let model = preset.model.clone();
+        let model = preset.model;
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             let preset_for_event = preset_for_action.clone();
             tx.send(AppEvent::OpenReasoningPopup {
@@ -886,8 +886,27 @@ impl ChatWidget {
         }
     }
 
-    fn model_picker_tabbed_footer_hint_line() -> Line<'static> {
-        Line::from("Use Left/Right to switch providers. Press Enter to confirm or Esc to go back")
+    /// Main's provider-tab hint, unless accept/cancel are remapped: then upstream's
+    /// configured-binding hint, so the footer never names keys that do nothing.
+    fn model_picker_tabbed_footer_hint_line(&self) -> Line<'static> {
+        let keymap = self.bottom_pane.list_keymap();
+        let default_keys = keymap.accept.first()
+            == Some(&crate::key_hint::plain(crossterm::event::KeyCode::Enter))
+            && keymap.cancel.first()
+                == Some(&crate::key_hint::plain(crossterm::event::KeyCode::Esc));
+        if default_keys {
+            return Line::from(
+                "Use Left/Right to switch providers. Press Enter to confirm or Esc to go back",
+            );
+        }
+        let keys = crate::bottom_pane::popup_consts::picker_hint_line_for_keymap(&keymap);
+        let mut hint = Line::from("Left/Right providers");
+        // With accept and cancel both unbound there is nothing to separate.
+        if !keys.spans.is_empty() {
+            hint.spans.push(" · ".into());
+            hint.spans.extend(keys.spans);
+        }
+        hint
     }
 
     pub(crate) fn show_in_pfterminal_model_picker(preset: &ModelPreset) -> bool {
@@ -961,10 +980,14 @@ impl ChatWidget {
                     effort: effort_for_action.clone(),
                 });
             } else {
-                tx.send(AppEvent::UpdateModelSelection {
-                    model: model_for_action.clone(),
-                    provider: provider_for_action.clone(),
-                });
+                // An explicit Astra pick keeps its task, so the app can offer
+                // the fresh-task sparkle once the model is applied (#2312).
+                tx.send(
+                    AstraModelPickerAction::UpdateModelSelection {
+                        provider: provider_for_action.clone(),
+                    }
+                    .into_picker_event(sparkle_thread, model_for_action.clone()),
+                );
                 tx.send(AppEvent::UpdateReasoningEffort(effort_for_action.clone()));
                 if Self::should_persist_model_provider(provider_for_action.as_deref()) {
                     tx.send(AppEvent::PersistModelSelection {
@@ -2033,6 +2056,8 @@ mod tests {
             availability_nux: None,
             supported_in_api: true,
             input_modalities: default_input_modalities(),
+            available_access_programs: None,
+            model_specialty: None,
         }
     }
 }

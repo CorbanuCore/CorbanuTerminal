@@ -3,6 +3,7 @@
 //! as shell commands: after untrusted content, a protected action needs a
 //! fresh human answer and is refused when approvals are off.
 
+use codex_core::TurnInputRequest;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,11 +80,7 @@ fn call(call_id: &str, name: &str, arguments: Value) -> Step {
 }
 
 fn injected_step() -> Step {
-    call(
-        "call-first",
-        "shell_command",
-        json!({ "command": INJECTED }),
-    )
+    call("call-first", "exec_command", json!({ "cmd": INJECTED }))
 }
 
 fn mcp_step(message: &str) -> Step {
@@ -136,6 +133,9 @@ fn insert_rmcp_server(config: &mut Config) -> anyhow::Result<()> {
             oauth: None,
             oauth_resource: None,
             tools: HashMap::new(),
+            startup_readiness: Default::default(),
+            tool_input_schema_max_bytes: None,
+            omit_tools_from: None,
         },
     );
     config
@@ -248,16 +248,13 @@ async fn start_turn_with(
     }
     before_turn(&test);
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check the notes, then continue".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok((test, captured))
 }
@@ -296,8 +293,9 @@ async fn answer(test: &TestCodex, request: &RequestUserInputEvent, label: &str) 
 }
 
 fn output_text(request: &ResponsesRequest, call_id: &str) -> String {
+    // MCP results are content items upstream, not one string.
     request
-        .function_call_output_text(call_id)
+        .function_call_output_any_text(call_id)
         .or_else(|| {
             request
                 .custom_tool_call_output(call_id)
@@ -685,6 +683,9 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
+    // The injected step now runs through `exec_command` too (main used the
+    // removed `shell_command`), and its process takes the first deterministic
+    // session ID (1000), so the shell opened next is 1001.
     let stdin_turn = |approval, chars: &str| {
         start_turn(
             SecurityLevel::Moderate,
@@ -699,12 +700,11 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
                 call(
                     "call-stdin",
                     "write_stdin",
-                    json!({ "session_id": 1000, "chars": chars, "yield_time_ms": 500 }),
+                    json!({ "session_id": 1001, "chars": chars, "yield_time_ms": 500 }),
                 ),
                 done_step(),
             ],
             |config| {
-                config.use_experimental_unified_exec_tool = true;
                 config
                     .features
                     .enable(Feature::UnifiedExec)
@@ -750,17 +750,16 @@ async fn pf_23_s01_typing_a_protected_command_into_a_running_shell_needs_the_hum
             call(
                 "call-half",
                 "write_stdin",
-                json!({ "session_id": 1000, "chars": "corban", "yield_time_ms": 200 }),
+                json!({ "session_id": 1001, "chars": "corban", "yield_time_ms": 200 }),
             ),
             call(
                 "call-stdin",
                 "write_stdin",
-                json!({ "session_id": 1000, "chars": "u vault list\n", "yield_time_ms": 200 }),
+                json!({ "session_id": 1001, "chars": "u vault list\n", "yield_time_ms": 200 }),
             ),
             done_step(),
         ],
         |config| {
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -906,7 +905,76 @@ fn canary_home() -> anyhow::Result<(Arc<TempDir>, String, String)> {
 
 #[cfg(target_os = "macos")]
 fn shell_step(call_id: &str, command: &str) -> Step {
-    call(call_id, "shell_command", json!({ "command": command }))
+    call(call_id, "exec_command", json!({ "cmd": command }))
+}
+
+/// #2548 (coordinator decision, 2026-11-18): Aggressive always has prompt
+/// and forbidden rules, so a script outside the minimal lexical set (these
+/// build paths at run time with `$(…)` and variables) asks before it runs,
+/// and with approvals off it would be refused before the sandbox is
+/// exercised. Under Aggressive these runs therefore allow approvals and
+/// approve that prompt; the sandbox assertions are unchanged.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn reading_gate_approval(level: SecurityLevel) -> AskForApproval {
+    if level == SecurityLevel::Aggressive {
+        AskForApproval::OnRequest
+    } else {
+        AskForApproval::Never
+    }
+}
+
+/// Approves the script-reading prompt [`reading_gate_approval`] expects
+/// under Aggressive for `script`, asserting it was raised exactly when the
+/// script lies outside the minimal lexical set (and that no other level
+/// asks); any other approval request (a sandbox retry) is denied, so the
+/// sandbox still decides.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+async fn approve_reading_gate(
+    test: &TestCodex,
+    level: SecurityLevel,
+    script: &str,
+) -> anyhow::Result<usize> {
+    use codex_protocol::protocol::ReviewDecision;
+    let mut gate_prompts = 0;
+    while let Some(approval) = next_exec_approval(test).await {
+        // Counted at every level, so a prompt where none is expected fails.
+        // Sync (D691): Aggressive's rules include forbidden ones, so the
+        // reading prompt is a fresh human decision that names its reason.
+        // On Linux the prompt before the run carries the Aggressive notice
+        // for what the command touches (a protected path, a user namespace)
+        // as its reason instead; a sandbox retry carries neither.
+        let gate = approval.reason.as_deref().is_none_or(|reason| {
+            reason.ends_with("a prompt-user or forbidden rule could match the command it runs")
+                || reason.starts_with("Security level Aggressive blocked access to `")
+                || reason.starts_with(
+                    "On Linux, security level Aggressive blocks creating user namespaces \
+                     for agent commands: if you approve, the command runs",
+                )
+        });
+        gate_prompts += usize::from(gate);
+        let decision = if level == SecurityLevel::Aggressive && gate {
+            ReviewDecision::Approved
+        } else {
+            ReviewDecision::denied("a sandbox retry")
+        };
+        test.codex
+            .submit(Op::ExecApproval {
+                id: approval.effective_approval_id(),
+                turn_id: None,
+                decision,
+            })
+            .await?;
+    }
+    // Exactly the one prompt for a script outside the minimal set under
+    // Aggressive (the Linux and macOS variants differ), none otherwise.
+    let expected = level == SecurityLevel::Aggressive
+        && codex_shell_command::bash::read_script(script).fails_closed();
+    assert_eq!(
+        gate_prompts,
+        usize::from(expected),
+        "{level:?}: the script-reading prompt"
+    );
+    Ok(gate_prompts)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -947,9 +1015,15 @@ async fn pf_23_s01_sandbox_denies_home_reads_the_command_text_hides() -> anyhow:
         if tainted {
             steps.insert(0, injected_step());
         }
-        let (test, captured) =
-            start_turn_in(Some(home), level, AskForApproval::Never, steps, |_| {}).await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        let (test, captured) = start_turn_in(
+            Some(home),
+            level,
+            reading_gate_approval(level),
+            steps,
+            |_| {},
+        )
+        .await?;
+        approve_reading_gate(&test, level, &evading).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-read");
         assert_eq!(
@@ -1040,7 +1114,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
         (false, true, ask, None, false),
     ] {
         let (home, evading, _) = canary_home()?;
-        let mut arguments = json!({ "command": evading });
+        let mut arguments = json!({ "cmd": evading });
         if escalate {
             arguments["sandbox_permissions"] = json!("require_escalated");
             arguments["justification"] = json!("read the notes");
@@ -1049,7 +1123,7 @@ async fn issue_239_moderate_escalation_before_untrusted_content_needs_the_human(
             Some(home),
             SecurityLevel::Moderate,
             approval,
-            vec![call("call-read", "shell_command", arguments), done_step()],
+            vec![call("call-read", "exec_command", arguments), done_step()],
             move |config| {
                 if full_access {
                     config
@@ -1109,8 +1183,8 @@ async fn pf_23_s01_working_folder_inside_a_denied_path_keeps_the_denial() -> any
     let workdir = wallet.to_string_lossy().into_owned();
     let read = call(
         "call-read",
-        "shell_command",
-        json!({ "command": "cat pf23-notes.txt", "workdir": workdir }),
+        "exec_command",
+        json!({ "cmd": "cat pf23-notes.txt", "workdir": workdir }),
     );
     let (test, captured) = start_turn_in(
         Some(home),
@@ -1148,12 +1222,12 @@ async fn pf_23_s02_aggressive_denies_home_reads_before_untrusted_content() -> an
     let (test, captured) = start_turn_in(
         Some(home),
         SecurityLevel::Aggressive,
-        AskForApproval::Never,
+        reading_gate_approval(SecurityLevel::Aggressive),
         vec![shell_step("call-read", &evading), done_step()],
         |_| {},
     )
     .await?;
-    assert!(next_exec_approval(&test).await.is_none());
+    approve_reading_gate(&test, SecurityLevel::Aggressive, &evading).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -1354,9 +1428,9 @@ async fn issue_442_permissive_is_unchanged() -> anyhow::Result<()> {
             ),
             call(
                 "call-approved",
-                "shell_command",
+                "exec_command",
                 json!({
-                    "command": write,
+                    "cmd": write,
                     "sandbox_permissions": "require_escalated",
                     "justification": "write the agent settings",
                 }),
@@ -1456,9 +1530,9 @@ async fn issue_245_additional_permissions_never_reopen_a_protected_read() -> any
         };
         let read = call(
             "call-read",
-            "shell_command",
+            "exec_command",
             json!({
-                "command": command,
+                "cmd": command,
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": {
                     "file_system": { "read": [dummy.to_string_lossy()] },
@@ -1697,9 +1771,9 @@ async fn issue_513_additional_writes_never_reopen_a_write_protection() -> anyhow
         };
         let write = call(
             "call-write",
-            "shell_command",
+            "exec_command",
             json!({
-                "command": format!("{command} && echo wrote-513"),
+                "cmd": format!("{command} && echo wrote-513"),
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": {
                     "file_system": { "write": [entry] },
@@ -1789,9 +1863,9 @@ async fn issue_513_moderate_only_a_persons_fresh_approval_lifts_a_write_protecti
     let write = |call_id: &str| {
         call(
             call_id,
-            "shell_command",
+            "exec_command",
             json!({
-                "command": "mkdir -p .agents && printf x >> .agents/issue513.md && echo wrote-513",
+                "cmd": "mkdir -p .agents && printf x >> .agents/issue513.md && echo wrote-513",
                 "sandbox_permissions": "with_additional_permissions",
                 "additional_permissions": { "file_system": { "write": [".agents"] } },
                 "justification": "update the agent notes",
@@ -2024,7 +2098,7 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
             )?;
         }
         let mut arguments = json!({
-            "command": format!(
+            "cmd": format!(
                 "cat '{}'; cp '{}' '{}'",
                 root.join("auth.json").display(),
                 root.join("issue540-new").display(),
@@ -2041,7 +2115,7 @@ async fn issue_540_runtime_entries_stay_read_only_when_a_person_lifts_the_rules(
             AskForApproval::OnRequest,
             vec![
                 injected_step(),
-                call("call-write", "shell_command", arguments),
+                call("call-write", "exec_command", arguments),
                 done_step(),
             ],
             |config| {
@@ -2131,7 +2205,7 @@ async fn issue_838_security_state_and_keys_stay_denied_after_a_fresh_approval() 
             AskForApproval::OnRequest,
             vec![
                 injected_step(),
-                call("call-read", "shell_command", json!({ "command": command })),
+                call("call-read", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2213,13 +2287,9 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call(
-                    "call-create",
-                    "shell_command",
-                    json!({ "command": command }),
-                ),
+                call("call-create", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             |config| {
@@ -2230,7 +2300,16 @@ async fn issue_562_missing_runtime_entries_cannot_be_created() -> anyhow::Result
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        let prompts = approve_reading_gate(&test, level, &command).await?;
+        // Pinned fixture, independent of the reader the helper consults: a
+        // script building its paths with `$(…)` must raise the reading
+        // prompt under Aggressive, so a reader that stopped failing closed
+        // cannot pass silently.
+        assert_eq!(
+            prompts,
+            usize::from(level == SecurityLevel::Aggressive),
+            "{level:?}: `$(…)` must raise the script-reading prompt"
+        );
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = [
@@ -2294,9 +2373,9 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-move", "shell_command", json!({ "command": command })),
+                call("call-move", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2312,7 +2391,7 @@ async fn issue_587_the_corbanu_home_cannot_be_moved_aside() -> anyhow::Result<()
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-move");
         let agents = std::fs::read_to_string(root.join("AGENTS.md")).unwrap_or_default();
@@ -2494,12 +2573,12 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
                 call(
                     "call-replace",
-                    "shell_command",
-                    json!({ "command": home.command(/*read*/ false) }),
+                    "exec_command",
+                    json!({ "cmd": home.command(/*read*/ false) }),
                 ),
                 done_step(),
             ],
@@ -2509,7 +2588,7 @@ async fn issue_594_a_linked_corbanu_home_cannot_be_replaced() -> anyhow::Result<
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &home.command(/*read*/ false)).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-replace");
         drop(test);
@@ -2553,8 +2632,8 @@ async fn issue_598_an_approved_command_cannot_move_the_corbanu_home() -> anyhow:
                 injected_step(),
                 call(
                     "call-replace",
-                    "shell_command",
-                    json!({ "command": home.command(/*read*/ true) }),
+                    "exec_command",
+                    json!({ "cmd": home.command(/*read*/ true) }),
                 ),
                 done_step(),
             ],
@@ -2650,9 +2729,9 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-1472", "shell_command", json!({ "command": command })),
+                call("call-1472", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -2671,7 +2750,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
                             ),
                             FileSystemSandboxEntry::new(
                                 FileSystemPath::Path {
-                                    path: cwd_abs.clone(),
+                                    path: cwd_abs.clone().into(),
                                 },
                                 FileSystemAccessMode::Write,
                             ),
@@ -2686,7 +2765,7 @@ async fn issue_1472_a_home_below_the_working_folder_cannot_be_moved_aside() -> a
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-1472");
         drop(test);
@@ -2745,13 +2824,9 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
         let (test, captured) = start_turn_in(
             Some(home.clone()),
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call(
-                    "call-create",
-                    "shell_command",
-                    json!({ "command": command }),
-                ),
+                call("call-create", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             |config| {
@@ -2762,7 +2837,7 @@ async fn issue_583_missing_corbanu_home_entries_cannot_be_created() -> anyhow::R
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-create");
         let entries = ["rules/x.rules", "new-entry"];
@@ -2836,11 +2911,7 @@ async fn issue_583_git_still_commits_in_a_corbanu_home_worktree() -> anyhow::Res
         SecurityLevel::Moderate,
         AskForApproval::Never,
         vec![
-            call(
-                "call-commit",
-                "shell_command",
-                json!({ "command": command }),
-            ),
+            call("call-commit", "exec_command", json!({ "cmd": command })),
             done_step(),
         ],
         move |config| {
@@ -2917,13 +2988,9 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
             let (test, captured) = start_turn_in(
                 Some(home.clone()),
                 level,
-                AskForApproval::Never,
+                reading_gate_approval(level),
                 vec![
-                    call(
-                        "call-create",
-                        "shell_command",
-                        json!({ "command": command }),
-                    ),
+                    call("call-create", "exec_command", json!({ "cmd": command })),
                     done_step(),
                 ],
                 move |config| {
@@ -2935,7 +3002,7 @@ async fn issue_603_a_command_in_the_corbanu_home_cannot_create_names_corbanu_rea
                 },
             )
             .await?;
-            assert!(next_exec_approval(&test).await.is_none());
+            approve_reading_gate(&test, level, &command).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-create");
             let mut entries = vec!["rules/x.rules", "hooks.json", "agents/x"];
@@ -3020,9 +3087,9 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
             let (test, captured) = start_turn_after(
                 Some(home.clone()),
                 level,
-                AskForApproval::Never,
+                reading_gate_approval(level),
                 vec![
-                    call("call-lock", "shell_command", json!({ "command": command })),
+                    call("call-lock", "exec_command", json!({ "cmd": command })),
                     done_step(),
                 ],
                 move |config| {
@@ -3045,7 +3112,7 @@ async fn issue_586_missing_db_init_lock_cannot_be_created_or_held() -> anyhow::R
                 },
             )
             .await?;
-            assert!(next_exec_approval(&test).await.is_none());
+            approve_reading_gate(&test, level, &command).await?;
             let requests = captured.requests();
             let output = output_text(&requests[requests.len() - 1], "call-lock");
             let ok = if missing {
@@ -3108,13 +3175,16 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-db", "shell_command", json!({ "command": command })),
+                call("call-db", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3130,7 +3200,7 @@ async fn issue_611_a_separate_database_folder_is_protected() -> anyhow::Result<(
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-db");
         let achieved = [
@@ -3203,9 +3273,9 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-650", "shell_command", json!({ "command": command })),
+                call("call-650", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3217,7 +3287,7 @@ async fn issue_650_other_worktrees_git_folders_stay_read_only() -> anyhow::Resul
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-650");
         // Where the folder is now (Permissive moves it).
@@ -3298,9 +3368,9 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
         let (test, captured) = start_turn_in(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-675", "shell_command", json!({ "command": command })),
+                call("call-675", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3312,7 +3382,7 @@ async fn issue_675_other_worktrees_dot_git_files_stay_read_only() -> anyhow::Res
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-675");
         let changed = std::fs::read_to_string(x.join("other/.git")).unwrap_or_default() != original;
@@ -3359,12 +3429,15 @@ async fn issue_651_a_database_folder_with_glob_syntax_is_protected() -> anyhow::
             level,
             AskForApproval::Never,
             vec![
-                call("call-651", "shell_command", json!({ "command": command })),
+                call("call-651", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
                 config.cwd = cwd.clone();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3434,14 +3507,17 @@ async fn issue_732_database_folder_outputs(
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-732", "shell_command", json!({ "command": command })),
+                call("call-732", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
                 config.cwd = cwd.clone();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3457,7 +3533,7 @@ async fn issue_732_database_folder_outputs(
         )
         .await?;
         let readable = std::fs::read_dir(&private).is_ok();
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-732");
         drop(test);
@@ -3563,13 +3639,16 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-651m", "shell_command", json!({ "command": command })),
+                call("call-651m", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                    sqlite_home.clone(),
+                    /*enforce_delete_on_nfs*/ false,
+                );
                 config
                     .permissions
                     .set_permission_profile(PermissionProfile::Disabled)
@@ -3581,7 +3660,7 @@ async fn issue_651_a_missing_database_folder_is_protected() -> anyhow::Result<()
             },
         )
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, &command).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-651m");
         let achieved = [
@@ -3688,16 +3767,19 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
         let (test, captured) = start_turn_after(
             /*home*/ None,
             level,
-            AskForApproval::Never,
+            reading_gate_approval(level),
             vec![
-                call("call-651s", "shell_command", json!({ "command": command })),
+                call("call-651s", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             {
                 let command_tmpdir = command_tmpdir.clone();
                 move |config| {
                     config.sqlite =
-                        codex_state::SqliteConfig::from_sqlite_home(sqlite_home.clone());
+                        codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+                            sqlite_home.clone(),
+                            /*enforce_delete_on_nfs*/ false,
+                        );
                     config
                         .permissions
                         .set_permission_profile(PermissionProfile::Disabled)
@@ -3726,7 +3808,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
             },
         )
         .await?;
-        let approval = next_exec_approval(&test).await;
+        let approved = approve_reading_gate(&test, level, &command).await;
         // SAFETY: as above.
         unsafe {
             match &original_tmpdir {
@@ -3734,7 +3816,7 @@ async fn shared_database_folder_scenario() -> anyhow::Result<()> {
                 None => std::env::remove_var("TMPDIR"),
             }
         }
-        assert!(approval.is_none());
+        approved?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-651s");
         let ordinary = output.contains("ordinary-651")
@@ -3820,7 +3902,7 @@ async fn issue_652_home_below_a_root_reached_through_a_nested_link_stays_protect
             level,
             AskForApproval::Never,
             vec![
-                call("call-652", "shell_command", json!({ "command": command })),
+                call("call-652", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3833,7 +3915,9 @@ async fn issue_652_home_below_a_root_reached_through_a_nested_link_stays_protect
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: root.clone() },
+                        FileSystemPath::Path {
+                            path: root.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);
@@ -3916,7 +4000,7 @@ async fn issue_605_minimal_reads_keep_git_below_tmp_read_only() -> anyhow::Resul
             level,
             AskForApproval::Never,
             vec![
-                call("call-605", "shell_command", json!({ "command": command })),
+                call("call-605", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -3929,7 +4013,9 @@ async fn issue_605_minimal_reads_keep_git_below_tmp_read_only() -> anyhow::Resul
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: cwd.clone() },
+                        FileSystemPath::Path {
+                            path: cwd.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);
@@ -4002,7 +4088,7 @@ async fn issue_649_minimal_reads_keep_denied_paths_below_tmp_unreadable() -> any
             level,
             AskForApproval::Never,
             vec![
-                call("call-649", "shell_command", json!({ "command": command })),
+                call("call-649", "exec_command", json!({ "cmd": command })),
                 done_step(),
             ],
             move |config| {
@@ -4015,7 +4101,9 @@ async fn issue_649_minimal_reads_keep_denied_paths_below_tmp_unreadable() -> any
                         FileSystemAccessMode::Read,
                     ),
                     FileSystemSandboxEntry::new(
-                        FileSystemPath::Path { path: cwd.clone() },
+                        FileSystemPath::Path {
+                            path: cwd.clone().into(),
+                        },
                         FileSystemAccessMode::Write,
                     ),
                 ]);
@@ -4065,12 +4153,12 @@ async fn pf_23_s03_stored_level_survives_restart_over_a_lower_config() -> anyhow
     let (test, captured) = start_turn_in(
         Some(home),
         SecurityLevel::Permissive,
-        AskForApproval::Never,
+        reading_gate_approval(SecurityLevel::Aggressive),
         vec![shell_step("call-read", &evading), done_step()],
         |_| {},
     )
     .await?;
-    assert!(next_exec_approval(&test).await.is_none());
+    approve_reading_gate(&test, SecurityLevel::Aggressive, &evading).await?;
     let requests = captured.requests();
     let output = output_text(&requests[requests.len() - 1], "call-read");
     assert!(!output.contains(CANARY), "{output}");
@@ -4103,14 +4191,14 @@ async fn pf_23_s02_sandbox_makes_persistence_files_read_only_under_full_access()
         if tainted {
             steps.insert(0, injected_step());
         }
-        let (test, captured) = start_turn(level, AskForApproval::Never, steps, |config| {
+        let (test, captured) = start_turn(level, reading_gate_approval(level), steps, |config| {
             config
                 .permissions
                 .set_permission_profile(PermissionProfile::Disabled)
                 .expect("full access");
         })
         .await?;
-        assert!(next_exec_approval(&test).await.is_none());
+        approve_reading_gate(&test, level, write).await?;
         let requests = captured.requests();
         let output = output_text(&requests[requests.len() - 1], "call-write");
         assert_eq!(
@@ -4167,7 +4255,6 @@ async fn pf_23_s02_typing_into_a_shell_started_before_untrusted_content_is_confi
         ]
     };
     let unified_exec = |config: &mut Config| {
-        config.use_experimental_unified_exec_tool = true;
         config
             .features
             .enable(Feature::UnifiedExec)

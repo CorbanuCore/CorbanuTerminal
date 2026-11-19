@@ -16,6 +16,7 @@ use codex_state::ThreadMetadataBuilder;
 use codex_state::accounting::Attempt;
 use codex_state::accounting::Observation;
 use codex_utils_absolute_path::AbsolutePathBuf;
+#[cfg(debug_assertions)]
 use futures::FutureExt;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
@@ -47,7 +48,7 @@ impl Fixture {
     async fn new() -> anyhow::Result<Self> {
         let home = tempfile::tempdir()?;
         let db = StateRuntime::init(
-            SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+            SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
             "openai".into(),
         )
         .await?;
@@ -219,7 +220,9 @@ impl HttpTransport for Probe {
         })
     }
 }
+#[cfg(debug_assertions)]
 struct Denied;
+#[cfg(debug_assertions)]
 impl codex_api::AuthProvider for Denied {
     fn add_auth_headers(&self, _: &mut http::HeaderMap) -> Result<(), codex_api::AuthError> {
         Ok(())
@@ -732,6 +735,8 @@ impl codex_api::AuthProvider for Mutate {
 
 #[tokio::test]
 async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
+    // Migrate one database for the matrix, rather than seven under CI load.
+    let mut fixture = Fixture::new().await?;
     for endpoint in [
         "https://127.0.0.1:1/v1/chat/completions",
         "http://localhost:1/v1/chat/completions",
@@ -741,7 +746,10 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
         "http://user@127.0.0.1:1/v1/chat/completions",
         "http://127.0.0.1:1/v1/chat/completions#fragment",
     ] {
-        let fixture = Fixture::new().await?;
+        // Each endpoint still gets a fresh sampling and failure latch.
+        fixture.deferred =
+            DeferredChatSampling::new(fixture.deferred.session.clone(), "turn".into(), mode());
+        assert!(fixture.deferred.check().is_ok());
         let sends = Arc::new(AtomicUsize::new(0));
         let transport = AccountingTransport::new(
             Probe(sends.clone()),
@@ -764,6 +772,7 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
         );
         assert!(fixture.deferred.check().is_err());
     }
+    fixture.db.close().await;
     Ok(())
 }
 

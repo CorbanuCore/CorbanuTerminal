@@ -100,6 +100,9 @@ async fn tmux_review_refusal_in_side_conversation_stays_visible() -> Result<()> 
         .filter(|request| {
             request.method == wiremock::http::Method::POST
                 && request.url.path().ends_with("/responses")
+                // The first turn also starts upstream's automatic thread-title request.
+                && !String::from_utf8_lossy(&request.body)
+                    .contains(r#"\"thread_source\":\"thread_title\""#)
         })
         .count();
     assert_eq!(model_requests, 1, "only the first turn reached the model");

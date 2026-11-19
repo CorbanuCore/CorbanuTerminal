@@ -382,7 +382,7 @@ if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
 fi
 
 bazel_console_log="$(mktemp)"
-trap 'rm -f "$bazel_console_log"' EXIT
+trap 'rm -- "$bazel_console_log"' EXIT
 
 bazel_run_args=(
   "${bazel_args[@]}"
@@ -394,7 +394,9 @@ else
   echo "BuildBuddy API key is not available; using local Bazel configuration."
   # `ci` would have set this: one failed action in a multi-hour cold build
   # must not hide every other target's result.
-  bazel_run_args+=(--keep_going)
+  # Ephemeral runners already retain their outputs in the execution root.
+  # Avoid a second copy in the default disk cache when `ci` is not selected.
+  bazel_run_args+=(--keep_going --disk_cache=)
   if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 0 ]]; then
     # Keep the Windows test skip list that `ci-windows` would have applied.
     bazel_run_args+=("--config=windows-native-tests")

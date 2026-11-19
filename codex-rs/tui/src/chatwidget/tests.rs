@@ -269,6 +269,8 @@ mod model_display_name_tests;
 #[path = "tests/model_picker_tests.rs"]
 mod model_picker_tests;
 mod model_route_choice;
+#[path = "tests/november_models.rs"]
+mod november_models;
 #[path = "tests/permission_picker_tests.rs"]
 mod permission_picker_tests;
 #[path = "tests/permission_shortcuts_tests.rs"]
@@ -280,6 +282,8 @@ mod plugin_catalog;
 mod popups_and_settings;
 #[path = "tests/program_status.rs"]
 mod program_status;
+#[path = "tests/provider_cooldown_tests.rs"]
+mod provider_cooldown_tests;
 #[path = "tests/rate_limit_recovery_tests.rs"]
 mod rate_limit_recovery_tests;
 #[path = "tests/reasoning_status_tests.rs"]
@@ -325,6 +329,7 @@ pub(super) use helpers::*;
 
 #[path = "tests/questions_tests.rs"]
 mod questions_tests;
+pub(crate) use questions_tests::burst_enter_tests::assert_app_input_handoff_cancels_burst;
 
 #[path = "tests/question_turn_end_tests.rs"]
 mod question_turn_end_tests;

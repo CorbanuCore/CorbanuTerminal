@@ -8,7 +8,15 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
-const MAX_CUR_PROJECT_PATH_PROBES: usize = 128;
+/// Upper bound on filesystem probes spent recovering one Cursor project path.
+///
+/// Every existing directory on a candidate path costs at most
+/// `1 + 3 * CUR_PROJECT_SEPARATORS.len()` = 34 probes, so this allows about 30
+/// resolved directory levels (deep or hyphen-heavy paths, such as isolated test
+/// homes) while keeping the worst case per project to 1024 `stat` calls.
+const MAX_CUR_PROJECT_PATH_PROBES: usize = 1024;
+/// Most encoded components rebuilt into a single directory name.
+const MAX_CUR_PROJECT_NAME_COMPONENTS: usize = 4;
 const CUR_PROJECT_SEPARATORS: [&str; 11] =
     ["-", "_", ".", " ", "--", "..", "__", "  ", "+", "@", "&"];
 
@@ -42,8 +50,13 @@ pub(crate) fn detect_recent_cur_sessions_with_limits(
         if !project_storage.is_dir() {
             continue;
         }
+        let transcripts = cur_transcript_files(&project_storage.join("agent-transcripts"));
+        if transcripts.is_empty() {
+            // Skip path recovery, and its filesystem probes, for empty projects.
+            continue;
+        }
         let fallback_cwd = cur_project_cwd(&project_storage, external_agent_home);
-        for path in cur_transcript_files(&project_storage.join("agent-transcripts")) {
+        for path in transcripts {
             candidates.push(SessionFileCandidate {
                 path,
                 fallback_cwd: fallback_cwd.clone(),
@@ -98,112 +111,72 @@ fn cur_project_cwd(project_storage: &Path, external_agent_home: &Path) -> Option
 }
 
 fn decode_cur_project_path(encoded: &str) -> Option<PathBuf> {
+    decode_cur_project_path_with_probe_limit(encoded, MAX_CUR_PROJECT_PATH_PROBES)
+}
+
+/// Recovers the project directory from Cursor's lossy encoding, where every path
+/// separator and punctuation run became `-`.
+///
+/// Each directory name is rebuilt from 1 to [`MAX_CUR_PROJECT_NAME_COMPONENTS`]
+/// encoded components joined by one separator, and only existing directories are
+/// descended into. The search must finish within `probe_limit` filesystem probes and
+/// find exactly one directory; ambiguity or an exhausted budget yields `None`, so
+/// an unresolved project imports without a recovered working directory.
+fn decode_cur_project_path_with_probe_limit(encoded: &str, probe_limit: usize) -> Option<PathBuf> {
     #[cfg(not(windows))]
-    let mut path = PathBuf::from("/");
+    let root = PathBuf::from("/");
 
     #[cfg(windows)]
-    let (encoded, mut path) = {
+    let (encoded, root) = {
         let (drive, encoded) = decode_cur_windows_project_drive(encoded)?;
         (encoded, PathBuf::from(format!("{drive}:\\")))
     };
 
     let encoded = encoded.strip_prefix('-').unwrap_or(encoded);
-    for component in encoded.split('-') {
-        if component.is_empty()
-            || matches!(component, "." | "..")
+    let components = encoded.split('-').collect::<Vec<_>>();
+    if components.iter().any(|component| {
+        component.is_empty()
+            // Dot-only names (`.`, `..`, and `...`, which Windows reads as `.`).
+            || component.bytes().all(|byte| byte == b'.')
             || component.contains(['/', '\\', ':'])
-        {
-            return None;
-        }
-        path.push(component);
+    }) {
+        return None;
     }
 
-    let mut matched_path = None;
     let mut probes = 0;
-    let mut inspect = |candidate: PathBuf| {
-        if probes >= MAX_CUR_PROJECT_PATH_PROBES {
-            return None;
-        }
-        probes += 1;
-        if candidate.is_dir() {
+    let mut matched_path: Option<PathBuf> = None;
+    let mut pending = vec![(root, 0)];
+    while let Some((directory, consumed)) = pending.pop() {
+        let remaining = &components[consumed..];
+        if remaining.is_empty() {
             if matched_path
                 .as_ref()
-                .is_some_and(|matched_path| matched_path != &candidate)
+                .is_some_and(|matched_path| matched_path != &directory)
             {
                 return None;
             }
-            matched_path = Some(candidate);
+            matched_path = Some(directory);
+            continue;
         }
-        Some(())
-    };
-    inspect(path.clone())?;
 
-    for suffix_length in 2..=4 {
-        let mut parent = path.as_path();
-        let mut suffix = Vec::with_capacity(suffix_length);
-        for _ in 0..suffix_length {
-            let Some(component) = parent.file_name().and_then(|name| name.to_str()) else {
-                break;
+        for count in 1..=remaining.len().min(MAX_CUR_PROJECT_NAME_COMPONENTS) {
+            let parts = &remaining[..count];
+            let separators: &[&str] = if count == 1 {
+                &[""]
+            } else {
+                &CUR_PROJECT_SEPARATORS
             };
-            suffix.push(component);
-            let Some(ancestor) = parent.parent() else {
-                break;
-            };
-            parent = ancestor;
-        }
-        if suffix.len() != suffix_length {
-            break;
-        }
-        suffix.reverse();
-
-        for separator in CUR_PROJECT_SEPARATORS {
-            inspect(parent.join(suffix.join(separator)))?;
-        }
-    }
-
-    let mut ancestor = path.parent();
-    while let Some(right) = ancestor {
-        let Some(right_name) = right.file_name().and_then(|name| name.to_str()) else {
-            break;
-        };
-        let Some(left) = right.parent() else {
-            break;
-        };
-        let Some(left_name) = left.file_name().and_then(|name| name.to_str()) else {
-            break;
-        };
-        let Some(prefix) = left.parent() else {
-            break;
-        };
-        let Ok(trailing) = path.strip_prefix(right) else {
-            return None;
-        };
-
-        for separator in CUR_PROJECT_SEPARATORS {
-            let merged_prefix = prefix.join(format!("{left_name}{separator}{right_name}"));
-            if probes >= MAX_CUR_PROJECT_PATH_PROBES {
-                return None;
+            for separator in separators {
+                if probes >= probe_limit {
+                    return None;
+                }
+                probes += 1;
+                let candidate = directory.join(parts.join(separator));
+                if candidate.is_dir() {
+                    pending.push((candidate, consumed + count));
+                }
             }
-            probes += 1;
-            if !merged_prefix.is_dir() {
-                continue;
-            }
-
-            if probes >= MAX_CUR_PROJECT_PATH_PROBES {
-                return None;
-            }
-            probes += 1;
-            let candidate = merged_prefix.join(trailing);
-            if !candidate.is_dir()
-                || matched_path
-                    .as_ref()
-                    .is_some_and(|matched_path| matched_path != &candidate)
-            {
-                return None;
-            }
-            matched_path = Some(candidate);
         }
-        ancestor = Some(left);
     }
 
     matched_path

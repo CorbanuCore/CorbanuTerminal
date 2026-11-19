@@ -36,14 +36,9 @@ use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
-<<<<<<< HEAD
-use codex_protocol::models::FunctionCallOutputPayload;
-||||||| 413492cd6c
-=======
 use codex_protocol::models::ExecutedToolCall;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::ToolResultMetadata;
 use codex_protocol::models::ToolResultSource;
@@ -61,14 +56,8 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
 use core_test_support::TestCodexResponsesRequestKind;
-<<<<<<< HEAD
-use core_test_support::load_default_config_for_test_in;
-||||||| 413492cd6c
-use core_test_support::load_default_config_for_test;
-=======
 use core_test_support::ThreadIdle;
-use core_test_support::load_default_config_for_test;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use core_test_support::load_default_config_for_test_in;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketTestServer;
 use core_test_support::responses::ev_assistant_message;
@@ -135,15 +124,9 @@ fn assert_request_trace_matches(body: &serde_json::Value, expected_trace: &W3cTr
 }
 
 struct WebsocketTestHarness {
-<<<<<<< HEAD
-    _codex_home: TempDir,
-    _cwd: TempDir,
-||||||| 413492cd6c
-    _codex_home: TempDir,
-=======
     codex_home: TempDir,
+    _cwd: TempDir,
     auth_manager: Arc<AuthManager>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     client: ModelClient,
     outbound_proxy_policy: OutboundProxyPolicy,
     session_id: SessionId,
@@ -240,7 +223,7 @@ async fn responses_websocket_preserves_credit_usage_metadata() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn responses_websocket_preserves_raw_tool_metadata_for_openai_custom_endpoint() {
+async fn responses_websocket_omits_raw_tool_metadata_for_openai_custom_endpoint() {
     skip_if_no_network!();
 
     let server = start_websocket_server(vec![vec![vec![
@@ -264,7 +247,12 @@ async fn responses_websocket_preserves_raw_tool_metadata_for_openai_custom_endpo
     output.append_executed_tool_calls(vec![call]);
     output.mark_tool_calls_complete();
     let prompt = prompt_with_input(vec![output.clone()]);
-    let expected = serde_json::to_value(&output).unwrap();
+    // D634: keep ordinary output and call metadata, but strip provider-private data
+    // from custom endpoints without changing the captured prompt.
+    let mut transmitted_output = output.clone();
+    transmitted_output.clear_tool_result_metadata();
+    let expected = serde_json::to_value(&transmitted_output).unwrap();
+    assert_ne!(expected, serde_json::to_value(&output).unwrap());
 
     let mut client_session = harness.client.new_session();
     stream_until_complete_with_model_info(
@@ -693,8 +681,13 @@ async fn responses_websocket_resume_prewarm_reuses_and_repairs_connection() -> a
     let connection = server.single_connection();
     assert_eq!(connection.len(), 3);
     let prewarm = connection[0].body_json();
-    assert_eq!(prewarm["input"].as_array().unwrap().len(), 1);
-    assert_eq!(prewarm["input"][0]["role"], "developer");
+    // Corbanu keeps base instructions in the dedicated request field.
+    assert_eq!(prewarm["input"], json!([]));
+    assert_eq!(
+        prewarm["instructions"],
+        connection[1].body_json()["instructions"]
+    );
+    assert!(!prewarm["instructions"].as_str().unwrap().is_empty());
     assert_eq!(connection[2].body_json()["previous_response_id"], "resp-1");
     let mut expected_history = connection
         .iter()
@@ -1068,8 +1061,11 @@ async fn responses_websocket_reconnects_when_the_sign_in_is_replaced() {
         )
         .await,
     );
+    let mut provider = websocket_provider(&server);
+    // This test exercises login replacement, so the provider must use that login.
+    provider.requires_openai_auth = true;
     let harness = websocket_harness_with_client_auth(
-        websocket_provider(&server),
+        provider,
         /*runtime_metrics_enabled*/ false,
         /*concurrent_reasoning_summaries_enabled*/ false,
         /*enabled_features*/ &[],
@@ -1247,7 +1243,7 @@ async fn responses_websocket_reconnects_after_account_switch() {
         assert_continuation_metrics(
             &harness.session_telemetry,
             &[
-                (["full", "other", "generation"], 1),
+                (["full", "auth_changed", "generation"], 1),
                 (["full", "no_previous_request", "generation"], 1),
                 (["incremental", "incremental", "generation"], 3),
             ],
@@ -2602,13 +2598,11 @@ async fn responses_websocket_creates_when_instructions_change() {
 
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second.get("previous_response_id"), None);
-    assert_eq!(second["input"][0]["role"], "developer");
+    // Corbanu sends base instructions in `instructions` (upstream #51156
+    // moved them to a leading developer message).
+    assert_eq!(second["instructions"], "base instructions two");
     assert_eq!(
-        second["input"][0]["content"][0]["text"],
-        "base instructions two"
-    );
-    assert_eq!(
-        &second["input"].as_array().unwrap()[1..],
+        second["input"].as_array().unwrap(),
         serde_json::to_value(&prompt_two.input)
             .unwrap()
             .as_array()
@@ -2622,8 +2616,10 @@ async fn responses_websocket_creates_when_instructions_change() {
                 ["full", "no_previous_request", "generation", "none", "none"],
                 1,
             ),
+            // The instructions field changed, not the input (Corbanu keeps
+            // base instructions out of the input).
             (
-                ["full", "input_mismatch", "generation", "message", "message"],
+                ["full", "instructions_changed", "generation", "none", "none"],
                 1,
             ),
         ],
@@ -2952,6 +2948,8 @@ fn assistant_message_item(id: &str, text: &str) -> ResponseItem {
 
 fn function_call_item(call_id: &str) -> ResponseItem {
     ResponseItem::FunctionCall {
+        encrypted_content: None,
+        status: None,
         id: None,
         name: "shell".to_string(),
         namespace: None,
@@ -2965,7 +2963,9 @@ fn function_call_item(call_id: &str) -> ResponseItem {
 fn function_call_output_item(call_id: &str) -> ResponseItem {
     ResponseItem::FunctionCallOutput {
         id: None,
-        call_id: call_id.to_string(),
+        call_id: Some(call_id.to_string()),
+        name: None,
+        namespace: None,
         output: FunctionCallOutputPayload::from_text("ok".to_string()),
         internal_chat_message_metadata_passthrough: None,
     }
@@ -3022,16 +3022,12 @@ fn websocket_provider_with_connect_timeout(
         requires_openai_auth: false,
         supports_websockets: true,
         supports_standalone_web_search: false,
-<<<<<<< HEAD
         billing: None,
-||||||| 413492cd6c
-=======
         capabilities: None,
         project_id: None,
         location: None,
         credential_file: None,
         include_internal_metadata: false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 }
 
@@ -3040,7 +3036,10 @@ async fn websocket_harness(server: &WebSocketTestServer) -> WebsocketTestHarness
 }
 
 async fn websocket_harness_for_codex_backend(server: &WebSocketTestServer) -> WebsocketTestHarness {
-    let provider = ModelProviderInfo::create_openai_provider(Some(format!("{}/v1", server.uri())));
+    let mut provider =
+        ModelProviderInfo::create_openai_provider(Some(format!("{}/v1", server.uri())));
+    // Custom endpoints opt out by default; this fixture explicitly exercises WebSockets.
+    provider.supports_websockets = true;
     websocket_harness_with_provider_options_and_auth(
         provider,
         /*runtime_metrics_enabled*/ false,
@@ -3084,25 +3083,6 @@ async fn websocket_harness_with_provider_options(
     concurrent_reasoning_summaries_enabled: bool,
     enabled_features: &[Feature],
 ) -> WebsocketTestHarness {
-<<<<<<< HEAD
-    websocket_harness_with_client_auth(
-        provider,
-        runtime_metrics_enabled,
-        concurrent_reasoning_summaries_enabled,
-        enabled_features,
-        /*client_auth_manager*/ None,
-    )
-    .await
-}
-
-async fn websocket_harness_with_client_auth(
-    provider: ModelProviderInfo,
-    runtime_metrics_enabled: bool,
-    concurrent_reasoning_summaries_enabled: bool,
-    enabled_features: &[Feature],
-    client_auth_manager: Option<Arc<AuthManager>>,
-||||||| 413492cd6c
-=======
     websocket_harness_with_provider_options_and_auth(
         provider,
         runtime_metrics_enabled,
@@ -3113,13 +3093,50 @@ async fn websocket_harness_with_client_auth(
     .await
 }
 
+async fn websocket_harness_with_client_auth(
+    provider: ModelProviderInfo,
+    runtime_metrics_enabled: bool,
+    concurrent_reasoning_summaries_enabled: bool,
+    enabled_features: &[Feature],
+    client_auth_manager: Option<Arc<AuthManager>>,
+) -> WebsocketTestHarness {
+    websocket_harness_with_auth_sources(
+        provider,
+        runtime_metrics_enabled,
+        concurrent_reasoning_summaries_enabled,
+        enabled_features,
+        /*auth*/ None,
+        client_auth_manager,
+    )
+    .await
+}
+
 async fn websocket_harness_with_provider_options_and_auth(
     provider: ModelProviderInfo,
     runtime_metrics_enabled: bool,
     concurrent_reasoning_summaries_enabled: bool,
     enabled_features: &[Feature],
     auth: Option<CodexAuth>,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+) -> WebsocketTestHarness {
+    websocket_harness_with_auth_sources(
+        provider,
+        runtime_metrics_enabled,
+        concurrent_reasoning_summaries_enabled,
+        enabled_features,
+        auth,
+        /*client_auth_manager*/ None,
+    )
+    .await
+}
+
+/// Builds the harness from either test auth (`auth`) or a caller-owned auth manager.
+async fn websocket_harness_with_auth_sources(
+    provider: ModelProviderInfo,
+    runtime_metrics_enabled: bool,
+    concurrent_reasoning_summaries_enabled: bool,
+    enabled_features: &[Feature],
+    auth: Option<CodexAuth>,
+    client_auth_manager: Option<Arc<AuthManager>>,
 ) -> WebsocketTestHarness {
     let codex_home = TempDir::new().unwrap();
     let cwd = TempDir::new().unwrap();
@@ -3151,11 +3168,13 @@ async fn websocket_harness_with_provider_options_and_auth(
     let model_info = codex_core::test_support::construct_model_info_offline(MODEL, &config);
     let thread_id = ThreadId::new();
     let session_id = SessionId::new();
-    let client_auth_manager = auth.map(|auth| {
-        codex_core::test_support::auth_manager_from_auth_with_home(
-            auth,
-            codex_home.path().to_path_buf(),
-        )
+    let client_auth_manager = client_auth_manager.or_else(|| {
+        auth.map(|auth| {
+            codex_core::test_support::auth_manager_from_auth_with_home(
+                auth,
+                codex_home.path().to_path_buf(),
+            )
+        })
     });
     let auth_manager = client_auth_manager.clone().unwrap_or_else(|| {
         codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("Test API Key"))
@@ -3217,15 +3236,9 @@ async fn websocket_harness_with_provider_options_and_auth(
     );
 
     WebsocketTestHarness {
-<<<<<<< HEAD
-        _codex_home: codex_home,
-        _cwd: cwd,
-||||||| 413492cd6c
-        _codex_home: codex_home,
-=======
         codex_home,
+        _cwd: cwd,
         auth_manager,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         client,
         outbound_proxy_policy,
         session_id,

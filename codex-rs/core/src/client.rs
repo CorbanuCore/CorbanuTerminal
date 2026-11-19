@@ -566,7 +566,15 @@ impl ConnectionIdentity {
             // sign-in. Apply them last, matching websocket handshake
             // precedence. A semantic identity skips them so that a refreshed
             // bearer token keeps the connection.
-            api_auth.add_auth_headers(&mut headers);
+            if api_auth.add_auth_headers(&mut headers).is_err() {
+                // #2259: the sign-in could not be resolved, so fail closed:
+                // the identity is unique and never matches another
+                // connection (the partly written headers are still hashed
+                // but cannot make two identities equal).
+                static AUTH_ERROR: AtomicU64 = AtomicU64::new(0);
+                digest.update(b"auth-error");
+                digest.update(AUTH_ERROR.fetch_add(1, Ordering::Relaxed).to_le_bytes());
+            }
         }
         // Configured headers can carry the sign-in too. Hash bytes rather than
         // an object's address or Debug output. Keep duplicate-value order, but
@@ -1261,7 +1269,7 @@ impl ModelClient {
     /// Issue #445: whether the security kill switch a person turned on in
     /// `/security` is on for this session. Only that switch: a session
     /// started from unreadable state or a cold-resumed child agent is denied
-    /// protected actions too, but its turns still run.
+    /// protected actions too. A detached child also receives a parent-task refusal.
     pub(crate) fn kill_switch_on(&self) -> bool {
         self.ingress_policy.as_ref().is_some_and(|policy| {
             policy
@@ -1276,6 +1284,15 @@ impl ModelClient {
     /// refused before its input is recorded (`session::turn`). A policy that
     /// cannot be read is refused by the source admission check instead.
     pub(crate) fn refuse_under_kill_switch(&self) -> Result<()> {
+        if self
+            .ingress_policy
+            .as_ref()
+            .is_some_and(|policy| policy.0.parent_unavailable(self.state.thread_id))
+        {
+            return Err(CodexErr::InvalidRequest(
+                "Not sent: this sub-agent is locked down because its parent task is not open. Open the parent task, then reopen this sub-agent before trying again. This message was not kept.".to_string(),
+            ));
+        }
         if self.kill_switch_on() {
             Err(CodexErr::InvalidRequest(KILL_SWITCH_REFUSAL.to_string()))
         } else {
@@ -1415,6 +1432,15 @@ impl ModelClient {
     pub(crate) fn note_recorded_for_taint(&self, items: &[ResponseItem]) {
         if let Ok(mut ingress) = self.ingress_items.lock() {
             ingress.note_recorded(items);
+        }
+    }
+
+    /// D624 (a): whether content without standing has reached this session, at any level. A
+    /// poisoned ingress lock counts as seen (fail closed).
+    pub(crate) fn untrusted_content_seen(&self) -> bool {
+        match self.ingress_items.lock() {
+            Ok(ingress) => ingress.taint_generation() > 0,
+            Err(_) => true,
         }
     }
 
@@ -1747,7 +1773,7 @@ impl ModelClient {
         let mut websocket_session = self.take_cached_websocket_session();
         if websocket_session.auth_owner_generation != auth_owner_generation {
             // Drop the old owner's cache before this turn can establish fresh routing state.
-            websocket_session.reset(Some("other"));
+            websocket_session.reset(Some("auth_changed"));
             websocket_session.auth_owner_generation = auth_owner_generation;
         }
         ModelClientSession {
@@ -4434,7 +4460,7 @@ impl ModelClientSession {
 
         if needs_new || owner_changed {
             self.websocket_session.reset(if owner_changed {
-                Some("other")
+                Some("auth_changed")
             } else {
                 reset_reason
             });
@@ -6962,6 +6988,17 @@ fn anthropic_reasoning_for_model_and_effort(
     model: &str,
     effort: Option<&ReasoningEffortConfig>,
 ) -> (Option<Value>, Option<Value>) {
+    // Fable 5.2 always uses adaptive thinking, including when an older
+    // session carries an unset or unsupported reasoning preference.
+    if model.trim() == codex_model_provider_info::CLAUDE_FABLE_5_2_MODEL {
+        let effort = effort
+            .and_then(anthropic_adaptive_effort_value)
+            .unwrap_or_else(|| "high".to_string());
+        return (
+            Some(json!({ "type": "adaptive", "display": "summarized" })),
+            Some(json!({ "effort": effort })),
+        );
+    }
     if anthropic_model_uses_adaptive_effort(model)
         && let Some(effort) = effort.and_then(anthropic_adaptive_effort_value)
     {
@@ -8296,6 +8333,10 @@ impl WebsocketTelemetry for ApiTelemetry {
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "client_fable_5_2_tests.rs"]
+mod fable_5_2_tests;
 
 /// The level in force for `thread_id`: the session's own level or the
 /// stricter one its policy tree holds (Aggressive when that is unreadable).

@@ -1117,7 +1117,9 @@ async fn sandbox_keeps_parent_repo_discovery_while_blocking_child_metadata() {
         return;
     }
 
-    let tmpdir = tempfile::tempdir().expect("tempdir");
+    // The policy below grants /tmp; the redirected sibling must be in that root
+    // even when the outer test runner supplies a different TMPDIR.
+    let tmpdir = tempfile::tempdir_in("/tmp").expect("tempdir under writable /tmp");
     let repo = tmpdir.path().join("repo");
     let subdir = repo.join("sub");
     let real_tmp = tmpdir.path().join("real-tmp");

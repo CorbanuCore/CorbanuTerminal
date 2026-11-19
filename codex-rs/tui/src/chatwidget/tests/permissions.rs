@@ -254,8 +254,10 @@ async fn permissions_command_preserves_full_access_confirmation() {
     chat.open_full_access_confirmation(preset, return_to_permissions, profile_selection);
 
     // Cancel returns to the picker; closing that picker must still recover the queue.
-    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Corbanu's confirmation starts on Cancel.
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    // Corbanu says that full access was not enabled before returning to the picker.
+    assert_matches!(events.try_recv(), Ok(AppEvent::InsertHistoryCell(_)));
     assert_matches!(events.try_recv(), Ok(AppEvent::OpenPermissionsPopup));
     chat.open_permissions_popup();
     assert_matches!(events.try_recv(), Ok(AppEvent::SettingsSelectionClosed));
@@ -394,6 +396,9 @@ async fn permission_discovery_discards_stale_results_and_preserves_covering_moda
         "an invalidated menu must settle the input hold"
     );
 
+    // #624: a request waits under the menu the person opened, so the loaded
+    // menu replaces its loading row and outlives the request. Upstream pushes
+    // the request on top instead.
     chat.permission_discovery = None;
     chat.open_permissions_popup();
     let request_id = chat.permission_popup_request_id.unwrap();
@@ -405,17 +410,68 @@ async fn permission_discovery_discards_stale_results_and_preserves_covering_moda
         is_blocking: true,
         auto_resolution_ms: None,
     });
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some("permission-profiles")
+    );
     chat.on_permission_profiles_loaded(request_id, Ok(Discovery::local(&chat.config)));
-    assert!(chat.bottom_pane.has_active_view());
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some("permission-profiles")
+    );
+    const REQUEST_WAITING: &str = "A request is waiting";
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains(REQUEST_WAITING));
     while rx.try_recv().is_ok() {}
     chat.dismiss_app_server_request(&ResolvedAppServerRequest::UserInput {
         call_id: "question".into(),
     });
+    assert_eq!(
+        chat.bottom_pane.active_view_id(),
+        Some("permission-profiles")
+    );
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains(REQUEST_WAITING));
+    assert!(
+        !std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
+        "the open menu keeps the permissions hold"
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
     assert!(!chat.bottom_pane.has_active_view());
     assert!(
         std::iter::from_fn(|| rx.try_recv().ok())
             .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
-        "resolving the covering request must release the permissions hold"
+        "closing the menu must release the permissions hold"
+    );
+
+    // A view the person opens over the loading row covers it: the reply is
+    // cached without popping the menu over that view, and closing the cover
+    // releases the hold.
+    chat.permission_discovery = None;
+    chat.open_permissions_popup();
+    let request_id = chat.permission_popup_request_id.unwrap();
+    chat.bottom_pane.show_selection_view(SelectionViewParams {
+        view_id: Some("covering-view"),
+        title: Some("Covering view".to_string()),
+        items: vec![SelectionItem {
+            name: "Item".to_string(),
+            ..Default::default()
+        }],
+        ..SelectionViewParams::picker()
+    });
+    chat.on_permission_profiles_loaded(request_id, Ok(Discovery::local(&chat.config)));
+    assert!(chat.permission_discovery.is_some());
+    assert_eq!(chat.bottom_pane.active_view_id(), Some("covering-view"));
+    assert!(
+        !std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
+        "the covering view keeps the permissions hold"
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
+    assert!(!chat.bottom_pane.has_active_view());
+    assert!(
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::SettingsSelectionClosed)),
+        "closing the covering view must release the permissions hold"
     );
 }
 

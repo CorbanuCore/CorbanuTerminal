@@ -7,6 +7,7 @@ mod get_context_remaining;
 pub(crate) mod get_context_remaining_spec;
 mod list_available_plugins_to_install;
 pub(crate) mod list_available_plugins_to_install_spec;
+pub(crate) mod list_models;
 mod mcp;
 mod mcp_resource;
 pub(crate) mod mcp_resource_spec;
@@ -57,6 +58,7 @@ use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::function_tool::FunctionCallError;
 use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
+use crate::session::turn_context::TurnContext;
 use crate::session::turn_context::TurnEnvironment;
 pub(crate) use crate::tools::code_mode::CodeModeExecuteHandler;
 pub(crate) use crate::tools::code_mode::CodeModeWaitHandler;
@@ -388,6 +390,7 @@ pub(super) fn implicit_granted_permissions(
 
 pub(crate) async fn apply_granted_turn_permissions(
     session: &Session,
+    turn_context: &TurnContext,
     environment: &TurnEnvironment,
     cwd: &PathUri,
     sandbox_permissions: SandboxPermissions,
@@ -401,7 +404,8 @@ pub(crate) async fn apply_granted_turn_permissions(
         };
     }
     let granted_permissions =
-        read_granted_permissions(session, &environment.selection.environment_id).await;
+        read_granted_permissions(session, turn_context, &environment.selection.environment_id)
+            .await;
     with_granted_permissions(
         granted_permissions,
         environment,
@@ -411,16 +415,19 @@ pub(crate) async fn apply_granted_turn_permissions(
     )
 }
 
-/// The session's and the turn's `request_permissions` grants for
+/// The session's and the captured turn's `request_permissions` grants for
 /// `environment_id`, merged. #245: read through the session, which strips
 /// protected paths from a grant while the protected-path rules apply (D51/D520:
 /// none after a security transition).
 pub(crate) async fn read_granted_permissions(
     session: &Session,
+    turn_context: &TurnContext,
     environment_id: &str,
 ) -> Option<AdditionalPermissionProfile> {
     let granted_session_permissions = session.granted_session_permissions(environment_id).await;
-    let granted_turn_permissions = session.granted_turn_permissions(environment_id).await;
+    let granted_turn_permissions = session
+        .granted_turn_permissions(turn_context, environment_id)
+        .await;
     merge_permission_profiles(
         granted_session_permissions.as_ref(),
         granted_turn_permissions.as_ref(),
@@ -775,9 +782,48 @@ mod tests {
 
     /// #1057: grants read once are always carried, so whatever they shaped
     /// is noticed when a transition ends them before the run is decided.
-    #[test]
-    fn issue_1057_grants_are_carried() {
-        let cwd = std::env::temp_dir();
+    /// A ready local environment (upstream's `with_granted_permissions` reads
+    /// the environment's sandbox context to resolve grant paths).
+    fn local_turn_environment(cwd: &PathUri) -> crate::session::turn_context::TurnEnvironment {
+        use codex_protocol::protocol::EnvironmentConfig;
+        use codex_protocol::protocol::EnvironmentConfigState;
+        use codex_protocol::protocol::TurnEnvironmentSelection;
+        crate::session::turn_context::TurnEnvironment::new(
+            TurnEnvironmentSelection {
+                selected_capability_roots: Default::default(),
+                environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
+                cwd: cwd.clone(),
+                workspace_roots: Vec::new(),
+                config: EnvironmentConfigState::Ready(EnvironmentConfig {
+                    environment_hooks: Default::default(),
+                    allow_login_shell: true,
+                    workspace_roots: Vec::new(),
+                    windows_sandbox_level:
+                        codex_protocol::config_types::WindowsSandboxLevel::Disabled,
+                    windows_sandbox_type: codex_sandboxing::SandboxType::None,
+                    use_legacy_landlock: false,
+                    permission_profile: crate::config::PermissionProfileSnapshot::legacy(
+                        codex_protocol::models::PermissionProfile::read_only(),
+                    ),
+                    shell_environment_policy: Default::default(),
+                    exec_policy: None,
+                    mcp_policy: None,
+                    network_policy: None,
+                    selected_capability_roots: Vec::new(),
+                }),
+            },
+            crate::environment_selection::EnvironmentConfigOrigin::Thread,
+            std::sync::Arc::new(codex_exec_server::Environment::default_for_tests()),
+            /*shell*/ None,
+        )
+    }
+
+    #[tokio::test]
+    async fn issue_1057_grants_are_carried() {
+        let cwd = PathUri::from_abs_path(
+            &AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("absolute temp dir"),
+        );
+        let environment = local_turn_environment(&cwd);
         let grant = AdditionalPermissionProfile {
             network: Some(NetworkPermissions {
                 enabled: Some(true),
@@ -788,8 +834,9 @@ mod tests {
             SandboxPermissions::UseDefault,
             SandboxPermissions::WithAdditionalPermissions,
         ] {
-            let effective = with_granted_permissions(
+            let effective = super::with_granted_permissions(
                 Some(grant.clone()),
+                &environment,
                 &cwd,
                 sandbox_permissions,
                 /*additional_permissions*/ None,

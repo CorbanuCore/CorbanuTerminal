@@ -11,7 +11,11 @@ mod matching;
 mod memory_scan_tests;
 #[cfg(any(unix, windows))]
 pub mod model_auth;
+mod model_snapshot;
 mod provider_config;
+mod snapshot_scan;
+pub use model_snapshot::ModelSnapshotScanError;
+pub use model_snapshot::model_credential_occurs_in;
 mod providers;
 mod registry;
 mod replacement;
@@ -44,6 +48,7 @@ pub use resolver::ScopedCredentialUse;
 #[cfg(all(test, any(unix, windows)))]
 pub(crate) use hardened::BrokeredCredentialRoute;
 pub(crate) use hardened::CredentialRouting;
+pub use hardened::KnownCredentialScanError;
 #[cfg(any(unix, windows))]
 pub(crate) use isolated::IsolatedBrokerOptions;
 #[cfg(not(any(unix, windows)))]
@@ -92,7 +97,9 @@ pub use provider_config::CredentialAuthMethod;
 pub use provider_config::CredentialProviderConfig;
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
-pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
+/// Marker listing the brokered variables as (name, dummy placeholder) pairs;
+/// it never holds a real credential value.
+pub const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
 const MIN_EMBEDDED_CREDENTIAL_LENGTH: usize = 16;
 const BROKERED_CREDENTIAL_ALIAS_MARKER_PREFIX: &str = "@alias:";
 
@@ -413,6 +420,15 @@ impl CredentialBroker {
     /// Whether `main`'s engine owns brokering for this broker.
     pub(crate) fn hardened(&self) -> bool {
         self.hardened.armed()
+    }
+
+    /// Whether `text` carries a credential the hardened engine has registered
+    /// (see `hardened::known_scan`).
+    pub(crate) fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, KnownCredentialScanError> {
+        self.hardened.known_credential_occurs_in(text)
     }
 
     /// Whether a Corbanu protection is armed (isolated broker, Core-sourced
@@ -799,9 +815,10 @@ impl CredentialBroker {
     /// Fail closed around `virtualize`, the hardened engine's pass: drop each
     /// provider's environment variables first (keys a built-in provider owns
     /// stay with the hardened engine), then drop any variable still carrying
-    /// one of their values, from the child or from Core's own environment. A
-    /// built-in variable the hardened engine masked holds a placeholder by
-    /// then and is kept.
+    /// one of their values, from the child or from Core's own environment.
+    /// That includes a built-in key a provider names: if the hardened engine
+    /// masked it, it holds a placeholder by then and is kept; if it left it raw
+    /// (e.g. `GH_ENTERPRISE_TOKEN` without `GH_HOST`), it is dropped (D612).
     fn virtualize_withholding_configured_sources(
         &self,
         env: &mut HashMap<String, String>,
@@ -809,7 +826,7 @@ impl CredentialBroker {
     ) {
         /// Shorter values are too common to match other variables on.
         const MIN_COPIED_VALUE_BYTES: usize = 8;
-        let keys = {
+        let configured_keys = {
             let state = self.read_state();
             if !state.enabled {
                 Vec::new()
@@ -818,28 +835,32 @@ impl CredentialBroker {
                     .configured_provider_configs
                     .values()
                     .flat_map(|provider| provider.env.iter().cloned())
-                    .filter(|key| {
-                        !providers::credential_env_keys()
-                            .any(|builtin| env_key_matches(key, builtin))
-                    })
                     .collect::<Vec<_>>()
             }
         };
-        if keys.is_empty() {
+        if configured_keys.is_empty() {
             virtualize(env);
             return;
         }
-        let is_source = |name: &str| keys.iter().any(|key| env_key_matches(name, key));
+        let is_builtin = |key: &str| {
+            providers::credential_env_keys().any(|builtin| env_key_matches(key, builtin))
+        };
+        let is_configured =
+            |name: &str| configured_keys.iter().any(|key| env_key_matches(name, key));
         let mut values = env
             .iter()
-            .filter(|(name, _)| is_source(name))
+            .filter(|(name, _)| is_configured(name))
             .map(|(_, value)| value.clone())
-            .chain(keys.iter().filter_map(|key| std::env::var(key).ok()))
+            .chain(
+                configured_keys
+                    .iter()
+                    .filter_map(|key| std::env::var(key).ok()),
+            )
             .filter(|value| value.len() >= MIN_COPIED_VALUE_BYTES)
             .collect::<Vec<_>>();
         values.sort_unstable();
         values.dedup();
-        env.retain(|name, _| !is_source(name));
+        env.retain(|name, _| !is_configured(name) || is_builtin(name));
         virtualize(env);
         env.retain(|_, value| !values.iter().any(|secret| value.contains(secret.as_str())));
     }

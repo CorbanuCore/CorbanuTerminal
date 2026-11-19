@@ -72,7 +72,7 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config.clone()).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -211,7 +211,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config.clone()).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -311,7 +311,7 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config.clone()).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -406,7 +406,7 @@ async fn accounting_records_a_request_another_client_already_sent() -> anyhow::R
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -667,7 +667,7 @@ async fn accounting_store_failure_never_fails_search_or_image() -> anyhow::Resul
             let (mut session, _context) =
                 crate::session::tests::make_session_and_context_for_config(config).await;
             let db = StateRuntime::init(
-                SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(
+                SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(
                     home.path().to_path_buf(),
                 )?),
                 "openai".into(),
@@ -830,7 +830,7 @@ async fn accounting_extension_prices_an_api_key_image_generation() -> anyhow::Re
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config.clone()).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;

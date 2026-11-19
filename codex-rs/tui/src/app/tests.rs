@@ -21,6 +21,8 @@ mod security_setup_tests;
 mod advanced_reasoning_tests;
 #[path = "tests/agents_navigation_tests.rs"]
 mod agents_navigation_tests;
+#[path = "tests/aggressive_resume_tests.rs"]
+mod aggressive_resume_tests;
 #[path = "tests/approvals_reviewer_error_tests.rs"]
 mod approvals_reviewer_error_tests;
 #[path = "tests/backend_banner_fallback_tests.rs"]
@@ -2908,6 +2910,9 @@ async fn open_agent_picker_selects_path_backed_agent() -> Result<()> {
                 agent_path: "/root/review".to_string(),
                 model: None,
                 reasoning_effort: None,
+                agent_nickname: None,
+                agent_role: None,
+                task_preview: None,
             },
             /*started_at_ms*/ 0,
         ),
@@ -3171,6 +3176,19 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
                 "type": "session_meta",
                 "payload": serde_json::to_value(session_meta)?,
             });
+            // Corbanu (#1129): a child resumes only on the runtime it last ran on.
+            let turn_context = serde_json::json!({
+                "timestamp": timestamp,
+                "type": "turn_context",
+                "payload": {
+                    "cwd": app.config.cwd.to_path_buf(),
+                    "approval_policy": "never",
+                    "sandbox_policy": {"type": "read-only"},
+                    "model": app.config.model.clone(),
+                    "model_provider": app.config.model_provider_id.clone(),
+                    "summary": "auto",
+                }
+            });
             let saved_message = format!("Saved work from child-{index}");
             let response_item = serde_json::json!({
                 "timestamp": timestamp,
@@ -3187,7 +3205,7 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
             });
             std::fs::write(
                 rollout_path,
-                format!("{session_meta_line}\n{response_item}\n{user_message}\n"),
+                format!("{session_meta_line}\n{turn_context}\n{response_item}\n{user_message}\n"),
             )?;
             child_thread_ids.push(child_thread_id);
         }
@@ -3231,7 +3249,8 @@ fn selected_and_resumed_threads_use_server_capability_for_v1_and_v2_children() -
             );
             assert_app_snapshot!(
                 format!("selected_unloaded_subagent_{multi_agent_version:?}"),
-                normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, /*width*/ 80))
+                // Wide enough for Corbanu's longer footer to keep the agent label.
+                normalize_snapshot_paths(render_bottom_popup(&app.chat_widget, /*width*/ 140))
             );
             let saved_message = format!("Saved work from child-{index}");
             while let Ok(event) = app_event_rx.try_recv() {
@@ -3515,12 +3534,14 @@ async fn handle_start_side_seeds_navigation_before_thread_started() -> Result<()
             config,
             parent_thread_id,
             crate::app_server_session::ResumeModelSettings::RestoreFromThread,
-            crate::app_server_session::ResumePermissionSettings::RestoreFromThread,
         )
         .await?;
     app.enqueue_primary_thread_session(started.session, started.turns)
         .await?;
     while app_event_rx.try_recv().is_ok() {}
+    // The fake rollouts record `/` as their folder, so a cold switch would open the folder
+    // prompt, which reads the terminal; stay in the launch folder, as `--cd` does.
+    app.harness_overrides.cwd = Some(app.config.cwd.to_path_buf());
     let mut tui = crate::tui::test_support::make_test_tui()?;
 
     app.runtime_permission_profile_override = Some(RuntimePermissionProfileOverride::from_config(
@@ -3696,7 +3717,7 @@ async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
           Enable subagents?
     › As  Subagents are disabled in this TUI session.
 
-      gp
+      gp                                                                        : -…
         › 1. Yes, enable  Save on the server for new threads without changing
                           this thread
           2. Not now      Keep subagents disabled
@@ -3835,9 +3856,14 @@ async fn server_only_profile_selection_keeps_turns_on_the_selected_profile() -> 
     let (mut app, mut events, mut ops) = make_test_app_with_channels().await;
     app.config.ephemeral = false;
     let home = tempdir()?;
+    // Corbanu: a turn must run on the chat's provider (modelProviderMismatch),
+    // so the server's default provider is the test app's.
     std::fs::write(
         home.path().join("config.toml"),
-        "default_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+        format!(
+            "model_provider = \"{}\"\ndefault_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
+            app.config.model_provider_id
+        ),
     )?;
     let server_config = ConfigBuilder::default()
         .codex_home(home.path().into())
@@ -5317,8 +5343,8 @@ async fn issue_867_kill_switch_names_a_stopped_sub_agent() -> Result<()> {
         rendered
     };
     let agent_list = |app: &mut App| {
-        app.chat_widget
-            .show_selection_view(app.agent_picker_selection_view_params(/*selected*/ None));
+        let params = app.agent_picker_selection_view_params(/*selected*/ None);
+        app.chat_widget.show_selection_view(params);
         render_bottom_popup(&app.chat_widget, /*width*/ 100)
     };
 
@@ -6893,7 +6919,8 @@ async fn ctrl_l_preserves_the_transcript_and_draft_after_clearing_the_screen() -
     let compact = transcript_composer::buffer_text(
         crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal),
     );
-    assert!(compact.contains("OpenAI Codex"));
+    // Corbanu's session header names the product.
+    assert!(compact.contains("Corbanu Terminal"));
     assert!(compact.contains("New exchange"));
     assert!(!compact.contains("Earlier exchange"));
     let ctrl_t = KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL);
@@ -6990,6 +7017,15 @@ async fn model_change_refreshes_committed_session_header_snapshot() -> Result<()
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!rendered.contains("gpt-before"));
+    // Upstream's header no longer draws the model; its raw text still carries it.
+    let raw = app.transcript_cells[0]
+        .raw_lines()
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(raw.contains("model: gpt-after high"), "{raw}");
+    assert!(!raw.contains("gpt-before"), "{raw}");
     assert_app_snapshot!("model_change_refreshes_committed_session_header", rendered);
     Ok(())
 }
@@ -7011,13 +7047,14 @@ async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
     app.chat_widget.set_model("gpt-after-clear");
     app.refresh_session_header(&mut tui)?;
 
-    let rendered = app.transcript_cells[0]
-        .display_lines(/*width*/ 80)
+    // Upstream's header no longer draws the model; its raw text still carries it.
+    let raw = app.transcript_cells[0]
+        .raw_lines()
         .into_iter()
         .map(|line| line.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("gpt-after-clear"));
+    assert!(raw.contains("gpt-after-clear"), "{raw}");
     Ok(())
 }
 
@@ -8275,11 +8312,13 @@ fn turn_completed_with_agent_message(
             ..test_turn(
                 turn_id,
                 status,
-                vec![ThreadItem::AgentMessage {
+                vec![ThreadItemPayload::AgentMessage {
                     id: "agent-message-1".to_string(),
                     text: message.to_string(),
                     phase: None,
                     memory_citation: None,
+                    delivery: None,
+                    questions: None,
                 }],
             )
         },
@@ -8360,12 +8399,14 @@ fn item_completed_notification(
     ServerNotification::ItemCompleted(ItemCompletedNotification {
         thread_id: thread_id.to_string(),
         turn_id: turn_id.to_string(),
-        item: ThreadItem::AgentMessage {
+        item: ThreadItem::untimed(ThreadItemPayload::AgentMessage {
             id: item_id.to_string(),
             text: message.to_string(),
             phase: None,
             memory_citation: None,
-        },
+            delivery: None,
+            questions: None,
+        }),
         completed_at_ms: 0,
     })
 }
@@ -9656,12 +9697,12 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     local_settings.tui.alternate_screen = codex_config::types::AltScreenMode::Never;
     local_settings.tui.terminal_resize_reflow_max_rows = Some(2);
     let started = app_server
-        .resume_thread(
+        .resume_thread_with_permission_overrides(
             &local_settings,
             config.clone(),
             source_thread_id,
             crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
-            crate::app_server_session::ResumePermissionSettings::OverrideFromCurrentConfig,
+            crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         )
         .await?;
     assert!(app_server.has_older_history(source_thread_id));
@@ -10406,6 +10447,8 @@ async fn override_turn_context_sends_thread_settings_update() {
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await
                 .expect("embedded app server");
+        // thread/start sends only an explicit (launch) provider, as `-c model_provider=openai`.
+        app_server.model_provider_override = Some(OPENAI_PROVIDER_ID.to_string());
         let started = app_server
             .start_thread(app.chat_widget.config_ref())
             .await
@@ -10548,11 +10591,23 @@ async fn selecting_cyber_model_defaults_active_thread_to_auto_review() {
             .expect("gpt-5.5 model");
         model.model_specialty = Some(MODEL_SPECIALTY_CYBER.to_string());
         app.model_catalog = Arc::new(ModelCatalog::new(vec![model]));
+        // gpt-5.5 runs on OpenAI; Corbanu's test default provider (Z.AI) refuses it.
+        let openai_provider = app
+            .chat_widget
+            .config_ref()
+            .model_providers
+            .get(OPENAI_PROVIDER_ID)
+            .cloned()
+            .expect("OpenAI provider");
+        app.chat_widget
+            .set_model_provider(OPENAI_PROVIDER_ID.to_string(), openai_provider);
 
         let mut app_server =
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await
                 .expect("embedded app server");
+        // thread/start sends only an explicit (launch) provider, as `-c model_provider=openai`.
+        app_server.model_provider_override = Some(OPENAI_PROVIDER_ID.to_string());
         let started = app_server
             .start_thread(app.chat_widget.config_ref())
             .await
@@ -10667,14 +10722,20 @@ async fn changing_cyber_model_reasoning_preserves_selected_permissions() {
         model.model_specialty = Some(MODEL_SPECIALTY_CYBER.to_string());
         app.model_catalog = Arc::new(ModelCatalog::new(vec![model]));
 
+        let mut permission_server = start_config_write_test_app_server(&app)
+            .await
+            .expect("permission test app server");
         assert!(
-            app.apply_permission_profile_selection(PermissionProfileSelection {
-                profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY
-                    .to_string(),
-                approval_policy: Some(AskForApproval::OnRequest),
-                approvals_reviewer: Some(ApprovalsReviewer::User),
-                display_label: "Read Only".to_string(),
-            })
+            app.apply_permission_profile_selection(
+                &mut permission_server,
+                PermissionProfileSelection {
+                    profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY
+                        .to_string(),
+                    approval_policy: Some(AskForApproval::OnRequest),
+                    approvals_reviewer: Some(ApprovalsReviewer::User),
+                    display_label: "Read Only".to_string(),
+                },
+            )
             .await
         );
 
@@ -11739,7 +11800,8 @@ fn claude_pane_text_op(text: &str) -> Op {
         service_tier: None,
         final_output_json_schema: None,
         collaboration_mode: None,
-        personality: None,
+        client_user_message_id: "test-message".to_string(),
+        turn_trigger: "user",
     }
 }
 
@@ -12084,21 +12146,19 @@ async fn thread_account_usage_reaches_status_and_resets_with_the_session() {
         feedback: app.feedback.clone(),
         is_first_run: false,
         status_account_display: app.chat_widget.status_account_display().cloned(),
-        runtime_model_provider_base_url: app
-            .chat_widget
-            .runtime_model_provider_base_url()
-            .map(str::to_string),
         initial_plan_type: app.chat_widget.current_plan_type(),
         model: Some(app.chat_widget.current_model().to_string()),
         startup_tooltip_override: None,
         status_line_invalid_items_warned: app.status_line_invalid_items_warned.clone(),
         terminal_title_invalid_items_warned: app.terminal_title_invalid_items_warned.clone(),
         session_telemetry: app.session_telemetry.clone(),
+        local_settings: crate::local_settings::LocalSettings::from(&app.config),
+        requires_openai_auth: app.chat_widget.requires_openai_auth,
     });
     app.replace_chat_widget(replacement);
     assert_eq!(totals(&app), expected);
 
-    app.reset_thread_event_state();
+    app.reset_thread_event_state().await;
     assert_eq!(totals(&app), vec![("default".to_string(), 0)]);
 }
 

@@ -1055,6 +1055,74 @@ async fn pf_27_s02_a_spoofed_bootstrap_path_is_never_trusted() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual D685 isolated snapshot scan timing"]
+#[allow(clippy::print_stderr)]
+async fn d685_large_zsh_snapshot_scan_timing() {
+    let upstream = start_upstream().await;
+    for keys in [1, 2, 4, 8] {
+        let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+        for index in 0..keys {
+            let mut env = HashMap::from([(
+                "GH_TOKEN".to_string(),
+                format!("ghp_synthetic_2502_{index:08}{}", "k".repeat(index)),
+            )]);
+            broker.virtualize_child_env(&mut env);
+        }
+        for bytes in [512 * 1024, 1024 * 1024, 3 * 1024 * 1024] {
+            let mut text = String::from("# Snapshot file\n");
+            for index in 0.. {
+                use std::fmt::Write;
+                writeln!(
+                    text,
+                    "_plugin_{index:05} () {{ local context state line; _arguments '-h[help]' '*:file:_files'; }}\nalias plugin_{index:05}='git status --short'"
+                )
+                .expect("text");
+                if text.len() >= bytes {
+                    text.truncate(bytes);
+                    break;
+                }
+            }
+            for sample in 0..3 {
+                let start = std::time::Instant::now();
+                let result = broker.known_credential_occurs_in(&text);
+                eprintln!(
+                    "D690_SCAN engine=D685 bytes={} records={keys} sample={sample} elapsed_us={} result={result:?}",
+                    text.len(),
+                    start.elapsed().as_micros()
+                );
+                assert!(!matches!(result, Ok(true)));
+            }
+        }
+    }
+}
+
+/// D685: a value copied out of a brokered variable is recognized by its keyed
+/// fingerprint, while the raw value stays in the broker process.
+#[tokio::test(flavor = "multi_thread")]
+async fn d685_snapshot_scan_finds_a_brokered_credential_by_fingerprint() {
+    let upstream = start_upstream().await;
+    let broker = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let dummy = virtualized_dummy(&broker);
+    assert!(broker.current_isolated_client().is_some());
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+
+    assert_eq!(
+        broker.known_credential_occurs_in(&format!(
+            "HIDDEN_HEADER=prefix\"{SYNTHETIC_TOKEN}\"suffix"
+        )),
+        Ok(true)
+    );
+    assert_eq!(broker.known_credential_occurs_in(&dummy), Ok(false));
+    let large = "x".repeat(/*n*/ 3 * 1024 * 1024);
+    assert_eq!(broker.known_credential_occurs_in(&large), Ok(false));
+    assert_eq!(
+        broker.known_credential_occurs_in(&format!("{large}{SYNTHETIC_TOKEN}")),
+        Ok(true)
+    );
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn pf_28_s02_broker_scrubs_its_credential_from_the_response() {
     let upstream = start_upstream().await;
     let broker = CredentialBroker::new_isolated_with_launcher(
@@ -1268,6 +1336,131 @@ mod pf_27_s05 {
             launcher(upstream, /*controller_pid_override*/ None),
         )
         .expect("model broker")
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d690_model_snapshot_registered_and_stashed_copies() {
+        // Bazel runs multiple tests in one process. Other tests intentionally
+        // install unavailable holders, so exercise the global registry alone.
+        const CHILD: &str = "CORBANU_D690_MODEL_SNAPSHOT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "credential_broker::isolated::tests::pf_27_s05::d690_model_snapshot_registered_and_stashed_copies",
+                    "--exact",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, "1")
+                .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+                .output()
+                .expect("run model snapshot child");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                output.status.success() && stdout.contains("1 passed"),
+                "{stdout}\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let credential = broker
+            .register(
+                binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                "synthetic-d690-model-value",
+            )
+            .expect("register");
+        assert_eq!(
+            broker
+                .known_credential_occurs_in("export COPY='prefixsynthetic-d690-model-valuesuffix'"),
+            Ok(true)
+        );
+        assert_eq!(
+            broker.known_credential_occurs_in("export SAFE='ordinary'"),
+            Ok(false)
+        );
+        let large = "x".repeat(/*n*/ 3 * 1024 * 1024);
+        assert_eq!(broker.known_credential_occurs_in(&large), Ok(false));
+        assert_eq!(
+            broker.known_credential_occurs_in(&format!("{large}synthetic-d690-model-value")),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::model_credential_occurs_in("synthetic-d690-model-value"),
+            Ok(true)
+        );
+        // Covers the registry while only a credential reference owns the client.
+        drop(broker);
+        assert_eq!(
+            crate::model_credential_occurs_in("synthetic-d690-model-value"),
+            Ok(true)
+        );
+        credential.unregister().expect("unregister");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn d690_model_snapshot_refuses_short_keys_and_dead_brokers() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        broker
+            .register(binding(upstream.port, "/v1", ModelAuthHeader::Bearer), "xy")
+            .expect("register");
+        assert!(
+            broker
+                .known_credential_occurs_in("ordinary configuration")
+                .is_err()
+        );
+        broker.kill_for_test();
+        assert!(
+            broker
+                .known_credential_occurs_in("ordinary configuration")
+                .is_err()
+        );
+        assert!(crate::model_credential_occurs_in("ordinary configuration").is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "manual D690 isolated snapshot scan timing"]
+    #[allow(clippy::print_stderr)]
+    async fn d690_large_zsh_snapshot_scan_timing() {
+        let upstream = start_upstream().await;
+        for keys in [1, 2, 4, 8] {
+            let broker = model_broker(&upstream);
+            for index in 0..keys {
+                broker
+                    .register(
+                        binding(upstream.port, "/v1", ModelAuthHeader::Bearer),
+                        &format!("synthetic-d690-benchmark-{index:08}{}", "k".repeat(index)),
+                    )
+                    .expect("register");
+            }
+            for bytes in [512 * 1024, 1024 * 1024, 3 * 1024 * 1024] {
+                let mut text = String::from("# Snapshot file\n");
+                for index in 0.. {
+                    use std::fmt::Write;
+                    writeln!(
+                        text,
+                        "_plugin_{index:05} () {{ local context state line; _arguments '-h[help]' '*:file:_files'; }}\nalias plugin_{index:05}='git status --short'"
+                    )
+                    .expect("text");
+                    if text.len() >= bytes {
+                        text.truncate(bytes);
+                        break;
+                    }
+                }
+                for sample in 0..3 {
+                    let start = std::time::Instant::now();
+                    let result = broker.known_credential_occurs_in(&text);
+                    eprintln!(
+                        "D690_SCAN bytes={} records={keys} sample={sample} elapsed_us={} result={result:?}",
+                        text.len(),
+                        start.elapsed().as_micros()
+                    );
+                    assert!(!matches!(result, Ok(true)));
+                }
+            }
+        }
     }
 
     fn binding(port: u16, path_prefix: &str, header: ModelAuthHeader) -> ModelCredentialBinding {
@@ -1571,6 +1764,16 @@ mod pf_27_s05 {
             .expect("take env keys");
         assert_eq!(taken, vec![name.clone()]);
         assert_eq!(std::env::var_os(&name), None);
+        // D690: a startup copy survives after take_env_keys removed the source.
+        let copy = String::from_utf8(memory_scan_tests::mask(&masked)).expect("synthetic key");
+        assert_eq!(
+            broker.known_credential_occurs_in(&format!("prefix{copy}suffix")),
+            Ok(true)
+        );
+        assert_eq!(
+            broker.known_credential_occurs_in("ordinary configuration"),
+            Ok(false)
+        );
 
         let credential = broker
             .register_stored(
@@ -1596,6 +1799,79 @@ mod pf_27_s05 {
         credential.unregister().expect("unregister");
         let response = signed(&credential, upstream.port, "/v1/responses").await;
         assert_eq!(denial(&response), Some("unknown_credential"));
+    }
+
+    /// SMQ-2: a held key copied into another variable (exact, a header, an
+    /// embedded or non-Unicode value, one copy inside another) is removed
+    /// from the environment commands inherit; other variables stay, and a
+    /// short placeholder key matches nothing. A broker that cannot check
+    /// fails closed and removes nothing.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn smq2_env_copies_of_held_keys_are_removed_and_fail_closed() {
+        let upstream = start_upstream().await;
+        let broker = model_broker(&upstream);
+        let pid = std::process::id();
+        let key = format!("sk-smq2-held-{:016x}", rand::random::<u64>());
+        let bound = || binding(upstream.port, "/v1", ModelAuthHeader::Bearer);
+        let credential = broker.register(bound(), &key).expect("register");
+        // A local-server placeholder: shorter than ENV_COPY_MIN_KEY_BYTES.
+        let placeholder = broker.register(bound(), "local").expect("register");
+        let name = |suffix: &str| format!("SMQ2_{suffix}_{pid}");
+        let (exact, header, embedded, safe, path) = (
+            name("EXACT"),
+            name("AUTH_HEADER"),
+            name("EMBEDDED"),
+            name("SAFE"),
+            name("PATH"),
+        );
+        let set = crate::credential_broker::env_scrub::set_env_var_for_test;
+        set(&exact, &key);
+        set(&header, &format!("Bearer {key}"));
+        set(&embedded, &format!("url=https://x.test/?k={key}&v=1"));
+        set(&safe, "ordinary value");
+        set(&path, "/usr/local/bin:/bin");
+        let mut expected = vec![header, embedded, exact];
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt as _;
+            let raw = name("RAW");
+            let mut bytes = vec![0xff, b' '];
+            bytes.extend_from_slice(key.as_bytes());
+            let _writes = crate::credential_broker::env_scrub::env_write_lock();
+            // SAFETY: a test-unique variable, serialized with `take_env_var`.
+            unsafe { std::env::set_var(&raw, std::ffi::OsString::from_vec(bytes)) };
+            expected.push(raw);
+        }
+        expected.sort();
+
+        let mut taken: Vec<String> = broker
+            .take_env_copies()
+            .expect("checked")
+            .into_iter()
+            .filter(|taken| taken.ends_with(&format!("_{pid}")))
+            .collect();
+        taken.sort();
+        assert_eq!(taken, expected);
+        for removed in &expected {
+            assert_eq!(std::env::var_os(removed), None, "{removed}");
+        }
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+        assert_eq!(std::env::var(&path).as_deref(), Ok("/usr/local/bin:/bin"));
+
+        let late = name("LATE");
+        set(&late, &format!("Bearer {key}"));
+        broker.kill_for_test();
+        assert_eq!(
+            broker.take_env_copies(),
+            Err(ModelCredentialBrokerError::Unavailable)
+        );
+        // Nothing is removed when the check fails; the caller refuses the broker.
+        assert!(std::env::var_os(&late).is_some());
+        assert_eq!(std::env::var(&safe).as_deref(), Ok("ordinary value"));
+        drop((credential, placeholder));
+        for name in [&late, &safe, &path] {
+            drop(crate::credential_broker::env_scrub::take_env_var(name));
+        }
     }
 
     /// The vault lock is created before containment (so a vault first

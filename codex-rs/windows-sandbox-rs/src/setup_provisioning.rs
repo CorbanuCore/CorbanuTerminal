@@ -4,6 +4,8 @@
 
 mod deny_write_path;
 mod firewall;
+#[cfg(test)]
+mod issue_2315_tests;
 mod service;
 pub use service::provision_sandbox_in_process;
 mod read_acl_mutex;
@@ -23,6 +25,7 @@ use crate::ensure_allow_write_aces;
 use crate::extract_setup_failure;
 use crate::hide_newly_created_users;
 use crate::install_wfp_filters;
+use crate::load_or_create_cap_sids;
 use crate::local_user_flags;
 use crate::log_note;
 use crate::log_writer;
@@ -42,6 +45,7 @@ use crate::string_from_sid_bytes;
 use crate::sync_persistent_deny_read_acls;
 use crate::to_wide;
 use crate::workspace_write_cap_sid_for_root;
+use crate::workspace_write_root_contains_path;
 use crate::workspace_write_root_overlaps_path;
 use crate::write_file_atomically;
 use crate::write_setup_error_report;
@@ -74,7 +78,6 @@ use windows_sys::Win32::Security::Authorization::GRANT_ACCESS;
 use windows_sys::Win32::Security::Authorization::SE_FILE_OBJECT;
 use windows_sys::Win32::Security::Authorization::SetEntriesInAclW;
 use windows_sys::Win32::Security::Authorization::SetNamedSecurityInfoW;
-use windows_sys::Win32::Security::Authorization::SetSecurityInfo;
 use windows_sys::Win32::Security::Authorization::TRUSTEE_IS_SID;
 use windows_sys::Win32::Security::Authorization::TRUSTEE_W;
 use windows_sys::Win32::Security::CONTAINER_INHERIT_ACE;
@@ -132,6 +135,10 @@ struct Payload {
     deny_read_sessions: crate::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
+    /// D607: Everyone-writable folders the launcher found (main's scan);
+    /// writes to them are denied for the sandbox's capability SIDs.
+    #[serde(default)]
+    world_writable_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
     #[serde(default)]
     allow_local_binding: bool,
@@ -182,6 +189,83 @@ fn log_line(log: &mut dyn Write, msg: &str) -> Result<()> {
             format!("failed to write setup log line: {err}"),
         ))
     })?;
+    Ok(())
+}
+
+/// D607 (upstream removed main's world-writable scan, #44933/#47943): every
+/// sandbox token lists Everyone among its restricting SIDs, so a folder that
+/// grants Everyone write access is writable from the sandbox. Deny writes to
+/// each such folder the launcher found for the capability SIDs a command can
+/// hold: the read-only one and each write root's, as main's TUI did; folders
+/// inside a write root are left alone. Opened without following a link in any
+/// component, so a swapped path cannot redirect the deny. Best effort, as on
+/// main: a folder that cannot be opened or updated is logged and skipped.
+fn apply_world_writable_denies(payload: &Payload, log: &mut dyn Write) -> Result<()> {
+    if payload.world_writable_paths.is_empty() {
+        return Ok(());
+    }
+    // The SIDs a command's token can hold: the read-only one, and each write
+    // root's. A refresh without write roots (read-only, or extra read roots
+    // only) denies the read-only SID alone, so it never denies a SID that
+    // writes inside a folder it does not know is a write root.
+    let mut sid_strs = vec![load_or_create_cap_sids(&payload.codex_home)?.readonly];
+    for root in &payload.write_roots {
+        sid_strs.push(workspace_write_cap_sid_for_root(
+            &payload.codex_home,
+            &payload.command_cwd,
+            root,
+        )?);
+    }
+    let mut sids = Vec::new();
+    for sid in &sid_strs {
+        sids.push(crate::LocalSid::from_string(sid)?);
+    }
+    for path in &payload.world_writable_paths {
+        if payload
+            .write_roots
+            .iter()
+            .any(|root| workspace_write_root_contains_path(root, path))
+        {
+            continue;
+        }
+        let folder = match open_directory_no_reparse(
+            path,
+            // The deny reads the folder's attributes first.
+            READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            DirectoryOpenDisposition::OpenExisting,
+        ) {
+            Ok(folder) => folder,
+            Err(err) => {
+                log_line(
+                    log,
+                    &format!(
+                        "world-writable deny skipped for {}: {err:#}",
+                        path.display()
+                    ),
+                )?;
+                continue;
+            }
+        };
+        for sid in &sids {
+            // SAFETY: a live handle opened with READ_CONTROL | WRITE_DAC and a valid SID.
+            match unsafe { add_deny_write_ace_to_handle(folder.as_raw_handle() as _, sid.as_ptr()) }
+            {
+                Ok(true) => log_line(
+                    log,
+                    &format!("applied world-writable deny ACE to {}", path.display()),
+                )?,
+                Ok(false) => {}
+                Err(err) => log_line(
+                    log,
+                    &format!(
+                        "world-writable deny ACE failed on {}: {err:#}",
+                        path.display()
+                    ),
+                )?,
+            }
+        }
+    }
     Ok(())
 }
 
@@ -373,9 +457,9 @@ fn lock_sandbox_dir(
         }
         SetupMode::ProvisionOnly => Some(open_directory_no_reparse(
             dir,
-            // SetSecurityInfo can reject a WRITE_DAC-only directory handle.
-            READ_CONTROL | WRITE_DAC,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            // Read the existing descriptor and resolve children through this handle.
+            READ_CONTROL | WRITE_DAC | windows_sys::Win32::Storage::FileSystem::FILE_TRAVERSE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
             DirectoryOpenDisposition::OpenOrCreate,
         )?),
     };
@@ -446,18 +530,19 @@ fn lock_sandbox_dir(
             }
         };
         let (res, api) = match directory.as_ref() {
-            Some(directory) => (
-                SetSecurityInfo(
-                    directory.as_raw_handle() as _,
-                    SE_FILE_OBJECT,
-                    security_information,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
+            Some(directory) => {
+                let result = crate::provisioning_files::set_directory_acl(
+                    directory,
+                    dir,
                     new_dacl,
-                    std::ptr::null_mut(),
-                ),
-                "SetSecurityInfo",
-            ),
+                    matches!(dacl_inheritance, DaclInheritance::Protected),
+                );
+                LocalFree(new_dacl as HLOCAL);
+                for sid in sids {
+                    LocalFree(sid as HLOCAL);
+                }
+                return result;
+            }
             None => {
                 let path_w = to_wide(dir.as_os_str());
                 (
@@ -616,7 +701,9 @@ fn run_payload(payload: &Payload) -> Result<()> {
             SetupMode::ProvisionOnly => serde_json::to_vec_pretty(&report)
                 .map_err(anyhow::Error::from)
                 .and_then(|json| {
-                    write_file_atomically(&setup_error_path(&payload.codex_home), &json)
+                    let path = setup_error_path(&payload.codex_home);
+                    crate::provisioning_files::check_output(&path)?;
+                    write_file_atomically(&path, &json)
                 }),
             SetupMode::Full | SetupMode::InteractiveProvision | SetupMode::ReadAclsOnly => {
                 write_setup_error_report(&payload.codex_home, &report)
@@ -1218,6 +1305,8 @@ fn run_setup_full(payload: &Payload, log: &mut dyn Write, sbx_dir: &Path) -> Res
         }
     }
 
+    apply_world_writable_denies(payload, log)?;
+
     lock_sandbox_bin_dir(payload, &sandbox_group_sid)?;
 
     if refresh_only {
@@ -1451,6 +1540,115 @@ mod tests {
                 second_refresh,
             ),
             (true, true, true, false, false, false)
+        );
+    }
+
+    /// D607: the helper denies writes to an Everyone-writable folder outside
+    /// the write roots for the read-only capability SID and each write root's,
+    /// and leaves one inside a write root alone.
+    #[test]
+    fn d607_world_writable_folders_outside_write_roots_get_capability_denies() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let codex_home = temp.path().join("codex-home");
+        let workspace = temp.path().join("workspace");
+        let inside = workspace.join("shared");
+        let outside = temp.path().join("tools");
+        for dir in [&codex_home, &inside, &outside] {
+            fs::create_dir_all(dir).expect("create dir");
+        }
+        crate::world_writable::tests::grant_everyone_modify(&outside);
+        crate::world_writable::tests::grant_everyone_modify(&inside);
+        let mut json = payload_json();
+        json["codex_home"] = json!(codex_home);
+        json["command_cwd"] = json!(workspace);
+        json["write_roots"] = json!([workspace]);
+        json["world_writable_paths"] = json!([outside, inside]);
+        let payload: Payload = serde_json::from_value(json).expect("payload");
+
+        let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
+        let workspace_sid = workspace_write_cap_sid_for_root(&codex_home, &workspace, &workspace)
+            .expect("workspace SID");
+        let may_add = crate::world_writable::tests::sandbox_token_may_add_files;
+        for sid in [&caps.readonly, &workspace_sid] {
+            assert!(
+                may_add(sid, &outside),
+                "control: a sandbox token writes to an Everyone-writable folder"
+            );
+        }
+
+        let mut log = Vec::new();
+        super::apply_world_writable_denies(&payload, &mut log).expect("apply denies");
+        for sid in [&caps.readonly, &workspace_sid] {
+            assert!(
+                !may_add(sid, &outside),
+                "a sandbox token still writes there"
+            );
+        }
+        let has_deny = |path: &std::path::Path, sid: &str| {
+            let sid = crate::LocalSid::from_string(sid).expect("SID");
+            let (dacl, sd) = unsafe { crate::fetch_dacl_handle(path) }.expect("read DACL");
+            let denied = unsafe { crate::acl::dacl_has_write_deny_for_sid(dacl, sid.as_ptr()) };
+            if !sd.is_null() {
+                unsafe { LocalFree(sd as HLOCAL) };
+            }
+            denied
+        };
+        for sid in [&caps.readonly, &workspace_sid] {
+            assert!(
+                has_deny(&outside, sid),
+                "outside folder lacks the deny for {sid}; log: {}",
+                String::from_utf8_lossy(&log)
+            );
+            assert!(
+                !has_deny(&inside, sid),
+                "write-root folder got a deny for {sid}"
+            );
+        }
+        // Applying again changes nothing.
+        let mut again = Vec::new();
+        super::apply_world_writable_denies(&payload, &mut again).expect("apply again");
+        assert!(
+            !String::from_utf8_lossy(&again).contains("applied world-writable deny"),
+            "{}",
+            String::from_utf8_lossy(&again)
+        );
+    }
+
+    /// D607 review r1: a refresh without write roots (read-only, or extra read
+    /// roots only) denies only the read-only SID, so a workspace token keeps
+    /// writing to an Everyone-writable folder inside its working folder.
+    #[test]
+    fn d607_refresh_without_write_roots_denies_only_the_read_only_sid() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let codex_home = temp.path().join("codex-home");
+        let workspace = temp.path().join("workspace");
+        let shared = workspace.join("shared");
+        for dir in [&codex_home, &shared] {
+            fs::create_dir_all(dir).expect("create dir");
+        }
+        crate::world_writable::tests::grant_everyone_modify(&shared);
+        let mut json = payload_json();
+        json["codex_home"] = json!(codex_home);
+        json["command_cwd"] = json!(workspace);
+        json["write_roots"] = json!([]);
+        json["world_writable_paths"] = json!([shared]);
+        let payload: Payload = serde_json::from_value(json).expect("payload");
+
+        let mut log = Vec::new();
+        super::apply_world_writable_denies(&payload, &mut log).expect("apply denies");
+
+        let caps = load_or_create_cap_sids(&codex_home).expect("load caps");
+        let workspace_sid = workspace_write_cap_sid_for_root(&codex_home, &workspace, &workspace)
+            .expect("workspace SID");
+        let may_add = crate::world_writable::tests::sandbox_token_may_add_files;
+        assert!(
+            !may_add(&caps.readonly, &shared),
+            "read-only token writes there"
+        );
+        assert!(
+            may_add(&workspace_sid, &shared),
+            "the workspace token lost its folder: {}",
+            String::from_utf8_lossy(&log)
         );
     }
 

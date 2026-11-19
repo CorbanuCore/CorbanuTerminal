@@ -445,11 +445,18 @@ async fn exec_command_reuses_foreign_windows_grant() {
     }
 
     let step_context = StepContext::for_test(Arc::clone(&turn));
-    step_context.turn.record_granted_permissions(
+    // Corbanu (#245): handlers read a turn's grants through the session's running task,
+    // which this test doesn't start, so the same grant is stored for the session.
+    assert!(session.record_granted_request_permissions_for_turn(
+        &codex_protocol::request_permissions::RequestPermissionsResponse {
+            permissions: granted_permissions.clone().into(),
+            scope: codex_protocol::request_permissions::PermissionGrantScope::Session,
+            strict_auto_review: false,
+        },
         codex_exec_server::REMOTE_ENVIRONMENT_ID,
-        granted_permissions.clone(),
-        /*strict_auto_review*/ false,
-    );
+        turn.as_ref(),
+        session.services.authority_marker(),
+    ));
     let response = ExecCommandHandler::default()
         .handle(ToolInvocation {
             session: Arc::clone(&session),

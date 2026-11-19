@@ -175,14 +175,17 @@ async fn resume_if_unloaded(app_server: &mut AppServerSession, thread_id: Thread
     if let Some(message) = crate::security::preflight::resume_refusal(&thread_id) {
         return Err(eyre!(message));
     }
+    let mut params = ThreadResumeParams {
+        thread_id: thread_id.to_string(),
+        exclude_turns: true,
+        ..Default::default()
+    };
+    // D621 (#2310): never left to the server's own policy.
+    crate::security::aggressive::enforce_approval(&mut params.approval_policy);
     handle
         .request_typed::<IgnoredAny>(ClientRequest::ThreadResume {
             request_id: app_server.next_request_id(),
-            params: ThreadResumeParams {
-                thread_id: thread_id.to_string(),
-                exclude_turns: true,
-                ..Default::default()
-            },
+            params,
         })
         .await?;
     Ok(())

@@ -647,12 +647,13 @@ fn issue_524_a_failed_check_is_refused_and_explained() {
 /// approving opens; answered without asking the same write is refused and
 /// explained, both where nobody may decide it (a run preapproved as an allow
 /// rule makes it) and where the prompt is answered by something other than a
-/// person asked now (here the approval cache, primed by a client that gave a
-/// "for this session" answer the prompt did not offer: see #2213). A stored
-/// session grant of that write does not even preapprove it: the grant is
-/// read through the protected-path strip (#245). The person picks the most lasting answer
-/// the prompt offers (this prompt offers no "for this session", #2187
-/// review).
+/// person asked now (here the approval cache). This prompt offers no "for
+/// this session" answer, so a client that sends one anyway is refused (#2213)
+/// and primes nothing; the test primes the cache directly with what an
+/// offered "for this session" answer would store. A stored session grant of
+/// that write does not even preapprove it: the grant is read through the
+/// protected-path strip (#245). The person picks the most lasting answer the
+/// prompt offers (#2187 review).
 #[tokio::test]
 async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_file() {
     use crate::session::turn_context::TurnEnvironment;
@@ -857,6 +858,7 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
     );
     let granted = crate::tools::handlers::apply_granted_turn_permissions(
         &session,
+        &turn,
         &environment,
         environment.cwd(),
         crate::sandboxing::SandboxPermissions::WithAdditionalPermissions,
@@ -878,21 +880,44 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
         )
         .await,
     );
-    // Asked now, answered "for this session" by a non-conforming client: it
-    // runs (a prompt was shown and answered) and primes the approval cache.
+    // Asked now, answered "for this session" by a non-conforming client: the
+    // prompt did not offer it, so #2213 refuses the answer, nothing runs and
+    // nothing is remembered.
     non_conforming.store(true, std::sync::atomic::Ordering::SeqCst);
     let asked_now = ExecApprovalRequirement::NeedsApproval {
         reason: None,
         proposed_execpolicy_amendment: None,
     };
     results.push(run(write(agents.as_path()), asked_now.clone()).await);
+    non_conforming.store(false, std::sync::atomic::Ordering::SeqCst);
+    // Prime the approval cache as an offered "for this session" answer to
+    // this command would.
+    let primed = crate::tools::sandboxing::Approvable::approval_action(
+        &Probe {
+            additional: write(agents.as_path()),
+            requirement: asked_now.clone(),
+            cwd: environment.cwd().clone(),
+            ran: false,
+        },
+        &environment,
+        "probe-call",
+    )
+    .expect("the probe's approval action");
+    let decided_under = session.services.approval_cache().await.policy();
+    session
+        .services
+        .remember_approvals(
+            crate::tools::exec_command_cache_keys(&primed, &turn.initial_environments),
+            decided_under,
+        )
+        .await;
     // The same write answered from that cache, nobody asked now.
     results.push(run(write(agents.as_path()), asked_now).await);
     answerer.abort();
 
-    // Asked now: a person is shown which file approving opens, and it runs.
-    // Two prompts (the first and third runs), each saying which file
-    // approving opens.
+    // Two prompts (the first run and the refused non-conforming answer), each
+    // saying which file approving opens; the preapproved and cached runs ask
+    // nobody.
     let reasons = reasons.lock().expect("lock").clone();
     assert_eq!(reasons.len(), 2, "{reasons:?}");
     for reason in &reasons {
@@ -926,6 +951,12 @@ async fn issue_513_orchestrator_lets_only_a_person_asked_now_open_a_persistence_
     };
     assert_ran(0);
     assert_refused(1);
-    assert_ran(2);
+    // #2213: the unoffered "for this session" answer is refused, not run.
+    let (result, ran) = &results[2];
+    let Err(ToolError::Declined(message)) = result else {
+        panic!("run 2: expected a refusal: {result:?}");
+    };
+    assert_eq!(message, "approval answer was not offered by this prompt");
+    assert!(!*ran, "run 2: {message}");
     assert_refused(3);
 }

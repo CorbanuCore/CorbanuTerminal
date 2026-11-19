@@ -225,9 +225,9 @@ impl ChatWidget {
                         self.add_error_message("Daybreak requires the OpenAI provider with either ChatGPT sign-in or an API key with Daybreak support enabled.".into());
                         return;
                     }
-                    if !crate::daybreak::available(&self.model_catalog.models) {
-                        if crate::daybreak::availability(&self.model_catalog.models) == Some(false)
-                        {
+                    let models = self.model_catalog.models();
+                    if !crate::daybreak::available(&models) {
+                        if crate::daybreak::availability(&models) == Some(false) {
                             self.add_info_message(
                                 "Daybreak is not available for this account. Apply at https://openai.com/form/enterprise-trusted-access-for-cyber/. Learn more at https://help.openai.com/en/articles/20001326.".into(),
                                 /*hint*/ None,
@@ -945,6 +945,21 @@ impl ChatWidget {
             return;
         }
         match cmd {
+            SlashCommand::Model
+                if trimmed
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(|action| action.eq_ignore_ascii_case("clear-cooldown")) =>
+            {
+                if trimmed.eq_ignore_ascii_case("clear-cooldown") {
+                    self.app_event_tx.send(AppEvent::ClearProviderCooldown {
+                        config: Box::new(self.config.clone()),
+                        model: self.current_model().to_string(),
+                    });
+                } else {
+                    self.add_error_message("Usage: /model clear-cooldown".to_string());
+                }
+            }
             SlashCommand::Model if !trimmed.is_empty() => {
                 self.handle_model_command_args(trimmed);
                 self.app_event_tx.send(AppEvent::SettingsSelectionClosed);
@@ -1826,6 +1841,18 @@ impl ChatWidget {
             "'/{}' is unavailable in side conversations. {SIDE_SLASH_COMMAND_UNAVAILABLE_HINT}",
             cmd.command()
         ));
+        // #1039: the hint says Ctrl+C returns to the main thread, so a refused command that the
+        // composer kept for dispatch validation must not stay behind as a draft (Ctrl+C would
+        // only clear it).
+        if cmd.requires_dispatch_validation() {
+            let draft = self.bottom_pane.composer_text();
+            let command = format!("/{}", cmd.command());
+            let first_line = draft.lines().next().unwrap_or_default().trim();
+            if first_line == command || first_line.starts_with(&format!("{command} ")) {
+                self.bottom_pane
+                    .set_composer_text(String::new(), Vec::new(), Vec::new());
+            }
+        }
         self.bottom_pane.drain_pending_submission_state();
         false
     }

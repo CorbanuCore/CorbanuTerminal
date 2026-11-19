@@ -21,26 +21,17 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::default_input_modalities;
-<<<<<<< HEAD
-use codex_protocol::protocol::MultiAgentVersion;
-use core_test_support::responses::ev_assistant_message;
-||||||| 413492cd6c
-=======
 use codex_protocol::protocol::MULTI_AGENT_MODE_OPEN_TAG;
 use codex_protocol::protocol::MultiAgentVersion;
 use core_test_support::responses::ResponsesRequest;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_models_once;
 use core_test_support::responses::mount_sse_once;
-<<<<<<< HEAD
 use core_test_support::responses::mount_sse_once_match;
-||||||| 413492cd6c
-=======
 use core_test_support::responses::mount_sse_sequence;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use core_test_support::responses::namespace_child_tool;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
@@ -53,14 +44,16 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
 
-#[test_case(false, "gpt-5.6-luna"; "Luna model-only selection")]
-#[test_case(true, "gpt-5.6-luna"; "Luna exact provider and model selection")]
-#[test_case(false, "gpt-6-astra"; "unpriced Astra model-only selection")]
-#[test_case(true, "gpt-6-astra"; "unpriced Astra exact provider and model selection")]
+#[test_case(false, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna model-only selection")]
+#[test_case(true, "gpt-5.6-luna", MultiAgentVersion::V1; "Luna exact provider and model selection")]
+#[test_case(false, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra model-only selection")]
+#[test_case(true, "gpt-6-astra", MultiAgentVersion::V1; "unpriced Astra exact provider and model selection")]
+#[test_case(true, "gpt-6.1-sol", MultiAgentVersion::Disabled; "disabled catalog preference exact provider and model selection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_preference(
     explicit_provider: bool,
     model: &'static str,
+    catalog_backend: MultiAgentVersion,
 ) -> Result<()> {
     let server = start_mock_server().await;
     let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": model, "reasoning_effort": "medium"});
@@ -108,8 +101,8 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     )
     .await;
     let test = test_codex()
-        .with_model_info_override(model, |model| {
-            model.multi_agent_version = Some(MultiAgentVersion::V1);
+        .with_model_info_override(model, move |model| {
+            model.multi_agent_version = Some(catalog_backend);
             model.tool_mode = None;
             model.use_responses_lite = false;
         })
@@ -232,7 +225,8 @@ fn test_model_info(
         tool_mode: None,
         multi_agent_version: None,
         multi_agent_reasoning_effort: None,
-        priority: 1,
+        // Keep the synthetic visible model in the compact preview.
+        priority: -1,
         additional_speed_tiers: Vec::new(),
         service_tiers,
         default_service_tier: None,
@@ -281,6 +275,7 @@ async fn wait_for_model_available(manager: &SharedModelsManager, slug: &str) {
 }
 
 #[test_case(MultiAgentVersion::V1, false; "v1_default")]
+#[test_case(MultiAgentVersion::V1, true; "v1_context")]
 #[test_case(MultiAgentVersion::V2, false; "v2_default")]
 #[test_case(MultiAgentVersion::V2, true; "v2_context")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -350,6 +345,7 @@ pub(super) async fn model_catalog_refresh_requests(
     )
     .await;
 
+    let catalog_url = format!("{}/v1/models", server.uri());
     let mut builder = test_codex()
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model("visible-model")
@@ -371,6 +367,8 @@ pub(super) async fn model_catalog_refresh_requests(
                     .enable(Feature::ModelCatalogInContext)
                     .expect("enable context catalogs");
             }
+            // D644: exercise the fixture catalog independently of bundled growth and caps.
+            config.model_provider.model_catalog_url = Some(catalog_url.into());
             config.multi_agent_v2.hide_spawn_agent_metadata = false;
             config.base_instructions = Some("Test model instructions.".to_string());
             config.include_environment_context = false;
@@ -387,8 +385,22 @@ pub(super) async fn model_catalog_refresh_requests(
         MultiAgentVersion::V2 => MULTI_AGENT_V2_NAMESPACE,
         MultiAgentVersion::Disabled => unreachable!("this scenario requires spawning"),
     };
-    let description = spawn_agent_description(&body, namespace)
-        .expect("spawn_agent description should be present");
+    let description = if multi_agent_version == MultiAgentVersion::V2 {
+        // The reserved native OpenAI schema has no runtime overrides. Its plaintext
+        // adapter carries the catalog and model-selection guidance being tested.
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "spawn_agent_plaintext")
+            .expect("plaintext spawn adapter")["description"]
+            .as_str()
+            .expect("adapter description")
+            .to_string()
+    } else {
+        spawn_agent_description(&body, namespace)
+            .expect("spawn_agent description should be present")
+    };
     let catalog = request.message_input_texts("developer").join("\n");
     let listing = if model_catalog_in_context {
         &catalog
@@ -396,25 +408,57 @@ pub(super) async fn model_catalog_refresh_requests(
         &description
     };
 
-    assert!(
-<<<<<<< HEAD
-        description.contains("- `openai` / `gpt-5.6-terra`"),
-        "expected an eligible exact provider route in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
-        ),
-        "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
-||||||| 413492cd6c
-        description.contains("- `visible-model`: Fast and capable"),
-        "expected visible model summary in spawn_agent description: {description:?}"
-=======
-        listing.contains("- `visible-model`: Fast and capable"),
-        "expected visible model summary in model catalog: {catalog:?}"
-    );
+    if model_catalog_in_context {
+        assert!(
+            listing.contains("- `visible-model`: Fast and capable"),
+            "expected visible model summary in model catalog: {catalog:?}"
+        );
+        assert!(
+            listing.contains("Reasoning efforts: low, medium (default), high."),
+            "expected default reasoning effort in model catalog: {catalog:?}"
+        );
+        assert!(
+            listing.contains("Service tiers: priority."),
+            "expected service tier guidance in model catalog: {catalog:?}"
+        );
+    } else {
+        // Corbanu: without the in-context catalogue, the spawn description carries the
+        // exact provider/model runtime catalogue.
+        assert!(
+            description.contains("- `openai` / `visible-model`"),
+            "expected an eligible exact provider route in spawn_agent description: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`."
+            ),
+            "expected provider/model choices to be framed as exact runtime pairs: {description:?}"
+        );
+        assert!(
+            description
+                .contains("Current inherited runtime: `openai` / `visible-model`; effort medium."),
+            "expected the exact parent runtime in the spawn catalogue: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "Default allocation policy: compare the task with this catalogue before every spawn."
+            ),
+            "expected model-aware default allocation policy: {description:?}"
+        );
+        assert!(
+            description.contains(
+                "`openai` / `visible-model`; explicit-choice only; allocation economics unavailable;"
+            ),
+            "remote models without economics remain explicit choices: {description:?}"
+        );
+        assert!(
+            description.contains("efforts: low, medium (default), high;")
+                && description.contains("tiers: priority"),
+            "expected reasoning efforts and service tiers in the spawn catalogue: {description:?}"
+        );
+    }
     assert_eq!(
-        description.contains("Pick model overrides from the latest <model_catalog> listing."),
+        description.contains("The latest <model_catalog> is a short preview."),
         model_catalog_in_context
     );
     assert_eq!(
@@ -422,75 +466,27 @@ pub(super) async fn model_catalog_refresh_requests(
         model_catalog_in_context
     );
     assert_eq!(
-        description.contains("- `visible-model`: Fast and capable"),
+        description.contains("`openai` / `visible-model`"),
         !model_catalog_in_context
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
-    let expected_inherited_model_guidance = if multi_agent_version == MultiAgentVersion::V2
-        && model_catalog_in_context
-    {
-        "Spawned agents inherit your current model by default. Do not set the `model` field unless the user explicitly asks for a different model."
+    // Corbanu: V2 names `model_provider` too, with or without the in-context catalogue.
+    let expected_inherited_model_guidance = if multi_agent_version == MultiAgentVersion::V2 {
+        "Spawned agents inherit your current provider and model by default. Omit both `model_provider` and `model` to inherit that runtime. To use another runtime, set both fields explicitly."
     } else {
         "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
     };
     assert!(
-<<<<<<< HEAD
-        description
-            .contains("Current inherited runtime: `openai` / `visible-model`; effort medium."),
-        "expected the exact parent runtime in the spawn catalogue: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Default allocation policy: compare the task with this catalogue before every spawn."
-        ),
-        "expected model-aware default allocation policy: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
-        ),
-||||||| 413492cd6c
-        description
-            .contains("Available model overrides (optional; inherited parent model is preferred):"),
-        "expected model choices to be framed as overrides in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains(
-            "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed."
-        ),
-=======
         description.contains(expected_inherited_model_guidance),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         "expected inherited-model guidance in spawn_agent description: {description:?}"
     );
+    // Corbanu: V2's provider/model guidance above replaces upstream's in-context
+    // "Do not set the `model` field" sentence, so only V1 carries it.
     assert_eq!(
         description.contains(
             "Do not set the `model` field unless the user explicitly asks for a different model."
         ),
-        multi_agent_version == MultiAgentVersion::V1 || model_catalog_in_context,
+        multi_agent_version == MultiAgentVersion::V1,
         "expected model override usage guidance in spawn_agent description: {description:?}"
-    );
-    assert!(
-<<<<<<< HEAD
-        description.contains(
-            "`openai` / `visible-model`; explicit-choice only; allocation economics unavailable;"
-        ),
-        "remote models without economics remain explicit choices: {description:?}"
-||||||| 413492cd6c
-        description.contains("Reasoning efforts: low, medium (default), high."),
-        "expected default reasoning effort in spawn_agent description: {description:?}"
-    );
-    assert!(
-        description.contains("Service tiers: priority."),
-        "expected service tier guidance in spawn_agent description: {description:?}"
-=======
-        listing.contains("Reasoning efforts: low, medium (default), high."),
-        "expected default reasoning effort in model catalog: {catalog:?}"
-    );
-    assert!(
-        listing.contains("Service tiers: priority."),
-        "expected service tier guidance in model catalog: {catalog:?}"
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     );
     assert!(
         !listing.contains("hidden-model"),
@@ -509,6 +505,12 @@ pub(super) async fn model_catalog_refresh_requests(
         ) && description.contains("### When to delegate vs. do the subtask yourself"),
         "expected delegation decision guidance in spawn_agent description: {description:?}"
     );
+        assert!(
+            description.contains(
+                "Agent-role guidance below only helps choose which agent to use after spawning is already authorized; it never authorizes spawning by itself."
+            ),
+            "expected agent-role clarification in spawn_agent description: {description:?}"
+        );
         assert!(
             !description.contains("A mini model can solve many tasks faster than the main model."),
             "spawn_agent description should not encourage choosing a smaller model by default: {description:?}"
@@ -657,9 +659,7 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
             let description = adapter["description"]
                 .as_str()
                 .expect("adapter description");
-            assert!(description.contains(
-                "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-            ));
+            assert!(description.contains("Call `list_models`"));
         }
         assert_eq!(
             adapter.get("type").and_then(Value::as_str),
@@ -704,6 +704,19 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
                 .enable(Feature::MultiAgentV2)
                 .expect("feature update");
             config.agent_provider_allowlist = allowlist;
+            // Keep every route under test inside the 32-entry display cap, while
+            // retaining both engine preferences and an authorized external provider.
+            config
+                .model_catalog
+                .as_mut()
+                .unwrap()
+                .models
+                .retain(|model| {
+                    matches!(
+                        model.slug.as_str(),
+                        "gpt-5.4" | "gpt-5.6-luna" | "gpt-6-astra" | "glm-5.3-flash"
+                    )
+                });
             config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
         })
         .build_with_auto_env(&server)
@@ -722,19 +735,25 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     // The reserved native tool cannot select overrides; the plaintext adapter owns
     // the actionable catalog and exact provider/model parameters on OpenAI.
     let description = plaintext["description"].as_str().unwrap();
+    assert!(description.contains("Call `list_models`"));
+    let preview = description
+        .lines()
+        .filter(|line| line.starts_with("- `"))
+        .collect::<Vec<_>>();
+    assert!(preview.len() <= 3);
     assert_eq!(
-        (
-            description.contains("`openai` / `gpt-5.6-luna`"),
-            description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
-            // The list is capped, so probe for any non-OpenAI row rather
-            // than one particular model that catalogue growth can push out.
-            description
-                .lines()
-                .any(|line| line.trim_start().starts_with("- `")
-                    && !line.trim_start().starts_with("- `openai`"))
-        ),
-        (expected_openai, expected_openai, expected_other_provider),
-        "provider policy, not engine preference or allocation economics, owns discovery: {description}"
+        preview.is_empty(),
+        !expected_openai && !expected_other_provider
+    );
+    if !expected_other_provider {
+        assert!(preview.iter().all(|line| line.starts_with("- `openai`")));
+    }
+    assert!(
+        body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "list_models")
     );
     assert!(
         plaintext

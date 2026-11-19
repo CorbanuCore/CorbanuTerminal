@@ -12,6 +12,8 @@ mod literals;
 mod render;
 #[path = "shell_snapshot_restore.rs"]
 mod restore;
+#[path = "shell_snapshot_values.rs"]
+mod values;
 
 pub use capture::CapturedSnapshot;
 pub use capture::CapturedStartupEnvironment;
@@ -24,8 +26,37 @@ pub use credentials::prepare_snapshot_credentials;
 pub use restore::SNAPSHOT_BROKERED_UNSET_ENV_PREFIX;
 pub use restore::SNAPSHOT_BROKERED_VALUE_ENV_PREFIX;
 pub use restore::build_brokered_credential_exports;
+pub use values::VALUES_MARKER as SNAPSHOT_VALUES_MARKER;
+pub use values::parse as parse_snapshot_values;
+pub use values::script as snapshot_values_script;
 
 use capture::BASH_SH_SNAPSHOT_HEADER;
+
+/// #310: shell snapshots are replayable. Never persist conventional
+/// credential-bearing variables into them, whatever the shell environment
+/// policy admits. A name-based safeguard; runtime auth should still prefer the
+/// vault so provider secrets do not enter the process environment in the first
+/// place. Matched case-insensitively. Shared by Core's snapshot file and the
+/// executor's in-memory snapshot (#2392).
+pub const SECRET_EXPORT_NAME_PATTERNS: &[&str] = &[
+    "*_API_KEY",
+    "*_TOKEN",
+    "*_SECRET",
+    "*_PASSWORD",
+    "*_PASSWD",
+    "*_PRIVATE_KEY",
+    "*_CREDENTIAL",
+    "*_CREDENTIALS",
+    "*_SECRET_*",
+    "API_KEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
+    "CREDENTIALS",
+];
 
 #[cfg(all(test, unix))]
 #[path = "shell_snapshot_tests.rs"]

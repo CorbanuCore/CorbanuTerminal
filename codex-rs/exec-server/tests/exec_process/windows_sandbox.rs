@@ -12,6 +12,42 @@ use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;
 
+/// Match the protected user-owned roots used by native sandbox tests (#158).
+/// Runner temp ACLs may already grant writes to ordinary users, which would
+/// make a parent canary writable independently of the sandbox's grants.
+#[cfg(windows)]
+fn protect_temp_fixture_root(root: &std::path::Path) -> Result<()> {
+    let system32 =
+        std::path::PathBuf::from(std::env::var_os("SystemRoot").context("SystemRoot is missing")?)
+            .join("System32");
+    let output = std::process::Command::new(system32.join("whoami.exe"))
+        .arg("/user")
+        .output()?;
+    anyhow::ensure!(output.status.success(), "fixture user SID lookup failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let sid = stdout
+        .split_whitespace()
+        .find(|token| token.starts_with("S-1-"))
+        .context("fixture user SID was not reported")?;
+    let output = std::process::Command::new(system32.join("icacls.exe"))
+        .arg(root)
+        .args([
+            "/inheritance:r",
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)F",
+            "*S-1-5-32-544:(OI)(CI)F",
+        ])
+        .arg(format!("*{sid}:(OI)(CI)F"))
+        .output()?;
+    anyhow::ensure!(
+        output.status.success(),
+        "protect fixture root: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
 /// Windows alias casing must not prevent fallback when the primary runtime is absent from PATH.
 #[test_case::test_case("pwsh.exe"; "lowercase_pwsh")]
 #[test_case::test_case("PWSH.exe"; "uppercase_pwsh")]
@@ -119,12 +155,30 @@ async fn tmpdir_uses_command_environment_over_rpc(
         None
     };
     let root = TempDir::new()?;
+    #[cfg(windows)]
+    protect_temp_fixture_root(root.path())?;
     let command_temp = root.path().join("command temp");
     let server_temp = root.path().join("server temp");
     std::fs::create_dir(&command_temp)?;
     std::fs::create_dir(&server_temp)?;
     let outside = server_temp.join("outside.txt");
     std::fs::write(&outside, "original")?;
+    let command_temp_file = command_temp.join("outside-session.txt");
+    std::fs::write(&command_temp_file, "original")?;
+    // Use a batch fixture, as the native D377 probes do: quotes in an inline
+    // /C argument are escaped by the launcher before cmd.exe interprets them.
+    let probe_name = "probe-session-temp.cmd";
+    std::fs::write(
+        root.path().join(probe_name),
+        concat!(
+            "@echo off\r\n",
+            "echo CHILD-TEMP:%TEMP%\r\n",
+            "echo allowed>\"%TEMP%\\allowed.txt\"\r\n",
+            "echo modified>%COMMAND_TEMP_FILE%\r\n",
+            "echo modified>%OUTSIDE_FILE%\r\n",
+            "exit /b 0\r\n",
+        ),
+    )?;
     let server = common::exec_server::exec_server_with_env(
         [
             ("TEMP", server_temp.as_os_str()),
@@ -157,8 +211,8 @@ async fn tmpdir_uses_command_environment_over_rpc(
     let env = HashMap::from([
         ("SystemRoot".to_owned(), std::env::var("SystemRoot")?),
         (
-            "ALLOWED_FILE".to_owned(),
-            format!("\"{}\"", command_temp.join("allowed.txt").display()),
+            "COMMAND_TEMP_FILE".to_owned(),
+            format!("\"{}\"", command_temp_file.display()),
         ),
         (
             "OUTSIDE_FILE".to_owned(),
@@ -187,7 +241,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 "/D".to_owned(),
                 "/S".to_owned(),
                 "/C".to_owned(),
-                "echo CHILD-TEMP:%TEMP% & echo allowed>%ALLOWED_FILE% & echo modified>%OUTSIDE_FILE% & exit /b 0".to_owned(),
+                probe_name.to_owned(),
             ],
             cwd,
             env_policy: Some(ExecEnvPolicy {
@@ -196,6 +250,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
                 exclude: Vec::new(),
                 r#set: configured_temp,
                 include_only: Vec::new(),
+                drop_url_password_values: false,
             }),
             shell_snapshot: None,
             env,
@@ -215,17 +270,43 @@ async fn tmpdir_uses_command_environment_over_rpc(
     )
     .await?;
     assert_eq!(
-        (stdout.trim(), code, exited),
-        (
-            format!("CHILD-TEMP:{}", command_temp.display()).as_str(),
-            Some(0),
-            true
-        ),
+        (code, exited),
+        (Some(0), true),
         "unexpected launch result, stderr: {stderr}"
     );
+    let actual_temp = std::path::PathBuf::from(
+        stdout
+            .trim()
+            .strip_prefix("CHILD-TEMP:")
+            .context("child TEMP output")?,
+    );
+    if selection == WindowsSandboxSelection::Elevated {
+        // D377: only the private session subfolder is writable, never the
+        // command's parent temp folder or the server's separate temp folder.
+        assert_eq!(
+            std::fs::canonicalize(actual_temp.parent().context("session temp parent")?)?,
+            std::fs::canonicalize(&command_temp)?,
+        );
+        assert!(
+            actual_temp
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("corbanu-sandbox-tmp-"))
+        );
+        assert_eq!(std::fs::read_to_string(&command_temp_file)?, "original");
+    } else {
+        assert_eq!(actual_temp, command_temp);
+        assert_eq!(
+            std::fs::read_to_string(&command_temp_file)?.trim_end(),
+            "modified"
+        );
+    }
     assert_eq!(
         (
-            std::fs::read_to_string(command_temp.join("allowed.txt"))?
+            std::fs::read_to_string(actual_temp.join("allowed.txt"))
+                .with_context(|| format!(
+                    "read private TEMP child {actual_temp:?}; stderr={stderr:?}"
+                ))?
                 .trim_end()
                 .to_owned(),
             std::fs::read_to_string(outside)?

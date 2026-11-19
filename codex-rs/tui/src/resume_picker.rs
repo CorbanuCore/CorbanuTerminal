@@ -510,6 +510,10 @@ struct SessionPickerRunOptions {
 /// Filtering happens in two layers:
 /// 1. Source and eligible working-directory filtering at the backend.
 /// 2. Typed search filtering over loaded rows in the picker.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "main's session-picker launch context is the eighth argument"
+)]
 pub async fn run_resume_picker_with_app_server(
     uses_remote_filesystem: bool,
     tui: &mut Tui,
@@ -533,6 +537,10 @@ pub async fn run_resume_picker_with_app_server(
     .await
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "main's session-picker launch context is the eighth argument"
+)]
 pub(crate) async fn run_resume_picker_with_app_servers(
     uses_remote_filesystem: bool,
     tui: &mut Tui,
@@ -4903,7 +4911,7 @@ mod tests {
             Some(String::from("cursor-1")),
             Some(ThreadListCwdFilter::One("repo/on/server".to_string())),
             SessionStatus::Active,
-            ProviderFilter::Any,
+            ProviderFilter::All,
             ThreadSortKey::UpdatedAt,
             /*include_non_interactive*/ false,
             /*use_state_db_only*/ false,
@@ -4927,7 +4935,7 @@ mod tests {
             Some(String::from("cursor-1")),
             /*cwd_filter*/ None,
             SessionStatus::Active,
-            ProviderFilter::Any,
+            ProviderFilter::All,
             ThreadSortKey::UpdatedAt,
             /*include_non_interactive*/ true,
             /*use_state_db_only*/ false,

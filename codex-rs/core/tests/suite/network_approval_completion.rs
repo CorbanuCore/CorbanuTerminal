@@ -44,7 +44,9 @@ use tokio::time::timeout;
 use tokio_tungstenite::WebSocketStream;
 
 #[test_case(SandboxType::WindowsRestrictedToken, "allow_local_binding = true", Ok(true), false; "explicit_local_binding")]
-#[test_case(SandboxType::WindowsMxc, "", Ok(true), false; "mxc_default_local_binding")]
+// D616: Corbanu keeps loopback off by default; a remote MXC executor needs an explicit true.
+#[test_case(SandboxType::WindowsMxc, "", Err("MXC needs network allow_local_binding = true set explicitly"), false; "mxc_default_local_binding")]
+#[test_case(SandboxType::WindowsMxc, "allow_local_binding = true", Ok(true), false; "mxc_explicit_local_binding")]
 #[test_case(SandboxType::WindowsMxc, "allow_local_binding = false", Err("MXC cannot enforce allow_local_binding=false"), false; "mxc_rejects_false")]
 #[test_case(SandboxType::WindowsRestrictedToken, "", Ok(false), false; "non_mxc_default_local_binding")]
 #[test_case(SandboxType::WindowsRestrictedToken, "", Ok(false), true; "local_mxc_preference_keeps_remote_legacy")]

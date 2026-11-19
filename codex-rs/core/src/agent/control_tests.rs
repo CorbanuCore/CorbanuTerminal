@@ -126,6 +126,9 @@ use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use toml::Value as TomlValue;
 
+#[path = "control/mailbox_admission_tests.rs"]
+mod mailbox_admission;
+
 #[path = "control/spawn_publication_tests.rs"]
 mod spawn_publication;
 
@@ -1556,8 +1559,19 @@ async fn spawn_failure_context_survives_manager_and_fork_errors() {
 async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
     let harness = AgentControlHarness::new().await;
     let state = harness.control.runtime.upgrade().expect("live manager");
-    let parent_id = ThreadId::new();
-    let spawn = harness.control.spawn_agent(
+    // Corbanu (PF-23-S03): the child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn). Spawn through
+    // the parent's own control, which holds its binding, so the lookups this test blocks
+    // are upstream's own.
+    let (parent_id, parent_thread) = harness.start_thread().await;
+    let control = parent_thread
+        .session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone();
+    let spawn = control.spawn_agent(
         harness.config.clone(),
         text_input("hello"),
         Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
@@ -1580,7 +1594,7 @@ async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
                 .poll(&mut Context::from_waker(Waker::noop()))
                 .is_pending()
         );
-        harness.control.runtime.request_shutdown()
+        control.runtime.request_shutdown()
     };
     let error = spawn
         .await
@@ -1601,30 +1615,57 @@ async fn spawn_failure_context_preserves_shutdown_during_child_startup() {
         .wait()
         .await
         .expect("spawn releases its membership");
-    let closed_children = harness
+    let state_db = harness
         .state_db
         .as_ref()
-        .expect("manager should retain state db")
+        .expect("manager should retain state db");
+    // Corbanu: the parent's durable flush runs before any edge is published, and shutdown
+    // stops the parent's persistence too. Whichever of that flush or child admission sees
+    // the shutdown first, no edge stays open and a published one is closed.
+    assert_eq!(
+        state_db
+            .list_thread_spawn_children_with_status(
+                parent_id,
+                codex_state::DirectionalThreadSpawnEdgeStatus::Open,
+            )
+            .await
+            .expect("open child edges should load"),
+        Vec::new(),
+        "failed startup leaves no open edge"
+    );
+    let closed_children = state_db
         .list_thread_spawn_children_with_status(
             parent_id,
             codex_state::DirectionalThreadSpawnEdgeStatus::Closed,
         )
         .await
         .expect("closed child edges should load");
-    assert_eq!(
-        closed_children.len(),
-        1,
-        "failed startup closes its published edge"
+    assert!(
+        closed_children.len() <= 1,
+        "failed startup closes its published edge: {closed_children:?}"
     );
-    assert_thread_not_loaded(&harness.manager, closed_children[0]).await;
+    for child in closed_children {
+        assert_thread_not_loaded(&harness.manager, child).await;
+    }
 }
 
 #[tokio::test]
 async fn cancelled_spawn_after_input_admission_discards_child() {
     let harness = AgentControlHarness::new().await;
     let state = harness.control.runtime.upgrade().expect("live manager");
-    let parent_id = ThreadId::new();
-    let mut spawn = harness.control.spawn(SpawnRequest {
+    // Corbanu (PF-23-S03): the child inherits its live parent's security policy, so the
+    // parent must be a running thread (an unknown parent refuses the spawn). Spawn through
+    // the parent's own control, which holds its binding, so the lookups this test blocks
+    // are upstream's own.
+    let (parent_id, parent_thread) = harness.start_thread().await;
+    let control = parent_thread
+        .session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone();
+    let mut spawn = control.spawn(SpawnRequest {
         caller: parent_id,
         config: harness.config.clone(),
         input: AgentInput::UserInput(text_input("child task")),
@@ -1669,13 +1710,12 @@ async fn cancelled_spawn_after_input_admission_discards_child() {
         drop(spawn);
     }
     assert!(
-        harness.control.get_agent_metadata(child_id).is_none(),
+        control.get_agent_metadata(child_id).is_none(),
         "cancelled spawn must not leave an accepted child registered"
     );
     child.wait_until_terminated().await;
     assert_thread_not_loaded(&harness.manager, child_id).await;
-    harness
-        .control
+    control
         .runtime
         .request_shutdown()
         .wait()
@@ -2891,6 +2931,115 @@ async fn issue1545_a_hand_off_to_a_session_replaced_by_an_in_process_reload_is_r
     );
 }
 
+/// #2009: reapplying the persisted role must keep a sandbox raised after startup.
+#[tokio::test]
+async fn ensure_v2_agent_loaded_keeps_live_windows_sandbox_after_stored_role_reapply() {
+    use crate::windows_sandbox::WindowsSandboxLevelExt;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+
+    let (home, mut config) = test_config().await;
+    config.features.enable(Feature::MultiAgentV2).expect("v2");
+    config.features.enable(Feature::Sqlite).expect("sqlite");
+    let role_file = home.path().join("reload-role.toml");
+    std::fs::write(&role_file, "developer_instructions = \"before reload\"\n").expect("write role");
+    config.agent_roles.insert(
+        "reload-worker".to_string(),
+        AgentRoleConfig {
+            description: None,
+            config_file: Some(role_file.clone()),
+            nickname_candidates: None,
+            source: crate::config::AgentRoleSource::User,
+        },
+    );
+    let harness = AgentControlHarness::new_with_config(home, config).await;
+    let (parent_id, parent) = harness.start_paginated_thread().await;
+    let control = parent
+        .session
+        .services
+        .local_agent_runtime
+        .control(parent.session.session_id());
+    let child = control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("hello child"),
+            role_spawn_source(parent_id, 1, "/root/worker", "reload-worker"),
+            SpawnAgentOptions {
+                parent_thread_id: Some(parent_id),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("spawn role child");
+    let mut child_thread = harness.manager.get_thread(child.thread_id).await.unwrap();
+    child_thread
+        .inject_response_items(vec![assistant_message(
+            "child persisted",
+            Some(MessagePhase::FinalAnswer),
+        )])
+        .await
+        .expect("persist child history");
+
+    for level in [
+        WindowsSandboxLevel::RestrictedToken,
+        WindowsSandboxLevel::Elevated,
+    ] {
+        child_thread.shutdown_and_wait().await.expect("stop child");
+        let stored = child_thread
+            .read_thread(
+                /*include_archived*/ true, /*include_history*/ false,
+            )
+            .await
+            .expect("persisted role");
+        assert_eq!(stored.agent_role.as_deref(), Some("reload-worker"));
+        assert!(
+            harness
+                .manager
+                .remove_thread(&child.thread_id)
+                .await
+                .is_some()
+        );
+        parent
+            .session
+            .update_settings(SessionSettingsUpdate {
+                windows_sandbox_level: Some(level),
+                ..Default::default()
+            })
+            .await
+            .expect("raise live parent sandbox");
+        // The starting layers still have no sandbox. A reconstruction from those
+        // layers would lose the live setting when the stored role is applied.
+        assert_eq!(
+            WindowsSandboxLevel::from_config(&harness.config),
+            WindowsSandboxLevel::Disabled
+        );
+        let instructions = format!("reapplied at {level:?}");
+        std::fs::write(
+            &role_file,
+            format!("developer_instructions = \"{instructions}\"\n"),
+        )
+        .expect("edit persisted role");
+        let pin = control
+            .ensure_v2_agent_loaded(
+                harness.config.clone(),
+                child.thread_id,
+                Some(Arc::clone(&parent)),
+            )
+            .await
+            .expect("cold reload with current parent settings");
+        child_thread = harness.manager.get_thread(child.thread_id).await.unwrap();
+        let turn = child_thread.session.new_default_turn().await;
+        assert_eq!(
+            (
+                turn.windows_sandbox_level,
+                WindowsSandboxLevel::from_config(&turn.config),
+                turn.developer_instructions.as_deref(),
+            ),
+            (level, level, Some(instructions.as_str()))
+        );
+        drop(pin);
+    }
+}
+
 #[tokio::test]
 async fn ensure_v2_agent_loaded_reloads_registered_unloaded_agent() {
     check_v2_agent_reload(V2ReloadRoute::Sender).await;
@@ -3475,8 +3624,29 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             .evicted_environments(child_id)
             .is_none()
     );
+    // Corbanu (#1545): the detached registration keeps its residency pin until it has
+    // also requeued the child's durable mail, which can finish after `thread_created`;
+    // evicting before then is a transient `Busy` (#2340). Wait for that pin, bounded,
+    // so a pin the cancelled sender leaked still fails here.
+    drop(
+        timeout(
+            Duration::from_secs(5),
+            Arc::clone(&reloaded.residency_gate).write_owned(),
+        )
+        .await
+        .expect("the cancelled sender must not leak a residency pin"),
+    );
+    // The cancelled send never reached the durable mailbox, so recovery has nothing
+    // to hand the reloaded child.
+    assert!(
+        !reloaded
+            .session
+            .input_queue
+            .has_pending_mailbox_items()
+            .await
+    );
     // Evict and reload again with the single child slot. This also catches a leaked
-    // pin or pending residency reservation left behind by the cancelled sender.
+    // pending residency reservation left behind by the cancelled sender.
     assert_eq!(
         harness.manager.try_evict_v2_thread(reloaded).await.unwrap(),
         ThreadEvictionOutcome::Evicted,
@@ -3497,15 +3667,21 @@ async fn cancelled_v2_send_finishes_reload_registration() {
             _ => None,
         })
         .collect();
+    // Corbanu's durable mailbox stamps each message with its own id and time.
+    let without_stamps = |mut communication: InterAgentCommunication| {
+        communication.message_id = None;
+        communication.created_at_ms = None;
+        communication
+    };
     assert_eq!(
-        messages,
-        vec![InterAgentCommunication::new(
+        messages.into_iter().map(without_stamps).collect::<Vec<_>>(),
+        vec![without_stamps(InterAgentCommunication::new(
             AgentPath::root(),
             child.metadata.agent_path.unwrap(),
             Vec::new(),
             "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\nfollow-up after cancellation".to_string(),
             /*trigger_turn*/ true,
-        )],
+        ))],
     );
 }
 

@@ -30,11 +30,14 @@ mod upload_read;
 
 pub(crate) use agent_media::prepare_agent_media;
 pub(crate) use gate::Admission;
+pub(crate) use gate::PostTaintPolicyAnswers;
 pub(crate) use gate::Route;
 pub(crate) use gate::admit;
 pub(crate) use gate::ask_human;
 pub(crate) use gate::ask_human_answer;
 pub(crate) use gate::check_dispatch;
+pub(crate) use gate::confirm_policy_request_review;
+pub(crate) use gate::forced_review_refusal;
 #[cfg(test)]
 pub(crate) use gate::question_id;
 pub(crate) use image_reads::check_image_generation;
@@ -130,8 +133,12 @@ const CHILD_AGENT: &[&str] = &[
     "wait_agent_v1",
 ];
 const NO_PROTECTED_EFFECT: &[&str] = &[
+    "list_models",
     "update_plan",
     "request_user_input",
+    // Upstream (#42354): shows a message to the person without ending the turn, like the
+    // model's own reply text; nothing is read, written or sent elsewhere.
+    "send_message_to_user_async",
     "sleep",
     "curr_time",
     "get_context_remaining",

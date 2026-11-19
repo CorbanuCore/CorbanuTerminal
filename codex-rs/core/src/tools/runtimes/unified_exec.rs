@@ -145,6 +145,8 @@ pub struct UnifiedExecRuntime<'a> {
     /// before it) failed with `ToolError::Rejected`: a setup or spawn
     /// failure, shown as failed rather than as refused by policy.
     start_rejected: bool,
+    /// The launch layer already published the terminal failure lifecycle for this attempt.
+    launch_failure_reported: bool,
 }
 
 pub(crate) struct UnifiedExecAttempt {
@@ -193,6 +195,7 @@ impl<'a> UnifiedExecRuntime<'a> {
             manager,
             shown_by_review: false,
             start_rejected: false,
+            launch_failure_reported: false,
         }
     }
 
@@ -210,6 +213,10 @@ impl<'a> UnifiedExecRuntime<'a> {
     /// refusal before it.
     pub(crate) fn start_rejected(&self) -> bool {
         self.start_rejected
+    }
+
+    pub(crate) fn launch_failure_reported(&self) -> bool {
+        self.launch_failure_reported
     }
 }
 
@@ -346,6 +353,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest<'_>, UnifiedExecAttempt> for UnifiedExec
         attempt: &SandboxAttempt<'_>,
         ctx: &ToolCtx,
     ) -> Result<UnifiedExecAttempt, ToolError> {
+        self.launch_failure_reported = false;
         let result = self.start_process(req, attempt, ctx).await;
         self.start_rejected = matches!(result, Err(ToolError::Rejected(_)));
         result
@@ -675,7 +683,12 @@ impl UnifiedExecRuntime<'_> {
             && !shell_snapshot_location
                 .as_ref()
                 .is_some_and(|snapshot| snapshot.exists());
-        if brokered_shell_snapshot_missing && let Some(network) = managed_network {
+        // D641/D653: main's one-way broker retains masking and markers without a
+        // snapshot; upstream's fail-open restore and warning do not apply.
+        if brokered_shell_snapshot_missing
+            && let Some(network) = managed_network
+            && !network.credential_broker_hardened()
+        {
             network.restore_and_disable_brokered_credentials(&mut env, &mut command);
             let message = "Credential masking is unavailable because a protected shell snapshot could not be created. This command will run with unmasked credentials.";
             tracing::warn!("{message}");
@@ -814,6 +827,7 @@ impl UnifiedExecRuntime<'_> {
                 prepared.turn_environment.environment.as_ref(),
             )
             .await;
+        self.launch_failure_reported = matches!(process, Err(ToolError::Rejected(_)));
         let mut process = with_launch_failure_events(process, prepared, ctx).await?;
         process._shell_snapshot = shell_snapshot;
         Ok(UnifiedExecAttempt {

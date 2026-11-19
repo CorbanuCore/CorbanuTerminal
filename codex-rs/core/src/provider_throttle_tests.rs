@@ -5,6 +5,31 @@ use codex_vault::ProviderAccountName;
 use codex_vault::Vault;
 use pretty_assertions::assert_eq;
 
+#[test]
+fn typed_retry_deadline_reaches_shared_throttle() {
+    let deadline = codex_http_client::RetryAfter::from_delay(std::time::Duration::from_secs(60))
+        .expect("bounded deadline");
+    let error = CodexErr::from(CodexErrorDetails::RateLimitExceeded("fixture".to_string()))
+        .with_retry_after(deadline);
+    let delay = provider_request_error_retry_after_ms(&error).expect("typed advice");
+    assert!((1..=60_001).contains(&delay));
+}
+
+#[test]
+fn expired_retry_advice_does_not_restart_default_cooldown() {
+    let deadline = codex_http_client::RetryAfter::from_delay(std::time::Duration::ZERO)
+        .expect("expired deadline");
+    let error = CodexErr::from(CodexErrorDetails::RateLimitExceeded("fixture".to_string()))
+        .with_retry_after(deadline);
+    assert_eq!(provider_request_error_retry_after_ms(&error), Some(1));
+    assert_eq!(
+        provider_request_error_retry_after_ms(&CodexErr::from(
+            CodexErrorDetails::RateLimitExceeded("fixture".to_string())
+        )),
+        None
+    );
+}
+
 fn zai_on(account: Option<&str>) -> ModelProviderInfo {
     let mut provider = ModelProviderInfo::create_zai_provider();
     provider.account = account.map(|name| NamedProviderAccount {
@@ -67,7 +92,7 @@ fn env_key_throttle_identity_is_salted_per_home() {
 
 async fn open_state_db(home: &Path) -> StateDbHandle {
     codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home).expect("absolute"),
         ),
         "zai".to_string(),
@@ -134,6 +159,37 @@ async fn blocked_in(state_db: &StateDbHandle, key: &ProviderRequestKey) -> bool 
         .await
         .decision
         .is_some()
+}
+
+#[test]
+fn cooldown_error_text_exposes_bounded_wait_and_longer_provider_hint() {
+    let key = ProviderRequestKey {
+        provider_id: "claude-plan".into(),
+        model: "claude-opus-5-5-plan".into(),
+        key_fingerprint: "config:auth-command".into(),
+    };
+    let block = ProviderRequestBlock {
+        reason: ProviderRequestBlockReason::Cooldown,
+        until_ms: 3_601_000,
+        remaining_ms: 3_600_000,
+        provider_reset_remaining_ms: 308_374_000,
+        lease_owner: None,
+        last_status: Some(429),
+        last_request_id: Some("fixture-request".into()),
+        last_input_tokens: 10,
+        last_cached_input_tokens: 0,
+        last_request_bytes: 100,
+        last_provider_input_tokens: 0,
+        last_provider_cached_input_tokens: 0,
+    };
+    let message = format_provider_request_block(&key, &block);
+    assert_eq!(
+        message,
+        "provider request blocked by local cooldown for claude-plan/claude-opus-5-5-plan (config:auth-command) for about 3600s. Last status: 429, request id: fixture-request. Last preflight: input=10 cached_input=0 request_bytes=100. Provider reset hint: about 308374s remaining (not enforced locally). After this wait, the next request probes the provider. To retry now, use /model clear-cooldown or corbanu model clear-cooldown with the same provider/model settings."
+    );
+    assert!(is_provider_request_block(&CodexErr::InvalidRequest(
+        message
+    )));
 }
 
 fn rate_limited() -> ProviderRequestResult {

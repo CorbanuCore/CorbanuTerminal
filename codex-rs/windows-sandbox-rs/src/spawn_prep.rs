@@ -316,15 +316,16 @@ unsafe fn deny_moving_ancestors_below_roots(
 /// in its `write_roots` while its command runs ([`crate::integrity_leases::watch`]),
 /// with D283's nested watch in the same roots a legacy session walks. Taken
 /// after setup, so what setup makes isn't counted. They only flag: when they
-/// can't be kept, the command runs without them, as before D425.
+/// can't be kept, ordinary recording errors retain D425's best-effort behavior.
+/// D598 makes untrusted records a launch refusal, never a disabled watch.
 pub(crate) fn watch_elevated_write_roots(
     permissions: &ResolvedWindowsSandboxPermissions,
     cwd: &Path,
     write_roots: &[PathBuf],
     log_dir: Option<&Path>,
-) -> Option<IntegrityLease> {
+) -> Result<Option<IntegrityLease>> {
     if write_roots.is_empty() {
-        return None;
+        return Ok(None);
     }
     let mut roots: Vec<PathBuf> = write_roots
         .iter()
@@ -334,16 +335,19 @@ pub(crate) fn watch_elevated_write_roots(
     roots.dedup();
     let allow: HashSet<PathBuf> = roots.iter().cloned().collect();
     let nested_roots = nested_metadata_roots(permissions, cwd, &allow);
-    crate::integrity_leases::watch(&roots, &nested_roots, log_dir)
-        .inspect_err(|err| {
+    match crate::integrity_leases::watch(&roots, &nested_roots, log_dir) {
+        Ok(watch) => Ok(Some(watch)),
+        Err(err) if err.is::<crate::integrity_registry::UntrustedRecords>() => Err(err),
+        Err(err) => {
             crate::logging::log_note(
                 &format!(
                     "planted metadata: this command's writable roots aren't watched, so what it plants isn't flagged: {err:#}"
                 ),
                 log_dir,
             );
-        })
-        .ok()
+            Ok(None)
+        }
+    }
 }
 
 /// D283: the writable roots watched for nested `.codex`/`.agents` folders:
@@ -922,7 +926,7 @@ pub(crate) fn prepare_elevated_spawn_context_for_permissions(
         cwd,
         &effective_write_roots,
         logs_base_dir.as_deref(),
-    );
+    )?;
     let caps = load_or_create_cap_sids(codex_home)?;
     let (psid_to_use, cap_sids) = if uses_write_capabilities {
         let cap_sids = root_capability_sids(codex_home, cwd, effective_write_roots)?

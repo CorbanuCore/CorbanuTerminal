@@ -158,6 +158,10 @@ impl Run {
     }
 }
 
+/// Prints `marker=1` where the sandbox marks the command, else
+/// `marker=unset`, within #2548's minimal lexical set (no `${…}`).
+const MARKER: &str = "printf marker=; printenv CODEX_SANDBOX_USER_NAMESPACES_DENIED || echo unset";
+
 /// `value` as one POSIX shell word.
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -235,12 +239,19 @@ async fn run(setup: Setup) -> Result<Run> {
     let bin_word = quote(&bin.to_string_lossy());
     let script = match target {
         Target::SameHome => format!("{nested} 2>&1"),
-        Target::UnshareSameHome => format!(
-            "echo marker=${{CODEX_SANDBOX_USER_NAMESPACES_DENIED:-unset}}; unshare -Ur {nested} 2>&1; echo \"exit=$?\""
-        ),
-        Target::MadeUpMarker => format!(
-            "mkdir -p made-up/tmp && : > made-up/tmp/security-moderate-marker && chmod 000 made-up/tmp/security-moderate-marker && CORBANU_SECURITY_ORIGIN=\"$PWD/made-up\" {nested} 2>&1; echo \"exit=$?\"; env -u CORBANU_HOME -u PFTERMINAL_HOME CODEX_HOME=\"$PWD/made-up\" {nested} 2>&1; echo \"exit=$?\""
-        ),
+        // #2548: the marker is printed without `${…}`, inside the minimal
+        // lexical set, so under Aggressive (headless, approvals off) the
+        // script is read and runs instead of asking; the sandbox decides.
+        Target::UnshareSameHome => format!("{MARKER}; unshare -Ur {nested} 2>&1; echo \"exit=$?\""),
+        Target::MadeUpMarker => {
+            // A literal path, not `$PWD`: Core asks before an `env` that is
+            // read past a word known only at run time (#2543), which would
+            // stop the nested run before it can refuse.
+            let made_up = quote(&cwd.canonicalize()?.join("made-up").to_string_lossy());
+            format!(
+                "mkdir -p made-up/tmp && : > made-up/tmp/security-moderate-marker && chmod 000 made-up/tmp/security-moderate-marker && CORBANU_SECURITY_ORIGIN={made_up} {nested} 2>&1; echo \"exit=$?\"; env -u CORBANU_HOME -u PFTERMINAL_HOME CODEX_HOME={made_up} {nested} 2>&1; echo \"exit=$?\""
+            )
+        }
         Target::NotAgents => [
             "resume --last",
             "app-server",
@@ -257,9 +268,9 @@ async fn run(setup: Setup) -> Result<Run> {
                 .with_sandbox_mode("workspace-write")
                 .write(&other)?;
             let unshare = if matches!(target, Target::UnshareOtherHome) {
-                "echo marker=${CODEX_SANDBOX_USER_NAMESPACES_DENIED:-unset}; unshare -Ur "
+                format!("{MARKER}; unshare -Ur ")
             } else {
-                ""
+                String::new()
             };
             format!(
                 "{unshare}env -u CORBANU_HOME -u PFTERMINAL_HOME CODEX_HOME={} HOME={} {nested} 2>&1; echo \"exit=$?\"",

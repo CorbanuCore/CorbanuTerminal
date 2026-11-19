@@ -96,6 +96,7 @@ enum ReviewCheckpoint {
 #[test_case(CheckpointReuse::Enabled, Some(""), Some("matching"), 0, EvidenceSize::Normal, ReviewCheckpoint::Valid; "empty producer preserves retained evidence")]
 #[test_case(CheckpointReuse::Enabled, Some("matching"), Some("matching"), 140, EvidenceSize::Normal, ReviewCheckpoint::Valid; "source call evicted")]
 #[test_case(CheckpointReuse::Enabled, Some("matching"), Some("matching"), 0, EvidenceSize::OversizedAnswer, ReviewCheckpoint::Valid; "incomplete answers reject fresh low score")]
+#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardians_retain_evidence_after_compaction_and_resume(
     checkpoint_reuse: CheckpointReuse,
@@ -257,8 +258,7 @@ async fn guardians_retain_evidence_after_compaction_and_resume(
     let (mcp_url, mcp_server) = start_mcp_server(/*sensitive_action*/ None).await?;
     let codex_home = TempDir::new()?;
     let mock_config = MockResponsesConfig::new(&responses_url)
-        .with_provider_name("OpenAI")
-        .with_provider_config("requires_openai_auth = true\nsupports_websockets = false")
+        .with_builtin_openai_provider()
         .with_root_config("approvals_reviewer = \"auto_review\"\nmodel_auto_compact_token_limit = 1000000")
         .enable_feature(Feature::DefaultModeRequestUserInput)
         .enable_feature(Feature::GuardianApproval)

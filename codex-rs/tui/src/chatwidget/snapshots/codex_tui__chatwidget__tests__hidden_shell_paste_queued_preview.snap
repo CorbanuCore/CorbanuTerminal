@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/composer_submission.rs
+assertion_line: 123
 expression: "normalize_snapshot_paths(render_bottom_popup(&chat, 80))"
 ---
 • Working (0s • esc to interrupt)
@@ -8,6 +9,6 @@ expression: "normalize_snapshot_paths(render_bottom_popup(&chat, 80))"
   ↳ [Pasted Content 1006 chars]
     ⇧← edit last queued message
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  GPT-5.6-Sol default · /tmp/project
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -…

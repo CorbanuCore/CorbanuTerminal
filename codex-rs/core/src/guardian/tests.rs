@@ -169,11 +169,14 @@ fn configure_guardian_mock_provider(config: &mut Config, base_url: &str) {
 fn apply_guardian_mock_turn_config(turn: &mut TurnContext, config: Arc<Config>) {
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = construct_model_info_offline_for_tests(
+    let mut model_info = construct_model_info_offline_for_tests(
         GUARDIAN_TEST_MODEL,
         &config.to_models_manager_config(),
     );
-    turn.model_info.slug = GUARDIAN_TEST_MODEL.to_string();
+    model_info.slug = GUARDIAN_TEST_MODEL.to_string();
+    crate::session::tests::update_turn_settings_for_test(turn, |settings| {
+        settings.model_info = Arc::new(model_info);
+    });
 }
 
 async fn guardian_test_session_turn_and_rx(
@@ -2245,12 +2248,13 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
         .enable(Feature::MemoryTool)
         .expect("memory tool feature is configurable");
     let config = Arc::new(config);
-    let models_manager = test_support::models_manager_with_provider(
-        config.codex_home.to_path_buf(),
-        session.services.auth_manager(),
-        config.model_provider.clone(),
-    );
-    session.services.models_manager = models_manager;
+    session.services.models_manager = Arc::new(StaticModelsManager::new(
+        Some(session.services.auth_manager()),
+        ModelsResponse {
+            models: vec![core_test_support::model_catalog::guardian_test_model()],
+        },
+        codex_models_manager::ModelOrigin::ExplicitConfig,
+    ));
     crate::guardian::test_host::install(&session, &config);
     let memory_extension = Arc::new(GuardianMemoryContextProbe);
     let mut extensions = codex_extension_api::ExtensionRegistryBuilder::<Config>::new();
@@ -2274,7 +2278,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     apply_guardian_mock_turn_config(&mut turn, Arc::clone(&config));
     update_turn_settings_for_test(&mut turn, |settings| {
         Arc::make_mut(&mut settings.model_info).auto_review_model_override =
-            Some("codex-auto-review".to_string());
+            Some("test-guardian-review".to_string());
     });
     let session = Arc::new(session);
     let turn = Arc::new(turn);
@@ -2520,11 +2524,7 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
     .await;
 
     let (mut session, mut turn) = guardian_test_session_and_turn(&server).await;
-    let mut reviewer_model = session
-        .services
-        .models_manager
-        .get_model_info("codex-auto-review", &turn.config.to_models_manager_config())
-        .await;
+    let mut reviewer_model = core_test_support::model_catalog::guardian_test_model();
     reviewer_model.comp_hash = Some("test-checkpoint".to_owned());
     let auth_manager = Arc::clone(&session.services.auth_manager());
     Arc::get_mut(&mut session)
@@ -2533,14 +2533,15 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
         .models_manager = Arc::new(StaticModelsManager::new(
         Some(auth_manager),
         ModelsResponse {
-            models: vec![Arc::unwrap_or_clone(reviewer_model.model)],
+            models: vec![reviewer_model],
         },
         codex_models_manager::ModelOrigin::ExplicitConfig,
     ));
+    crate::guardian::test_host::install(&session, &turn.config);
     let turn_mut = Arc::get_mut(&mut turn).expect("turn should be unique");
     update_turn_settings_for_test(turn_mut, |settings| {
         Arc::make_mut(&mut settings.model_info).auto_review_model_override =
-            Some("codex-auto-review".to_string());
+            Some("test-guardian-review".to_string());
     });
     seed_guardian_parent_history(&session, &turn).await;
 
@@ -3579,7 +3580,9 @@ async fn guardian_review_routes_required_actions(
 #[tokio::test]
 async fn guardian_ephemeral_retry_preserves_parallel_trunk_and_fork_history() -> anyhow::Result<()>
 {
-    const TEST_STACK_SIZE_BYTES: usize = 4 * 1024 * 1024;
+    // #2294: upstream's budget is 4 MiB; with Corbanu's review-path checks a debug build
+    // needs more (it passes at 8 MiB). Production reviews run on a 16 MiB thread.
+    const TEST_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
     let handle = std::thread::Builder::new()
         .name("guardian_ephemeral_retry_preserves_parallel_trunk_and_fork_history".to_string())
@@ -4065,15 +4068,20 @@ async fn guardian_review_session_config_keeps_deepseek_review_on_deepseek() {
     );
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = construct_model_info_offline_for_tests(
+    let model_info = construct_model_info_offline_for_tests(
         DEEPSEEK_DEFAULT_MODEL,
         &config.to_models_manager_config(),
     );
+    crate::session::tests::update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(model_info);
+    });
+    let turn = Arc::new(turn);
 
-    let guardian_config = guardian_review_session_config(&session, &turn)
-        .await
-        .expect("DeepSeek guardian config")
-        .spawn_config;
+    let guardian_config =
+        guardian_review_session_config(&session, &GuardianReviewContext::from(&turn))
+            .await
+            .expect("DeepSeek guardian config")
+            .spawn_config;
     let mut expected_provider = ModelProviderInfo::create_deepseek_provider();
     expected_provider.request_max_retries = Some(1);
     expected_provider.stream_max_retries = Some(1);
@@ -4115,17 +4123,25 @@ async fn guardian_review_session_config_uses_active_model_for_unknown_provider()
     session.services.models_manager = Arc::new(StaticModelsManager::new(
         Some(session.services.auth_manager()),
         ModelsResponse {
-            models: vec![parent_model.clone(), openai_hidden_model],
+            models: vec![
+                parent_model.model.as_ref().clone(),
+                openai_hidden_model.model.as_ref().clone(),
+            ],
         },
+        codex_models_manager::ModelOrigin::ExplicitConfig,
     ));
     turn.config = Arc::clone(&config);
     turn.provider = create_model_provider(config.model_provider.clone(), turn.auth_manager.clone());
-    turn.model_info = parent_model;
+    crate::session::tests::update_turn_settings_for_test(&mut turn, |settings| {
+        settings.model_info = Arc::new(parent_model);
+    });
+    let turn = Arc::new(turn);
 
-    let guardian_config = guardian_review_session_config(&session, &turn)
-        .await
-        .expect("custom-provider guardian config")
-        .spawn_config;
+    let guardian_config =
+        guardian_review_session_config(&session, &GuardianReviewContext::from(&turn))
+            .await
+            .expect("custom-provider guardian config")
+            .spawn_config;
 
     assert_eq!(
         (guardian_config.model, guardian_config.model_provider_id,),

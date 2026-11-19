@@ -353,38 +353,28 @@ async fn assert_user_turn_local_image_resizes_to(
 async fn user_turn_with_local_image_attaches_image() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
-<<<<<<< HEAD
-    assert_user_turn_local_image_resizes_to((2304, 864), (2000, 750)).await
-||||||| 413492cd6c
-    assert_user_turn_local_image_resizes_to((2304, 864), (2048, 768)).await
-=======
+    // Corbanu resizes high detail to 2000 px (image_preparation.rs HIGH_DETAIL_MODE).
     assert_user_turn_local_image_resizes_to(
         (2304, 864),
-        (2048, 768),
+        (2000, 750),
         ImageBudgetPolicy::DetailBased,
         ResizeNoticeExpectation::Disabled,
     )
     .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_with_vertical_local_image_resizes_to_square_bounds() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
-<<<<<<< HEAD
-    assert_user_turn_local_image_resizes_to((1024, 4096), (500, 2000)).await
-||||||| 413492cd6c
-    assert_user_turn_local_image_resizes_to((1024, 4096), (512, 2048)).await
-=======
+    // Corbanu resizes high detail to 2000 px (image_preparation.rs HIGH_DETAIL_MODE).
     assert_user_turn_local_image_resizes_to(
         (1024, 4096),
-        (512, 2048),
+        (500, 2000),
         ImageBudgetPolicy::DetailBased,
         ResizeNoticeExpectation::Disabled,
     )
     .await
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -570,7 +560,7 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
         &input[function_output_index + 1],
         concat!(
             "<image_resize_notice>\n",
-            "Image 1 of 1 in the preceding tool output was resized from 2304x864 to 2048x768 pixels.\n",
+            "Image 1 of 1 in the preceding tool output was resized from 2304x864 to 2000x750 pixels.\n",
             "</image_resize_notice>"
         ),
     );

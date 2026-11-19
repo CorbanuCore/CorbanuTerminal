@@ -1,4 +1,4 @@
-//! Verifies host controller selection and routing through existing runtime entry points.
+//! D682: policy-less host controllers fail closed (D530), including cold resume.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,45 +11,30 @@ use codex_core::AgentInfo;
 use codex_core::AgentTarget;
 use codex_core::AgentTurnOutcome;
 use codex_core::DeliveryReceipt;
-use codex_core::ForkSnapshot;
 use codex_core::GuardianRootSnapshot;
 use codex_core::LiveAgent;
 use codex_core::PendingAgentMessage;
 use codex_core::RolloutBudgetReminder;
 use codex_core::SendRequest;
 use codex_core::SpawnRequest;
-use codex_core::StartThreadOptions;
 use codex_core::ThreadConfigSnapshot;
-use codex_core::TurnInputRequest;
 use codex_features::Feature;
-use codex_history::InitialHistory;
-use codex_history::ResumedHistory;
-use codex_history::RolloutItem;
-use codex_message_board::PostMetadata;
 use codex_protocol::AgentPath;
 use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::TokenUsage;
-use codex_protocol::user_input::UserInput;
 use codex_rollout_trace::ThreadTraceContext;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
-use core_test_support::wait_for_event;
 use futures::future::BoxFuture;
 use pretty_assertions::assert_eq;
-use serde_json::json;
 use test_case::test_case;
-use wiremock::MockServer;
 
 pub(super) struct TestAgentControl {
     thread_id: ThreadId,
@@ -214,488 +199,84 @@ impl AgentControl for TestAgentControl {
     }
 }
 
-async fn test_with_host_control(
-    server: &MockServer,
-    extra_features: &[Feature],
-) -> anyhow::Result<(TestCodex, Arc<TestAgentControl>)> {
-    let thread_id = ThreadId::new();
-    let controller = Arc::new(TestAgentControl::new(thread_id));
-    let extra_features = extra_features.to_vec();
-    let test = test_codex()
+// D682 retires the upstream host-dispatch/mailbox/lifecycle success contracts.
+// A controller without Corbanu's policy must never gain a runnable thread.
+#[test_case(Feature::Collab, false; "new_collaboration")]
+#[test_case(Feature::AgentMessageBoard, false; "new_mailbox")]
+#[test_case(Feature::WakeOnAgentMessages, false; "new_mail_wake")]
+#[test_case(Feature::Collab, true; "resumed_collaboration")]
+#[test_case(Feature::AgentMessageBoard, true; "resumed_mailbox")]
+#[test_case(Feature::WakeOnAgentMessages, true; "resumed_mail_wake")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn policyless_host_controller_refuses_startup(
+    feature: Feature,
+    resume: bool,
+) -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = responses::start_mock_server().await;
+    let controls = Arc::new(Mutex::new(Vec::new()));
+    let mut builder = test_codex()
         .with_config(move |config| {
-            for feature in [
-                Feature::Collab,
-                Feature::MultiAgentV2,
-                Feature::AgentMessageBoard,
-            ]
-            .into_iter()
-            .chain(extra_features.iter().copied())
-            {
-                config
-                    .features
-                    .enable(feature)
-                    .expect("enable collaboration feature");
-            }
-            config.service_tier = Some("priority".to_string());
-        })
-        .with_thread_manager({
-            let controller = Arc::clone(&controller);
-            move |manager| {
-                manager
-                    .with_thread_id_generator(move || thread_id)
-                    .with_agent_control_factory(move |_| {
-                        let control: Arc<dyn AgentControl> = controller.clone();
-                        async move { Ok(control) }
-                    })
-            }
-        })
-        .build_with_auto_env(server)
-        .await?;
-    Ok((test, controller))
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn host_threads_preserve_lineage_settings_and_resume_routing() -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    let server = responses::start_mock_server().await;
-    let (test, controller) = test_with_host_control(&server, &[]).await?;
-    let root_id = test.session_configured.thread_id;
-    let mut child_config = test.config.clone();
-    child_config.service_tier = None;
-    let child = test
-        .thread_manager
-        .start_thread(StartThreadOptions {
-            reserved_thread_id: Some(ThreadId::new()),
-            environments: Some(vec![test.executor_environment().request()]),
-            session_source: Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
-                parent_thread_id: root_id,
-                depth: 1,
-                agent_path: Some(AgentPath::root().join("worker").expect("valid child path")),
-                agent_nickname: None,
-                agent_role: None,
-            })),
-            ..StartThreadOptions::new(child_config.clone())
-        })
-        .await?;
-    assert_eq!(
-        (
-            child.session_configured.session_id,
-            child.session_configured.parent_thread_id
-        ),
-        (controller.identity(), Some(root_id))
-    );
-    assert_eq!(controller.service_tier(), Some("priority".to_string()));
-    let message = codex_protocol::protocol::InterAgentCommunication::new(
-        AgentPath::root(),
-        AgentPath::root().join("worker").expect("valid child path"),
-        Vec::new(),
-        "Retain this in the host mailbox".into(),
-        /*trigger_turn*/ false,
-    );
-    let unread_mail = vec![message.into()];
-    *controller.mail.lock().expect("mail lock") = unread_mail.clone();
-    let error = test
-        .thread_manager
-        .try_evict_v2_thread(Arc::clone(&child.thread))
-        .await
-        .expect_err("local eviction must reject a host-controlled child");
-    assert!(matches!(
-        error.details(),
-        CodexErrorDetails::InvalidRequest(_)
-    ));
-    assert!(Arc::ptr_eq(
-        &test.thread_manager.get_thread(child.thread_id).await?,
-        &child.thread,
-    ));
-    assert_eq!(controller.take_mailbox(child.thread_id), unread_mail);
-    child.thread.ensure_rollout_materialized().await;
-    child.thread.flush_rollout().await?;
-    let saved = test
-        .thread_store
-        .load_latest_model_context(codex_thread_store::LoadThreadHistoryParams {
-            thread_id: child.thread_id,
-            include_archived: false,
-        })
-        .await?;
-    assert!(saved.items.iter().any(|item| matches!(item,
-        RolloutItem::SessionMeta(meta) if meta.meta.parent_thread_id == Some(root_id)
-    )));
-
-    controller
-        .agents
-        .lock()
-        .expect("agents lock")
-        .insert("/root/worker".into(), child.thread_id);
-    for (thread, author, recipient, destination) in [
-        (&test.codex, "/root", "/root/worker", "new_channel_name"),
-        (&child.thread, "/root/worker", "/root", "channel_name"),
-    ] {
-        let arguments = serde_json::json!({
-            (destination): "design",
-            "text": "A shared decision.",
-            "agents_to_notify": [recipient],
-        });
-        let mock = responses::mount_sse_sequence(
-            &server,
-            vec![
-                responses::sse(vec![
-                    responses::ev_function_call_with_namespace(
-                        "post",
-                        "collaboration",
-                        "post",
-                        &arguments.to_string(),
-                    ),
-                    responses::ev_completed("post"),
-                ]),
-                responses::sse(vec![responses::ev_completed("done")]),
-            ],
-        )
-        .await;
-        thread
-            .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
-                text: "Post a decision.".into(),
-                text_elements: Vec::new(),
-            }]))
-            .await?;
-        wait_for_event(thread, |event| matches!(event, EventMsg::TurnComplete(_))).await;
-        let post: PostMetadata = serde_json::from_str(
-            &mock.requests()[1]
-                .function_call_output_text("post")
-                .expect("post result"),
-        )?;
-        assert_eq!(post.author.as_str(), author);
-    }
-
-    // Rejected starts must leave the live tree's settings alone, whether the
-    // requested root already exists or the factory returns the wrong identity.
-    for reserved_thread_id in [root_id, ThreadId::new()] {
-        let rejected = test
-            .thread_manager
-            .start_thread(StartThreadOptions {
-                reserved_thread_id: Some(reserved_thread_id),
-                environments: Some(vec![test.executor_environment().request()]),
-                ..StartThreadOptions::new(child_config.clone())
-            })
-            .await;
-        let error = rejected
-            .err()
-            .expect("startup must reject the requested root");
-        if reserved_thread_id != root_id {
-            assert!(
-                matches!(error.details(), CodexErrorDetails::InvalidRequest(_)),
-                "{error:?}"
-            );
-        }
-        assert_eq!(controller.service_tier(), Some("priority".to_string()));
-    }
-    child.thread.shutdown_and_wait().await?;
-    test.thread_manager.remove_thread(&child.thread_id).await;
-    let error = test
-        .thread_manager
-        .ensure_multi_agent_v2_child_loaded(child.thread_id)
-        .await
-        .expect_err("child reload must reach the host controller");
-    assert!(
-        matches!(error.details(), CodexErrorDetails::InvalidRequest(message)
-            if message == &format!("host resume rejection for {}", child.thread_id)
-        ),
-        "{error:?}"
-    );
-    test.codex.shutdown_and_wait().await?;
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn host_factory_follows_thread_lifecycle() -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    let server = responses::start_mock_server().await;
-    let calls = Arc::new(Mutex::new(Vec::new()));
-    let test = test_codex()
-        .with_config(|config| {
             config
                 .features
                 .enable(Feature::MultiAgentV2)
-                .expect("enable multi-agent v2");
+                .expect("enable V2");
+            config
+                .features
+                .enable(feature)
+                .expect("enable host capability");
+            config.service_tier = Some("priority".into());
         })
         .with_thread_manager({
-            let calls = Arc::clone(&calls);
+            let controls = Arc::clone(&controls);
             move |manager| {
                 manager.with_agent_control_factory(move |thread_id| {
-                    calls.lock().expect("factory calls lock").push(thread_id);
-                    let control: Arc<dyn AgentControl> = Arc::new(TestAgentControl::new(thread_id));
+                    let controller = Arc::new(TestAgentControl::new(thread_id));
+                    controls
+                        .lock()
+                        .expect("controls lock")
+                        .push(Arc::clone(&controller));
+                    let control: Arc<dyn AgentControl> = controller;
                     async move { Ok(control) }
                 })
             }
-        })
-        .build_with_auto_env(&server)
-        .await?;
-    let root_id = test.session_configured.thread_id;
-    let manager = &test.thread_manager;
-    let options = || StartThreadOptions {
-        environments: Some(vec![test.executor_environment().request()]),
-        ..StartThreadOptions::new(test.config.clone())
-    };
-    let internal = manager
-        .spawn_internal_session(
-            root_id,
-            StartThreadOptions {
-                session_source: Some(SessionSource::Internal(InternalSessionSource::Guardian)),
-                ..options()
-            },
-        )
-        .await?;
-    assert_eq!(
-        internal.session_configured.session_id,
-        test.session_configured.session_id
-    );
-    test.codex.ensure_rollout_materialized().await;
-    test.codex.flush_rollout().await?;
-    let saved = test.codex.load_history(/*include_archived*/ false).await?;
-    let history = InitialHistory::Resumed(ResumedHistory {
-        history_revision: None,
-        conversation_id: root_id,
-        history: Arc::new(saved.items),
-        rollout_path: test.codex.rollout_path(),
-    });
-    let fork = manager
-        .fork_thread_from_history(ForkSnapshot::Interrupted, options(), history.clone())
-        .await?;
-    assert_eq!(
-        fork.session_configured.session_id,
-        SessionId::from(fork.thread_id)
-    );
-    let warm = manager
-        .start_thread(StartThreadOptions {
-            initial_history: history.clone(),
-            ..options()
-        })
-        .await?;
-    assert!(Arc::ptr_eq(&warm.thread, &test.codex));
-    assert_eq!(
-        *calls.lock().expect("factory calls lock"),
-        vec![root_id, fork.thread_id]
-    );
-    internal.thread.shutdown_and_wait().await?;
-    test.codex.shutdown_and_wait().await?;
-    let cold = manager
-        .start_thread(StartThreadOptions {
-            initial_history: history,
-            ..options()
-        })
-        .await?;
-    assert!(!Arc::ptr_eq(&cold.thread, &test.codex));
-    assert_eq!(cold.thread_id, root_id);
-    assert_eq!(
-        *calls.lock().expect("factory calls lock"),
-        vec![root_id, fork.thread_id, root_id]
-    );
-    cold.thread.shutdown_and_wait().await?;
-    fork.thread.shutdown_and_wait().await?;
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn collaboration_tools_dispatch_to_the_host_controller() -> anyhow::Result<()> {
-    skip_if_no_network!(Ok(()));
-    let server = responses::start_mock_server().await;
-    let (test, _controller) = test_with_host_control(&server, &[]).await?;
-    let mut events = vec![responses::ev_response_created("tools")];
-    for (call, name, arguments) in [
-        (
-            "spawn",
-            "spawn_agent",
-            serde_json::json!({"task_name": "worker", "message": "hello", "fork_turns": "none"}),
-        ),
-        (
-            "send",
-            "send_message",
-            serde_json::json!({"target": ThreadId::new().to_string(), "message": "hello"}),
-        ),
-        ("list", "list_agents", serde_json::json!({})),
-    ] {
-        events.push(responses::ev_function_call_with_namespace(
-            call,
-            "collaboration",
-            name,
-            &arguments.to_string(),
-        ));
-    }
-    events.push(responses::ev_completed("tools"));
-    let calls = responses::mount_sse_sequence(
-        &server,
-        vec![
-            responses::sse(events),
-            responses::sse(vec![responses::ev_completed("done")]),
-        ],
-    )
-    .await;
-    test.submit_text_turn("use collaboration").await?;
-    let requests = calls.requests();
-    assert_eq!(requests.len(), 2);
-    for call in ["spawn", "send", "list"] {
-        assert!(
-            requests[1]
-                .function_call_output(call)
-                .to_string()
-                .contains(&format!("host {call} rejection"))
-        );
-    }
-    test.codex.shutdown_and_wait().await?;
-    Ok(())
-}
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InternalSessionSource;
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn host_mailbox_notifies_waiting_agent_and_delivers_once() -> anyhow::Result<()> {
-    let server = responses::start_mock_server().await;
-    let (test, controller) = test_with_host_control(&server, &[]).await?;
-    responses::mount_sse_once(
-        &server,
-        responses::sse(vec![
-            responses::ev_response_created("waiting"),
-            responses::ev_function_call_with_namespace(
-                "wait-mail",
-                "collaboration",
-                "wait_agent",
-                r#"{"timeout_ms":10000}"#,
-            ),
-            responses::ev_completed("waiting"),
-        ]),
-    )
-    .await;
-    test.codex
-        .start_or_steer_turn(TurnInputRequest::user_input(vec![UserInput::Text {
-            text: "Wait for a colleague.".into(),
-            text_elements: Vec::new(),
-        }]))
-        .await?;
-    wait_for_event(&test.codex, |event| matches!(event,
-        EventMsg::ItemStarted(event) if matches!(&event.item,
-            codex_protocol::items::TurnItem::CollabAgentToolCall(call) if call.id == "wait-mail")
-    )).await;
-    let next = responses::mount_sse_once(
-        &server,
-        responses::sse(vec![
-            responses::ev_response_created("done"),
-            responses::ev_assistant_message("done", "Received the note."),
-            responses::ev_completed("done"),
-        ]),
-    )
-    .await;
-    controller.mail.lock().expect("mail lock").push(
-        codex_protocol::protocol::InterAgentCommunication::new(
-            AgentPath::root().join("worker").expect("valid worker path"),
-            AgentPath::root(),
-            Vec::new(),
-            "Note from the host mailbox".into(),
-            /*trigger_turn*/ false,
-        )
-        .into(),
-    );
-    controller.mailbox_state.send_replace(true);
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
-    let request = next.single_request();
-    let wait_output = request
-        .function_call_output_text("wait-mail")
-        .expect("wait_agent output");
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&wait_output)?,
-        serde_json::json!({"message": "Wait completed.", "timed_out": false})
-    );
-    assert_eq!(
-        request
-            .inputs_of_type("agent_message")
-            .iter()
-            .filter(|item| item.to_string().contains("Note from the host mailbox"))
-            .count(),
-        1
-    );
-    assert!(controller.mail.lock().expect("mail lock").is_empty());
-    test.codex.shutdown_and_wait().await?;
-    Ok(())
-}
-
-/// Both delivery paths wake an opted-in completed root exactly once.
-#[test_case(false; "direct_op")]
-#[test_case(true; "host_mailbox")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn agent_mail_wakes_completed_root_when_enabled(
-    via_host_mailbox: bool,
-) -> anyhow::Result<()> {
-    let server = responses::start_mock_server().await;
-    let (test, controller) =
-        test_with_host_control(&server, &[Feature::WakeOnAgentMessages]).await?;
-    let mut final_answer = responses::ev_assistant_message("first-answer", "initial work finished");
-    final_answer["item"]["phase"] = json!("final_answer");
-    let response = responses::mount_sse_sequence(
-        &server,
-        vec![
-            responses::sse(vec![
-                responses::ev_response_created("initial"),
-                final_answer,
-                responses::ev_completed("initial"),
-            ]),
-            responses::sse(vec![
-                responses::ev_response_created("agent-mail"),
-                responses::ev_assistant_message("mail-answer", "received the agent update"),
-                responses::ev_completed("agent-mail"),
-            ]),
-        ],
-    )
-    .await;
-    test.submit_text_turn("Finish the initial work.").await?;
-    assert_eq!(response.requests().len(), 1);
-
-    let message = InterAgentCommunication::new(
-        AgentPath::root().join("worker").expect("valid worker path"),
-        AgentPath::root(),
-        Vec::new(),
-        "Late agent update".into(),
-        /*trigger_turn*/ false,
-    );
-    if via_host_mailbox {
-        controller
-            .mail
-            .lock()
-            .expect("mail lock")
-            .push(message.into());
-        controller.mailbox_state.send_replace(true);
+        });
+    let result = if resume {
+        let seed = test_codex().build_with_auto_env(&server).await?;
+        seed.codex.ensure_rollout_materialized().await;
+        seed.codex.flush_rollout().await?;
+        builder.restart_with_auto_env(&server, &seed).await
     } else {
-        test.codex
-            .submit(Op::InterAgentCommunication {
-                communication: message,
-                start_options: Default::default(),
-            })
-            .await?;
+        builder.build_with_auto_env(&server).await
+    };
+    let error = result
+        .err()
+        .expect("policy-less host controller must not start");
+    let error = error
+        .downcast_ref::<CodexErr>()
+        .expect("typed startup error");
+    assert!(
+        matches!(error.details(), CodexErrorDetails::UnsupportedOperation(message)
+            if message == "this agent controller has no Corbanu security policy"),
+        "{error:?}"
+    );
+    {
+        let controls = controls.lock().expect("controls lock");
+        assert_eq!(controls.len(), 1);
+        assert_eq!(
+            controls[0].service_tier(),
+            None,
+            "rejection must not publish root settings"
+        );
+        assert!(controls[0].mail.lock().expect("mail lock").is_empty());
     }
-    wait_for_event(&test.codex, |event| {
-        matches!(event, EventMsg::TurnComplete(_))
-    })
-    .await;
-    test.codex.shutdown_and_wait().await?;
-
-    let requests = response.requests();
-    assert_eq!(requests.len(), 2);
-    assert_eq!(
-        responses::received_responses_requests(&server).await.len(),
-        2
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("recorded requests")
+            .iter()
+            .all(|request| !request.url.path().ends_with("/responses"))
     );
-    assert_ne!(
-        requests[0].body_json()["client_metadata"]["turn_id"],
-        requests[1].body_json()["client_metadata"]["turn_id"]
-    );
-    let messages = requests[1].inputs_of_type("agent_message");
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0]["author"], "/root/worker");
-    assert_eq!(messages[0]["recipient"], "/root");
-    assert_eq!(
-        messages[0]["content"],
-        json!([{"type": "input_text", "text": "Late agent update"}])
-    );
-    assert!(controller.mail.lock().expect("mail lock").is_empty());
     Ok(())
 }

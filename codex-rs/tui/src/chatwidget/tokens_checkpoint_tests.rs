@@ -19,7 +19,7 @@ async fn ledger(
 ) -> anyhow::Result<(tempfile::TempDir, Arc<codex_state::StateRuntime>, ThreadId)> {
     let home = tempfile::tempdir()?;
     let runtime = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "synthetic".into(),

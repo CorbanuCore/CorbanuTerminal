@@ -52,6 +52,12 @@ test-group = 'provider_tui_journeys'
 retries = 0
 slow-timeout = { period = "60s", terminate-after = 3 }
 
+[[profile.default.overrides]]
+# #2502: keep the full 3 MiB/eight-length equivalence regression. Unoptimized
+# macOS CI exceeded the default 60 s bound; release latency is measured apart.
+filter = 'package(codex-network-proxy) & test(three_mib_eight_isolated_lengths_pass_and_copies_at_end_are_found)'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
 [test-groups.app_server_protocol_codegen]
 max-threads = 1
 
@@ -153,7 +159,7 @@ test-group = 'windows_sandbox_legacy_sessions'
 # Every test that runs the elevated setup takes it too (#1827): the setup
 # resets the sandbox users' passwords, failing other tests' logons (1326), and
 # in tests it asserts the guard is held.
-filter = 'package(codex-windows-sandbox) & (test(legacy_) | test(elevated_) | test(sec_win_1648_) | test(d311_) | test(d377_) | test(sec_win_345_sandboxed_commands_dont_get_the_runners_access) | test(large_deny_list_uses_environment_without_changing_the_request) | test(windows_wrapper_args_round_trip))'
+filter = 'package(codex-windows-sandbox) & (test(legacy_) | test(elevated_) | test(sec_win_1648_) | test(sec_win_1842_) | test(d311_) | test(d377_) | test(sec_win_345_sandboxed_commands_dont_get_the_runners_access) | test(large_deny_list_uses_environment_without_changing_the_request) | test(windows_wrapper_args_round_trip))'
 test-group = 'windows_sandbox_legacy_sessions'
 
 [[profile.default.overrides]]

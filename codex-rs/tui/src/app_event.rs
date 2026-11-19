@@ -68,7 +68,6 @@ use codex_features::Feature;
 use codex_plugin::PluginCapabilitySummary;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::models::ActivePermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
 use codex_realtime_webrtc::StartedRealtimeWebrtcSession;
 use zeroize::Zeroize;
 
@@ -2017,7 +2016,9 @@ pub(crate) enum AppEvent {
         provider: Option<String>,
     },
 
-    /// Apply a model-picker selection to the active conversation and saved local defaults.
+    /// Exercise the legacy combined selection path in unit tests. Live pickers
+    /// send provider-aware default updates or session-only selection events.
+    #[cfg(test)]
     ApplyModelSelection {
         model: String,
         effort: Option<ReasoningEffort>,
@@ -2182,6 +2183,12 @@ pub(crate) enum AppEvent {
 
     /// Open the durable GPU rental and recipe surface.
     OpenGpuMenu,
+
+    /// Clear only the current provider/model/credential's local rate-limit state.
+    ClearProviderCooldown {
+        config: Box<crate::legacy_core::config::Config>,
+        model: String,
+    },
     OpenGpuRental {
         rental_id: String,
     },
@@ -2972,6 +2979,11 @@ pub(crate) enum AppEvent {
 
     /// Open an existing editor above the configuration panel.
     OpenConfigEditor(crate::config_panel::ConfigEditorHandoff),
+
+    /// Replay a held Enter only if the same question editor still owns it.
+    AsyncQuestionBurstEnter {
+        token: u64,
+    },
 
     /// Schedule a notification preview with time to switch away from the terminal.
     TestConfigNotification,

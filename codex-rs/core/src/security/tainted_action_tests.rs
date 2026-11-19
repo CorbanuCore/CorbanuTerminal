@@ -22,6 +22,9 @@ mod issue_1901_disguised_stat_load;
 #[path = "issue_1276_to_1620_tests.rs"]
 mod issue_1276_to_1620;
 
+#[path = "issue_1661_expansion_tests.rs"]
+mod issue_1661_expansion;
+
 // #1808: chroot after untrusted content.
 #[path = "tainted_action_chroot_tests.rs"]
 mod chroot_tests;

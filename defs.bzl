@@ -205,6 +205,7 @@ def codex_rust_crate(
         integration_compile_data_extra = [],
         integration_test_args = [],
         unit_test_args = [],
+        windows_unit_test_env = {},
         binary_test_target_compatible_with = [],
         integration_test_timeout = None,
         test_data_extra = [],
@@ -260,6 +261,7 @@ def codex_rust_crate(
             tests, including resources embedded with include_str! or include_bytes!.
         integration_test_args: Optional args for integration test binaries.
         unit_test_args: Optional args for the unit test binary.
+        windows_unit_test_env: Extra unit test environment on Windows targets.
         binary_test_target_compatible_with: Platform constraints for binary unit tests.
         integration_test_timeout: Optional Bazel timeout for integration test
             targets generated from `tests/*.rs`.
@@ -311,6 +313,10 @@ def codex_rust_crate(
         "INSTA_WORKSPACE_ROOT": ".",
         "INSTA_SNAPSHOT_PATH": "src",
     }
+    unit_test_env = select({
+        "@platforms//os:windows": test_env | windows_unit_test_env,
+        "//conditions:default": test_env,
+    })
 
     native.filegroup(
         name = "package-files",
@@ -430,7 +436,7 @@ def codex_rust_crate(
 
         workspace_root_test(
             name = unit_test_name,
-            env = test_env,
+            env = unit_test_env,
             runfile_env = unit_test_runfile_env,
             test_bin = ":" + unit_test_binary,
             workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
@@ -441,7 +447,7 @@ def codex_rust_crate(
         if unit_test_alone:
             workspace_root_test(
                 name = unit_test_name + "-alone",
-                env = test_env,
+                env = unit_test_env,
                 runfile_env = unit_test_runfile_env,
                 test_bin = ":" + unit_test_binary,
                 workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
@@ -524,7 +530,7 @@ def codex_rust_crate(
 
         workspace_root_test(
             name = binary_unit_test_name,
-            env = test_env,
+            env = unit_test_env,
             test_bin = ":" + binary_unit_test_binary,
             workspace_root_marker = "//codex-rs/utils/cargo-bin:repo_root.marker",
             target_compatible_with = binary_test_target_compatible_with,

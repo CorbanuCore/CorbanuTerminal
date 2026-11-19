@@ -32,6 +32,7 @@ pub fn provision_sandbox_in_process(
         deny_read_paths: Vec::new(),
         deny_read_sessions: crate::DenyReadSessions::default(),
         deny_write_paths: Vec::new(),
+        world_writable_paths: Vec::new(),
         proxy_ports: settings.proxy_ports,
         allow_local_binding: settings.allow_local_binding,
         otel: codex_otel::global_statsig_metrics_settings(),

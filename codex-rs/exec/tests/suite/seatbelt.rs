@@ -16,7 +16,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn codex_home_symlink_opt_out_uses_loaded_user_config() -> anyhow::Result<()> {
+async fn symlinked_codex_home_is_writable_at_its_real_location_with_any_opt_out()
+-> anyhow::Result<()> {
     use core_test_support::responses;
     use core_test_support::test_codex_exec::test_codex_exec;
     use serde_json::json;
@@ -65,7 +66,6 @@ async fn codex_home_symlink_opt_out_uses_loaded_user_config() -> anyhow::Result<
             visualizations.display()
         );
         let server = responses::start_mock_server().await;
-        let should_run = enabled && !ignore_user_config;
         let mock = responses::mount_sse_sequence(
             &server,
             vec![
@@ -101,20 +101,11 @@ async fn codex_home_symlink_opt_out_uses_loaded_user_config() -> anyhow::Result<
         let output = command.output()?;
         assert!(output.status.success(), "{output:?}");
         assert_eq!(mock.requests().len(), 2);
-        if should_run {
-            assert_eq!(fs::read(target.path().join("shell.txt"))?, b"shell");
-            assert_eq!(fs::read(target.path().join("patch.txt"))?, b"patched\n");
-        } else {
-            let shell_output = mock
-                .function_call_output_text("shell")
-                .expect("shell tool output");
-            assert!(
-                shell_output.contains("symlinked writable roots are not supported"),
-                "{shell_output}"
-            );
-            assert!(!target.path().join("shell.txt").exists());
-            assert!(!target.path().join("patch.txt").exists());
-        }
+        // Main grants a symlinked writable root at its pinned real location, so upstream's
+        // refusal and its `allow_symlinked_codex_home` opt-out do not apply (S3a ledger row for
+        // sandboxing/src/seatbelt.rs). Every case writes through the link into the target.
+        assert_eq!(fs::read(target.path().join("shell.txt"))?, b"shell");
+        assert_eq!(fs::read(target.path().join("patch.txt"))?, b"patched\n");
     }
     Ok(())
 }
@@ -155,7 +146,10 @@ fn denied_glob_profile(workspace: &AbsolutePathBuf, pattern: String) -> Permissi
     permission_profile(
         workspace,
         vec![(
-            FileSystemPath::GlobPattern { pattern },
+            FileSystemPath::GlobPattern {
+                pattern,
+                scan: None,
+            },
             FileSystemAccessMode::Deny,
         )],
     )
@@ -313,10 +307,14 @@ extends = ":read-only"
         workspace = workspace.display()
     );
     fs::write(temp_dir.path().join("config.toml"), config).expect("write permissions config");
-    let profile = core_test_support::load_default_config_for_test(&temp_dir)
-        .await
-        .permissions
-        .effective_permission_profile();
+    let profile = core_test_support::load_default_config_for_test_in(
+        &temp_dir,
+        Default::default(),
+        workspace.as_path(),
+    )
+    .await
+    .permissions
+    .effective_permission_profile();
 
     for denied_path in [&dotenv, &secrets, &escaped] {
         assert_denied_read(denied_path, &workspace, &profile).await;
@@ -589,12 +587,14 @@ async fn seatbelt_blocks_protected_reads_and_writes_through_symlink_aliases() {
         (
             FileSystemPath::GlobPattern {
                 pattern: format!("{}/*.env", private.display()),
+                scan: None,
             },
             alias_path.clone(),
         ),
         (
             FileSystemPath::GlobPattern {
                 pattern: format!("{}/*.env", alias.display()),
+                scan: None,
             },
             protected.clone(),
         ),
@@ -819,6 +819,7 @@ async fn seatbelt_blocks_protected_ancestor_moves_across_writable_roots() {
             let protected_path = if use_glob {
                 FileSystemPath::GlobPattern {
                     pattern: format!("{}/*.env", private.display()),
+                    scan: None,
                 }
             } else {
                 protected.clone().into()

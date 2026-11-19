@@ -245,6 +245,7 @@ async fn build_uploaded_argument_value(
     // #245: stored grants with protected paths stripped at read time, as file tools read them.
     let additional_permissions = crate::tools::handlers::read_granted_permissions(
         sess,
+        turn_context,
         &turn_environment.selection.environment_id,
     )
     .await;

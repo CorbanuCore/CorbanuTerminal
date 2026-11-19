@@ -105,15 +105,14 @@ async fn steer_joins_existing_turn_without_extending_sampling(
     let telemetry = SdkTracerProvider::builder()
         .with_simple_exporter(exported.clone())
         .build();
-    tracing_subscriber::registry()
-        .with(
-            tracing_opentelemetry::layer()
-                .with_tracer(telemetry.tracer("turn-phase-test"))
-                .with_filter(tracing_subscriber::filter::filter_fn(
-                    codex_otel::OtelProvider::trace_export_filter,
-                )),
-        )
-        .try_init()?;
+    let subscriber = tracing_subscriber::registry().with(
+        tracing_opentelemetry::layer()
+            .with_tracer(telemetry.tracer("turn-phase-test"))
+            .with_filter(tracing_subscriber::filter::filter_fn(
+                codex_otel::OtelProvider::trace_export_filter,
+            )),
+    );
+    codex_log_guard::guard(subscriber).try_init()?;
     let server = start_mock_server().await;
     let first = mount_sse_once(
         &server,

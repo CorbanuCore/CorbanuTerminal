@@ -21,6 +21,9 @@ fn complete_subagent(chat: &mut ChatWidget, id: &str) {
         kind: codex_app_server_protocol::SubAgentActivityKind::Completed,
         agent_thread_id: ThreadId::new().to_string(),
         agent_path: "/root/stack_tip".to_string(),
+        agent_nickname: None,
+        agent_role: None,
+        task_preview: None,
     };
     for notification in [
         ServerNotification::ItemStarted(ItemStartedNotification::new(

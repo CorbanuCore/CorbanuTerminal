@@ -1024,6 +1024,15 @@ impl NetworkProxy {
         if let Some(policy) = environment_policy {
             policy.apply_to(&mut config);
         }
+        // D616: Corbanu keeps host-loopback binding off unless it is configured. MXC cannot
+        // block loopback, so a remote MXC executor needs an explicit `true`.
+        anyhow::ensure!(
+            !config.enabled
+                || local_binding_policy != crate::LocalBindingPolicy::ExplicitTrue
+                || config.allow_local_binding.is_some(),
+            "{}",
+            crate::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED
+        );
         config.allow_local_binding = Some(local_binding_policy.resolve(&config));
         anyhow::ensure!(
             environment_policy.is_none() || config.enabled,
@@ -1031,7 +1040,7 @@ impl NetworkProxy {
         );
         anyhow::ensure!(
             !config.enabled
-                || local_binding_policy != crate::LocalBindingPolicy::RequireTrue
+                || !local_binding_policy.requires_true()
                 || config.allow_local_binding(),
             "MXC cannot enforce allow_local_binding=false: native host-loopback access is bidirectional; use true or a different sandbox backend"
         );
@@ -1364,6 +1373,23 @@ impl NetworkProxy {
         env: &HashMap<String, String>,
     ) -> bool {
         self.state.virtualize_brokered_text(text, env)
+    }
+
+    /// Whether `main`'s hardened engine owns brokering for this proxy (D353). Callers use it to
+    /// skip upstream's fail-open restore, which cannot unmask credentials that engine brokers.
+    pub fn credential_broker_hardened(&self) -> bool {
+        self.state.credential_broker_hardened()
+    }
+
+    /// Whether `text` contains a credential the hardened engine already brokers, including
+    /// isolated records whose raw values stay in the broker process (D685). Matching happens in
+    /// the engine; nothing is returned or registered and no destination is granted. Errors mean
+    /// the check could not be completed and the caller must not persist `text`.
+    pub fn brokered_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, crate::KnownCredentialScanError> {
+        self.state.known_credential_occurs_in(text)
     }
 
     /// Applies the selected failure mode to recognized credentials left unmasked after preparation.
@@ -2653,14 +2679,23 @@ mod tests {
             config
         };
 
-        // Flag off: today's grants reach the OS sandbox unchanged.
+        // Flag off: supported grants reach the OS sandbox unchanged;
+        // Windows always drops Unix-socket permissions.
         let open = NetworkProxy::builder()
             .state(Arc::new(network_proxy_state_for_policy(config(false))))
             .build()
             .await?;
         assert!(open.allow_local_binding());
-        assert!(open.dangerously_allow_all_unix_sockets());
-        assert_eq!(open.allow_unix_sockets().len(), 1);
+        assert_eq!(
+            open.dangerously_allow_all_unix_sockets(),
+            !cfg!(target_os = "windows")
+        );
+        let expected_unix_sockets: &[String] = if cfg!(target_os = "windows") {
+            &[]
+        } else {
+            &["/tmp/pf-33-s02.sock".to_string()]
+        };
+        assert_eq!(open.allow_unix_sockets().as_ref(), expected_unix_sockets);
 
         // Guarded: loopback-wide, port 53 and Unix-socket grants are dropped,
         // so the sandbox may reach only the proxy's own loopback ports.

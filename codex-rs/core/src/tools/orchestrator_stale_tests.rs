@@ -150,13 +150,6 @@ impl ToolRuntime<Req, ()> for Probe {
         &req.environment
     }
 
-    fn turn_environment<'a>(
-        &self,
-        _req: &'a Req,
-    ) -> Option<&'a crate::session::turn_context::TurnEnvironment> {
-        None
-    }
-
     async fn run(
         &mut self,
         _req: &Req,
@@ -345,6 +338,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         handler_basis = Some(HandlerBasis::now(&session));
         let effective = crate::tools::handlers::apply_granted_turn_permissions(
             &session,
+            &turn,
             &environment,
             environment.cwd(),
             crate::sandboxing::SandboxPermissions::UseDefault,

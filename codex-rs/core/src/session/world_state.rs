@@ -26,6 +26,7 @@ use crate::context::world_state::WorldState;
 use crate::exec_policy::AllowPrefixRules;
 use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use codex_connectors::AppToolPolicyEvaluator;
+use codex_extension_api::WorldStateContextMode;
 use codex_extension_api::WorldStateContributionInput;
 use codex_features::Feature;
 use codex_file_system::FileSystemSandboxContext;
@@ -384,6 +385,13 @@ impl Session {
         }
         let environments = step_context.environments.to_selections();
         let previous_world_state = self.state.lock().await.history.world_state_checkpoint();
+        step_context
+            .extension_data
+            .insert(if turn_context.provider.info().is_openai() {
+                WorldStateContextMode::AppendOnly
+            } else {
+                WorldStateContextMode::ReplaceSections
+            });
         for contributor in self.services.extensions.context_contributors() {
             for section in contributor
                 .contribute_world_state(WorldStateContributionInput {
@@ -450,7 +458,10 @@ impl Session {
                     .enabled(Feature::ModelCatalogInContext)
             {
                 ModelCatalogState::new(
-                    &turn_context.available_models,
+                    &crate::tools::spec_plan::spawn_agent_available_models(
+                        turn_context,
+                        turn_context.multi_agent_version == MultiAgentVersion::V2,
+                    ),
                     turn_context.multi_agent_version,
                 )
             } else {

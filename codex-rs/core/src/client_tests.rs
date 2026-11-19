@@ -2396,8 +2396,7 @@ fn websocket_continuation_reports_unavailable_response_state() {
 }
 
 #[tokio::test]
-async fn responses_http_preserves_raw_tool_metadata_for_openai_custom_endpoint()
--> anyhow::Result<()> {
+async fn responses_http_omits_raw_tool_metadata_for_openai_custom_endpoint() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
@@ -2462,7 +2461,13 @@ async fn responses_http_preserves_raw_tool_metadata_for_openai_custom_endpoint()
     let requests = server.received_requests().await.expect("received requests");
     assert_eq!(requests.len(), 1);
     let body: serde_json::Value = serde_json::from_slice(&requests[0].body)?;
-    assert_eq!(body["input"], serde_json::to_value(vec![output.clone()])?);
+    // D634: preserve ordinary tool output and call metadata, but omit provider-private data.
+    let mut transmitted_output = output.clone();
+    transmitted_output.clear_tool_result_metadata();
+    assert_eq!(
+        body["input"],
+        serde_json::to_value(vec![transmitted_output])?
+    );
     assert_eq!(prompt.input, vec![output]);
     Ok(())
 }
@@ -2513,6 +2518,19 @@ fn prefix_ids_track_thread_and_payload(responses_lite: bool) -> anyhow::Result<(
 
     let original = build(&client, &prompt)?;
     assert_eq!(build(&client, &prompt)?, original);
+    if !responses_lite {
+        // Corbanu keeps main's Responses shape: base instructions travel in `instructions`
+        // and tools in `tools`, so no prompt-only prefix items (or ids) are added.
+        assert!(original.input.is_empty(), "{:?}", original.input);
+        assert_eq!(original.instructions, "base instructions");
+        assert!(original.tools.is_some());
+        prompt.base_instructions.text.push_str(" with an update");
+        assert_eq!(
+            build(&client, &prompt)?.instructions,
+            "base instructions with an update"
+        );
+        return Ok(());
+    }
 
     prompt.base_instructions.text.push_str(" with an update");
     let changed_instructions = build(&client, &prompt)?;
@@ -3169,6 +3187,24 @@ fn opus_5_5_plan_request_preserves_exact_model_and_subscription_identity() {
         body["system"][0]["text"],
         json!(super::CLAUDE_CODE_IDENTITY_PROMPT)
     );
+    assert_eq!(body["thinking"]["type"], json!("adaptive"));
+    assert_eq!(body["output_config"]["effort"], json!("high"));
+}
+
+#[test]
+fn fable_5_2_request_uses_exact_upstream_model_high_effort_and_output_limit() {
+    let model = codex_models_manager::bundled_models_response()
+        .expect("catalog")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "claude-fable-5-2")
+        .expect("Fable 5.2");
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(&super::Prompt::default(), &model, /*effort*/ None)
+        .expect("Fable 5.2 request");
+    let body = serde_json::to_value(request).expect("request JSON");
+    assert_eq!(body["model"], json!("claude-fable-5-2"));
+    assert_eq!(body["max_tokens"], json!(128_000));
     assert_eq!(body["thinking"]["type"], json!("adaptive"));
     assert_eq!(body["output_config"]["effort"], json!("high"));
 }
@@ -4878,7 +4914,7 @@ async fn pf_60_s03_memory_summarize_is_recorded() -> anyhow::Result<()> {
     let (mut session, _context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;

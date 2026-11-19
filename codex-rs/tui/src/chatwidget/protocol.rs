@@ -513,9 +513,10 @@ impl ChatWidget {
                 }
                 self.last_non_retry_error = None;
                 let completion = self.completion_cell(&notification.turn, replay_kind);
-                self.on_task_complete(
+                self.on_task_complete_with_duration(
                     last_agent_message.map(|(_, _, text)| text),
                     completion,
+                    notification.turn.duration_ms,
                     replay_kind.is_some(),
                 );
             }

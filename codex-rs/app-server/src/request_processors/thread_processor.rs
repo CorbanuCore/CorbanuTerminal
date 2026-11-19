@@ -6,6 +6,7 @@ mod daemon_snapshot;
 
 mod workspace_switching;
 
+use super::fork_windows_sandbox::pin_fork_windows_sandbox;
 use super::persisted_resume_settings::PersistedResumeSettings;
 use super::persisted_resume_settings::latest_owned_thread_settings;
 use super::persisted_resume_settings::latest_persisted_model_settings;
@@ -552,9 +553,12 @@ fn apply_persisted_permission_profile(
             key == "sandbox_workspace_write" || key.starts_with("sandbox_workspace_write.")
         })
     }) {
-        config_overrides
-            .persisted_permission_profile
-            .clone_from(&settings.unnamed_permission_profile);
+        // #2384: a named profile's snapshot travels with its id so core can cap the
+        // fallback if the id no longer resolves.
+        config_overrides.persisted_permission_profile = settings
+            .unnamed_permission_profile
+            .clone()
+            .or_else(|| settings.named_profile_snapshot.clone());
     }
 }
 
@@ -2784,6 +2788,9 @@ impl ThreadRequestProcessor {
                 "thread {thread_id} listener stopped before draining shutdown events"
             ))
         })?;
+        // D624 (a): a revert never clears the session's "untrusted content seen" flag; capture
+        // it once the last turn has finished and carry it into the reloaded session.
+        let untrusted_content_seen = thread.untrusted_content_seen();
         // The listener is drained: even an interrupted turn is durable now. Inspect only the
         // suffix being reverted and remember the revision, not a collection of turn IDs.
         let receipt_to_retire = async {
@@ -2896,6 +2903,7 @@ impl ThreadRequestProcessor {
                 runtime_snapshot,
                 app_server_client_name,
                 app_server_client_version,
+                untrusted_content_seen,
             )
             .await?;
         revert_result?;
@@ -2909,6 +2917,7 @@ impl ThreadRequestProcessor {
         runtime_snapshot: ThreadRevertRuntimeSnapshot,
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
+        untrusted_content_seen: bool,
     ) -> Result<ThreadRevertResponse, JSONRPCErrorError> {
         let ThreadRevertRuntimeSnapshot {
             mut config,
@@ -2944,12 +2953,13 @@ impl ThreadRequestProcessor {
             ..
         } = self
             .thread_manager
-            .resume_thread_with_history(
+            .resume_thread_after_revert(
                 config,
                 thread_history,
                 self.auth_manager.clone(),
                 self.request_trace_context(request_id).await,
                 client_mcp_extensions,
+                untrusted_content_seen,
             )
             .await
             .map_err(|err| internal_error(format!("error reloading thread after revert: {err}")))?;
@@ -5285,10 +5295,26 @@ impl ThreadRequestProcessor {
                     mismatch_details.join("; ")
                 );
             }
-            self.config_manager
-                .check_thread_model_provider_for_input(existing_thread.config().await.as_ref())
-                .await
-                .map_err(|err| config_load_error(&err))?;
+            let config = existing_thread.config().await;
+            // Rejoining a parent-owned V2 child observes its retained runtime; it
+            // does not select a provider or admit direct input. Mixed-provider crews
+            // still have to satisfy current managed requirements and network policy.
+            let is_v2_child = existing_thread.multi_agent_version()
+                == Some(codex_protocol::protocol::MultiAgentVersion::V2)
+                && matches!(
+                    config_snapshot.session_source,
+                    CoreSessionSource::SubAgent(CoreSubAgentSource::ThreadSpawn { .. })
+                );
+            let provider_check = if is_v2_child {
+                self.config_manager
+                    .check_thread_model_provider(config.as_ref())
+                    .await
+            } else {
+                self.config_manager
+                    .check_thread_model_provider_for_input(config.as_ref())
+                    .await
+            };
+            provider_check.map_err(|err| config_load_error(&err))?;
             let redact_resume_payloads =
                 should_redact_thread_resume_payloads(app_server_client_name.as_deref());
             let include_turns = !params.exclude_turns;
@@ -6058,7 +6084,8 @@ impl ThreadRequestProcessor {
         };
         let history_cwd = Some(source_thread.cwd.clone());
 
-        // Persist Windows sandbox mode.
+        // Persist Windows sandbox mode; D721: a stricter one the request
+        // asked for is kept.
         let mut cli_overrides = cli_overrides.unwrap_or_default();
         if cfg!(windows) && !experimental_prediction_mode {
             let mode = self.config.permissions.windows_sandbox_mode.or_else(|| {
@@ -6071,7 +6098,7 @@ impl ThreadRequestProcessor {
                 }
             });
             if let Some(mode) = mode {
-                cli_overrides.insert("windows.sandbox".to_string(), serde_json::json!(mode));
+                pin_fork_windows_sandbox(&mut cli_overrides, mode);
             }
         }
         let request_overrides = if cli_overrides.is_empty() {
@@ -6117,7 +6144,10 @@ impl ThreadRequestProcessor {
             !has_permission_override(request_overrides.as_ref(), &typesafe_overrides);
         let needs_latest_settings =
             restore_approval_policy || restore_approvals_reviewer || restore_permission_profile;
-        let loaded_parent_settings = if paginated_source && needs_latest_settings {
+        // #2015 (D519, D711 (a)): a loaded parent's live settings are its
+        // current ones, also for a legacy source whose history has not yet
+        // recorded a change made since its last turn.
+        let loaded_parent_settings = if needs_latest_settings {
             if let Some(parent) = loaded_parent.as_ref() {
                 let snapshot = parent.thread_settings_snapshot().await;
                 Some(PersistedResumeSettings::from(&snapshot))
@@ -6213,7 +6243,7 @@ impl ThreadRequestProcessor {
             &mut typesafe_overrides,
         );
         let (inherited_options, inherited_settings) = inherited_fork.unzip();
-        let options = if let Some(options) = inherited_options {
+        let mut options = if let Some(options) = inherited_options {
             *options
         } else {
             // Derive a Config using the same logic as new conversation, honoring overrides if provided.
@@ -6227,6 +6257,12 @@ impl ThreadRequestProcessor {
                 ..StartThreadOptions::new(config)
             }
         };
+        // #2015 (D519, D711 (a)): the fork never runs below its loaded
+        // parent's current Windows sandbox or security level, including
+        // changes since the parent started, whatever this request asked for.
+        if let Some(parent) = loaded_parent.as_ref() {
+            parent.hold_fork_to_current_floor(&mut options.config).await;
+        }
         let goals_enabled = options.config.features.enabled(Feature::Goals);
 
         let fallback_model_provider = options.config.model_provider_id.clone();

@@ -306,6 +306,7 @@ pub(crate) async fn request_thread_start_with_history_fallback(
     mut request_id: RequestId,
     mut params: ThreadStartParams,
 ) -> std::result::Result<(ThreadStartResponse, ThreadHistorySupport, bool), TypedRequestError> {
+    crate::security::aggressive::enforce_approval(&mut params.approval_policy);
     let mut history_support = ThreadHistorySupport::Paginated;
     loop {
         match request_handle
@@ -1147,7 +1148,9 @@ impl AppServerSession {
             .unwrap_or(account_has_chatgpt_account);
         let auth_mode = auth_status_mode
             .map(|mode| match mode {
-                AuthMode::ApiKey | AuthMode::BedrockApiKey => TelemetryAuthMode::ApiKey,
+                AuthMode::ApiKey | AuthMode::BedrockApiKey | AuthMode::BedrockAccessKeys => {
+                    TelemetryAuthMode::ApiKey
+                }
                 AuthMode::Chatgpt
                 | AuthMode::ChatgptAuthTokens
                 | AuthMode::Headers
@@ -1688,6 +1691,7 @@ impl AppServerSession {
                 codex_protocol::protocol::ThreadSource::SIDE_CONVERSATION.to_string(),
             ));
         }
+        crate::security::aggressive::enforce_approval(&mut params.approval_policy);
         let response: ThreadForkResponse = match self
             .request_handle
             .request_typed(ClientRequest::ThreadFork {
@@ -3054,11 +3058,19 @@ fn thread_resume_params_from_config(
     model_settings: ResumeModelSettings,
     permission_overrides: crate::resume_permissions::ResumePermissions,
 ) -> ThreadResumeParams {
+    // D621 (#2310): Aggressive's approval policy is not in any config layer
+    // the server loads, so it goes with every local resume, rejoins included;
+    // a loaded thread on another policy is then rebuilt or left as is by the
+    // server's usual override rules, never moved to the user's own policy.
+    let aggressive_approval = (permission_overrides.aggressive_approval
+        && thread_params_mode == ThreadParamsMode::Embedded)
+        .then_some(AskForApproval::UnlessTrusted);
     if thread_params_mode.settings_owner() == ThreadSettingsOwner::Server
         || model_settings == ResumeModelSettings::PreserveExistingThread
     {
         return ThreadResumeParams {
             thread_id: thread_id.to_string(),
+            approval_policy: aggressive_approval,
             ..ThreadResumeParams::default()
         };
     }
@@ -3084,7 +3096,8 @@ fn thread_resume_params_from_config(
     let (model, model_provider) = match model_settings {
         ResumeModelSettings::OverrideFromCurrentConfig => (
             config.model.clone(),
-            provider_selection::explicit_provider(&config),
+            // D636: a current-config resume always carries its effective provider.
+            Some(config.model_provider_id.clone()),
         ),
         ResumeModelSettings::RestoreFromThread | ResumeModelSettings::PreserveExistingThread => {
             (None, None)
@@ -3110,6 +3123,9 @@ fn thread_resume_params_from_config(
     };
     if thread_params_mode == ThreadParamsMode::Remote || !permission_overrides.approval_policy {
         params.approval_policy = None;
+    }
+    if aggressive_approval.is_some() {
+        params.approval_policy = aggressive_approval;
     }
     if thread_params_mode == ThreadParamsMode::Remote || !permission_overrides.approvals_reviewer {
         params.approvals_reviewer = None;
@@ -3514,6 +3530,9 @@ mod reasoning_defaults_tests;
 mod workspace_roots_tests;
 
 #[cfg(test)]
+#[path = "app_server_session/aggressive_reload_matrix_tests.rs"]
+mod aggressive_reload_matrix_tests;
+#[cfg(test)]
 #[path = "app_server_session/prompt_history_tests.rs"]
 mod prompt_history_tests;
 
@@ -3650,7 +3669,10 @@ mod tests {
         let state = codex_state::StateRuntime::init(sqlite.clone(), "test-provider".to_string())
             .await
             .expect("initialize runtime databases");
-        let log_db = codex_state::log_db::start(state.clone());
+        let log_db = codex_state::log_db::start(
+            state.clone(),
+            std::sync::Arc::new(codex_feedback::CodexFeedback::new()),
+        );
         let subscriber = tracing_subscriber::registry().with(log_db.clone());
         let dispatch = tracing::Dispatch::new(subscriber);
         let thread_id = ThreadId::new();
@@ -3697,6 +3719,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            bedrock_access_keys: None,
         };
         assert!(auth_dot_json_has_codex_backend_auth(&auth));
 
@@ -3708,6 +3731,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            bedrock_access_keys: None,
         };
         assert!(!auth_dot_json_has_codex_backend_auth(&auth));
     }
@@ -3783,7 +3807,8 @@ mod tests {
 
         let bootstrap = app_server.bootstrap_with_account(&config, account).await?;
 
-        assert_eq!(app_server.next_request_id, next_request_id + 2);
+        // Corbanu's bootstrap also reads the auth status (one more request).
+        assert_eq!(app_server.next_request_id, next_request_id + 3);
         assert_eq!(
             (
                 bootstrap.account_email.as_deref(),
@@ -3871,7 +3896,8 @@ mod tests {
 
         app_server.bootstrap(&config).await?;
 
-        assert_eq!(app_server.next_request_id, next_request_id + 3);
+        // Corbanu's bootstrap also reads the auth status (one more request).
+        assert_eq!(app_server.next_request_id, next_request_id + 4);
         app_server.shutdown().await?;
         Ok(())
     }
@@ -3899,7 +3925,8 @@ mod tests {
 
         let (bootstrap, ()) =
             tokio::join!(app_server.bootstrap_with_account(&config, account), async {
-                for _ in 0..3 {
+                // Corbanu's bootstrap also reads the auth status first.
+                for _ in 0..4 {
                     let command = commands.recv().await.expect("bootstrap request");
                     let codex_app_server_client::CloudOperation::Request(request) =
                         command.operation
@@ -3924,6 +3951,7 @@ mod tests {
                         ClientRequest::CollaborationModeList { .. } => {
                             Ok(serde_json::json!({"data": []}))
                         }
+                        ClientRequest::GetAuthStatus { .. } => Ok(serde_json::json!({})),
                         request => panic!("unexpected bootstrap request: {request:?}"),
                     };
                     command.response.send(Ok(result)).unwrap();
@@ -4000,6 +4028,7 @@ mod tests {
             service_tiers: Vec::new(),
             default_service_tier: None,
             available_access_programs: None,
+            orchestration: None,
             is_default: false,
         }
     }
@@ -4601,6 +4630,7 @@ mod tests {
             (
                 FileSystemPath::GlobPattern {
                     pattern: "**/*.secret".to_string(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ),
@@ -4675,7 +4705,7 @@ mod tests {
             crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         );
         let fork = thread_fork_params_from_config(
-            config,
+            config.clone(),
             thread_id,
             ThreadParamsMode::Remote,
             /*remote_cwd_override*/ None,
@@ -4688,7 +4718,7 @@ mod tests {
         assert_eq!(resume.runtime_workspace_roots, None);
         assert_eq!(fork.runtime_workspace_roots, None);
         assert_eq!(start.model_provider, None);
-        assert_eq!(resume.model_provider, None);
+        assert_eq!(resume.model_provider, Some(config.model_provider_id));
         assert_eq!(fork.model_provider, None);
         assert_eq!(start.sandbox, expected_sandbox);
         assert_eq!(resume.sandbox, None);
@@ -4818,7 +4848,7 @@ mod tests {
             crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
         );
         let fork = thread_fork_params_from_config(
-            config,
+            config.clone(),
             thread_id,
             ThreadParamsMode::Remote,
             Some(remote_cwd.as_path()),
@@ -4831,7 +4861,7 @@ mod tests {
         assert_eq!(resume.runtime_workspace_roots, None);
         assert_eq!(fork.runtime_workspace_roots, None);
         assert_eq!(start.model_provider, None);
-        assert_eq!(resume.model_provider, None);
+        assert_eq!(resume.model_provider, Some(config.model_provider_id));
         assert_eq!(fork.model_provider, None);
         assert_eq!(start.sandbox, expected_sandbox);
         assert_eq!(resume.sandbox, None);
@@ -5190,7 +5220,9 @@ requires_openai_auth = false
             )
             .await?;
 
-        assert_eq!(resumed.session.service_tier.as_deref(), Some("default"));
+        // The retained custom provider has no catalog default tier. Its saved
+        // settings must not acquire the current config or picker-only Fast tier.
+        assert_eq!(resumed.session.service_tier, None);
         app_server.shutdown().await?;
         Ok(())
     }

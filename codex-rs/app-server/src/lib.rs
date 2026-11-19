@@ -587,9 +587,13 @@ pub async fn run_main_with_transport_options(
         arg0_paths.clone(),
         Arc::new(NoopThreadConfigLoader),
     );
-    let startup = config_manager
-        .load_managed_startup_config(startup_cwd.clone())
-        .await?;
+    // Config loading reads the GPU provider overlay and can recover an existing
+    // database before the main state runtime starts. Preserve those notices too.
+    let (startup, mut startup_backups) = codex_state::collect_runtime_db_backups(
+        config_manager.load_managed_startup_config(startup_cwd.clone()),
+    )
+    .await;
+    let startup = startup?;
     let mut config_warnings = Vec::new();
     let mut plugin_startup_config = PluginStartupConfig::Current;
     let config = match startup.config {
@@ -605,7 +609,10 @@ pub async fn run_main_with_transport_options(
             let message = config_warning_from_error("Invalid configuration; using defaults.", &err);
             config_warnings.push(message);
             plugin_startup_config = PluginStartupConfig::Defaults;
-            config_manager.load_default_config().await.map_err(|e| {
+            let (fallback, backups) =
+                codex_state::collect_runtime_db_backups(config_manager.load_default_config()).await;
+            startup_backups.extend(backups);
+            fallback.map_err(|e| {
                 std::io::Error::new(
                     ErrorKind::InvalidData,
                     format!("error loading default config after config error: {e}"),
@@ -688,15 +695,16 @@ pub async fn run_main_with_transport_options(
         }
         _ => None,
     };
-    let state_db_init = match init_sqlite_state_db_with_fresh_start_on_corruption(&config).await {
-        Ok(state_db_init) => state_db_init,
-        Err(err) => {
-            return Err(std::io::Error::other(format!(
-                "failed to initialize sqlite state runtime under {}: {err}",
-                config.sqlite_config().home().display()
-            )));
-        }
-    };
+    let state_db_init =
+        match init_sqlite_state_db_with_fresh_start_on_corruption(&config, startup_backups).await {
+            Ok(state_db_init) => state_db_init,
+            Err(err) => {
+                return Err(std::io::Error::other(format!(
+                    "failed to initialize sqlite state runtime under {}: {err}",
+                    config.sqlite_config().home().display()
+                )));
+            }
+        };
     let state_db = state_db_init.state_db;
     if let Some(recovery_notice) = state_db_init.recovery_notice {
         config_warnings.push(ConfigWarningNotification {
@@ -1471,6 +1479,7 @@ struct StateDbInitResult {
 
 async fn init_sqlite_state_db_with_fresh_start_on_corruption(
     config: &Config,
+    startup_backups: Vec<codex_state::RuntimeDbBackup>,
 ) -> anyhow::Result<StateDbInitResult> {
     let (result, backups) = codex_state::collect_runtime_db_backups(async {
         let mut attempted_backups = HashSet::new();
@@ -1518,7 +1527,7 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
     let state_db = result?;
     let mut recovered_databases = Vec::new();
     let mut backup_folders = HashSet::new();
-    for backup in backups {
+    for backup in startup_backups.into_iter().chain(backups) {
         if let Some(folder) = backup.backup_path.parent()
             && backup_folders.insert(folder.to_path_buf())
         {
@@ -1591,9 +1600,11 @@ fn test_user_config_file_from_env() -> Option<std::path::PathBuf> {
 }
 
 fn loader_overrides_with_test_user_config_file(
-    mut loader_overrides: LoaderOverrides,
+    loader_overrides: LoaderOverrides,
     test_user_config_file: Option<std::path::PathBuf>,
 ) -> IoResult<LoaderOverrides> {
+    #[cfg(debug_assertions)]
+    let mut loader_overrides = loader_overrides;
     #[cfg(debug_assertions)]
     if let Some(path) = test_user_config_file {
         let path = AbsolutePathBuf::from_absolute_path(path).map_err(|err| {

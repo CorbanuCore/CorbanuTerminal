@@ -6,7 +6,9 @@ use std::time::Duration;
 use codex_exec_server_protocol::JSONRPCErrorError;
 #[cfg(unix)]
 use codex_file_system::WindowsSandboxSelection;
+use codex_network_proxy::BROKERED_CREDENTIALS_ENV_KEY;
 use codex_network_proxy::BlockedRequestObserver;
+use codex_network_proxy::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
 #[cfg(target_os = "macos")]
 use codex_network_proxy::ManagedNetworkSandboxContext;
 use codex_network_proxy::NetworkPolicyAuditObserver;
@@ -34,6 +36,7 @@ use test_case::test_case;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::time::timeout;
+use tracing_subscriber::layer::SubscriberExt;
 
 use super::NetworkPolicyHooks;
 use super::PreparedExecRequest;
@@ -46,6 +49,8 @@ use crate::ExecServerRuntimeOptions;
 use crate::FileSystemSandboxContext;
 use crate::ProcessId;
 use crate::process_telemetry::ProcessTelemetry;
+use crate::test_tracing::CapturedLogs;
+use crate::test_tracing::ScopedTestSubscriber;
 
 async fn prepare_exec_request(
     params: &ExecParams,
@@ -580,6 +585,15 @@ async fn native_request_handles_remote_proxy_config_for_platform(
         env.insert(key.to_string(), "startup-hook".to_string());
     }
 
+    let logs = CapturedLogs::default();
+    let writer = logs.clone();
+    let subscriber = tracing_subscriber::registry().with(
+        tracing_subscriber::fmt::layer()
+            .with_ansi(false)
+            .with_writer(move || writer.clone()),
+    );
+    let subscriber_guard = ScopedTestSubscriber::set_default(subscriber);
+    tracing::warn!("process sandbox log capture sentinel");
     let prepared = prepare_exec_request(
         &params,
         env.clone(),
@@ -590,10 +604,51 @@ async fn native_request_handles_remote_proxy_config_for_platform(
     )
     .await
     .expect("prepare request with executor-local proxy");
+    drop(subscriber_guard);
+    let logs = logs.text();
+    assert!(
+        logs.contains("process sandbox log capture sentinel"),
+        "{logs}"
+    );
+    // D641 (a), #2365: main's engine keeps the child masked, so no startup may
+    // claim it runs with unmasked credentials.
+    assert!(!logs.contains("unmasked credentials"), "{logs}");
 
     assert_eq!(prepared.command, params.argv);
-    for key in ["PATH", "OPENAI_API_KEY"].into_iter().chain(startup_env) {
+    for key in ["PATH"].into_iter().chain(startup_env) {
         assert_eq!(prepared.env.get(key), env.get(key), "{key}");
+    }
+    let real_key = env.get("OPENAI_API_KEY").expect("executor key");
+    let child_key = prepared.env.get("OPENAI_API_KEY").expect("child key");
+    // Unsandboxed native Windows launches leave the proxy, and so the broker,
+    // out entirely (see the Windows branch below).
+    if credential_masking && !cfg!(target_os = "windows") {
+        // Corbanu brokers with main's engine (D353): the child gets a
+        // placeholder even when its shell startup is one upstream's engine
+        // would fail open for (BASH_ENV, SSH_CLIENT, extra login options).
+        // Brokering is one-way; the real key never reaches the child (#2270).
+        assert_ne!(child_key, real_key);
+        assert!(child_key.starts_with("sk-proj-"), "{child_key}");
+        assert!(!child_key.contains("executor-only"), "{child_key}");
+        // Upstream's fail-open branch is skipped (D641 (a)), so the broker
+        // markers survive and nested launches still recognise the placeholder.
+        assert_eq!(
+            prepared
+                .env
+                .get(CREDENTIAL_BROKER_ACTIVE_ENV_KEY)
+                .map(String::as_str),
+            Some("1")
+        );
+        let brokered = prepared
+            .env
+            .get(BROKERED_CREDENTIALS_ENV_KEY)
+            .expect("brokered credentials marker");
+        assert!(brokered.contains("OPENAI_API_KEY"), "{brokered}");
+        assert!(brokered.contains(child_key.as_str()), "{brokered}");
+    } else {
+        assert_eq!(child_key, real_key);
+        assert!(!prepared.env.contains_key(CREDENTIAL_BROKER_ACTIVE_ENV_KEY));
+        assert!(!prepared.env.contains_key(BROKERED_CREDENTIALS_ENV_KEY));
     }
 
     if cfg!(target_os = "windows") {
@@ -687,7 +742,7 @@ async fn disabled_remote_proxy_config_is_rejected_before_exporting_ports() {
 }
 
 #[cfg(windows)]
-#[test_case(WindowsSandboxLevel::RestrictedToken ; "unelevated is rejected")]
+#[test_case(WindowsSandboxLevel::RestrictedToken ; "unelevated selection is promoted")]
 #[test_case(WindowsSandboxLevel::Elevated ; "elevated is accepted")]
 #[tokio::test]
 async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: WindowsSandboxLevel) {
@@ -737,25 +792,19 @@ async fn managed_network_honors_windows_sandbox_level(windows_sandbox_level: Win
     )
     .await;
 
-    if windows_sandbox_level == WindowsSandboxLevel::RestrictedToken {
-        let error = prepared
-            .err()
-            .expect("managed networking must reject an unelevated Windows sandbox");
-        assert_eq!(error.code, -32602);
-        assert!(
-            error
-                .message
-                .contains("managed networking requires the elevated Windows sandbox backend")
-        );
-        return;
-    }
-
-    let mut prepared = prepared.expect("managed networking accepts an elevated Windows sandbox");
+    // D355 selects the elevated backend when proxy enforcement is required;
+    // the request still carries the original configured sandbox level.
+    // Both cases must retain the proxy enforcement flag and restricting SID.
+    let mut prepared = prepared.expect("managed networking prepares an elevated Windows sandbox");
     let spawn = prepared
         .windows_sandbox_spawn_request()
         .expect("Windows sandbox spawn request");
-    assert_eq!(spawn.windows_sandbox_level, WindowsSandboxLevel::Elevated);
+    assert_eq!(spawn.windows_sandbox_level, windows_sandbox_level);
     assert!(spawn.proxy_enforced);
+    assert!(codex_sandboxing::windows_sandbox_uses_elevated_backend(
+        spawn.windows_sandbox_level,
+        spawn.proxy_enforced,
+    ));
     assert!(spawn.network_proxy_restricting_sid.is_some());
     prepared
         .network_proxy_handle

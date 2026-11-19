@@ -345,6 +345,7 @@ async fn launch_permissions_preserve_server_owned_constrained_profile() -> Resul
     entries.push(FileSystemSandboxEntry {
         path: FileSystemPath::GlobPattern {
             pattern: "**/*.secret".into(),
+            scan: None,
         },
         access: FileSystemAccessMode::Deny,
         missing_path_behavior: None,

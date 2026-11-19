@@ -176,7 +176,7 @@ async fn accounting_developer_activation_samples_http_and_installs_inspectable_d
         },
     );
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "anthropic".into(),
     )
     .await?;
@@ -490,7 +490,7 @@ impl Fixture {
     async fn with_endpoint(endpoint: &str) -> anyhow::Result<Self> {
         let home = tempfile::tempdir()?;
         let db = StateRuntime::init(
-            SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+            SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
             "anthropic".into(),
         )
         .await?;

@@ -64,9 +64,9 @@ pub const SPEED_TIER_FAST: &str = "fast";
 
 /// OpenAI protocol compatibility, independent of Corbanu's product version.
 /// Shared by model discovery and inference so the backend negotiates one contract.
-/// Validated against Codex 0.156.0 for Astra, Sol, and Luna. Older negotiation
-/// versions can hide available models and reject inference for the same account.
-pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.156.0";
+/// Validated against Codex 0.167.0, including GPT-6.2 Astra and Sol (which require
+/// at least 0.166.0). Older versions hide models and reject ChatGPT inference.
+pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.167.0";
 
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning
 #[derive(Debug, Default, Clone, PartialEq, Eq, TS, Hash)]

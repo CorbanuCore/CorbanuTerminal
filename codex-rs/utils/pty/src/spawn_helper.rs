@@ -22,7 +22,8 @@ use crate::child_command::ChildDropPolicy;
 
 /// Setup that needs a fresh, single-threaded image before target exec.
 pub(crate) enum Setup {
-    /// Detach from the terminal and terminate when the parent dies.
+    /// Reset signal state, detach from the terminal and terminate when the
+    /// parent dies.
     Pipe,
     /// Establish a controlling terminal and reset interactive signal state.
     Pty,

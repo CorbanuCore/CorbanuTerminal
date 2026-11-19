@@ -13,13 +13,27 @@ use super::tmux::TmuxPane;
 /// window, so wait for this before driving them. Only the session header card has a row that
 /// starts with a lowercase `model:` label; narrow terminals truncate the rest of that row, so the
 /// `/model to change` hint is not required.
+///
+/// Upstream's header has no card or model row: `>_ <product> (v…)` over the working
+/// directory, with `loading` in its place until the session is configured.
 pub(crate) fn session_configured(capture: &str) -> bool {
-    capture.lines().any(|line| {
+    let lines = capture.lines().collect::<Vec<_>>();
+    let card = lines.iter().any(|line| {
         line.trim()
             .strip_prefix('│')
             .map(str::trim_start)
             .is_some_and(|row| row.starts_with("model:") && !row.contains("loading"))
-    })
+    });
+    let header = lines.iter().enumerate().any(|(index, line)| {
+        let line = line.trim();
+        line.starts_with(">_ ")
+            && line.contains("(v")
+            && lines[index..]
+                .iter()
+                .take(3)
+                .all(|line| !line.contains("loading"))
+    });
+    card || header
 }
 
 /// Waits until the session header shows a configured model.
@@ -47,6 +61,19 @@ mod tests {
         ));
         assert!(session_configured(
             "  │ model:     gpt-5.6-terra   /model… │"
+        ));
+    }
+
+    #[test]
+    fn upstream_header_is_configured_once_loading_is_gone() {
+        assert!(!session_configured(
+            "  >_ Corbanu Terminal (v0.1.48)      loading\n"
+        ));
+        assert!(!session_configured(
+            "  >_ Corbanu Terminal (v0.1.48)\n     loading\n"
+        ));
+        assert!(session_configured(
+            "  >_ Corbanu Terminal (v0.1.48)\n     ~/project\n\n› Ask Corbanu Terminal to do anything\n"
         ));
     }
 

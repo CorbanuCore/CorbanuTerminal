@@ -137,6 +137,11 @@ pub struct CodexHarnessMetadata {
     /// Sender context captured by the host when this task message was accepted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_user_messages: Option<Box<SenderUserMessages>>,
+
+    /// Corbanu D523: background hook output waiting in a running turn's input queue.
+    /// Recorded with the hook origin (labelled external data), then cleared. Host-only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hook_output: bool,
 }
 
 fn deserialize_mcp_attribution_checkpoint<'de, D>(

@@ -334,7 +334,9 @@ async fn chat_accounting_positions_and_cumulative_patches() {
     );
 }
 
-#[tokio::test]
+// Exercise the barrier without spending the observer's 50ms budget on
+// unrelated runner scheduling delays.
+#[tokio::test(start_paused = true)]
 async fn chat_accounting_observation_barrier_and_rejection() {
     for reject in [false, true] {
         let sink = Arc::new(Sink {

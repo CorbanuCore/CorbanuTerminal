@@ -1,8 +1,8 @@
 //! #476: a provider 429 holds later requests on the same key back locally for
 //! the cooldown the provider asked for, in every session on the home, even
 //! when the request held no lease (any human-driven session).
+use codex_core::TurnInputRequest;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -29,16 +29,13 @@ fn rate_limited() -> ResponseTemplate {
 /// Submits one turn and returns the message of the error it ended with.
 async fn turn_error(test: &TestCodex) -> anyhow::Result<String> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "hello".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::Error(error) =
         wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await
@@ -58,7 +55,11 @@ async fn a_429_holds_later_requests_back_in_every_session() -> anyhow::Result<()
     let server = MockServer::start().await;
     let mock = mount_response_sequence(&server, vec![rate_limited()]).await;
 
-    let mut builder = test_codex();
+    let mut builder = test_codex().with_config(|config| {
+        // Exercise cross-turn cooldown, without waiting through in-turn stream retries.
+        config.model_provider.request_max_retries = Some(0);
+        config.model_provider.stream_max_retries = Some(0);
+    });
     let first = builder.build(&server).await?;
     let error = turn_error(&first).await?;
     assert!(error.contains("rate limited by provider"), "{error}");
@@ -98,6 +99,8 @@ async fn a_429_holds_later_requests_back_in_every_session() -> anyhow::Result<()
 fn named_account_session(account: &'static str) -> core_test_support::test_codex::TestCodexBuilder {
     test_codex()
         .with_config(move |config| {
+            config.model_provider.request_max_retries = Some(0);
+            config.model_provider.stream_max_retries = Some(0);
             let vault = codex_vault::Vault::new(config.codex_home.to_path_buf());
             for (name, key) in [
                 ("alpha", "pf84-shared-fixture-key"),

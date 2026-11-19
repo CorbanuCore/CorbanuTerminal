@@ -1154,6 +1154,7 @@ async fn executor_browser_and_computer_use_cleanup_hooks_use_separate_mcp_routes
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 thread_source: Some(ThreadSource::Subagent),
                 ..fixture.test.start_thread_options().await

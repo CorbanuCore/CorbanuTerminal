@@ -17,13 +17,15 @@ import windows_integration_known_failures as known  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 WORKFLOW = "windows-integration-tests.yml"
-PACKAGE_DIRS = {"codex-core": "core", "codex-app-server": "app-server"}
+PACKAGE_DIRS = {
+    package: directory.removeprefix("codex-rs/").rstrip("/")
+    for package, directory in known.PACKAGES.items()
+}
 
 
 class KnownFailureListTest(unittest.TestCase):
     def test_every_entry_names_an_existing_test_and_an_issue(self) -> None:
         entries = known.load()
-        self.assertTrue(entries)
         self.assertEqual(len(entries), len(set(entries)))
         for entry in entries:
             with self.subTest(test=entry.test):
@@ -49,6 +51,16 @@ class KnownFailureListTest(unittest.TestCase):
                     ),
                     f"no fn {function} in {[str(source) for source in sources]}",
                 )
+
+    def test_no_known_failures_runs_every_test(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "list.txt")
+            path.write_text("# All recorded failures are repaired.\n", encoding="utf-8")
+            entries = known.load(path)
+        self.assertEqual(entries, [])
+        for package in PACKAGE_DIRS:
+            self.assertEqual(known.nextest_filter(entries, package), "all()")
+            self.assertNotIn("were excluded", known.summary(entries, package))
 
     def test_malformed_lines_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -80,7 +92,10 @@ class KnownFailureListTest(unittest.TestCase):
         self.assertEqual(known.nextest_filter(entries, "codex-cli"), "all()")
 
     def test_summary_names_every_excluded_test_and_its_issue(self) -> None:
-        entries = known.load()
+        entries = [
+            known.KnownFailure("codex-core", "suite::a::one", "1"),
+            known.KnownFailure("codex-app-server", "suite::v2::b::two", "2"),
+        ]
         for package in PACKAGE_DIRS:
             text = known.summary(entries, package)
             self.assertIn("Non-blocking", text)
@@ -98,8 +113,9 @@ class KnownFailureListTest(unittest.TestCase):
         )
         result = run("filter", "codex-core")
         self.assertEqual(result.returncode, 0)
-        self.assertTrue(result.stdout.startswith("not (test(=suite::"))
-        self.assertTrue(result.stdout.endswith(")"))
+        self.assertEqual(
+            result.stdout, known.nextest_filter(known.load(), "codex-core")
+        )
         self.assertEqual(run("bogus", "codex-core").returncode, 2)
 
 
@@ -118,6 +134,21 @@ class PackageSelectionTest(unittest.TestCase):
         )
         self.assertEqual(select(["codex-rs/core-api/src/lib.rs", "README.md"]), [])
         self.assertEqual(select([]), [])
+
+    def test_code_mode_selection_includes_runtime_dependents(self) -> None:
+        self.assertEqual(
+            known.changed_packages(["codex-rs/code-mode-host/tests/stdio.rs"]),
+            ["codex-code-mode-host"],
+        )
+        self.assertEqual(
+            known.changed_packages(["codex-rs/code-mode-runtime/src/lib.rs"]),
+            ["codex-code-mode-host", "codex-code-mode-runtime"],
+        )
+        self.assertEqual(
+            known.changed_packages([".github/actions/setup-ci/action.yml"]),
+            list(known.PACKAGES),
+        )
+        self.assertEqual(known.changed_packages(["codex-rs/Cargo.lock.backup"]), [])
 
     def test_job_files_run_every_package(self) -> None:
         for path in known.JOB_FILES:
@@ -142,7 +173,8 @@ class WorkflowTest(unittest.TestCase):
     def test_pull_request_paths_match_the_package_selection(self) -> None:
         triggers = self.workflow().split("\njobs:")[0]
         paths = re.findall(r'(?m)^      - "([^"]+)"$', triggers)
-        expected = list(known.JOB_FILES) + [d + "**" for d in known.PACKAGES.values()]
+        expected = [p + "**" if p.endswith("/") else p for p in known.JOB_FILES]
+        expected += [d + "**" for d in known.PACKAGES.values()]
         self.assertEqual(sorted(paths), sorted(expected))
         self.assertRegex(triggers, r"(?m)^  pull_request:\n    paths:$")
         self.assertNotRegex(triggers, r"(?m)^  (push|schedule|pull_request_target):")
@@ -162,7 +194,12 @@ class WorkflowTest(unittest.TestCase):
         )
         self.assertIn("if: ${{ needs.packages.outputs.packages != '[]' }}", workflow)
         self.assertIn(
-            "cargo nextest run --cargo-profile ci-test -p \"$PACKAGE\" --test '*'",
+            'cargo nextest run --cargo-profile ci-test -p "$PACKAGE" "${targets[@]}"',
+            workflow,
+        )
+        self.assertIn("targets=(--test '*')", workflow)
+        self.assertIn(
+            "codex-code-mode-host|codex-code-mode-runtime) targets=(--lib --tests)",
             workflow,
         )
         self.assertIn('-E "$filter"', workflow)

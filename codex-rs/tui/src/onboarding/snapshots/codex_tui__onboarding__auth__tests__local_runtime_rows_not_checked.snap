@@ -1,6 +1,6 @@
 ---
 source: tui/src/onboarding/auth.rs
-assertion_line: 2994
+assertion_line: 3535
 expression: visible
 ---
   Choose a provider account for Corbanu Terminal

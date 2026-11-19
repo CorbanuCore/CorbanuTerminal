@@ -8,6 +8,18 @@ use tree_sitter_bash::LANGUAGE as BASH;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
+mod heredoc;
+mod script_lexical;
+mod script_read;
+pub use script_read::ARITHMETIC_TESTS;
+pub use script_read::CommandStdin;
+pub use script_read::RESERVED_WORDS;
+pub use script_read::ReadCommand;
+pub use script_read::ScriptRead;
+pub use script_read::numeric_operand;
+pub use script_read::read_script;
+pub use script_read::runs_code_from_variable;
+
 /// Parse the provided bash source using tree-sitter-bash, returning a Tree on
 /// success or None if parsing failed.
 pub fn try_parse_shell(shell_lc_arg: &str) -> Option<Tree> {
@@ -75,6 +87,21 @@ pub fn try_parse_shell_bounded(
 /// (parentheses, redirections, substitutions, control flow, etc.). Otherwise
 /// returns `None`.
 pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<Vec<Vec<String>>> {
+    let mut commands = Vec::new();
+    for node in word_only_command_nodes(tree, src, /*require_literal_words*/ true)? {
+        commands.push(parse_plain_command_from_node(node, src)?);
+    }
+    Some(commands)
+}
+
+/// The command nodes of a word-only commands sequence, in source order.
+/// `require_literal_words`: reject a bare word that bash may still expand
+/// (upstream's check); main's parse accepted such words.
+fn word_only_command_nodes<'tree>(
+    tree: &'tree Tree,
+    src: &str,
+    require_literal_words: bool,
+) -> Option<Vec<Node<'tree>>> {
     if tree.root_node().has_error() {
         return None;
     }
@@ -109,7 +136,10 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
             if !ALLOWED_KINDS.contains(&kind) {
                 return None;
             }
-            if matches!(kind, "word" | "number") && !is_literal_word_or_number(node, src) {
+            if require_literal_words
+                && matches!(kind, "word" | "number")
+                && !is_literal_word_or_number(node, src)
+            {
                 return None;
             }
             if kind == "command" {
@@ -133,18 +163,57 @@ pub fn try_parse_word_only_commands_sequence(tree: &Tree, src: &str) -> Option<V
 
     // Walk uses a stack (LIFO), so re-sort by position to restore source order.
     command_nodes.sort_by_key(Node::start_byte);
-
-    let mut commands = Vec::new();
-    for node in command_nodes {
-        commands.push(parse_plain_command_from_node(node, src)?);
-    }
-    Some(commands)
+    Some(command_nodes)
 }
 
 /// Parses a shell script consisting only of plain commands joined by safe operators.
 pub fn parse_shell_script_into_commands(script: &str) -> Option<Vec<Vec<String>>> {
     let tree = try_parse_shell(script)?;
     try_parse_word_only_commands_sequence(&tree, script)
+}
+
+/// Corbanu (D48): [`parse_shell_script_into_commands`] as main parsed it, where
+/// a bare word bash may still expand (a glob, brace, tilde, `#` or backslash)
+/// does not reject the script. Each word comes with whether its spelling is
+/// proven literal; a caller must not rely on the text of a word that is not.
+/// Expansions that run or substitute anything (`$`, backquotes, `$(...)`) still
+/// reject the script.
+pub fn parse_shell_script_into_words_with_literal_flags(
+    script: &str,
+) -> Option<Vec<Vec<(String, bool)>>> {
+    let tree = try_parse_shell(script)?;
+    let mut commands = Vec::new();
+    for node in word_only_command_nodes(&tree, script, /*require_literal_words*/ false)? {
+        let words = parse_plain_command_from_node(node, script)?;
+        let mut cursor = node.walk();
+        let literal: Vec<bool> = node
+            .named_children(&mut cursor)
+            .map(|child| plain_word_is_literal(child, script))
+            .collect();
+        if literal.len() != words.len() {
+            return None;
+        }
+        commands.push(words.into_iter().zip(literal).collect());
+    }
+    Some(commands)
+}
+
+/// Whether one word of a plain command (a child of its `command` node) has a
+/// proven literal spelling under upstream's check.
+fn plain_word_is_literal(node: Node<'_>, src: &str) -> bool {
+    match node.kind() {
+        "command_name" => node
+            .named_child(0)
+            .is_some_and(|word| plain_word_is_literal(word, src)),
+        "word" | "number" => is_literal_word_or_number(node, src),
+        "string" | "raw_string" => true,
+        "concatenation" => {
+            let mut cursor = node.walk();
+            node.named_children(&mut cursor)
+                .all(|part| plain_word_is_literal(part, src))
+        }
+        _ => false,
+    }
 }
 
 /// A word of a plain command (see [`parse_shell_script_into_plain_words`]).
@@ -229,6 +298,106 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
     parse_shell_script_into_commands(script)
 }
 
+/// [`read_script`] for a `bash -lc "..."`, `sh -c "..."` or `zsh -lc "..."`
+/// invocation; `None` for any other command.
+pub fn shell_lc_script_read(command: &[String]) -> Option<ScriptRead> {
+    let (_, script) = extract_bash_command(command)?;
+    Some(read_script(script))
+}
+
+/// The argv words of a command node; assignments, redirections and
+/// comments are not argv.
+fn script_command_words(command: Node<'_>, src: &str) -> Vec<Option<String>> {
+    let mut words = Vec::new();
+    let mut cursor = command.walk();
+    for child in command.named_children(&mut cursor) {
+        match child.kind() {
+            "variable_assignment"
+            | "variable_assignments"
+            | "file_redirect"
+            | "heredoc_redirect"
+            | "herestring_redirect"
+            | "comment" => {}
+            "command_name" => {
+                words.push(child.named_child(0).and_then(|name| script_word(name, src)))
+            }
+            _ => words.push(script_word(child, src)),
+        }
+    }
+    words
+}
+
+/// The word bash makes of `node` after quote removal, or `None` when the
+/// word is built as the script runs.
+fn script_word(node: Node<'_>, src: &str) -> Option<String> {
+    let text = node.utf8_text(src.as_bytes()).ok()?;
+    match node.kind() {
+        "word" | "number" if has_no_named_children(node) => unquoted_word(text),
+        "raw_string" => parse_raw_string(node, src),
+        "string" => parse_double_quoted_string_with_escapes(node, src),
+        // A decoded byte above ASCII is not the character it is read as.
+        "ansi_c_string" => ansi_c::decode(text).filter(|word| word.is_ascii()),
+        "concatenation" => {
+            // The grammar splits `gi[t]` and `{a,b}` into several words;
+            // look for expansions in their unquoted text as a whole.
+            let mut word = String::new();
+            let mut unquoted = String::new();
+            let mut cursor = node.walk();
+            for part in node.named_children(&mut cursor) {
+                word.push_str(&script_word(part, src)?);
+                match part.kind() {
+                    "word" | "number" => unquoted.push_str(part.utf8_text(src.as_bytes()).ok()?),
+                    _ => unquoted.push('\0'),
+                }
+            }
+            unquoted_word(&unquoted)?;
+            Some(word)
+        }
+        _ => None,
+    }
+}
+
+/// An unquoted word after backslash removal; `None` where bash (or zsh or
+/// ksh, read alike) may expand it: pathname expansion (`*`, `?`, `[…]`,
+/// `@(…)`), brace expansion (`{a,b}`, `{1..3}`), tilde expansion or zsh's
+/// `=cmd`. Approximate on the side of `None`.
+fn unquoted_word(text: &str) -> Option<String> {
+    let mut word = String::new();
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        let rest = || chars.clone();
+        match ch {
+            '\\' => match chars.next() {
+                Some('\n') => {}
+                Some(escaped) => word.push(escaped),
+                None => word.push('\\'),
+            },
+            // zsh's extended_glob (a user may set it) adds `#` and `^`.
+            '*' | '?' | '~' | '#' | '^' => return None,
+            // An expansion the grammar left in a word (zsh's `$=x`).
+            '$' => return None,
+            // zsh's `=cmd` is the program's path.
+            '=' if word.is_empty() => return None,
+            // ksh's and extglob's `@(…)`, `+(…)`, `!(…)`.
+            '@' | '+' | '!' if rest().next() == Some('(') => return None,
+            '[' if rest().any(|next| next == ']') => return None,
+            '{' if rest().any(|next| matches!(next, ',' | '.'))
+                && rest().any(|next| next == '}') =>
+            {
+                return None;
+            }
+            _ => word.push(ch),
+        }
+    }
+    Some(word)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LiteralWordMode {
+    Verbatim,
+    DecodeForForcedRm,
+}
+
 /// Extracts the literal portions of command invocations from a shell script.
 ///
 /// Unlike [`parse_shell_lc_plain_commands`], this accepts complex shell syntax
@@ -236,7 +405,10 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
 /// syntax tree. Dynamic words and redirections are omitted. This is suitable
 /// for identifying dangerous literal commands, but must not be used to prove
 /// that a command is safe.
-pub(crate) fn parse_shell_lc_literal_commands(command: &[String]) -> Option<Vec<Vec<String>>> {
+pub(crate) fn parse_shell_lc_literal_commands(
+    command: &[String],
+    mode: LiteralWordMode,
+) -> Option<Vec<Vec<String>>> {
     let (_, script) = extract_bash_command(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
@@ -248,7 +420,7 @@ pub(crate) fn parse_shell_lc_literal_commands(command: &[String]) -> Option<Vec<
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
         if node.kind() == "command"
-            && let Some(command) = parse_literal_command_from_node(node, script)
+            && let Some(command) = parse_literal_command_from_node(node, script, mode)
         {
             commands.push(command);
         }
@@ -272,7 +444,7 @@ pub fn parse_shell_lc_single_command_prefix(command: &[String]) -> Option<Vec<St
     let (_, script) = extract_bash_command(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
-    if root.has_error() {
+    if root.has_error() || !heredoc::heredoc_boundaries_readable(root, script) {
         return None;
     }
     if !has_named_descendant_kind(root, "heredoc_redirect") {
@@ -344,7 +516,11 @@ fn parse_plain_command_from_node(cmd: tree_sitter::Node, src: &str) -> Option<Ve
     Some(words)
 }
 
-fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<String>> {
+fn parse_literal_command_from_node(
+    cmd: Node<'_>,
+    src: &str,
+    mode: LiteralWordMode,
+) -> Option<Vec<String>> {
     if cmd.kind() != "command" {
         return None;
     }
@@ -354,10 +530,11 @@ fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<Strin
     let mut cursor = cmd.walk();
     for child in cmd.named_children(&mut cursor) {
         if child.kind() == "command_name" {
-            let command_name = parse_literal_shell_word(child.named_child(0)?, src)?;
+            let command_name = parse_literal_shell_word(child.named_child(0)?, src, mode)?;
             words.push(command_name);
             found_command_name = true;
-        } else if found_command_name && let Some(word) = parse_literal_shell_word(child, src) {
+        } else if found_command_name && let Some(word) = parse_literal_shell_word(child, src, mode)
+        {
             words.push(word);
         }
     }
@@ -365,7 +542,48 @@ fn parse_literal_command_from_node(cmd: Node<'_>, src: &str) -> Option<Vec<Strin
     found_command_name.then_some(words)
 }
 
-fn parse_literal_shell_word(node: Node<'_>, src: &str) -> Option<String> {
+#[path = "bash/ansi_c.rs"]
+mod ansi_c;
+
+fn parse_literal_shell_word(node: Node<'_>, src: &str, mode: LiteralWordMode) -> Option<String> {
+    if mode == LiteralWordMode::DecodeForForcedRm {
+        match node.kind() {
+            "ansi_c_string" => return ansi_c::decode(node.utf8_text(src.as_bytes()).ok()?),
+            "string" => {
+                // Reject substitutions before removing shell quote/escape syntax.
+                // (Sync: `double_quoted_contents` is main's substitution check;
+                // the sync side's `parse_double_quoted_string` also refuses
+                // escapes, which this decoder must remove instead.)
+                double_quoted_contents(node, src)?;
+                return shlex::split(node.utf8_text(src.as_bytes()).ok()?)
+                    .filter(|words| words.len() == 1)
+                    .and_then(|words| words.into_iter().next());
+            }
+            "translated_string" => {
+                // Inspect the literal source message; never load locale catalogs.
+                return parse_literal_shell_word(node.named_child(0)?, src, mode);
+            }
+            "word" | "number" if has_no_named_children(node) => {
+                // Tree-sitter has already identified this as a word, including
+                // a literal '#' joined to a quoted segment. Do not lex it
+                // again as standalone shell source (where '#' is a comment).
+                let mut chars = node.utf8_text(src.as_bytes()).ok()?.chars();
+                let mut decoded = String::new();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\' {
+                        let escaped = chars.next()?;
+                        if escaped != '\n' {
+                            decoded.push(escaped);
+                        }
+                    } else {
+                        decoded.push(ch);
+                    }
+                }
+                return Some(decoded);
+            }
+            _ => {}
+        }
+    }
     match node.kind() {
         // Corbanu (S3b): this parser only finds dangerous commands, so a word
         // that may still expand keeps its source spelling, as on main. Dropping
@@ -379,7 +597,7 @@ fn parse_literal_shell_word(node: Node<'_>, src: &str) -> Option<String> {
             let mut concatenated = String::new();
             let mut cursor = node.walk();
             for part in node.named_children(&mut cursor) {
-                concatenated.push_str(&parse_literal_shell_word(part, src)?);
+                concatenated.push_str(&parse_literal_shell_word(part, src, mode)?);
             }
             (!concatenated.is_empty()).then_some(concatenated)
         }
@@ -685,6 +903,38 @@ mod tests {
     }
 
     #[test]
+    fn words_with_literal_flags_keep_expandable_words_unproven() {
+        // Main's parse accepted a word bash may still expand; this keeps it,
+        // flagged, where upstream's stricter parse refuses the script.
+        assert_eq!(parse_shell_script_into_commands("nix build .#hello"), None);
+        assert_eq!(
+            parse_shell_script_into_words_with_literal_flags("nix build .#hello"),
+            Some(vec![vec![
+                ("nix".to_string(), true),
+                ("build".to_string(), true),
+                (".#hello".to_string(), false),
+            ]])
+        );
+        assert_eq!(
+            parse_shell_script_into_words_with_literal_flags("pod*man 'a*' x\"y\" ~/b"),
+            Some(vec![vec![
+                ("pod*man".to_string(), false),
+                ("a*".to_string(), true),
+                ("xy".to_string(), true),
+                ("~/b".to_string(), false),
+            ]])
+        );
+        // Substitutions and expansions still refuse the script.
+        for script in ["echo $x", "echo $(id)", "echo `id`", "(ls)", "ls > out"] {
+            assert_eq!(
+                parse_shell_script_into_words_with_literal_flags(script),
+                None,
+                "{script}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_parentheses_and_subshells() {
         assert!(parse_seq("(ls)").is_none());
         assert!(parse_seq("ls || (pwd && echo hi)").is_none());
@@ -946,3 +1196,10 @@ mod tests {
         assert_eq!(parse_shell_lc_single_command_prefix(&command), None);
     }
 }
+
+#[cfg(test)]
+#[path = "bash/script_commands_tests.rs"]
+mod script_commands_tests;
+#[cfg(test)]
+#[path = "bash/script_read_tests.rs"]
+mod script_read_tests;

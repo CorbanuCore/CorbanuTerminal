@@ -307,6 +307,13 @@ where
             return;
         }
 
+        // A failed metrics export emits this SDK event even when exporter retries are
+        // disabled. Persisting it creates another SQLite-write metric and export failure.
+        // Keep the exclusion local to this sink so stderr and other SDK diagnostics remain.
+        if target == "opentelemetry_sdk" && metadata.name() == "PeriodicReader.ExportError" {
+            return;
+        }
+
         // The SDK emits DEBUG timer meta-events every second per process; these
         // were over 30% of retained logs in measured high-fanout Codex environments.
         if target == "opentelemetry_sdk"

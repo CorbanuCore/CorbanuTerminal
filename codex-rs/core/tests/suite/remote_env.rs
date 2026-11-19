@@ -258,22 +258,10 @@ async fn submit_turn_with_approval_and_environments(
                 environments: Some(turn_environment_selections.into_requests()),
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::User),
-<<<<<<< HEAD
                 sandbox_policy: Some(sandbox_policy),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
-||||||| 413492cd6c
-                sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
-=======
-                sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
                 collaboration_mode: Some(CollaborationMode {
                     mode: ModeKind::Default,
                     settings: Settings {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -477,6 +465,7 @@ async fn approved_remote_shell_runs_in_remote_cwd() -> Result<()> {
         "run the remote shell in the remote cwd",
         vec![selection.clone()],
         AskForApproval::OnRequest,
+        SandboxPolicy::new_read_only_policy(),
     )
     .await?;
 
@@ -520,24 +509,27 @@ async fn approved_remote_shell_runs_in_remote_cwd() -> Result<()> {
     Ok(())
 }
 
-/// `shell_command` only runs commands on the Codex host. With a remote primary
-/// environment it must refuse instead of running the command on the host.
+/// #721: a command aimed at a remote primary environment never runs on the
+/// Codex host. Main tested this on `shell_command`, which upstream removed;
+/// `exec_command` runs the command in the remote environment instead.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn shell_command_does_not_run_on_the_host_for_a_remote_environment() -> Result<()> {
-    const CALL_ID: &str = "remote-shell-command";
+async fn remote_environment_command_does_not_run_on_the_host() -> Result<()> {
+    const CALL_ID: &str = "remote-command-not-on-host";
 
     skip_if_no_remote_env!(Ok(()));
     skip_if_target_windows!(Ok(()), "uses a POSIX shell command fixture");
 
-    let marker = std::env::temp_dir().join(format!(
-        "codex-remote-shell-command-{}-{}",
+    // A fixed `/tmp` path: it exists both on the host and in the remote
+    // environment, whatever the host's `TMPDIR` is.
+    let marker = std::path::Path::new("/tmp").join(format!(
+        "codex-remote-exec-command-{}-{}",
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
     let arguments = serde_json::to_string(&json!({
-        "command": format!("touch {}", marker.display()),
+        "cmd": format!("touch {} && echo touched-remotely", marker.display()),
         "workdir": "/tmp",
-        "timeout_ms": 10_000,
+        "yield_time_ms": 10_000,
     }))?;
     let server = start_mock_server().await;
     let test = test_codex().build_with_auto_env(&server).await?;
@@ -546,7 +538,7 @@ async fn shell_command_does_not_run_on_the_host_for_a_remote_environment() -> Re
         vec![
             sse(vec![
                 ev_response_created("resp-1"),
-                ev_function_call(CALL_ID, "shell_command", &arguments),
+                ev_function_call(CALL_ID, "exec_command", &arguments),
                 ev_completed("resp-1"),
             ]),
             sse(vec![
@@ -567,16 +559,14 @@ async fn shell_command_does_not_run_on_the_host_for_a_remote_environment() -> Re
         .last_request()
         .context("model should receive the tool result")?
         .function_call_output_text(CALL_ID)
-        .context("shell_command result should be present")?;
+        .context("exec_command result should be present")?;
     let ran_on_host = marker.exists();
     if ran_on_host {
         std::fs::remove_file(&marker)?;
     }
-    assert!(!ran_on_host, "shell_command ran on the host: {output}");
-    assert!(
-        output.contains("can't run in the remote environment"),
-        "{output}"
-    );
+    assert!(!ran_on_host, "the command ran on the host: {output}");
+    // It ran, in the remote environment.
+    assert!(output.contains("touched-remotely"), "{output}");
 
     Ok(())
 }
@@ -1626,6 +1616,16 @@ async fn serve_environment_with_instruction_files(
                     "result": { "dataBase64": BASE64_STANDARD.encode(contents) }
                 })
             }
+            Some("fs/readFile")
+                if request["params"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("guardian-marker.txt")) =>
+            {
+                json!({
+                    "id": request["id"],
+                    "error": { "code": -32004, "message": "not found" }
+                })
+            }
             method => panic!("unexpected exec-server request: {method:?}"),
         };
         websocket
@@ -2184,13 +2184,20 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
     for tool in [
         "exec_command",
         "write_stdin",
-        "apply_patch",
         "view_image",
         "request_permissions",
     ] {
         assert!(
             first_tool_names.contains(&tool.to_string()),
             "missing tool: {tool}"
+        );
+    }
+    // No environment means no edit tools. D647 / main #709 also hides them once
+    // the ready owner's read-only profile overrides the waiting thread's broader setting.
+    for tool in ["apply_patch", "structured_edit", "structured_write"] {
+        assert!(
+            !first_tool_names.contains(&tool.to_string()),
+            "read-only session exposed edit tool: {tool}"
         );
     }
     for call_id in [EXEC_CALL_ID, STDIN_CALL_ID] {
@@ -2208,8 +2215,22 @@ async fn pending_attachment_installs_configuration_before_waiting_turn_resumes()
         .await?;
     wait_for_response_request_count(&response_mock, /*expected_count*/ 4).await;
     let pending_requests = response_mock.requests();
+    let pending_tool_names = tool_names(&pending_requests[2].body_json());
+    let edit_tools = ["apply_patch", "structured_edit", "structured_write"];
     assert_eq!(
-        tool_names(&pending_requests[2].body_json()),
+        pending_tool_names
+            .iter()
+            .filter(|name| edit_tools.contains(&name.as_str()))
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        edit_tools,
+        "the pending thread still uses its own workspace-write profile",
+    );
+    assert_eq!(
+        pending_tool_names
+            .into_iter()
+            .filter(|name| !edit_tools.contains(&name.as_str()))
+            .collect::<Vec<_>>(),
         first_tool_names
     );
     assert!(first_tool_names.contains(&"wait_for_environment".to_string()));

@@ -984,6 +984,15 @@ impl CodexThread {
         result.await.unwrap_or(Err(CodexErr::InternalAgentDied))
     }
 
+    /// D624 (a): whether untrusted content has reached this live session. `thread/revert`
+    /// captures it before shutdown and carries it into the reloaded session.
+    pub fn untrusted_content_seen(&self) -> bool {
+        self.session
+            .services
+            .model_client()
+            .untrusted_content_seen()
+    }
+
     /// Restores thread-owned mutable settings captured from another loaded runtime.
     ///
     /// Runtime replacement uses this after resume so clients keep their current thread settings
@@ -1137,13 +1146,6 @@ impl CodexThread {
             internal_chat_message_metadata_passthrough: None,
         };
         self.inject_item_without_turn(item, /*origin*/ None).await;
-    }
-
-    /// Records a context fragment without creating a new user turn boundary.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) async fn inject_fragment_without_turn(&self, fragment: impl ContextualUserFragment) {
-        self.inject_item_without_turn(ContextualUserFragment::into(fragment), /*origin*/ None)
-            .await;
     }
 
     /// A sub-agent's result notification: agent data, never human or host text
@@ -1345,6 +1347,14 @@ impl CodexThread {
 
     pub async fn config_snapshot(&self) -> ThreadConfigSnapshot {
         self.session.thread_config_snapshot().await
+    }
+
+    /// #2015 (D519, D711 (a)): `config` is for a thread a client forks from
+    /// this one (upstream's replacement for a detached review). Holds it at
+    /// least at this thread's current Windows sandbox and security level,
+    /// including changes since this thread started; never lowers it.
+    pub async fn hold_fork_to_current_floor(&self, config: &mut crate::config::Config) {
+        self.session.hold_fork_to_current_floor(config).await;
     }
 
     /// PF-84-S06 (#658): whether a client is attached to this thread. A user

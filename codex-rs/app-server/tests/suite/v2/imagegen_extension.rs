@@ -714,7 +714,8 @@ async fn standalone_image_generation_failure_emits_terminal_item(
                 .insert_header("x-codex-imagegen-request-id", "req-imagegen-failed-123")
                 .set_body_string("image backend failed"),
         )
-        .expect(1)
+        // Match main: HTTP 500 may be retried before the terminal failure.
+        .expect(1..)
         .mount(&server)
         .await;
     let response_mock = responses::mount_sse_sequence(

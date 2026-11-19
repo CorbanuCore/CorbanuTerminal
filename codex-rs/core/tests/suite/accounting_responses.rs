@@ -1,8 +1,11 @@
 #[path = "accounting_responses_support.rs"]
 pub(super) mod support;
+use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
+#[cfg(not(target_os = "windows"))]
+use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_state::accounting::*;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
@@ -447,23 +450,19 @@ async fn accounting_responses_native_ws_fallback_http_segment() -> anyhow::Resul
 async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
+    // Upstream removed the legacy `/responses/compact` endpoint (#44273), so the
+    // compaction here is the streamed remote-compaction-v2 request.
     let mock = responses::mount_sse_sequence(
         &server,
         vec![
             responses::sse(vec![
                 responses::ev_response_created("tools"),
-                responses::ev_shell_command_call("shell-fixture", "echo accounting"),
+                responses::ev_exec_command_call("shell-fixture", "echo accounting"),
                 event("response.completed", usage(Some(0))),
             ]),
             success(usage(Some(0))),
+            compaction(usage(Some(0))),
         ],
-    )
-    .await;
-    let compact = responses::mount_compact_json_once(
-        &server,
-        json!({"output":[{
-            "type":"compaction","encrypted_content":"synthetic-summary"
-        }]}),
     )
     .await;
     let test = builder(endpoint.clone(), enabled(&endpoint))
@@ -471,10 +470,6 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
             config
                 .features
                 .disable(codex_features::Feature::TokenBudget)
-                .unwrap();
-            config
-                .features
-                .disable(codex_features::Feature::RemoteCompactionV2)
                 .unwrap();
         })
         .build_with_auto_env(&server)
@@ -491,15 +486,13 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
         .submit(codex_protocol::protocol::Op::Compact)
         .await?;
     terminal(&test).await?;
-    assert_eq!(compact.single_request().path(), "/v1/responses/compact");
-    // The legacy compaction endpoint records too, under its own `compact:`
-    // turn. This assertion used to pin the opposite.
+    assert_eq!(mock.requests().len(), 3);
+    // The compaction records too, under its own `compact:` turn.
     let after = wait_attempts(&db, /*count*/ 3).await?;
     assert_eq!(after[..2], records[..]);
     assert!(after[2].turn.starts_with("compact:"), "{}", after[2].turn);
-    // That fixture's compact body states no usage, so the compaction records an
-    // attempt with its tokens unknown rather than a third observation.
-    assert_eq!(observations(&db).await?.len(), 2);
+    // Its streamed usage is a third observation.
+    wait_observations(&db, /*count*/ 3).await?;
     stop(&test).await;
     Ok(())
 }
@@ -670,7 +663,7 @@ async fn accounting_responses_native_ws_only_no_install() -> anyhow::Result<()> 
     ]])
     .await;
     let mut builder = builder(
-        "http://127.0.0.1:1/v1".into(),
+        format!("{}/v1", server.uri()),
         enabled("https://api.openai.com/v1"),
     )
     .with_config(|config| config.model_provider.supports_websockets = true);
@@ -747,130 +740,6 @@ async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The legacy compaction endpoint answers with one JSON body rather than a
-/// stream, so it never met the streaming collector. It is reachable by turning
-/// `remote_compaction_v2` off - a Stable, default-on feature - and every such
-/// compaction was paid for and recorded nowhere.
-#[tokio::test]
-async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
-    let server = MockServer::start().await;
-    let endpoint = format!("{}/v1", server.uri());
-    let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
-    let compact = responses::mount_compact_json_once(
-        &server,
-        json!({
-            "output":[{"type":"compaction","encrypted_content":"synthetic-summary"}],
-            "usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":20},
-                "output_tokens":40,"output_tokens_details":{"reasoning_tokens":10},
-                "total_tokens":140}
-        }),
-    )
-    .await;
-    let test = builder(endpoint.clone(), enabled(&endpoint))
-        .with_config(|config| {
-            config
-                .features
-                .disable(codex_features::Feature::TokenBudget)
-                .unwrap();
-            config
-                .features
-                .disable(codex_features::Feature::RemoteCompactionV2)
-                .unwrap();
-        })
-        .build_with_auto_env(&server)
-        .await?;
-    test.submit_turn("fixture").await?;
-    let db = test.codex.state_db().unwrap();
-    let turn = wait_attempts(&db, /*count*/ 1).await?;
-    test.codex
-        .submit(codex_protocol::protocol::Op::Compact)
-        .await?;
-    terminal(&test).await?;
-    let records = wait_attempts(&db, /*count*/ 2).await?;
-    assert_eq!(records.len(), 2);
-    let compaction = &records[1];
-    assert!(
-        compaction.turn.starts_with("compact:"),
-        "legacy compaction recorded under {}",
-        compaction.turn
-    );
-    assert_ne!(compaction.turn, turn[0].turn);
-    assert_eq!(compact.single_request().path(), "/v1/responses/compact");
-    // The endpoint's own body carried the numbers, so they are recorded: the
-    // turn's 100 input tokens plus the compaction's own 100.
-    wait_observations(&db, /*count*/ 2).await?;
-    assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
-    assert_eq!(mock.requests().len(), 1);
-    stop(&test).await;
-    Ok(())
-}
-
-/// A collected request never follows a redirect on its recording client: a
-/// response from somewhere else would be attributed to the approved endpoint.
-/// Accounting never blocks the request either, so a redirected compaction is
-/// resent once, unrecorded, on the ordinary client, and the turn says so.
-#[tokio::test]
-async fn accounting_legacy_compaction_redirect_is_resent_unrecorded() -> anyhow::Result<()> {
-    for status in [301, 302, 303, 307, 308] {
-        let origin = MockServer::start().await;
-        let target = MockServer::start().await;
-        let endpoint = format!("{}/v1", origin.uri());
-        let turn = responses::mount_sse_once(&origin, success(usage(Some(0)))).await;
-        Mock::given(method("POST"))
-            .and(path("/v1/responses/compact"))
-            .respond_with(
-                ResponseTemplate::new(status)
-                    .insert_header("location", format!("{}/v1/responses/compact", target.uri())),
-            )
-            .mount(&origin)
-            .await;
-        Mock::given(method("POST"))
-            .and(path("/v1/responses/compact"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "output":[{"type":"compaction","encrypted_content":"elsewhere"}]
-            })))
-            .mount(&target)
-            .await;
-        let test = builder(endpoint.clone(), enabled(&endpoint))
-            .with_config(|config| {
-                config
-                    .features
-                    .disable(codex_features::Feature::TokenBudget)
-                    .unwrap();
-                config
-                    .features
-                    .disable(codex_features::Feature::RemoteCompactionV2)
-                    .unwrap();
-            })
-            .build_with_auto_env(&origin)
-            .await?;
-        test.submit_turn("fixture").await?;
-        let db = test.codex.state_db().unwrap();
-        wait_attempts(&db, /*count*/ 1).await?;
-        test.codex
-            .submit(codex_protocol::protocol::Op::Compact)
-            .await?;
-        let events = terminal(&test).await?;
-        assert!(
-            events
-                .iter()
-                .any(|event| matches!(event, EventMsg::Warning(warning)
-                if warning.message.starts_with("Developer accounting could not record"))),
-            "{status}: {events:?}"
-        );
-        assert_eq!(
-            target.received_requests().await.unwrap().len(),
-            1,
-            "{status}: the unrecorded resend follows the redirect once"
-        );
-        assert_eq!(turn.requests().len(), 1);
-        // Only the turn's request and the refused compaction send were admitted.
-        assert_eq!(attempts(&db).await?.len(), 2);
-        stop(&test).await;
-    }
-    Ok(())
-}
-
 /// PF-60-S05 AC7: compaction is best effort. With the ledger refusing the
 /// admission, or refusing the usage after the paid response arrived, the
 /// compaction still finishes, the provider's answer is used, and the turn
@@ -883,13 +752,12 @@ async fn accounting_store_failure_never_fails_compaction() -> anyhow::Result<()>
     ] {
         let server = MockServer::start().await;
         let endpoint = format!("{}/v1", server.uri());
-        responses::mount_sse_once(&server, success(usage(Some(0)))).await;
-        let compact = responses::mount_compact_json_once(
+        let mock = responses::mount_sse_sequence(
             &server,
-            json!({
-                "output":[{"type":"compaction","encrypted_content":"synthetic-summary"}],
-                "usage":{"input_tokens":100,"output_tokens":40,"total_tokens":140}
-            }),
+            vec![
+                success(usage(Some(0))),
+                compaction(json!({"input_tokens":100,"output_tokens":40,"total_tokens":140})),
+            ],
         )
         .await;
         let test = builder(endpoint.clone(), enabled(&endpoint))
@@ -897,10 +765,6 @@ async fn accounting_store_failure_never_fails_compaction() -> anyhow::Result<()>
                 config
                     .features
                     .disable(codex_features::Feature::TokenBudget)
-                    .unwrap();
-                config
-                    .features
-                    .disable(codex_features::Feature::RemoteCompactionV2)
                     .unwrap();
             })
             .build_with_auto_env(&server)
@@ -933,7 +797,7 @@ async fn accounting_store_failure_never_fails_compaction() -> anyhow::Result<()>
                 .any(|event| matches!(event, EventMsg::Error(_))),
             "{table}: {events:?}"
         );
-        assert_eq!(compact.single_request().path(), "/v1/responses/compact");
+        assert_eq!(mock.requests().len(), 2, "{table}");
         assert_eq!(attempts(&db).await?.len(), recorded, "{table}");
         sqlx::Connection::close(conn).await?;
         stop(&test).await;
@@ -1076,7 +940,6 @@ async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation(
     use codex_core::sandboxing::SandboxPermissions;
     use codex_protocol::config_types::ApprovalsReviewer;
     use codex_protocol::protocol::AskForApproval;
-    use codex_protocol::protocol::Op;
     use codex_protocol::protocol::SandboxPolicy;
     use codex_protocol::user_input::UserInput;
     use core_test_support::responses::ev_assistant_message;
@@ -1148,21 +1011,18 @@ async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation(
     )
     .await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run a command the reviewer denies".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
                 sandbox_policy: Some(sandbox_policy),
                 ..Default::default()
-            },
-        })
+            }),
+        )
         .await?;
     core_test_support::wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
@@ -1194,7 +1054,6 @@ async fn accounting_guardian_review_is_recorded_under_the_reviewed_conversation(
 /// keep their labels.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn accounting_side_conversation_is_recorded_under_its_conversation() -> anyhow::Result<()> {
-    use codex_protocol::protocol::Op;
     use codex_protocol::user_input::UserInput;
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
@@ -1213,27 +1072,25 @@ async fn accounting_side_conversation_is_recorded_under_its_conversation() -> an
     side_config.ephemeral = true;
     let side = test
         .thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            side_config,
+            codex_core::StartThreadOptions {
+                thread_source: Some(codex_protocol::protocol::ThreadSource::Feature(
+                    codex_protocol::protocol::ThreadSource::SIDE_CONVERSATION.to_string(),
+                )),
+                ..codex_core::StartThreadOptions::new(side_config)
+            },
             test.codex.rollout_path().unwrap(),
-            Some(codex_protocol::protocol::ThreadSource::Feature(
-                codex_protocol::protocol::ThreadSource::SIDE_CONVERSATION.to_string(),
-            )),
-            /*parent_trace*/ None,
         )
         .await?;
     side.thread
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "side question".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     core_test_support::wait_for_event(&side.thread, |event| {
         matches!(event, EventMsg::TurnComplete(_))

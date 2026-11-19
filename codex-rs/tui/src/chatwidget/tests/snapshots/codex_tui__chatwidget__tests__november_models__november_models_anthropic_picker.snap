@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/tests/november_models.rs
+expression: popup
+---
+  Select Model and Effort
+  Anthropic API key
+
+   OpenAI   Ambient   Corbanu API   Kimi Code   Z.AI   DeepSeek   Claude Plan   Anthropic   Meta   Vercel   Baseten            ›
+
+  1. Claude Opus 5.5             Model: claude-opus-5-5. Claude Opus 5.5 through the Anthropic Messages API.
+  2. Claude Opus 5               Model: claude-opus-5. Claude Opus 5 through the Anthropic Messages API.
+  3. Claude Fable 5.1            Model: claude-fable-5-1. Claude Fable 5.1 through the Anthropic Messages API.
+  4. Claude Fable 5              Model: claude-fable-5. Claude Fable 5 through the Anthropic Messages API.
+› 5. Claude Fable 5.2 (current)  Model: claude-fable-5-2. Claude Fable 5.2 through the Anthropic Messages API. Adaptive thinking
+                                 is always on.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

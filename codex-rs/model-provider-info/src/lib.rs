@@ -157,6 +157,7 @@ pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1";
 pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-5";
 pub const ANTHROPIC_OPUS_5_5_MODEL: &str = "claude-opus-5-5";
 pub const ANTHROPIC_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8";
+pub const CLAUDE_FABLE_5_2_MODEL: &str = "claude-fable-5-2";
 pub const CLAUDE_FABLE_5_1_MODEL: &str = "claude-fable-5-1";
 pub const CLAUDE_FABLE_5_MODEL: &str = "claude-fable-5";
 pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
@@ -437,7 +438,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     // picker owns it there. `claude-plan` also serves it, translated exactly to
     // `claude-opus-5-5-plan`, so `corrected_catalog_provider` leaves that pair
     // alone rather than moving a subscription session onto per-token billing.
-    if model == ANTHROPIC_OPUS_5_5_MODEL {
+    if matches!(model, ANTHROPIC_OPUS_5_5_MODEL | CLAUDE_FABLE_5_2_MODEL) {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model == ANTHROPIC_DEFAULT_MODEL
@@ -567,6 +568,11 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
         && provider != ANTHROPIC_PROVIDER_ID
         && provider != CLAUDE_PLAN_PROVIDER_ID
     {
+        return Some(ANTHROPIC_PROVIDER_ID);
+    }
+    // This catalog offers Fable 5.2 only on the direct API. Do not translate it to
+    // an older subscription model or advertise an unverified gateway route.
+    if model == CLAUDE_FABLE_5_2_MODEL && provider != ANTHROPIC_PROVIDER_ID {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("claude-")
@@ -1666,7 +1672,9 @@ other non-default provider fields are not supported"
             location: None,
             credential_file: None,
             capabilities: None,
-            include_internal_metadata: true,
+            // D634 / #2351: endpoint overrides do not inherit a first-party metadata grant.
+            // ModelProvider checks the resolved HTTPS destination before including it.
+            include_internal_metadata: false,
         }
     }
 
@@ -2845,3 +2853,7 @@ pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> M
 #[cfg(test)]
 #[path = "model_provider_info_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "november_models_tests.rs"]
+mod november_models_tests;

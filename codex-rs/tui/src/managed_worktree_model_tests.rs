@@ -261,6 +261,7 @@ pub(super) async fn exercise(
         .iter()
         .map(context_snapshot::SnapshotEntry::body)
         .collect::<Vec<_>>();
+    report_first_input_item_changes(&bodies);
     insta::assert_snapshot!(
         "managed_worktree_model_creation",
         context_snapshot::format_context_snapshot(
@@ -272,4 +273,24 @@ pub(super) async fn exercise(
         )
     );
     Ok(())
+}
+
+/// #2312: under full-suite load the first developer message sometimes changes mid-run. The
+/// snapshot masks it, so print the unmasked change to diagnose a failing run.
+#[allow(clippy::print_stderr)]
+fn report_first_input_item_changes(bodies: &[Value]) {
+    let first_items = bodies
+        .iter()
+        .map(|body| body["input"][0].to_string())
+        .collect::<Vec<_>>();
+    for (index, pair) in first_items.windows(2).enumerate() {
+        if pair[0] != pair[1] {
+            eprintln!(
+                "first input item changed before request {}:\nbefore: {}\nafter: {}",
+                index + 2,
+                pair[0],
+                pair[1]
+            );
+        }
+    }
 }

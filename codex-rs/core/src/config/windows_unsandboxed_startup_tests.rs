@@ -157,3 +157,40 @@ async fn issue_1976_no_notice_under_permissive_or_with_a_windows_sandbox() -> st
     }
     Ok(())
 }
+
+/// D522 (a): `prefer_mxc` can select MXC over a configured elevated or
+/// restricted-token sandbox; the notice is judged on MXC, as no sandbox.
+#[test]
+fn d522_startup_notice_is_judged_on_the_selected_backend() {
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    use codex_sandboxing::SandboxType;
+
+    for (sandbox_type, level, expected) in [
+        (
+            SandboxType::WindowsMxc,
+            WindowsSandboxLevel::Elevated,
+            WindowsSandboxLevel::Disabled,
+        ),
+        (
+            SandboxType::WindowsMxc,
+            WindowsSandboxLevel::RestrictedToken,
+            WindowsSandboxLevel::Disabled,
+        ),
+        (
+            SandboxType::WindowsRestrictedToken,
+            WindowsSandboxLevel::Elevated,
+            WindowsSandboxLevel::Elevated,
+        ),
+        (
+            SandboxType::None,
+            WindowsSandboxLevel::Disabled,
+            WindowsSandboxLevel::Disabled,
+        ),
+    ] {
+        assert_eq!(
+            super::startup_notice_sandbox_level(sandbox_type, level),
+            expected,
+            "{sandbox_type:?} at {level:?}"
+        );
+    }
+}

@@ -24,6 +24,7 @@ codex_rust_crate(
         "//codex-rs/cli:codex",
         "//codex-rs/windows-sandbox-rs:codex-command-runner",
         "//codex-rs/windows-sandbox-rs:codex-windows-managed-deny-probe",
+        "//codex-rs/windows-sandbox-rs:codex-conpty-launcher",
         "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
     ],
     integration_compile_data_extra = glob(["assets/**"]) + [
@@ -55,6 +56,7 @@ codex_rust_crate(
     unit_test_extra_binaries = [
         "//codex-rs/bwrap:bwrap",
         "//codex-rs/windows-sandbox-rs:codex-command-runner",
+        "//codex-rs/windows-sandbox-rs:codex-conpty-launcher",
         "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
     ],
     unit_test_srcs = glob([
@@ -70,4 +72,7 @@ codex_rust_crate(
         "src/plugins/test_support.rs",
     ],
     unit_test_timeout = "long",
+    # #1448: each Windows shard already runs alongside other Bazel actions.
+    # Avoid a CPU-sized libtest pool multiplying SQLite fixture setup pressure.
+    windows_unit_test_env = {"RUST_TEST_THREADS": "1"},
 )

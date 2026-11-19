@@ -810,8 +810,10 @@ async fn retained_thread_and_settings_project_complete_pane_local_provider() {
         }
         other => panic!("expected pane-local status output, got {other:?}"),
     };
+    // As upstream, the line names the thread's provider ID, without the base URL.
     assert!(
-        rendered.contains("OpenRouter - https://openrouter.ai/api/v1"),
+        rendered.lines().any(|line| line.contains("Model provider:")
+            && line.trim_end().ends_with(OPENROUTER_PROVIDER_ID)),
         "expected /status to use the selected pane provider, got: {rendered}"
     );
     assert!(
@@ -1644,6 +1646,9 @@ async fn live_app_server_sub_agent_activity_renders_once() {
         kind: codex_app_server_protocol::SubAgentActivityKind::Completed,
         agent_thread_id: ThreadId::new().to_string(),
         agent_path: "/root/researcher".to_string(),
+        agent_nickname: None,
+        agent_role: None,
+        task_preview: None,
     };
 
     chat.handle_server_notification(
@@ -2172,7 +2177,7 @@ async fn live_app_server_server_overloaded_error_renders_error() {
         let rendered = lines_to_single_string(&cells[0]);
         insta::allow_duplicates! {
             if message.is_empty() {
-                insta::assert_snapshot!(rendered, @"■ Codex is currently experiencing high load.");
+                insta::assert_snapshot!(rendered, @"■ Corbanu Terminal is currently experiencing high load.");
             } else {
                 insta::assert_snapshot!(rendered, @"■ server overloaded");
             }
@@ -2339,7 +2344,8 @@ async fn live_app_server_manual_thread_name_updates_status_surfaces() {
         .iter()
         .map(|lines| lines_to_single_string(lines))
         .collect::<String>();
-    let footer = render_bottom_popup(&chat, /*width*/ 80);
+    // Wide enough for Corbanu's longer footer to keep the thread name.
+    let footer = render_bottom_popup(&chat, /*width*/ 120);
     let title = chat.last_terminal_title.as_deref().unwrap();
     assert_chatwidget_snapshot!(
         "manual_thread_name_status_surfaces",

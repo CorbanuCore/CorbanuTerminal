@@ -357,7 +357,7 @@ impl AuthManager {
             workload_identity_selected: false,
             allowed_auth_modes: RwLock::new(None),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
-            auth_route_config: self.auth_route_config.clone(),
+            auth_route_config: self.auth_route_config.for_named_account(),
             named_store: Some(NamedAccountStore::new(codex_vault::Vault::new(
                 self.codex_home.clone(),
             ))),

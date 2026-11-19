@@ -2,13 +2,43 @@ use core_test_support::responses;
 use serde_json::json;
 use std::path::Path;
 
+/// Joins a fixture command into the `cmd` string the user's shell runs.
+fn command_string(command: &[String]) -> anyhow::Result<String> {
+    if cfg!(windows) {
+        // PowerShell does not understand POSIX single-quote escaping.
+        let (program, args) = command
+            .split_first()
+            .ok_or_else(|| anyhow::anyhow!("shell command fixture requires a program"))?;
+        // Keep ordinary executable names bare: the safety parser rejects the
+        // call operator, which is only necessary for a quoted program path.
+        let program = if program.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+            && program
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        {
+            program.clone()
+        } else {
+            format!("& '{}'", program.replace('\'', "''"))
+        };
+        Ok(std::iter::once(program)
+            .chain(
+                args.iter()
+                    .map(|arg| format!("'{}'", arg.replace('\'', "''"))),
+            )
+            .collect::<Vec<_>>()
+            .join(" "))
+    } else {
+        Ok(shlex::try_join(command.iter().map(String::as_str))?)
+    }
+}
+
 pub fn create_command_execution_sse_response(
     command: Vec<String>,
     workdir: Option<&Path>,
     timeout_ms: Option<u64>,
     call_id: &str,
 ) -> anyhow::Result<String> {
-    let command_str = shlex::try_join(command.iter().map(String::as_str))?;
+    let command_str = command_string(&command)?;
     let mut arguments = json!({
         "cmd": command_str,
         "workdir": workdir.map(|w| w.to_string_lossy()),
@@ -30,7 +60,7 @@ pub fn create_escalated_command_execution_sse_response(
     timeout_ms: Option<u64>,
     call_id: &str,
 ) -> anyhow::Result<String> {
-    let command_str = shlex::try_join(command.iter().map(String::as_str))?;
+    let command_str = command_string(&command)?;
     let tool_call_arguments = serde_json::to_string(&json!({
         "cmd": command_str,
         "workdir": workdir.map(|w| w.to_string_lossy()),

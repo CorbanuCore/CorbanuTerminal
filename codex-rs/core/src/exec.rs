@@ -491,8 +491,9 @@ pub async fn build_exec_request(
 /// the profile's own deny-read entries), so an MXC launch is refused whenever
 /// one of them would apply: a launch contract is armed, the profile denies
 /// some reads, or one of `folders` (command/exec's working folders, where
-/// D446 applies) is on a network.
-pub(crate) fn refuse_mxc_without_corbanu_protections(
+/// D446 applies) is on a network. Public for `sandbox windows`
+/// (`cli/src/debug_sandbox.rs`), which applies the same refusal.
+pub fn refuse_mxc_without_corbanu_protections(
     sandbox: SandboxType,
     permission_profile: &PermissionProfile,
     contract_armed: bool,
@@ -548,18 +549,13 @@ pub(crate) fn refuse_mxc_mcp_sandbox_state(
 /// every sandbox level, because its path URI lost `localhost`. Upstream's
 /// path URIs now keep such a folder, so command/exec refuses it here, with
 /// the same message. Covers `\\localhost\`, `\\?\UNC\localhost\` and
-/// `\\.\UNC\localhost\`, in any letter case.
+/// `\\.\UNC\localhost\`, in any letter case and with either separator.
 pub(crate) fn refuse_localhost_unc_folder(folder: &AbsolutePathBuf) -> Result<()> {
     if !cfg!(windows) {
         return Ok(());
     }
-    let path = folder.as_path().to_string_lossy().to_ascii_lowercase();
-    let server_and_rest = [r"\\?\unc\", r"\\.\unc\", r"\\"]
-        .into_iter()
-        .find_map(|prefix| path.strip_prefix(prefix));
-    let is_localhost =
-        server_and_rest.is_some_and(|rest| rest.split(['\\', '/']).next() == Some("localhost"));
-    if !is_localhost {
+    // D537 (b): the same classification path URIs refuse.
+    if !codex_utils_path_uri::is_windows_localhost_unc_path(&folder.as_path().to_string_lossy()) {
         return Ok(());
     }
     Err(CodexErr::Io(io::Error::new(

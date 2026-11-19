@@ -75,6 +75,7 @@ pub(crate) fn nested_launch_kind(
         Subcommand::TcpTunnel(_) => ("tcp-tunnel", Host),
         Subcommand::Vault(_) => ("vault", Credentials),
         Subcommand::Account(_) => ("account", Credentials),
+        Subcommand::Model(_) => ("model", Credentials),
         Subcommand::InternalClaudeOauthToken { .. } => (
             codex_login::auth::CLAUDE_PLAN_TOKEN_HELPER_SUBCOMMAND,
             Credentials,

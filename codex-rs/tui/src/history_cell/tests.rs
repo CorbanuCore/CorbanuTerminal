@@ -782,9 +782,12 @@ async fn session_info_availability_nux_tooltip_snapshot() {
 #[tokio::test]
 async fn session_info_preserves_styled_tooltip_links() {
     let config = test_config().await;
+    // Corbanu turns startup tooltips off by default.
+    let mut local_settings = crate::local_settings::LocalSettings::from(&config);
+    local_settings.tui.show_tooltips = true;
     let cell = new_session_info(
         &config,
-        &crate::local_settings::LocalSettings::from(&config),
+        &local_settings,
         "gpt-5",
         "gpt-5",
         &session_configured_event("gpt-5"),
@@ -999,6 +1002,17 @@ fn ps_output_chunk_leading_whitespace_snapshot() {
         ],
     }]);
     let rendered = render_lines(&cell.display_lines(/*width*/ 60)).join("\n");
+    insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn error_event_provider_cooldown_snapshot() {
+    // Matches the core formatter fixture: one-hour enforcement with the provider's
+    // longer reset hint retained for display.
+    let cell = new_error_event(
+        "provider request blocked by local cooldown for claude-plan/claude-opus-5-5-plan (config:auth-command) for about 3600s. Last status: 429, request id: fixture-request. Last preflight: input=10 cached_input=0 request_bytes=100. Provider reset hint: about 308374s remaining (not enforced locally). After this wait, the next request probes the provider. To retry now, use /model clear-cooldown or corbanu model clear-cooldown with the same provider/model settings.".to_string(),
+    );
+    let rendered = render_lines(&cell.display_lines(/*width*/ 120)).join("\n");
     insta::assert_snapshot!(rendered);
 }
 

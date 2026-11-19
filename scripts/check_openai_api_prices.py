@@ -65,7 +65,10 @@ def milli(value: int | None) -> Decimal | None:
 
 def catalogue_prices() -> dict[str, tuple[Decimal | None, ...]]:
     prices = {}
-    for model in json.loads(CATALOGUE.read_text())["models"]:
+    models = json.loads(CATALOGUE.read_text())["models"]
+    for shard in sorted(CATALOGUE.parent.glob("models-*.json")):
+        models.extend(json.loads(shard.read_text())["models"])
+    for model in models:
         orchestration = model.get("orchestration") or {}
         billing = orchestration.get("billing")
         if orchestration.get("provider_id") != "openai":

@@ -167,6 +167,8 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
                         assert_eq!(params["collaborationMode"], json!(expected_submitted_mode));
                         Some(json!({"result": {"turn": {"id": "fresh", "items": [], "status": "inProgress"}}}))
                     }
+                    // Corbanu's bootstrap also reads the auth status.
+                    "getAuthStatus" => Some(json!({"result": {}})),
                     method => panic!("unexpected reconnect request: {method}"),
                 })).await?);
             }
@@ -298,6 +300,7 @@ async fn reconnect_restores_history_permissions_and_resumes_unsent_input() -> Re
             app.app_server_target.clone(),
             app.config.clone(),
             app.local_settings.clone(),
+            app.launch_approval_resume_permissions(),
             Some(id),
             /*remote_cwd*/ None,
             transport,
@@ -559,6 +562,8 @@ async fn reconnect_reconciles_offscreen_pending_profile_before_restoring_permiss
                 "thread/list" | "thread/loaded/list" =>
                     json!({"result": {"data": [], "nextCursor": null}}),
                 "thread/goal/get" => json!({"result": {"goal": null}}),
+                // Corbanu's bootstrap also reads the auth status.
+                "getAuthStatus" => json!({"result": {}}),
                 method => panic!("unexpected reconnect request: {method}"),
             }))
         })
@@ -572,6 +577,7 @@ async fn reconnect_reconciles_offscreen_pending_profile_before_restoring_permiss
         app.app_server_target.clone(),
         app.config.clone(),
         app.local_settings.clone(),
+        app.launch_approval_resume_permissions(),
         Some(displayed),
         /*remote_cwd*/ None,
         session.thread_tool_transport(),
@@ -645,6 +651,7 @@ async fn reconnect_exhaustion_and_unknown_initial_thread_stay_offline() -> Resul
             app.app_server_target.clone(),
             app.config.clone(),
             app.local_settings.clone(),
+            app.launch_approval_resume_permissions(),
             id,
             /*remote_cwd*/ None,
             crate::dynamic_tools_mcp::ThreadToolTransport::Dynamic,
@@ -686,6 +693,10 @@ async fn reconnect_allows_slow_hydration_but_bounds_a_stalled_server() -> Result
             serve_reconnect_requests(
                 tokio_tungstenite::accept_async(stream).await?,
                 move |request| async move {
+                    // Corbanu's bootstrap also reads the auth status.
+                    if request.method == "getAuthStatus" {
+                        return Some(json!({"result": {}}));
+                    }
                     if request.method == "thread/resume" {
                         tokio::time::pause();
                         tokio::time::sleep(Duration::from_secs(delay)).await;
@@ -706,6 +717,7 @@ async fn reconnect_allows_slow_hydration_but_bounds_a_stalled_server() -> Result
             },
             app.config.clone(),
             app.local_settings.clone(),
+            app.launch_approval_resume_permissions(),
             Some(id),
             /*remote_cwd*/ None,
             crate::dynamic_tools_mcp::ThreadToolTransport::Dynamic,
@@ -772,9 +784,12 @@ async fn reconnect_allows_slow_hydration_but_bounds_a_stalled_server() -> Result
             );
         } else {
             tokio::time::resume();
+            // Main's 30 s per-request limit (app-server-client REQUEST_TIMEOUT) ends the
+            // stalled resume first; the retry then waits on this single-connection server
+            // until the same 120 s deadline.
             assert_eq!(
                 result.err().expect("resume should time out").to_string(),
-                "Automatic reconnect timed out while resuming the conversation."
+                "Automatic reconnect timed out while connecting to the server."
             );
             assert_eq!(elapsed, 120);
             server.abort();

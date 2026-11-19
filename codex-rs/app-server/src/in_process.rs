@@ -279,6 +279,9 @@ pub struct InProcessClientHandle {
     runtime_handle: tokio::task::JoinHandle<()>,
     #[cfg(test)]
     _test_folder: Option<tempfile::TempDir>,
+    /// Tests: the runtime's plugins manager, set once its processor exists.
+    #[cfg(test)]
+    test_plugins_manager: Arc<std::sync::OnceLock<Arc<codex_core_plugins::PluginsManager>>>,
 }
 
 impl InProcessClientHandle {
@@ -455,6 +458,10 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
     trace_in_process_timing("after_resolve_installation_id", start_uninitialized_at);
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
     let (event_tx, event_rx) = mpsc::unbounded_channel::<InProcessServerEvent>();
+    #[cfg(test)]
+    let test_plugins_manager = Arc::new(std::sync::OnceLock::new());
+    #[cfg(test)]
+    let runtime_plugins_manager = Arc::clone(&test_plugins_manager);
 
     let runtime_handle = tokio::spawn(async move {
         let (outgoing_tx, outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(channel_capacity);
@@ -532,6 +539,8 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
                 remote_control_handle: None,
                 plugin_startup_tasks: Some(PluginStartupConfig::Current),
             }));
+            #[cfg(test)]
+            let _ = runtime_plugins_manager.set(processor.plugins_manager());
             let mut thread_created_rx = processor.thread_created_receiver();
             let session = Arc::new(ConnectionSessionState::new(
                 crate::transport::ConnectionOrigin::InProcess,
@@ -814,6 +823,8 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
         runtime_handle,
         #[cfg(test)]
         _test_folder: None,
+        #[cfg(test)]
+        test_plugins_manager,
     })
 }
 
@@ -926,6 +937,30 @@ mod tests {
             })
             .expect("test thread should spawn");
         handle.join().expect("test thread should not panic");
+    }
+
+    /// #477/#494: in-process shutdown (what `corbanu exec` runs on every exit
+    /// after the client starts) cancels the curated plugin sync, which then
+    /// stops its `git` (core-plugins tests that with an injected `git`).
+    #[test]
+    fn in_process_shutdown_cancels_the_curated_plugin_sync() {
+        run_in_process_test_with_stack(
+            "in_process_shutdown_cancels_the_curated_plugin_sync",
+            async move {
+                let client = start_test_client(SessionSource::Exec).await;
+                let plugins_manager = client
+                    .test_plugins_manager
+                    .get()
+                    .cloned()
+                    .expect("the processor exists once start returns");
+                assert!(!plugins_manager.curated_repo_sync_cancelled());
+                client
+                    .shutdown()
+                    .await
+                    .expect("in-process runtime should shutdown cleanly");
+                assert!(plugins_manager.curated_repo_sync_cancelled());
+            },
+        );
     }
 
     #[test]
@@ -1108,6 +1143,7 @@ mod tests {
             event_rx,
             runtime_handle,
             _test_folder: None,
+            test_plugins_manager: Arc::default(),
         };
 
         client
@@ -1177,17 +1213,34 @@ mod tests {
         let mut client = spawn_streaming_test_process(
             dir.path(),
             "download",
-            concat!(
-                "p=$$; (while kill -0 $p 2>/dev/null; do sleep 0.05; done; touch exited) ",
-                "</dev/null >/dev/null 2>&1 & exec cat input",
-            ),
+            r#"printf '%s\n' "$$" > pid; exec cat input"#,
         )
         .await;
 
         timeout(Duration::from_secs(10), async {
-            // The pipe readers can hold this payload while delivery is stalled.
-            while !dir.path().join("exited").exists() {
+            // Observe exit from outside the child's process group. A background
+            // shell watcher can be killed by ProcessHandle cleanup before it writes
+            // its marker, even though the download has already completed.
+            let pid = loop {
+                if let Ok(contents) = std::fs::read_to_string(dir.path().join("pid"))
+                    && let Ok(pid) = contents.trim().parse::<libc::pid_t>()
+                {
+                    assert!(pid > 0);
+                    break pid;
+                }
                 tokio::task::yield_now().await;
+            };
+            loop {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                // SAFETY: the fixture supplied a positive PID; signal 0 only
+                // checks whether that process exists, without sending a signal.
+                if unsafe { libc::kill(pid, 0) } == -1 {
+                    assert_eq!(
+                        std::io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ESRCH)
+                    );
+                    break;
+                }
             }
             let error = client
                 .request(ClientRequest::ProcessKill {
@@ -1199,7 +1252,19 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap_err();
-            assert_eq!(error.message, "process \"download\" is no longer running");
+            assert_eq!(error.code, crate::error_code::INVALID_REQUEST_ERROR_CODE);
+            // Like main, the in-process event channel is unbounded: the exit
+            // notification can already be buffered and the handle removed while
+            // the client has not consumed any events yet. Both terminal states
+            // must refuse kill; neither may lose the queued output or exit.
+            assert!(
+                matches!(
+                    error.message.as_str(),
+                    "process \"download\" is no longer running"
+                        | "no active process for process handle \"download\""
+                ),
+                "unexpected process/kill error: {error:?}"
+            );
             let mut received = Vec::new();
             loop {
                 if let InProcessServerEvent::ServerNotification(notification) =

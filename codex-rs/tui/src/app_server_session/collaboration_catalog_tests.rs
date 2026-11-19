@@ -45,6 +45,8 @@ async fn collaboration_catalog_is_optional_and_refetched_on_bootstrap() -> Resul
                         json!({"result": {"account": null, "requiresOpenaiAuth": false}})
                     }
                     "model/list" => json!({"result": {"data": [], "nextCursor": null}}),
+                    // Corbanu's bootstrap also reads the auth status.
+                    "getAuthStatus" => json!({"result": {}}),
                     "configRequirements/read" => json!({"result": {"requirements": null}}),
                     "collaborationMode/list" => {
                         assert_eq!(request.params, Some(json!({})));

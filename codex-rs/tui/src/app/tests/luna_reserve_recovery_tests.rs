@@ -42,7 +42,7 @@ pub(super) fn configure_reserve_catalog(app: &mut App) {
     let mut high = original.supported_reasoning_efforts[0].clone();
     high.effort = ReasoningEffortConfig::High;
     original.supported_reasoning_efforts.push(high);
-    Arc::make_mut(&mut app.model_catalog).models = models;
+    app.model_catalog.replace_models_for_test(models);
     let mut tui = crate::tui::test_support::make_test_tui().unwrap();
     let mut init = app.chatwidget_init_for_forked_or_resumed_thread(
         &mut tui,
@@ -51,6 +51,8 @@ pub(super) fn configure_reserve_catalog(app: &mut App) {
     );
     init.has_chatgpt_account = true;
     init.has_codex_backend_auth = true;
+    // Corbanu's default test provider is not OpenAI; Reserve applies to OpenAI sign-ins.
+    init.requires_openai_auth = true;
     app.replace_chat_widget(ChatWidget::new_with_app_event(init));
     app.chat_widget
         .handle_thread_session(app.primary_session_configured.clone().unwrap());

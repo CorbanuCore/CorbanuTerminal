@@ -6,6 +6,7 @@
 //! (its own nested-launch rules apply there).
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -14,7 +15,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -68,8 +68,8 @@ async fn run(
                 ev_response_created(CALL_ID),
                 ev_function_call(
                     CALL_ID,
-                    "shell_command",
-                    &json!({ "command": format!("cat '{}' && echo {READ}", marker.display()) })
+                    "exec_command",
+                    &json!({ "cmd": format!("cat '{}' && echo {READ}", marker.display()) })
                         .to_string(),
                 ),
                 ev_completed(CALL_ID),
@@ -116,16 +116,13 @@ async fn run(
         .build(&server)
         .await?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "read the marker".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))

@@ -133,6 +133,8 @@ libc = { workspace = true }
 codex-windows-sandbox = { workspace = true }
 
 [dev-dependencies]
+codex-keyring-store = { workspace = true, features = ["test-support"] }
+codex-model-provider = { workspace = true }
 zip = { workspace = true }
 codex-uds = { workspace = true }
 app_test_support = { workspace = true }

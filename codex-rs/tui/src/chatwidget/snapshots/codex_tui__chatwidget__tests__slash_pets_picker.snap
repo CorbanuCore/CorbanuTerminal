@@ -1,6 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
-assertion_line: 2890
+assertion_line: 3507
 expression: popup
 ---
   Select Pet
@@ -16,5 +16,5 @@ expression: popup
   Null Signal
   Rocky
   Seedy
-↓
+↓                                        3 / 9
   enter select · esc back

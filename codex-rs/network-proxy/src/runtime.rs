@@ -264,6 +264,9 @@ where
     }
 }
 
+/// D616: why a remote MXC launch without `allow_local_binding = true` is refused.
+pub const MXC_EXPLICIT_LOCAL_BINDING_REQUIRED: &str = "MXC needs network allow_local_binding = true set explicitly: Corbanu keeps host-loopback access off by default and MXC cannot block it; set it to true or use a different sandbox backend";
+
 /// How the executor resolves and validates local binding when managed networking is enabled.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum LocalBindingPolicy {
@@ -272,6 +275,9 @@ pub enum LocalBindingPolicy {
     DefaultFalse,
     /// Omission defaults to true; explicit false is rejected.
     RequireTrue,
+    /// Corbanu D616 (remote Windows MXC executors): binding must be configured as
+    /// true; omission and explicit false are both rejected at launch.
+    ExplicitTrue,
 }
 
 impl LocalBindingPolicy {
@@ -280,6 +286,11 @@ impl LocalBindingPolicy {
         config
             .allow_local_binding
             .unwrap_or(config.enabled && self == Self::RequireTrue)
+    }
+
+    /// Whether an enabled launch must end up with local binding on.
+    pub(crate) fn requires_true(self) -> bool {
+        matches!(self, Self::RequireTrue | Self::ExplicitTrue)
     }
 
     pub(crate) fn resolved_config(self, config: &NetworkProxyConfig) -> NetworkProxyConfig {
@@ -794,6 +805,13 @@ impl NetworkProxyState {
     /// `credential_broker::hardened`).
     pub(crate) fn credential_broker_hardened(&self) -> bool {
         self.credential_broker().hardened()
+    }
+
+    pub(crate) fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, crate::KnownCredentialScanError> {
+        self.credential_broker().known_credential_occurs_in(text)
     }
 
     /// PF-28-S02: whether injected values are scrubbed from responses.
@@ -1754,7 +1772,11 @@ mod tests {
 
     #[tokio::test]
     async fn host_blocked_requires_allowlist_match() {
-        let state = network_proxy_state_for_policy(network_settings(&["example.com"], &[]));
+        // Exercise allowlist matching independently of DNS/local-address checks.
+        let state = network_proxy_state_for_policy(NetworkProxyConfig {
+            allow_local_binding: Some(true),
+            ..network_settings(&["example.com"], &[])
+        });
 
         assert_eq!(
             state
@@ -1801,7 +1823,11 @@ mod tests {
 
     #[tokio::test]
     async fn add_allowed_domain_removes_matching_deny_entry() {
-        let state = network_proxy_state_for_policy(network_settings(&[], &["example.com"]));
+        // Exercise allow/deny list updates independently of DNS/local-address checks.
+        let state = network_proxy_state_for_policy(NetworkProxyConfig {
+            allow_local_binding: Some(true),
+            ..network_settings(&[], &["example.com"])
+        });
 
         state.add_allowed_domain("ExAmPlE.CoM").await.unwrap();
 
@@ -2071,7 +2097,11 @@ mod tests {
 
     #[tokio::test]
     async fn host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist() {
-        let state = network_proxy_state_for_policy(network_settings(&["*"], &["evil.example"]));
+        // Exercise wildcard matching independently of DNS/local-address checks.
+        let state = network_proxy_state_for_policy(NetworkProxyConfig {
+            allow_local_binding: Some(true),
+            ..network_settings(&["*"], &["evil.example"])
+        });
 
         assert_eq!(
             state

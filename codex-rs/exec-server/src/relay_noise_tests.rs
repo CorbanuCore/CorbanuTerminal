@@ -609,23 +609,31 @@ async fn malformed_handshakes_preserve_active_streams_and_admission_recovers() -
                 .with_tracer(tracer_provider.tracer("exec-server-noise-test"))
                 .with_filter(filter_fn(codex_otel::OtelProvider::trace_export_filter)),
         );
-    let environment_task = AbortOnDropHandle::new(tokio::spawn(
-        run_multiplexed_environment(
-            environment_websocket,
-            EchoMessages,
-            ENVIRONMENT_ID.to_string(),
-            EXECUTOR_REGISTRATION_ID.to_string(),
-            environment_identity.clone(),
-            DiagnosticValidator {
-                blocking: BlockingValidator {
-                    calls: Arc::clone(&calls),
-                    release: Arc::clone(&release),
-                },
-                timeout_started: Arc::clone(&timeout_started),
+    // tracing-core caches callsite interest process-wide. If this test's
+    // dispatcher were the only live one, a concurrent test thread without a
+    // subscriber could cache `Interest::never` for the shared Noise diagnostic
+    // callsites and drop this test's events and spans (#2270; the same race
+    // `ScopedTestSubscriber` closes for thread-scoped subscribers, #1413).
+    // Registering an inert dispatcher first keeps every interest computation
+    // consulting this test's dispatcher for its whole lifetime.
+    let _second_dispatcher = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+    let environment = run_multiplexed_environment(
+        environment_websocket,
+        EchoMessages,
+        ENVIRONMENT_ID.to_string(),
+        EXECUTOR_REGISTRATION_ID.to_string(),
+        environment_identity.clone(),
+        DiagnosticValidator {
+            blocking: BlockingValidator {
+                calls: Arc::clone(&calls),
+                release: Arc::clone(&release),
             },
-        )
-        .with_subscriber(subscriber),
-    ));
+            timeout_started: Arc::clone(&timeout_started),
+        },
+    )
+    .with_subscriber(subscriber);
+    tracing::callsite::rebuild_interest_cache();
+    let environment_task = AbortOnDropHandle::new(tokio::spawn(environment));
 
     let healthy_stream_id = "healthy";
     let prologue =

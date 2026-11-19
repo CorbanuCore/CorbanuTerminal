@@ -68,8 +68,44 @@ exclude_slash_tmp = true
 /// Code-blind case B-06: the review shows what the user would lose. The
 /// legacy sandbox has no denied reads, so approved commands can leave it,
 /// and its "off" network and vault rows say so.
-#[tokio::test]
-async fn workspace_write_rows_name_the_escape_route() {
+///
+/// The vault row depends on the process-wide, one-way secretless launch flag
+/// (PF-27-S02), which any other test in this binary may arm first. The body
+/// therefore runs in a fresh test process where the flag is still off.
+#[test]
+fn workspace_write_rows_name_the_escape_route() {
+    const CHILD_ENV: &str = "CORBANU_SECURITY_CURRENT_ESCAPE_ROUTE_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        assert!(
+            !codex_protocol::secretless_launch::is_armed(),
+            "a fresh test process starts with the secretless launch off"
+        );
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime")
+            .block_on(workspace_write_rows_name_the_escape_route_body());
+        return;
+    }
+    let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "--exact",
+            "security::current::tests::workspace_write_rows_name_the_escape_route",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CHILD_ENV, "1")
+        .output()
+        .expect("run the isolated test process");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "isolated test failed\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+async fn workspace_write_rows_name_the_escape_route_body() {
     let home = tempfile::tempdir().unwrap();
     let cwd = tempfile::tempdir().unwrap();
     let extra = tempfile::tempdir().unwrap();
@@ -401,8 +437,39 @@ request_permissions_tool = {request_tools}
 /// projection. Rebuilding the profile from it dropped the Aggressive denied
 /// reads, so the rows claimed approved commands leave the sandbox and the
 /// vault is readable. The known profile is kept while nothing changed.
-#[tokio::test]
-async fn sec_437_thread_settings_keep_the_aggressive_rows() {
+// The lossy-profile comparison below requires secretless launch to remain off.
+// Other tests can arm that process-wide flag permanently, so use a fresh process.
+#[test]
+fn sec_437_thread_settings_keep_the_aggressive_rows() {
+    const CHILD_ENV: &str = "CORBANU_SECURITY_CURRENT_THREAD_SETTINGS_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        assert!(!codex_protocol::secretless_launch::is_armed());
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test runtime")
+            .block_on(sec_437_thread_settings_keep_the_aggressive_rows_body());
+        return;
+    }
+    let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "--exact",
+            "security::current::tests::sec_437_thread_settings_keep_the_aggressive_rows",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CHILD_ENV, "1")
+        .output()
+        .expect("run the isolated test process");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "isolated test failed\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+async fn sec_437_thread_settings_keep_the_aggressive_rows_body() {
     use crate::legacy_core::config::PermissionProfileSnapshot;
 
     let home = tempfile::tempdir().unwrap();
@@ -444,6 +511,7 @@ async fn sec_437_thread_settings_keep_the_aggressive_rows() {
         },
         multi_agent_mode: Default::default(),
         personality: None,
+        disabled_plugin_ids: Vec::new(),
     };
 
     // The milestone's rows: rebuilt from the projection alone.

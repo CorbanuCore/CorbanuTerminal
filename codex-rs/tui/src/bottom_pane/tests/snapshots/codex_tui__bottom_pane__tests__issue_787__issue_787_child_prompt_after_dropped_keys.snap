@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/tests/issue_787.rs
+assertion_line: 188
 expression: "render_snapshot(&pane, area)"
 ---
                                                                                 
@@ -8,6 +9,7 @@ expression: "render_snapshot(&pane, area)"
   Thread: Agent (01a13a2a)                                                      
                                                                                 
   $ sleep 60; echo finished > ks-child.txt                                      
+                                                                                
                                                                                 
 › 1. Yes, proceed (y)                                                           
   2. Yes, and don't ask again for commands that start with `sleep`              

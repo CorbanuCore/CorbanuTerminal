@@ -60,13 +60,9 @@ mod agent_execution;
 mod agent_message_wake;
 mod agent_websocket;
 mod agents_md;
-<<<<<<< HEAD
 mod aggressive_refusals;
 mod anthropic_payload_limit;
-||||||| 413492cd6c
-=======
 mod app_tool_exposure;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod apply_patch_cli;
 mod apply_patch_serialization;
 #[cfg(target_os = "macos")]
@@ -98,12 +94,8 @@ mod collaboration_instructions;
 mod compact;
 mod compact_remote;
 mod compact_resume_fork;
-<<<<<<< HEAD
-mod cross_provider_history;
-||||||| 413492cd6c
-=======
 mod context_annotations;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod cross_provider_history;
 mod current_time_reminder;
 mod cyber_access_program;
 mod cyber_exec_policy;
@@ -128,6 +120,7 @@ mod guardian_checkpoint_migration;
 // Uses the same command-approval harness as guardian_review below.
 mod builtin_model_catalog;
 mod canonical_plugin_connectors;
+mod corbanu_astra;
 mod critical_path_runtime;
 mod gateway_auth;
 mod guardian_connector_trust;
@@ -156,13 +149,16 @@ mod hooks_executor;
 mod hooks_mcp;
 mod hooks_plugin_policy_refresh;
 mod image_rollout;
-<<<<<<< HEAD
+mod injected_models_cache;
+#[cfg(not(target_os = "windows"))]
+mod interrupt_hooks;
 mod issue_1087;
 mod issue_1139;
 #[path = "issue_1355_tests.rs"]
 mod issue_1355;
 mod issue_1976;
 mod issue_2000;
+mod issue_2049;
 mod issue_2050;
 mod issue_443;
 mod issue_445;
@@ -186,48 +182,29 @@ mod issue_840;
 mod issue_874;
 mod issue_891_d48_known_tools;
 mod issue_891_one_run;
-||||||| 413492cd6c
-=======
-mod injected_models_cache;
-#[cfg(not(target_os = "windows"))]
-mod interrupt_hooks;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod items;
 mod json_result;
+mod list_models;
 mod live_cli;
-<<<<<<< HEAD
 mod log_redaction;
-||||||| 413492cd6c
-=======
 #[path = "managed_threads_tests.rs"]
 mod managed_threads;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod mcp_auth_elicitation;
 mod mcp_auth_refresh;
-<<<<<<< HEAD
 mod mcp_chat_completions;
-#[cfg(unix)]
-||||||| 413492cd6c
-#[cfg(unix)]
-=======
 mod mcp_ema_config;
 #[path = "mcp_executor_context_tests.rs"]
 mod mcp_executor_context;
 mod mcp_extension_protocol;
 mod mcp_optional_startup_grace;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod mcp_refresh_cleanup;
 mod mcp_startup_refresh_http_proxy;
 mod mcp_subagent_elicitation;
 mod mcp_tool_cache;
 mod mcp_tool_exposure;
 mod mcp_turn_metadata;
-<<<<<<< HEAD
-mod memory_stage_one_policy;
-||||||| 413492cd6c
-=======
 mod mcp_user_verification;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod memory_stage_one_policy;
 mod model_overrides;
 #[path = "model_provider_requirements_tests.rs"]
 mod model_provider_requirements;
@@ -294,13 +271,11 @@ mod rollout_compression;
 mod rollout_list_find;
 mod safety_buffering;
 mod safety_check_downgrade;
-<<<<<<< HEAD
 mod sandbox_denied_at_start;
-||||||| 413492cd6c
-=======
 mod scenarios;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod search_tool;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod session_resources;
 mod settings_commits;
 mod settings_constraints;
 mod shell_snapshot;
@@ -308,24 +283,16 @@ mod skills;
 mod skills_extension;
 mod spawn_agent_description;
 mod sqlite_state;
-<<<<<<< HEAD
-mod state_db_throttle_fallback;
-||||||| 413492cd6c
-=======
 mod startup_cancellation;
+mod state_db_throttle_fallback;
 mod step_settings;
 mod step_settings_snapshots;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 mod stream_error_allows_next_turn;
 mod stream_no_completed;
 mod subagent_dynamic_tools;
 mod subagent_notifications;
-<<<<<<< HEAD
-mod test_codex_cwd;
-||||||| 413492cd6c
-=======
 mod subagent_service_tier;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod test_codex_cwd;
 mod token_budget;
 mod token_usage_rollout;
 mod tool_harness;

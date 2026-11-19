@@ -1,0 +1,274 @@
+=== http_proxy::tests::http_connect_accept_blocks_in_limited_mode
+   Compiling codex-network-proxy v0.1.48 (/home/lapper/CorbanuTerminal/codex-rs/network-proxy)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.89s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test http_proxy::tests::http_connect_accept_blocks_in_limited_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.01s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.72s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.43s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== runtime::tests::add_allowed_domain_removes_matching_deny_entry
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::add_allowed_domain_removes_matching_deny_entry ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.40s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== runtime::tests::host_blocked_requires_allowlist_match
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.38s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test runtime::tests::host_blocked_requires_allowlist_match ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.55s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.00s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.10s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+     Running unittests src/lib.rs (target/debug/deps/codex_network_proxy-f860e1f84233688f)
+
+running 1 test
+test socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 314 filtered out; finished in 0.10s
+
+     Running tests/destination_contract.rs (target/debug/deps/destination_contract-f7c2f3ed5022b8cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/windows_stable_ingress.rs (target/debug/deps/windows_stable_ingress-1729af895e91ae04)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

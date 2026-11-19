@@ -1,6 +1,7 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-expression: "renders[0]"
+assertion_line: 332
+expression: "renders[0].replace(&test_cwd_display(), \"<cwd>\")"
 ---
 Compact:
 • Explored
@@ -23,6 +24,8 @@ $ ls missing
 list output
 ✗ (1) • 5ms
 
+job: pid=not reported · call=list · cwd=<cwd> · output=thread transcript
+
 • Inspecting the page
 
 • Checking its contents
@@ -31,13 +34,19 @@ $ cat index.html
 read output
 ✓ • 5ms
 
+job: pid=not reported · call=read · cwd=<cwd> · output=thread transcript
+
 $ echo boundary
 run output
 ✓ • 5ms
 
+job: pid=not reported · call=run · cwd=<cwd> · output=thread transcript
+
 $ cat later.txt
 later output
 ✓ • 5ms
+
+job: pid=not reported · call=later · cwd=<cwd> · output=thread transcript
 
 • Checking one more file.
 
@@ -45,25 +54,33 @@ $ cat final.txt
 after-message output
 ✓ • 5ms
 
+job: pid=not reported · call=after-message · cwd=<cwd> · output=thread
+transcript
+
 Raw:
 $ ls missing
 list output
 ✗ (1) • 5ms
+job: pid=not reported · call=list · cwd=<cwd> · output=thread transcript
 
 $ cat index.html
 read output
 ✓ • 5ms
+job: pid=not reported · call=read · cwd=<cwd> · output=thread transcript
 
 $ echo boundary
 run output
 ✓ • 5ms
+job: pid=not reported · call=run · cwd=<cwd> · output=thread transcript
 
 $ cat later.txt
 later output
 ✓ • 5ms
+job: pid=not reported · call=later · cwd=<cwd> · output=thread transcript
 
 Checking one more file.
 
 $ cat final.txt
 after-message output
 ✓ • 5ms
+job: pid=not reported · call=after-message · cwd=<cwd> · output=thread transcript

@@ -1,6 +1,9 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
+#[path = "nested_metadata_mount_tests.rs"]
+mod mount_points;
+
 type ListHook = std::sync::Arc<dyn Fn(&Path) + Send + Sync>;
 
 /// #1909: called (on any walk thread) with each folder just before it is
@@ -466,6 +469,11 @@ fn contents_share_one_budget() {
         truncated(&contents_within(&b, &bytes)),
     );
 
+    let exact = ContentBudget::with_limits(/*max_entries*/ 6, /*max_bytes*/ 24);
+    assert_eq!(
+        (contents_within(&a, &exact), contents_within(&b, &exact)),
+        (contents(&a), contents(&b)),
+    );
     assert_eq!((by_entries, by_bytes), ((true, true), (true, true)));
 }
 
@@ -490,7 +498,7 @@ fn nested_folders_over_the_total_are_flagged() {
 
     let flagged = appeared(&before, find(std::slice::from_ref(&root)).entries);
 
-    assert!(!flagged.is_empty(), "nothing flagged past the total");
+    assert!((1..=2).contains(&flagged.len()), "{flagged:?}");
 }
 
 /// #1909: a folder swapped for a junction after the walk found it is not
@@ -604,6 +612,7 @@ fn contents_do_not_list_a_folder_replaced_after_the_check() {
     let prints = with_before_list(swap, || {
         contents_of(&folder, recorded, &ContentBudget::default())
     });
+    assert!(folder.with_extension("aside").exists(), "swap hook ran");
 
     assert_eq!(
         (

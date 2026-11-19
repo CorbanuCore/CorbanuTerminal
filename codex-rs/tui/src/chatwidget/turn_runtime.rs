@@ -175,6 +175,23 @@ impl ChatWidget {
         completion: Option<history_cell::FinalMessageSeparator>,
         from_replay: bool,
     ) {
+        self.on_task_complete_with_duration(
+            last_agent_message,
+            completion,
+            /*duration_ms*/ None,
+            from_replay,
+        );
+    }
+
+    /// Like [`Self::on_task_complete`], with the turn duration the server reported so the TPS
+    /// estimate uses it (it falls back to the locally measured time without one).
+    pub(super) fn on_task_complete_with_duration(
+        &mut self,
+        last_agent_message: Option<String>,
+        completion: Option<history_cell::FinalMessageSeparator>,
+        duration_ms: Option<i64>,
+        from_replay: bool,
+    ) {
         if self.status_state.reasoning_resume_turn_id.is_some() {
             self.on_agent_reasoning_final();
         }
@@ -450,7 +467,32 @@ impl ChatWidget {
         last_agent_message: Option<String>,
         duration_ms: Option<i64>,
     ) {
-        self.on_task_complete(last_agent_message, duration_ms, /*from_replay*/ false);
+        let elapsed_seconds = duration_ms
+            .and_then(|duration_ms| u64::try_from(duration_ms).ok())
+            .map(|duration_ms| duration_ms / 1_000)
+            .or_else(|| {
+                self.bottom_pane
+                    .status_elapsed()
+                    .map(|elapsed| elapsed.as_secs())
+            });
+        // An external pane's turn has no server turn record; mark its completion as a live
+        // turn's is (`completion_cell`).
+        let completion = Some(
+            history_cell::FinalMessageSeparator::new(
+                elapsed_seconds,
+                /*runtime_metrics*/ None,
+            )
+            .with_completed_at(
+                chrono::Local::now(),
+                crate::clock_format::ClockFormat::system(),
+            ),
+        );
+        self.on_task_complete_with_duration(
+            last_agent_message,
+            completion,
+            duration_ms,
+            /*from_replay*/ false,
+        );
     }
 
     pub(crate) fn fail_external_pane_turn(&mut self, message: String) {
@@ -498,7 +540,7 @@ impl ChatWidget {
         let can_enable_daybreak =
             self.daybreak_account_eligible() && !self.side_conversation_active();
         crate::daybreak::notice_for_setting(
-            &self.model_catalog.models,
+            &self.model_catalog.models(),
             self.current_model(),
             self.daybreak_enabled && can_enable_daybreak,
             can_enable_daybreak,

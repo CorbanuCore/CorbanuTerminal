@@ -1,3 +1,4 @@
+# Corbanu: DISABLED. See docs/management/upstreamSync/landing-plan-v0.167.0.md.
 name: python-runtime-release
 
 on:
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   prepare-python-runtime:
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: prepare-python-runtime
     permissions:
       contents: read
@@ -23,7 +25,7 @@ jobs:
 
   # PyPI must trust this top-level workflow for manual runtime publication.
   publish-python-runtime:
-    if: github.repository == 'openai/codex'
+    if: ${{ false }} # Corbanu: disabled pending an explicit owner decision (#1632).
     name: publish-python-runtime
     needs: prepare-python-runtime
     runs-on: ubuntu-latest

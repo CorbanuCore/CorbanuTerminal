@@ -1285,12 +1285,8 @@ pub(crate) async fn file_tool_denial_explanation(
             ReadPolicyInputs::capture(session, turn)
                 .map(|inputs| (SecurityLevel::Aggressive, inputs))
         })?;
-    let policy = |context: &codex_file_system::FileSystemSandboxContext| {
-        PermissionProfile::try_from(context.permissions.clone())
-            .ok()
-            .map(|profile| profile.file_system_sandbox_policy())
-    };
-    let (own_policy, protected_policy) = (policy(own)?, policy(protected)?);
+    let own_policy = own.permissions.file_system_sandbox_policy();
+    let protected_policy = protected.permissions.file_system_sandbox_policy();
     let cwd = own
         .cwd
         .to_abs_path()

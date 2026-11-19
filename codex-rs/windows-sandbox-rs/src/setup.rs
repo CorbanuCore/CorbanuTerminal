@@ -356,6 +356,13 @@ fn run_setup_refresh_inner(
         ),
         deny_read: overrides.deny_read,
         deny_write_paths,
+        // D607: main's world-writable scan, run by the launcher (it has the
+        // command's environment); the elevated helper applies the denies.
+        world_writable_paths: crate::world_writable::cached_everyone_writable_folders(
+            request.command_cwd,
+            request.env_map,
+            Some(&sandbox_dir(request.codex_home)),
+        ),
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
         otel: None,
@@ -724,6 +731,9 @@ struct ElevationPayload {
     deny_read_sessions: crate::DenyReadSessions,
     #[serde(default)]
     deny_write_paths: Vec<PathBuf>,
+    /// D607: Everyone-writable folders (main's scan) the helper denies writes to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    world_writable_paths: Vec<PathBuf>,
     proxy_ports: Vec<u16>,
     #[serde(default)]
     allow_local_binding: bool,
@@ -991,6 +1001,9 @@ fn run_setup_exe_payload(
     use windows_sys::Win32::UI::Shell::SHELLEXECUTEINFOW;
     use windows_sys::Win32::UI::Shell::ShellExecuteExW;
     let exe = find_setup_exe();
+    // The service reports failures through its event log. Never reopen a daily
+    // log by pathname in the privileged orchestrator before the helper starts.
+    let log_dir = retained_handles.is_empty().then(|| sandbox_dir(codex_home));
     let cleared_report = match clear_setup_error_report(codex_home) {
         Ok(()) => true,
         Err(err) => {
@@ -998,7 +1011,7 @@ fn run_setup_exe_payload(
                 &format!(
                     "setup orchestrator: failed to clear setup_error.json before launch: {err}"
                 ),
-                Some(&sandbox_dir(codex_home)),
+                log_dir.as_deref(),
             );
             false
         }
@@ -1037,7 +1050,7 @@ fn run_setup_exe_payload(
                 &format!(
                     "setup orchestrator: failed to clear setup_error.json after success: {err}"
                 ),
-                Some(&sandbox_dir(codex_home)),
+                log_dir.as_deref(),
             );
         }
         return Ok(());
@@ -1087,7 +1100,7 @@ fn run_setup_exe_payload(
     if let Err(err) = clear_setup_error_report(codex_home) {
         log_note(
             &format!("setup orchestrator: failed to clear setup_error.json after success: {err}"),
-            Some(&sandbox_dir(codex_home)),
+            log_dir.as_deref(),
         );
     }
     Ok(())
@@ -1197,6 +1210,7 @@ fn elevated_provisioning_payload(
         deny_read_paths: Vec::new(),
         deny_read_sessions: crate::DenyReadSessions::default(),
         deny_write_paths: Vec::new(),
+        world_writable_paths: Vec::new(),
         proxy_ports: offline_proxy_settings.proxy_ports,
         allow_local_binding: offline_proxy_settings.allow_local_binding,
         real_user,
@@ -1280,6 +1294,7 @@ pub fn run_elevated_provisioning_setup_with_retained_handles(
         deny_read_paths: Vec::new(),
         deny_read_sessions: crate::DenyReadSessions::default(),
         deny_write_paths: Vec::new(),
+        world_writable_paths: Vec::new(),
         proxy_ports: settings.proxy_ports,
         allow_local_binding: settings.allow_local_binding,
         otel: codex_otel::global_statsig_metrics_settings(),

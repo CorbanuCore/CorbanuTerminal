@@ -9,6 +9,7 @@
 #![allow(clippy::print_stderr)]
 
 use super::SandboxAttempt;
+use super::SandboxOverride;
 use crate::exec::ExecCapturePolicy;
 use crate::exec::ExecExpiration;
 use crate::sandboxing::ExecOptions;
@@ -61,19 +62,19 @@ impl Drop for EnvGuard {
 
 /// Prepares `cmd /C type secret.env & type public.txt` through the tool path
 /// agent commands use, under the unelevated sandbox.
-fn unelevated_tool_launch(
+async fn unelevated_tool_launch(
     permissions: &PermissionProfile,
     cwd: &AbsolutePathBuf,
     temp: &Path,
 ) -> Result<crate::sandboxing::ExecRequest, CodexErr> {
-    unelevated_tool_launch_script(permissions, cwd, temp, "type secret.env & type public.txt")
+    unelevated_tool_launch_script(permissions, cwd, temp, "type secret.env & type public.txt").await
 }
 
 /// Prepares `cmd /C <script>` through the tool path, under the unelevated
 /// sandbox, with `temp` as its `TEMP` and `TMP`: the sandbox grants its temp
 /// folder to this test's new capability SID for good, so the real one would
 /// gain an entry on every run (#1890).
-fn unelevated_tool_launch_script(
+async fn unelevated_tool_launch_script(
     permissions: &PermissionProfile,
     cwd: &AbsolutePathBuf,
     temp: &Path,
@@ -82,6 +83,7 @@ fn unelevated_tool_launch_script(
     let cwd_uri = PathUri::from_abs_path(cwd);
     let manager = SandboxManager::new();
     SandboxAttempt {
+        sandbox_override: SandboxOverride::NoOverride,
         sandbox: SandboxType::WindowsRestrictedToken,
         sandbox_requested: true,
         permissions,
@@ -90,10 +92,10 @@ fn unelevated_tool_launch_script(
         manager: &manager,
         sandbox_cwd: &cwd_uri,
         workspace_roots: std::slice::from_ref(&cwd_uri),
-        codex_linux_sandbox_exe: None,
+        sandbox_exe: None,
         use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::WindowsRestrictedToken,
         windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
-        windows_sandbox_private_desktop: false,
         network_denial_cancellation_token: None,
         network_proxy: None,
     }
@@ -116,6 +118,7 @@ fn unelevated_tool_launch_script(
         /*network*/ None,
         /*environment_id*/ None,
     )
+    .await
 }
 
 #[tokio::test]
@@ -137,7 +140,9 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
     // Control: the unelevated sandbox runs commands here, and without a deny
     // entry it reads both files.
     let control = crate::sandboxing::execute_env(
-        unelevated_tool_launch(&base, &cwd, session_temp.path()).expect("control launch"),
+        unelevated_tool_launch(&base, &cwd, session_temp.path())
+            .await
+            .expect("control launch"),
         /*stdout_stream*/ None,
     )
     .await
@@ -153,7 +158,7 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
         (
             "exact path",
             FileSystemPath::Path {
-                path: cwd.join("secret.env"),
+                path: cwd.join("secret.env").into(),
             },
         ),
         (
@@ -184,7 +189,7 @@ async fn sec_win_300_unelevated_tool_launch_refuses_deny_read_profiles() {
             &file_system,
             NetworkSandboxPolicy::Restricted,
         );
-        let outcome = match unelevated_tool_launch(&denying, &cwd, session_temp.path()) {
+        let outcome = match unelevated_tool_launch(&denying, &cwd, session_temp.path()).await {
             Err(refused) => refused.to_string(),
             Ok(request) => {
                 match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
@@ -233,7 +238,9 @@ async fn sec_win_d331_unelevated_tool_launch_refuses_writable_inside_read_only()
         (&out, FileSystemAccessMode::Write),
     ] {
         file_system.entries.push(FileSystemSandboxEntry {
-            path: FileSystemPath::Path { path: path.clone() },
+            path: FileSystemPath::Path {
+                path: path.clone().into(),
+            },
             access,
             missing_path_behavior: None,
         });
@@ -246,7 +253,9 @@ async fn sec_win_d331_unelevated_tool_launch_refuses_writable_inside_read_only()
         &cwd,
         session_temp.path(),
         "echo ran> ran.txt",
-    ) {
+    )
+    .await
+    {
         Err(refused) => refused.to_string(),
         Ok(request) => {
             match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
@@ -317,7 +326,7 @@ async fn sec_win_1506_planted_project_config_is_not_loaded() {
             // A TOML literal string: cmd doesn't understand the `\"` the
             // argument quoting would give a double quote.
             "mkdir .codex && (echo model = 'planted')> .codex\\config.toml && mkdir .agents\\skills",
-        )
+        ).await
         .expect("planting launch"),
         /*stdout_stream*/ None,
     )
@@ -355,11 +364,7 @@ async fn sec_win_1506_planted_project_config_is_not_loaded() {
             .and_then(toml::Value::as_str)
             .map(str::to_string);
         let project_layer_disabled = stack
-            .get_layers(
-                codex_config::ConfigLayerStackOrdering::LowestPrecedenceFirst,
-                /*include_disabled*/ true,
-            )
-            .into_iter()
+            .all_layers_low_to_high()
             .find(|layer| matches!(layer.name, ConfigLayerSource::Project { .. }))
             .map(|layer| layer.disabled_reason.is_some());
         (model, project_layer_disabled)
@@ -582,7 +587,9 @@ async fn sec_win_d331_1801_writable_inside_read_only_through_a_link() {
             (&writable, FileSystemAccessMode::Write),
         ] {
             file_system.entries.push(FileSystemSandboxEntry {
-                path: FileSystemPath::Path { path: path.clone() },
+                path: FileSystemPath::Path {
+                    path: path.clone().into(),
+                },
                 access,
                 missing_path_behavior: None,
             });
@@ -596,7 +603,8 @@ async fn sec_win_d331_1801_writable_inside_read_only_through_a_link() {
         // fixture paths have no spaces.
         let script = format!("echo y> {}", writable.join("y.txt").as_path().display());
         let outcome =
-            match unelevated_tool_launch_script(&profile, &cwd, session_temp.path(), &script) {
+            match unelevated_tool_launch_script(&profile, &cwd, session_temp.path(), &script).await
+            {
                 Err(refused) => refused.to_string(),
                 Ok(request) => {
                     match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
@@ -730,7 +738,8 @@ async fn sec_win_d331_1810_legacy_format_profile_with_writable_inside_protected_
         // fixture paths have no spaces.
         let script = format!("echo y> {}", writable.join("y.txt").as_path().display());
         let outcome =
-            match unelevated_tool_launch_script(&profile, &cwd, session_temp.path(), &script) {
+            match unelevated_tool_launch_script(&profile, &cwd, session_temp.path(), &script).await
+            {
                 Err(refused) => refused.to_string(),
                 Ok(request) => {
                     match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
@@ -747,11 +756,14 @@ async fn sec_win_d331_1810_legacy_format_profile_with_writable_inside_protected_
         outcomes.push((label, legacy_format, refused, written));
     }
 
+    // Upstream no longer reads these legacy workspace-write profiles as the
+    // legacy format (needs_direct_runtime_enforcement), so every case takes
+    // the direct path; the refusal and the protected folders are unchanged.
     let expected = [
-        (".git\\hooks", true, true, false),
-        (".codex\\sub", true, true, false),
-        (".agents\\x", true, true, false),
-        ("cwd through a junction, .git\\hooks", true, true, false),
+        (".git\\hooks", false, true, false),
+        (".codex\\sub", false, true, false),
+        (".agents\\x", false, true, false),
+        ("cwd through a junction, .git\\hooks", false, true, false),
         (".git\\hooks through a junction to .git", false, true, false),
         (
             ".git\\hooks through a symbolic link to .git",
@@ -759,7 +771,7 @@ async fn sec_win_d331_1810_legacy_format_profile_with_writable_inside_protected_
             true,
             false,
         ),
-        ("control: .git itself", true, false, true),
+        ("control: .git itself", false, false, true),
         ("control: a plain folder", false, false, true),
     ];
     let expected: Vec<_> = expected

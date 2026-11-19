@@ -1,3 +1,4 @@
+use crate::bash::LiteralWordMode;
 use crate::bash::parse_shell_lc_literal_commands;
 #[path = "windows_dangerous_commands.rs"]
 mod windows_dangerous_commands;
@@ -44,35 +45,55 @@ pub fn dangerous_command_match_for_platform(
     command: &[String],
     platform: DangerousCommandPlatform,
 ) -> Option<DangerousCommandMatch> {
-    dangerous_command_match_with_depth(command, /*wrapper_depth*/ 0, platform)
+    dangerous_command_match_with_depth(
+        command,
+        /*wrapper_depth*/ 0,
+        platform,
+        LiteralWordMode::Verbatim,
+    )
+    .or_else(|| {
+        // Only add forced-rm matches. Keeping the old pass means decoding a
+        // previously omitted "--" cannot weaken an existing refusal.
+        dangerous_command_match_with_depth(
+            command,
+            /*wrapper_depth*/ 0,
+            platform,
+            LiteralWordMode::DecodeForForcedRm,
+        )
+        .filter(|matched| *matched == DangerousCommandMatch::ForcedRm)
+    })
 }
 
 fn dangerous_command_match_with_depth(
     command: &[String],
     wrapper_depth: usize,
     platform: DangerousCommandPlatform,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     if wrapper_depth > MAX_DANGEROUS_COMMAND_WRAPPER_DEPTH {
         return Some(DangerousCommandMatch::Other);
     }
 
     if let Some(dangerous_match) =
-        dangerous_command_match_for_exec(command, wrapper_depth, platform)
+        dangerous_command_match_for_exec(command, wrapper_depth, platform, mode)
     {
         return Some(dangerous_match);
     }
 
     // Support shell scripts where any literal command might be dangerous,
     // including commands nested in control flow or substitutions.
-    if let Some(dangerous_match) = parse_shell_lc_literal_commands(command).and_then(|commands| {
-        commands.iter().find_map(|command| {
-            dangerous_command_match_with_depth(command, wrapper_depth + 1, platform)
+    if let Some(dangerous_match) =
+        parse_shell_lc_literal_commands(command, mode).and_then(|commands| {
+            commands.iter().find_map(|command| {
+                dangerous_command_match_with_depth(command, wrapper_depth + 1, platform, mode)
+            })
         })
-    }) {
+    {
         return Some(dangerous_match);
     }
 
     if platform == DangerousCommandPlatform::Windows
+        && mode == LiteralWordMode::Verbatim
         && windows_dangerous_commands::is_dangerous_command_windows(command)
     {
         return Some(DangerousCommandMatch::Other);
@@ -102,13 +123,21 @@ pub fn dangerous_powershell_literal_words_match(
         .then_some(DangerousCommandMatch::Other)
 }
 
+/// The name a program word runs as. D692 (#2543), stricter only: where
+/// programs are found without regard to case (Windows NTFS; macOS APFS
+/// when this host is a Mac), `RM`, `/bin/Rm` and `ſudo` run `rm` and
+/// `sudo`, so names compare case-folded; Windows also ignores trailing dots
+/// and spaces. Used by the dangerous-command check only.
 fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> Option<String> {
     match platform {
-        DangerousCommandPlatform::Posix => raw
-            .rsplit('/')
-            .next()
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned),
+        DangerousCommandPlatform::Posix => {
+            let name = raw.rsplit('/').next().filter(|name| !name.is_empty())?;
+            Some(if cfg!(target_os = "macos") {
+                fold_name(name, /*windows*/ false)
+            } else {
+                name.to_owned()
+            })
+        }
         DangerousCommandPlatform::Windows => {
             let name = raw
                 .rsplit(['/', '\\'])
@@ -118,7 +147,7 @@ fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> 
                 [drive, b':', ..] if drive.is_ascii_alphabetic() => &name[2..],
                 _ => name,
             };
-            let name = name.to_ascii_lowercase();
+            let name = fold_name(name.trim_end_matches(['.', ' ']), /*windows*/ true);
             for suffix in [".exe", ".cmd", ".bat", ".com"] {
                 if let Some(stripped) = name.strip_suffix(suffix) {
                     return Some(stripped.to_string());
@@ -129,10 +158,23 @@ fn executable_name_lookup_key(raw: &str, platform: DangerousCommandPlatform) -> 
     }
 }
 
+/// ASCII lowercase, and the non-ASCII letters whose case folding is ASCII.
+fn fold_name(name: &str, windows: bool) -> String {
+    name.chars()
+        .map(|ch| match ch {
+            '\u{17f}' => 's',
+            '\u{212a}' => 'k',
+            '\u{131}' if windows => 'i',
+            _ => ch.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
 fn dangerous_command_match_for_exec(
     command: &[String],
     wrapper_depth: usize,
     platform: DangerousCommandPlatform,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let cmd0 = command
         .first()
@@ -145,14 +187,14 @@ fn dangerous_command_match_for_exec(
 
         // For sudo <cmd>, simply check <cmd>.
         Some("sudo") => {
-            dangerous_command_match_with_depth(&command[1..], wrapper_depth + 1, platform)
+            dangerous_command_match_with_depth(&command[1..], wrapper_depth + 1, platform, mode)
         }
 
         // Skip environment assignments before checking the command run by env.
-        Some("env") => dangerous_command_match_for_env(command, wrapper_depth, platform),
+        Some("env") => dangerous_command_match_for_env(command, wrapper_depth, platform, mode),
 
         // A trap action is shell source stored in the first operand.
-        Some("trap") => dangerous_command_match_for_trap(command, wrapper_depth, platform),
+        Some("trap") => dangerous_command_match_for_trap(command, wrapper_depth, platform, mode),
 
         // ── anything else ─────────────────────────────────────────────────
         _ => None,
@@ -163,6 +205,7 @@ fn dangerous_command_match_for_env(
     command: &[String],
     wrapper_depth: usize,
     platform: DangerousCommandPlatform,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let mut command_index = 1;
     while let Some(argument) = command.get(command_index) {
@@ -180,13 +223,14 @@ fn dangerous_command_match_for_env(
         }
         break;
     }
-    dangerous_command_match_with_depth(&command[command_index..], wrapper_depth + 1, platform)
+    dangerous_command_match_with_depth(&command[command_index..], wrapper_depth + 1, platform, mode)
 }
 
 fn dangerous_command_match_for_trap(
     command: &[String],
     wrapper_depth: usize,
     platform: DangerousCommandPlatform,
+    mode: LiteralWordMode,
 ) -> Option<DangerousCommandMatch> {
     let mut action_index = 1;
     if command
@@ -199,19 +243,25 @@ fn dangerous_command_match_for_trap(
         .get(action_index)
         .filter(|action| !action.starts_with('-'))?;
     let shell_command = vec!["sh".to_string(), "-c".to_string(), action.clone()];
-    dangerous_command_match_with_depth(&shell_command, wrapper_depth + 1, platform)
+    dangerous_command_match_with_depth(&shell_command, wrapper_depth + 1, platform, mode)
 }
 
 fn rm_args_include_force_option(args: &[String]) -> bool {
     args.iter()
         .take_while(|arg| arg.as_str() != "--")
         .any(|arg| {
-            arg == "--force"
+            // GNU getopt_long accepts every nonempty, unambiguous prefix.
+            arg.strip_prefix("--")
+                .is_some_and(|option| !option.is_empty() && "force".starts_with(option))
                 || arg
                     .strip_prefix('-')
                     .is_some_and(|flags| !flags.starts_with('-') && flags.contains('f'))
         })
 }
+
+#[cfg(test)]
+#[path = "forced_rm_spelling_tests.rs"]
+mod forced_rm_spelling_tests;
 
 #[cfg(test)]
 mod tests {
@@ -349,6 +399,53 @@ mod tests {
                 dangerous_powershell_words_match(&command, DangerousCommandPlatform::host()),
                 None
             );
+        }
+    }
+    #[test]
+    fn program_names_fold_case_where_the_platform_does() {
+        // D692 (#2543, stricter only): Windows, and macOS hosts, run `RM`,
+        // `/bin/Rm` and `ſudo` as `rm` and `sudo`; Linux runs other programs.
+        for (platform, folds) in [
+            (DangerousCommandPlatform::Windows, true),
+            (DangerousCommandPlatform::Posix, cfg!(target_os = "macos")),
+        ] {
+            for command in [
+                vec_str(&["RM", "-rf", "x"]),
+                vec_str(&["Rm", "-f", "x"]),
+                vec_str(&["/bin/RM", "-rf", "x"]),
+                vec_str(&["SUDO", "rm", "-rf", "x"]),
+                vec_str(&["\u{17f}\u{75}do", "RM", "-rf", "x"]),
+                vec_str(&["Env", "A=1", "rM", "-rf", "x"]),
+                vec_str(&["bash", "-lc", "RM -rf x"]),
+                vec_str(&["bash", "-lc", "echo hi && TRAP 'RM -rf x' EXIT"]),
+            ] {
+                let expected = folds.then_some(DangerousCommandMatch::ForcedRm);
+                assert_eq!(
+                    dangerous_command_match_for_platform(&command, platform),
+                    expected,
+                    "{platform:?} {command:?}"
+                );
+            }
+        }
+        for program in ["RM.EXE", "rm.exe.", "Rm.Exe . "] {
+            let command = vec_str(&[program, "-rf", "x"]);
+            assert_eq!(
+                dangerous_command_match_for_platform(&command, DangerousCommandPlatform::Windows),
+                Some(DangerousCommandMatch::ForcedRm),
+                "{command:?}"
+            );
+        }
+        for command in [vec_str(&["RM", "-r", "x"]), vec_str(&["RMX", "-rf", "x"])] {
+            for platform in [
+                DangerousCommandPlatform::Windows,
+                DangerousCommandPlatform::Posix,
+            ] {
+                assert_eq!(
+                    dangerous_command_match_for_platform(&command, platform),
+                    None,
+                    "{command:?}"
+                );
+            }
         }
     }
 }

@@ -1512,6 +1512,15 @@ impl BottomPaneView for RequestUserInputOverlay {
         if key_event.kind == KeyEventKind::Release {
             return;
         }
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            if self.done {
+                return;
+            }
+        }
+        if !crate::bottom_pane::key_continues_paste(key_event.code, key_event.modifiers) {
+            self.composer.cancel_pending_burst_submission();
+        }
 
         self.snooze_auto_resolution();
 
@@ -1751,6 +1760,10 @@ impl BottomPaneView for RequestUserInputOverlay {
     }
 
     fn flush_paste_burst_if_due(&mut self) -> bool {
+        if let Some(result) = self.composer.take_burst_submission(Instant::now()) {
+            self.handle_composer_input_result(result);
+            return true;
+        }
         self.composer.flush_paste_burst_if_due()
     }
 
@@ -2620,8 +2633,12 @@ mod tests {
     }
 
     fn answered(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Option<Vec<String>> {
+        // Answers go to the request's thread (upstream's `SubmitThreadOp`).
         std::iter::from_fn(|| rx.try_recv().ok()).find_map(|event| match event {
-            AppEvent::CodexOp(Op::UserInputAnswer { response, .. }) => {
+            AppEvent::SubmitThreadOp {
+                op: Op::UserInputAnswer { response, .. },
+                ..
+            } => {
                 let mut answers: Vec<String> = response
                     .answers
                     .into_values()

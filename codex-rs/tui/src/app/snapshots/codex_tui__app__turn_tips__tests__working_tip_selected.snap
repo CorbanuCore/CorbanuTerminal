@@ -1,6 +1,6 @@
 ---
 source: tui/src/app/turn_tips_tests.rs
-assertion_line: 485
+assertion_line: 530
 expression: "crate::chatwidget::tests::helpers::normalize_snapshot_paths(buffer_text(crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal),))"
 ---
 Response row 0
@@ -23,7 +23,7 @@ Response row 9
   └ Tip: Try /help.
                                                                Copying 5 chars…
 
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  gpt-test default · /tmp/project
+  gpt-test via test-provider default · /tmp/project · Corbanu Terminal · TPS: -…
   ? for shortcuts

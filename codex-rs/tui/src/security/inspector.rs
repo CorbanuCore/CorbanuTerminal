@@ -180,6 +180,8 @@ fn sandbox_name(config: &Config) -> &'static str {
         Some(codex_sandboxing::SandboxType::MacosSeatbelt) => "macOS Seatbelt",
         Some(codex_sandboxing::SandboxType::LinuxSeccomp) => "Linux bubblewrap and seccomp",
         Some(codex_sandboxing::SandboxType::WindowsRestrictedToken) => "Windows restricted token",
+        // Upstream's MXC sandbox is chosen by `sandbox = "mxc"`, never as the platform default.
+        Some(codex_sandboxing::SandboxType::WindowsMxc) => "Windows MXC",
         Some(codex_sandboxing::SandboxType::None) | None => "none",
     }
 }

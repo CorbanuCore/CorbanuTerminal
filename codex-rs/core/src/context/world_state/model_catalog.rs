@@ -7,7 +7,6 @@ use super::SectionTransition;
 use super::WorldStateHash;
 use super::WorldStateSection;
 use super::WorldStateUpdate;
-use crate::agent::child_config::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
 use crate::agent::child_config::model_supports_multi_agent_backend;
 use crate::context::ContextualUserFragment;
 use crate::context::environment_context::push_xml_escaped_text;
@@ -22,7 +21,8 @@ use codex_protocol::protocol::MultiAgentVersion;
 // Includes XML escaping and markers; at most 1,000 tokens even with byte fallback.
 const MAX_RENDERED_BYTES: usize = 1_000;
 const MAX_DESCRIPTION_CHARS: usize = 250;
-const OMITTED_NOTICE: &str = "Additional model choices omitted.\n";
+const MAX_MODEL_PREVIEW_ROWS: usize = 3;
+const OMITTED_NOTICE: &str = "Call `list_models` for all authorized model choices.\n";
 
 /// The current model choices, or an empty catalog to invalidate a retained listing.
 #[derive(Clone, Default)]
@@ -38,7 +38,7 @@ impl ModelCatalogState {
             .iter()
             .filter(|model| model.show_in_picker)
             .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
-            .take(MAX_SPAWN_AGENT_MODEL_OVERRIDES)
+            .take(MAX_MODEL_PREVIEW_ROWS)
             .collect::<Vec<_>>();
         // Stabilize the selected choices independently of their picker ordering.
         models.sort_by(|left, right| left.model.cmp(&right.model));

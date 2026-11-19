@@ -13,7 +13,6 @@
 use std::path::Path;
 
 use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStackOrdering;
 use codex_config::types::ShellEnvironmentPolicyToml;
 use codex_execpolicy::Decision;
 use codex_features::Feature;
@@ -125,6 +124,12 @@ fn string(value: &str) -> toml::Value {
 /// `-c`-level overrides; they also reach the embedded app server, so every
 /// thread it starts (and every child it spawns) is built from them.
 ///
+/// D621 (#2310): the approval policy is not among them. Upstream rejects
+/// `approval_policy = "untrusted"` in any config layer, so `untrusted` comes
+/// only from [`apply_launch_overrides`] and is sent with every thread
+/// request ([`is_launch_override`] for requests built from the launch
+/// overrides, [`enforce_approval`] for the rest).
+///
 /// `origin` is the Corbanu home whose stored level chose Aggressive: this
 /// home, or for a nested launch the home of the session that started it.
 /// Both paths must be valid UTF-8 (checked by the launch path) so the
@@ -195,7 +200,6 @@ pub(crate) fn base_overrides_with_registry(
         }
     }
     vec![
-        ("approval_policy".to_string(), string("untrusted")),
         ("approvals_reviewer".to_string(), string("user")),
         (format!("permissions.{PROFILE_ID}"), profile),
         ("default_permissions".to_string(), string(PROFILE_ID)),
@@ -336,6 +340,26 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
     replaced
 }
 
+/// D621 (#2310): the approval policy every thread request of this process
+/// must carry, set on requests built without the launch overrides (thread
+/// starts, forks and resumes, including those agent tools send). `None`
+/// unless this process launched under Aggressive.
+pub(crate) fn enforce_approval(policy: &mut Option<codex_app_server_protocol::AskForApproval>) {
+    if super::level::launched_aggressive() {
+        *policy = Some(codex_app_server_protocol::AskForApproval::UnlessTrusted);
+    }
+}
+
+/// D621 (#2310): whether `overrides` carry Aggressive's launch approval
+/// override. The embedded app server never loads the launch overrides and
+/// the session flags no longer hold the policy, so every thread request,
+/// including a resume that otherwise keeps the thread's saved settings, must
+/// send it; otherwise the server resolves the user's own policy.
+pub(crate) fn is_launch_override(overrides: &ConfigOverrides) -> bool {
+    overrides.approval_policy == Some(AskForApproval::UnlessTrusted)
+        && overrides.default_permissions.as_deref() == Some(PROFILE_ID)
+}
+
 /// Every row must be observed in the loaded config; otherwise the failing
 /// rows are returned and Aggressive must not be shown as active.
 pub(crate) fn verify(config: &Config, rules_present: bool, origin: &Path) -> Vec<String> {
@@ -400,10 +424,7 @@ fn verify_sandbox(config: &Config, failures: &mut Vec<String>) {
     }
     // Only the launch overrides may define the profile; any other layer
     // (user, `-p` profile, project) could widen it through a table merge.
-    for layer in config.config_layer_stack.get_layers(
-        ConfigLayerStackOrdering::LowestPrecedenceFirst,
-        /*include_disabled*/ false,
-    ) {
+    for layer in config.config_layer_stack.layers_low_to_high() {
         let defines_profile = layer
             .config
             .get("permissions")
@@ -483,8 +504,14 @@ fn verify_credential_names(
     if cfg!(target_os = "macos") {
         expected.extend(credential_file_globs("/"));
     }
-    let matcher = ReadDenyMatcher::try_new(file_system, cwd).ok().flatten();
-    let probe = |path: &Path| matcher.as_ref().is_some_and(|m| m.is_read_denied(path));
+    let matcher = ReadDenyMatcher::try_new_for_local_paths(file_system, cwd)
+        .ok()
+        .flatten();
+    let probe = |path: &Path| {
+        matcher
+            .as_ref()
+            .is_some_and(|m| m.is_local_path_read_denied(path))
+    };
     let probes_denied = [".env", "app/.env.local", ".envrc"]
         .iter()
         .all(|name| probe(&cwd.join("corbanu-new").join(name)));

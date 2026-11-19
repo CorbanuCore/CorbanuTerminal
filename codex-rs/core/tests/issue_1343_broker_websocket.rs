@@ -28,7 +28,9 @@ use http::HeaderMap;
 struct BrokeredAuth;
 
 impl AuthProvider for BrokeredAuth {
-    fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
+    fn add_auth_headers(&self, _headers: &mut HeaderMap) -> Result<(), codex_api::AuthError> {
+        Ok(())
+    }
 }
 
 struct TestBroker;
@@ -46,7 +48,7 @@ fn websocket_client(token: &str) -> ModelClient {
     let mut provider =
         create_oss_provider_with_base_url("http://127.0.0.1:9/v1", WireApi::Responses);
     provider.supports_websockets = true;
-    provider.experimental_bearer_token = Some(token.to_string());
+    provider.experimental_bearer_token = Some(token.to_string().into());
     ModelClient::new(
         /*auth_manager*/ None,
         AgentIdentityAuthPolicy::JwtOnly,
@@ -55,12 +57,19 @@ fn websocket_client(token: &str) -> ModelClient {
         SessionSource::Cli,
         "test_originator".to_string(),
         /*model_verbosity*/ None,
+        /*content_item_kinds_enabled*/ false,
+        /*reasoning_effort_override_enabled*/ false,
         /*enable_request_compression*/ false,
         /*include_timing_metrics*/ false,
         /*beta_features_header*/ None,
         /*concurrent_reasoning_summaries_enabled*/ false,
+        /*output_token_replay_enabled*/ false,
         /*attestation_provider*/ None,
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+        codex_model_provider::WorkspaceRoutingContext::new(
+            "https://chatgpt.com/backend-api".into(),
+        ),
+        /*request_contributors*/ Vec::new(),
     )
 }
 

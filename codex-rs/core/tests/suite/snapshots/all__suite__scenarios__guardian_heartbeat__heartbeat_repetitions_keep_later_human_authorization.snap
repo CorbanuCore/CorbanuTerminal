@@ -1,22 +1,21 @@
 ---
 source: core/tests/suite/scenarios_guardian_heartbeat.rs
+assertion_line: 147
 expression: snapshot
 ---
 Scenario: Three scheduled runs share one instruction body, a human overrides its restriction between runs, and the last scheduled run steers the active human turn. Guardian reviews the later action with the override intact. The assessment is mocked.
 
 ## Window 1
 -- request 1 (request) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <tools>
         Deferred tool namespaces:
         - multi_agent_v1: Tools for spawning and managing sub-agents.
         </tools>
-02:message/user:
+01:message/user:
     <ENVIRONMENT_CONTEXT>
-03:message/user:
+02:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:00:00Z</current_time_iso>
@@ -26,9 +25,9 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
     </heartbeat>
 
 -- request 2 (request) --
-04:message/assistant:
+03:message/assistant:
     Recorded this input.
-05:message/user:
+04:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:01:00Z</current_time_iso>
@@ -38,14 +37,14 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
     </heartbeat>
 
 -- request 3 (request) --
-06:message/assistant:
+05:message/assistant:
     Recorded this input.
-07:message/user:
+06:message/user:
     Create a new worktree for the fix; this overrides the monitor's no-worktree restriction.
 -- request 4 (request) --
-08:message/assistant:
+07:message/assistant:
     Recorded this input.
-09:message/user:
+08:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:03:00Z</current_time_iso>
@@ -55,12 +54,12 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
     </heartbeat>
 
 -- request 5 (request) --
-10:message/assistant:
+09:message/assistant:
     Recorded this input.
-11:message/user:
+10:message/user:
     Check the fix in the requested worktree.
 
-## Window 2 (after request 5: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 2 (after request 5: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 6 (request) --
 00:additional_tools/developer (1; hash=65a86311792f6c71):
         - namespace/functions; hash=dcfbcf0da1c2d607
@@ -173,19 +172,17 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
     [29] >>> APPROVAL REQUEST END
 
 
-## Window 3 (after request 6: input diverged at item 00, settings changed (model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
+## Window 3 (after request 6: input diverged at item 00, settings changed (instructions, model, parallel_tool_calls, prompt_cache_key, reasoning, text, tools))
 -- request 7 (request) --
-00:message/developer:
-    <MODEL_INSTRUCTIONS>
-01:message/developer[2]:
+00:message/developer[2]:
     [01] <PERMISSIONS_INSTRUCTIONS>
     [02] <tools>
         Deferred tool namespaces:
         - multi_agent_v1: Tools for spawning and managing sub-agents.
         </tools>
-02:message/user:
+01:message/user:
     <ENVIRONMENT_CONTEXT>
-03:message/user:
+02:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:00:00Z</current_time_iso>
@@ -194,9 +191,9 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
       </instructions>
     </heartbeat>
 
-04:message/assistant:
+03:message/assistant:
     Recorded this input.
-05:message/user:
+04:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:01:00Z</current_time_iso>
@@ -205,13 +202,13 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
       </instructions>
     </heartbeat>
 
-06:message/assistant:
+05:message/assistant:
     Recorded this input.
-07:message/user:
+06:message/user:
     Create a new worktree for the fix; this overrides the monitor's no-worktree restriction.
-08:message/assistant:
+07:message/assistant:
     Recorded this input.
-09:message/user:
+08:message/user:
     <heartbeat>
       <automation_id>monitor</automation_id>
       <current_time_iso>2026-01-01T00:03:00Z</current_time_iso>
@@ -220,9 +217,11 @@ Scenario: Three scheduled runs share one instruction body, a human overrides its
       </instructions>
     </heartbeat>
 
-10:message/assistant:
+09:message/assistant:
     Recorded this input.
-11:message/user:
+10:message/user:
     Check the fix in the requested worktree.
-12:function_call/exec_command:{"cmd":"exit 0","justification":"Check the explicitly requested change.","sandbox_permissions":"require_escalated"}
-13:function_call_output:exec_command failed: CreateProcess { message: "Rejected(\\"This action was rejected due to unacceptable r...e risk. Otherwise, stop and request user input.\\")" } [hash=1920af4a5ed341ad]
+11:function_call/exec_command:{"cmd":"exit 0","justification":"Check the explicitly requested change.","sandbox_permissions":"require_escalated"}
+12:function_call_output:exec_command failed: This action was rejected due to unacceptable risk.
+    Reason: Mock decision.
+    The agent must not attempt to achieve the same outcome via workaround, indirect execution, or policy cir... of the risk. Otherwise, stop and request user input. [hash=316a6640caee3870]

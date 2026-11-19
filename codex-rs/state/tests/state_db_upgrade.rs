@@ -48,8 +48,14 @@ fn fixture(name: &str) -> PathBuf {
     if manifest.is_file() {
         manifest
     } else {
-        // Bazel runs integration tests from a Cargo-like crate directory.
-        relative
+        // Direct Bazel rust_test targets start at the runfiles workspace root.
+        let bazel = Path::new(option_env!("BAZEL_PACKAGE").unwrap_or(".")).join(&relative);
+        if bazel.is_file() {
+            bazel
+        } else {
+            // Retain the original helper's crate-relative fallback.
+            relative
+        }
     }
 }
 
@@ -119,6 +125,8 @@ async fn upgrade(name: &str, released_through: i64) -> anyhow::Result<()> {
             .iter()
             .map(|(_, ours, description)| (*ours, (*description).to_string())),
     );
+    // Corbanu added this migration after the upstream migration range was renumbered.
+    expected.push((70, "provider reset hint".to_string()));
     assert_eq!(added, expected, "{name}: migrations added by the upgrade");
 
     // The conversations survive, and upstream's schema is in place.

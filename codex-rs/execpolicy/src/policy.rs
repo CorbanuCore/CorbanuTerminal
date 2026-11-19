@@ -24,7 +24,19 @@ type HeuristicsFallback<'a> = Option<&'a dyn Fn(&[String]) -> Decision>;
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MatchOptions {
     pub resolve_host_executables: bool,
+    /// D692: program names compare without regard to case (macOS and
+    /// Windows; see [`PROGRAM_NAMES_FOLD_CASE`]). Only forbidden and prompt
+    /// rules match a differently cased name, through
+    /// [`Policy::case_folded_matches`] and
+    /// [`Policy::strictest_rule_matching_more_args`]; allow rules still need
+    /// the exact name, and [`Policy::matches_for_command_with_options`] stays
+    /// exact.
+    pub fold_program_case: bool,
 }
+
+/// D692: whether this platform finds programs without regard to case
+/// (case-insensitive APFS on macOS, NTFS on Windows).
+pub const PROGRAM_NAMES_FOLD_CASE: bool = cfg!(any(target_os = "macos", windows));
 
 #[derive(Clone, Debug)]
 pub struct Policy {
@@ -32,6 +44,8 @@ pub struct Policy {
     rules_by_program: MultiMap<String, RuleRef>,
     network_rules: Vec<NetworkRule>,
     host_executables_by_name: HashMap<String, Arc<[AbsolutePathBuf]>>,
+    /// D692: the programs of `rules_by_program` by [`fold_program_name`].
+    programs_by_folded_name: HashMap<String, Vec<String>>,
 }
 
 /// A requirements-owned execution policy with order-independent equality.
@@ -94,11 +108,19 @@ impl Policy {
                     .map(|rule| (canonical_key(program).collect::<String>(), rule.clone()))
             })
             .collect();
+        let mut programs_by_folded_name: HashMap<String, Vec<String>> = HashMap::new();
+        for program in rules_by_program.keys() {
+            programs_by_folded_name
+                .entry(fold_program_name(program))
+                .or_default()
+                .push(program.clone());
+        }
         Self {
             insensitive_rules,
             rules_by_program,
             network_rules,
             host_executables_by_name,
+            programs_by_folded_name,
         }
     }
 
@@ -171,6 +193,12 @@ impl Policy {
             justification,
         });
 
+        if !self.rules_by_program.contains_key(first_token) {
+            self.programs_by_folded_name
+                .entry(fold_program_name(first_token))
+                .or_default()
+                .push(first_token.clone());
+        }
         self.rules_by_program.insert(first_token.clone(), rule);
         Ok(())
     }
@@ -410,16 +438,8 @@ impl Policy {
         heuristics_fallback: HeuristicsFallback<'_>,
         options: &MatchOptions,
     ) -> Vec<RuleMatch> {
-        let matched_rules = self
-            .match_exact_rules(cmd)
-            .filter(|matched_rules| !matched_rules.is_empty())
-            .or_else(|| {
-                options
-                    .resolve_host_executables
-                    .then(|| self.match_host_executable_rules(cmd))
-                    .filter(|matched_rules| !matched_rules.is_empty())
-            })
-            .unwrap_or_default();
+        let matched_rules =
+            self.matched_rules(cmd, options, /*allow_needs_exact_spelling*/ true);
 
         if matched_rules.is_empty()
             && let Some(heuristics_fallback) = heuristics_fallback
@@ -431,6 +451,213 @@ impl Policy {
         } else {
             matched_rules
         }
+    }
+
+    /// D677 (#2455): the strictest decision of the rules that `known` does
+    /// not match yet but could once more words follow it (xargs appends
+    /// words read from stdin): their pattern extends past `known` and agrees
+    /// with it so far. Rules `known` already matches are left to
+    /// [`Self::matches_for_command_with_options`]. With no `known` words
+    /// every rule counts. An absolute program also counts its basename's
+    /// rules, whatever the host executable paths (stricter than matching).
+    /// Canonical (caseless) rules count under their canonical program name
+    /// and compare words canonically, as they do when matching.
+    pub fn strictest_rule_matching_more_args(
+        &self,
+        known: &[String],
+        options: &MatchOptions,
+    ) -> Option<Decision> {
+        self.strictest_rule_matching_more_args_by(known, options, Some)
+    }
+
+    /// [`Self::strictest_rule_matching_more_args`] with each rule's decision
+    /// mapped first (`None` skips the rule), so a caller that weakens one
+    /// level cannot lose a stricter outcome from another (#2506).
+    pub fn strictest_rule_matching_more_args_by(
+        &self,
+        known: &[String],
+        options: &MatchOptions,
+        map: impl Fn(Decision) -> Option<Decision>,
+    ) -> Option<Decision> {
+        let Some(first) = known.first() else {
+            return self
+                .rules_by_program
+                .iter_all()
+                .flat_map(|(_, rules)| rules)
+                .filter_map(|rule| map(rule_decision(rule.as_ref())))
+                .max();
+        };
+        let host_program = options
+            .resolve_host_executables
+            .then(|| AbsolutePathBuf::try_from(first.clone()).ok())
+            .flatten();
+        let basename = host_program
+            .as_ref()
+            .and_then(|program| executable_path_lookup_key(program.as_path()));
+        let rest = &known[1..];
+        // D692: forbidden and prompt rules for the name in another case.
+        let folded = std::iter::once(first)
+            .chain(basename.as_ref())
+            .filter(|_| options.fold_program_case)
+            .flat_map(|program| self.programs_folding_like(program))
+            .filter_map(|program| self.rules_by_program.get_vec(program))
+            .flatten()
+            .filter(|rule| rule_decision(rule.as_ref()) > Decision::Allow);
+        let host_candidates = basename
+            .as_ref()
+            .into_iter()
+            .flat_map(|name| self.candidates(name))
+            .filter(|rule| {
+                // D696 also applies before all command arguments are known.
+                rule_decision(rule.as_ref()) != Decision::Allow
+                    || host_program.as_ref().is_some_and(|program| {
+                        let listed = basename
+                            .as_ref()
+                            .and_then(|name| self.host_executables_by_name.get(name))
+                            .map(|paths| &paths[..]);
+                        allow_spelled_exactly(rule.as_ref(), program.as_path(), listed)
+                    })
+            });
+        self.candidates(first)
+            .into_iter()
+            .chain(host_candidates)
+            .chain(folded)
+            .filter(|rule| {
+                rule.as_any()
+                    .downcast_ref::<PrefixRule>()
+                    .is_none_or(|rule| {
+                        let pattern = &rule.pattern.rest;
+                        pattern.len() > rest.len()
+                            && pattern.iter().zip(rest).all(|(token, word)| {
+                                token
+                                    .alternatives()
+                                    .iter()
+                                    .any(|alt| rule.pattern.tokens_equal(alt, word))
+                            })
+                    })
+            })
+            .filter_map(|rule| map(rule_decision(rule.as_ref())))
+            .max()
+    }
+
+    /// D692: the matches of forbidden and prompt rules whose program equals
+    /// the command's only up to case (see [`fold_program_name`]), when
+    /// `options.fold_program_case`: `RM -rf x` for a forbidden `rm` rule,
+    /// and with `resolve_host_executables` `/bin/RM` for `rm` (at a listed
+    /// host path, compared up to case). Rules for the exact name are left to
+    /// [`Self::matches_for_command_with_options`]; callers add these to its
+    /// matches and keep its fallback, so they can only make a command
+    /// stricter. Allow rules never match here.
+    pub fn case_folded_matches(&self, cmd: &[String], options: &MatchOptions) -> Vec<RuleMatch> {
+        let mut found = Vec::new();
+        let Some(first) = cmd.first().filter(|_| options.fold_program_case) else {
+            return found;
+        };
+        let mut add = |program: &String, resolved: Option<&AbsolutePathBuf>| {
+            let Some(rules) = self.rules_by_program.get_vec(program) else {
+                return;
+            };
+            // Only as many words as the longest pattern reads.
+            let words = rules
+                .iter()
+                .map(|rule| {
+                    rule.as_any()
+                        .downcast_ref::<PrefixRule>()
+                        .map_or(usize::MAX, |rule| rule.pattern.rest.len())
+                })
+                .max()
+                .unwrap_or_default();
+            let respelled = std::iter::once(program.clone())
+                .chain(cmd[1..].iter().take(words).cloned())
+                .collect::<Vec<_>>();
+            for rule in rules {
+                if rule_decision(rule.as_ref()) == Decision::Allow {
+                    continue;
+                }
+                if let Some(rule_match) = rule.matches(&respelled) {
+                    let rule_match = match resolved {
+                        Some(program) => rule_match.with_resolved_program(program),
+                        None => rule_match,
+                    };
+                    if !found.contains(&rule_match) {
+                        found.push(rule_match);
+                    }
+                }
+            }
+        };
+        for program in self.programs_folding_like(first) {
+            add(program, None);
+        }
+        // A path (`/bin/RM`, `../bin/RM`), read by its basename as the
+        // exact host lookup reads it. A bare name was folded above.
+        let is_path = first.contains('/') || (cfg!(windows) && first.contains('\\'));
+        if options.resolve_host_executables
+            && is_path
+            && let Ok(path) = AbsolutePathBuf::try_from(first.clone())
+            && let Some(basename) = executable_path_lookup_key(path.as_path())
+        {
+            let folded_path = fold_program_name(&path.as_path().to_string_lossy());
+            let programs = self
+                .programs_by_folded_name
+                .get(&fold_program_name(&basename))
+                .into_iter()
+                .flatten();
+            for program in programs {
+                let listed = self.host_executables_by_name.get(program);
+                // The exact name at an exactly listed path (or with no list)
+                // is matched by `matches_for_command_with_options`.
+                if *program == basename && listed.is_none_or(|paths| paths.contains(&path)) {
+                    continue;
+                }
+                if let Some(paths) = listed
+                    && !paths.iter().any(|listed| {
+                        fold_program_name(&listed.as_path().to_string_lossy()) == folded_path
+                    })
+                {
+                    continue;
+                }
+                add(program, Some(&path));
+            }
+        }
+        found
+    }
+
+    /// The rule programs equal to `name` up to case, other than `name`.
+    fn programs_folding_like<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a String> {
+        self.programs_by_folded_name
+            .get(&fold_program_name(name))
+            .into_iter()
+            .flatten()
+            .filter(move |program| program.as_str() != name)
+    }
+
+    /// D696: the rules a `match`/`not_match` example of a rules file
+    /// matches. Allow rules here still match every spelling the host lookup
+    /// reaches (as before D696), so rules files that parsed keep parsing;
+    /// only command matching tightened.
+    pub(crate) fn example_matches(&self, example: &[String]) -> Vec<RuleMatch> {
+        let options = MatchOptions {
+            resolve_host_executables: true,
+            fold_program_case: false,
+        };
+        self.matched_rules(example, &options, /*allow_needs_exact_spelling*/ false)
+    }
+
+    fn matched_rules(
+        &self,
+        cmd: &[String],
+        options: &MatchOptions,
+        allow_needs_exact_spelling: bool,
+    ) -> Vec<RuleMatch> {
+        self.match_exact_rules(cmd)
+            .filter(|matched_rules| !matched_rules.is_empty())
+            .or_else(|| {
+                options
+                    .resolve_host_executables
+                    .then(|| self.match_host_executable_rules(cmd, allow_needs_exact_spelling))
+                    .filter(|matched_rules| !matched_rules.is_empty())
+            })
+            .unwrap_or_default()
     }
 
     fn match_exact_rules(&self, cmd: &[String]) -> Option<Vec<RuleMatch>> {
@@ -462,7 +689,11 @@ impl Policy {
         candidates
     }
 
-    fn match_host_executable_rules(&self, cmd: &[String]) -> Vec<RuleMatch> {
+    fn match_host_executable_rules(
+        &self,
+        cmd: &[String],
+        allow_needs_exact_spelling: bool,
+    ) -> Vec<RuleMatch> {
         let Some(first) = cmd.first() else {
             return Vec::new();
         };
@@ -472,12 +703,21 @@ impl Policy {
         let Some((basename, rules)) = self.host_executable_rules(&program) else {
             return Vec::new();
         };
+        let listed = self
+            .host_executables_by_name
+            .get(&basename)
+            .map(|paths| &paths[..]);
 
         let basename_command = std::iter::once(basename)
             .chain(cmd.iter().skip(1).cloned())
             .collect::<Vec<_>>();
         rules
             .iter()
+            .filter(|rule| {
+                !allow_needs_exact_spelling
+                    || rule_decision(rule.as_ref()) != Decision::Allow
+                    || allow_spelled_exactly(rule.as_ref(), program.as_path(), listed)
+            })
             .filter_map(|rule| rule.matches(&basename_command))
             .map(|rule_match| rule_match.with_resolved_program(&program))
             .collect()
@@ -562,6 +802,77 @@ fn can_weaken_fallback(exact: &RuleRef, fallback: &RuleRef, path_rules: &[RuleRe
                 })
             })
     })
+}
+
+/// D696: whether allow rule `rule` may approve `program`, a path the host
+/// lookup reached through its basename. That lookup folds case and drops
+/// `.exe`, `.cmd`, `.bat` and `.com` on Windows, so `RM`, `GIT.EXE` and
+/// `C:\…\git.exe` all reach the rules for `rm` and `git`; forbidden and
+/// prompt rules keep matching them. Allow rules approve only the spelling the
+/// rules file wrote: a path listed by `host_executable` for the name exactly
+/// as listed (drive letter case included), or else a file name equal to the
+/// rule's program (compared caselessly only for a `canonical_matching` rule,
+/// which asks for that). Elsewhere the lookup key is the file name itself, so
+/// this changes nothing for exact rules.
+fn allow_spelled_exactly(
+    rule: &dyn crate::rule::Rule,
+    program: &std::path::Path,
+    listed: Option<&[AbsolutePathBuf]>,
+) -> bool {
+    match listed {
+        Some(paths) => paths
+            .iter()
+            .any(|path| same_spelling(path.as_path(), program)),
+        None => {
+            let Some(name) = program.file_name().and_then(std::ffi::OsStr::to_str) else {
+                return false;
+            };
+            rule.as_any()
+                .downcast_ref::<PrefixRule>()
+                .is_some_and(|rule| rule.pattern.tokens_equal(name, &rule.pattern.first))
+        }
+    }
+}
+
+/// Path equality on each component's text as written: unlike Windows `Path`
+/// equality it tells apart drive letter case (`c:` and `C:`) and prefix
+/// separators (`//server/share` and `\\server\share`), which only ever
+/// makes allow rules match less.
+fn same_spelling(a: &std::path::Path, b: &std::path::Path) -> bool {
+    a.components()
+        .map(std::path::Component::as_os_str)
+        .eq(b.components().map(std::path::Component::as_os_str))
+}
+
+/// D692: `name` as case-insensitive file systems compare it: Unicode
+/// lowercase, plus the folds APFS applies that lowercasing does not (`ſ`,
+/// `ß`, the Latin ligatures) and the dotless `ı`, which NTFS uppercases to
+/// `I`. Folding more than a file system does only adds forbidden and prompt
+/// matches.
+pub(crate) fn fold_program_name(name: &str) -> String {
+    let mut folded = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '\u{17f}' => folded.push('s'),
+            '\u{131}' => folded.push('i'),
+            '\u{df}' | '\u{1e9e}' => folded.push_str("ss"),
+            '\u{fb00}' => folded.push_str("ff"),
+            '\u{fb01}' => folded.push_str("fi"),
+            '\u{fb02}' => folded.push_str("fl"),
+            '\u{fb03}' => folded.push_str("ffi"),
+            '\u{fb04}' => folded.push_str("ffl"),
+            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
+            c => folded.extend(c.to_lowercase()),
+        }
+    }
+    folded
+}
+
+/// A prefix rule's decision; other kinds count as forbidding (fail closed).
+fn rule_decision(rule: &dyn crate::rule::Rule) -> Decision {
+    rule.as_any()
+        .downcast_ref::<PrefixRule>()
+        .map_or(Decision::Forbidden, |rule| rule.decision)
 }
 
 fn upsert_domain(entries: &mut Vec<String>, host: &str) {

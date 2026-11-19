@@ -137,7 +137,6 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use std::time::Instant;
 use test_case::test_case;
 use tokio::sync::oneshot;
 use wiremock::Mock;
@@ -1637,9 +1636,12 @@ async fn code_mode_tool_call_completeness_is_private_and_opt_in(
     let server = responses::start_mock_server().await;
     let code = if oversized {
         r#"
-const args = { barrier: { id: "", participants: 1 } };
-args.barrier.id = "x".repeat(9000 - JSON.stringify(args).length);
-for (let index = 0; index < 17; index++) await tools.test_sync_tool(args);
+// Distinct 9000-byte calls exercise metadata size, without hitting the repetition guard.
+for (let index = 0; index < 17; index++) {
+  const args = { barrier: { id: String(index).padStart(2, "0"), participants: 1 } };
+  args.barrier.id += "x".repeat(9000 - JSON.stringify(args).length);
+  await tools.test_sync_tool(args);
+}
 text("done");
 yield_control();
 await new Promise(() => {});
@@ -1667,17 +1669,22 @@ await new Promise(() => {});
     let calls = serde_json::json!([{ "name": "test_sync_tool", "arguments": {} }]);
     let complete = Value::Bool(true);
     if oversized {
-        let mut arguments = serde_json::json!({ "barrier": { "id": "", "participants": 1 } });
-        arguments["barrier"]["id"] =
-            serde_json::json!("x".repeat(9000 - arguments.to_string().len()));
+        let expected_calls = (0..17)
+            .map(|index| {
+                let prefix = format!("{index:02}");
+                let mut arguments =
+                    serde_json::json!({ "barrier": { "id": prefix, "participants": 1 } });
+                arguments["barrier"]["id"] = serde_json::json!(format!(
+                    "{prefix}{}",
+                    "x".repeat(9000 - arguments.to_string().len())
+                ));
+                assert_eq!(arguments.to_string().len(), 9000);
+                serde_json::json!({ "name": "test_sync_tool", "arguments": arguments })
+            })
+            .collect::<Vec<_>>();
         assert_eq!(
             metadata["executed_tool_calls"],
-            serde_json::json!(vec![
-                serde_json::json!({
-                    "name": "test_sync_tool", "arguments": arguments,
-                });
-                17
-            ]),
+            serde_json::json!(expected_calls)
         );
     } else {
         assert_eq!(
@@ -2257,7 +2264,10 @@ enum ResultMetadataAnalytics {
 async fn direct_result_metadata_retained_budget_preserves_resource_access() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let server = responses::start_mock_server().await;
-    let arguments = serde_json::json!({ "search": "retained-budget" });
+    // Keep all 33 real calls while respecting the per-turn identical-call guard.
+    let arguments = (0..33)
+        .map(|index| serde_json::json!({ "search": format!("retained-budget-{index}") }))
+        .collect::<Vec<_>>();
     let resource_access = serde_json::json!({
         "schema_version": 1,
         "resource_coverage": "complete",
@@ -2290,7 +2300,8 @@ async fn direct_result_metadata_retained_budget_preserves_resource_access() -> R
         .collect::<Vec<_>>();
     let mut events = call_ids[..32]
         .iter()
-        .map(|call_id| {
+        .zip(&arguments)
+        .map(|(call_id, arguments)| {
             responses::ev_function_call_with_namespace(
                 call_id,
                 "mcp__codex_apps__messagesearch",
@@ -2309,7 +2320,7 @@ async fn direct_result_metadata_retained_budget_preserves_resource_access() -> R
                 &call_ids[32],
                 "mcp__codex_apps__messagesearch",
                 RESULT_METADATA_TOOL,
-                &arguments.to_string(),
+                &arguments[32].to_string(),
             ),
             ev_completed("resp-2"),
         ]),
@@ -2344,10 +2355,15 @@ async fn direct_result_metadata_retained_budget_preserves_resource_access() -> R
     }
     let calls = recorded_apps_tool_calls(&server).await;
     assert_eq!(calls.len(), call_ids.len());
+    let mut actual_arguments = Vec::new();
     for call in calls {
         assert_eq!(call["params"]["name"], RESULT_METADATA_TOOL);
-        assert_eq!(call["params"]["arguments"], arguments);
+        actual_arguments.push(call["params"]["arguments"].to_string());
     }
+    let mut expected_arguments = arguments.iter().map(Value::to_string).collect::<Vec<_>>();
+    actual_arguments.sort();
+    expected_arguments.sort();
+    assert_eq!(actual_arguments, expected_arguments);
     // Inspect retained history directly to isolate the Direct admission budget.
     let history = test.codex.conversation_history_snapshot().await;
     assert!(
@@ -2381,7 +2397,7 @@ async fn direct_result_metadata_retained_budget_preserves_resource_access() -> R
                 .unwrap()
                 .ends_with(RESULT_METADATA_TOOL)
         );
-        assert_eq!(calls[0]["arguments"], arguments);
+        assert_eq!(calls[0]["arguments"], arguments[index]);
         assert_eq!(
             calls[0]["tool_result_metadata"],
             if index < 32 {
@@ -3425,7 +3441,10 @@ async fn code_mode_recovers_complete_inventory_after_orphaned_mapping_pressure()
     skip_if_no_network!(Ok(()));
 
     let empty_calls = (0..256)
-        .map(|index| ev_custom_tool_call(&format!("seed-{index}"), "exec", "void 0;"))
+        // Reuse each payload twice, below the identical-call guard, while keeping 512 execs.
+        .map(|index| {
+            ev_custom_tool_call(&format!("seed-{index}"), "exec", &format!("void {index};"))
+        })
         .collect::<Vec<_>>();
     let mut seed = empty_calls.clone();
     seed.push(ev_completed("resp-seed"));
@@ -3542,7 +3561,9 @@ async fn code_mode_wait_serializes_empty_inventory_under_pending_call_pressure()
                     "call-pressure",
                     "exec",
                     r#"// @exec: {"yield_time_ms": 60000}
-for (let index = 0; index < 256; index++) await tools.test_sync_tool({});
+for (let index = 0; index < 256; index++) {
+  await tools.test_sync_tool({ barrier: { id: `pressure-${index}`, participants: 1 } });
+}
 text("pressure ready");"#,
                 )]),
             },
@@ -3627,10 +3648,10 @@ text("pressure ready");"#,
     let pressure = &output_for(/*request_index*/ 2, "call-pressure")["internal_chat_message_metadata_passthrough"];
     assert_eq!(
         pressure["executed_tool_calls"],
-        serde_json::json!(vec![
-            serde_json::json!({"name": "test_sync_tool", "arguments": {}});
-            256
-        ]),
+        serde_json::json!((0..256).map(|index| serde_json::json!({
+            "name": "test_sync_tool",
+            "arguments": { "barrier": { "id": format!("pressure-{index}"), "participants": 1 } },
+        })).collect::<Vec<_>>()),
     );
     assert_eq!(pressure["tool_calls_complete"], true);
     let metadata =
@@ -4281,7 +4302,6 @@ async fn code_mode_nested_tool_calls_can_run_in_parallel() -> Result<()> {
 
     let warmup_code = r#"
 const args = {
-  sleep_after_ms: 10,
   barrier: {
     id: "code-mode-parallel-tools-warmup",
     participants: 2,
@@ -4296,7 +4316,6 @@ await Promise.all([
 "#;
     let code = r#"
 const args = {
-  sleep_after_ms: 300,
   barrier: {
     id: "code-mode-parallel-tools",
     participants: 2,
@@ -4339,20 +4358,15 @@ text(JSON.stringify(results));
 
     test.submit_turn("warm up nested tools in parallel").await?;
 
-    let start = Instant::now();
     test.submit_turn("run nested tools in parallel").await?;
-    let duration = start.elapsed();
-
-    assert!(
-        duration < Duration::from_millis(1_600),
-        "expected nested tools to finish in parallel, got {duration:?}",
-    );
 
     let req = response_mock
         .last_request()
         .expect("parallel code mode run should send a completion request");
     let items = custom_tool_output_items(&req, "call-1");
     assert_eq!(items.len(), 2);
+    // Both calls must reach the shared two-participant barrier before either
+    // can return, so this output proves the nested tool calls overlapped.
     assert_eq!(text_item(&items, /*index*/ 1), "[\"ok\",\"ok\"]");
 
     Ok(())
@@ -7694,7 +7708,7 @@ await tools.exec_command({ cmd: "printf second", sandbox_permissions: "require_e
             let payload = reviewer_image_urls[1].split_once(',').unwrap().1;
             let dimensions =
                 image::load_from_memory(&BASE64_STANDARD.decode(payload)?)?.dimensions();
-            assert_eq!(dimensions, (2048, 32));
+            assert_eq!(dimensions, (2000, 31));
         }
         for (index, marker) in [(image_index - 1, "before"), (image_index + 1, "after")] {
             let text = reviewer_user_content[index]["text"].as_str().unwrap();

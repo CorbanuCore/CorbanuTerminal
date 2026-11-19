@@ -423,7 +423,6 @@ pub fn sources_from_config(config: &Config) -> InventorySources {
     let config_layers = config
         .config_layer_stack
         .layers_high_to_low()
-        .into_iter()
         .filter(|layer| !layer.is_disabled())
         .map(|layer| {
             let (label, path) = match (&layer.name, layer.project_role_file()) {

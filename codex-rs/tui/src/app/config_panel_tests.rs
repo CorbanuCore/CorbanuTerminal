@@ -362,7 +362,13 @@ async fn notification_test_delay_rejects_cancelled_and_rescheduled_timers() -> R
     .await;
     tokio::time::advance(std::time::Duration::from_secs(/*secs*/ 5)).await;
     tokio::task::yield_now().await;
-    let generation = notification_generation(rx.try_recv().expect("cancelled preview timer"));
+    // Advancing the clock wakes the timer; it does not guarantee its spawned
+    // task has run before this task is polled again under load.
+    let generation = notification_generation(
+        tokio::time::timeout(std::time::Duration::from_secs(/*secs*/ 5), rx.recv())
+            .await?
+            .expect("cancelled preview timer"),
+    );
     app.send_config_notification_test(&mut tui, generation);
     assert!(rx.try_recv().is_err());
     Ok(())

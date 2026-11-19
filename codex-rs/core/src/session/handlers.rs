@@ -491,7 +491,7 @@ pub async fn review(
 /// #1927: re-admits input an interrupted turn held for the next turn. User input starts a
 /// turn or steers the running one like any submission; response items join a running turn as
 /// extension work (admission checked) or are recorded; agent mail is queued again.
-async fn readmit_interrupted_input(
+pub(super) async fn readmit_interrupted_input(
     sess: &Arc<Session>,
     input: TurnInput,
     final_output_json_schema: Option<Value>,
@@ -506,7 +506,7 @@ async fn readmit_interrupted_input(
             let held = TurnInput::UserInput {
                 content: content.clone(),
                 client_id: client_id.clone(),
-                metadata: metadata.clone(),
+                metadata,
             };
             let request = codex_protocol::turn_input::TurnInputRequest {
                 input: codex_protocol::turn_input::TurnInput::UserInput { content, client_id },
@@ -577,8 +577,30 @@ async fn readmit_interrupted_input(
                     None => items,
                 };
                 let context = sess.new_default_turn().await;
-                sess.record_annotated_conversation_items(&context, context.model_info(), items)
-                    .await;
+                // D523 (a): readmitted background hook output keeps its hook origin.
+                for item in items {
+                    match crate::hook_runtime::take_hook_output(item) {
+                        (item, true) => {
+                            sess.record_annotated_conversation_items_from(
+                                &context,
+                                context.model_info(),
+                                vec![item],
+                                Some(crate::security::ingress::MessageOrigin::External(
+                                    codex_protocol::provenance::SourceKind::Hook,
+                                )),
+                            )
+                            .await;
+                        }
+                        (item, false) => {
+                            sess.record_annotated_conversation_items(
+                                &context,
+                                context.model_info(),
+                                vec![item],
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
         TurnInput::InterAgentCommunication(communication) => {

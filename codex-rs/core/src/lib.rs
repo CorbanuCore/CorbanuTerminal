@@ -108,8 +108,8 @@ mod exec_policy;
 #[cfg(test)]
 mod git_info_tests;
 mod guardian;
-pub mod home_access;
 pub mod guardian_review;
+pub mod home_access;
 mod hook_environment_executor;
 mod hook_mcp_executor;
 mod hook_runtime;
@@ -293,6 +293,8 @@ pub mod compact;
 pub mod memory_stage_one;
 mod memory_usage;
 mod model_broker_auth;
+mod provider_cooldown;
+pub use provider_cooldown::clear_provider_cooldown;
 mod provider_throttle;
 pub use model_broker_auth::BrokerModelAuthOrigin;
 pub use model_broker_auth::holds_environment_key as broker_holds_environment_key;

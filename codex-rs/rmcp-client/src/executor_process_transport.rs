@@ -197,6 +197,10 @@ pub(super) struct ExecutorProcessTransport {
     /// When the pushed event stream lags, use this as the retained-output read
     /// cursor to recover missed stdout/stderr chunks from the executor.
     last_seq: u64,
+
+    /// Whether this transport already accounted for the sequenced `Exited`
+    /// event, either from the pushed stream or from a lagged-recovery read.
+    exit_seen: bool,
 }
 
 impl ExecutorProcessTransport {
@@ -216,6 +220,7 @@ impl ExecutorProcessTransport {
             closed: false,
             terminated: false,
             last_seq: 0,
+            exit_seen: false,
         }
     }
 
@@ -296,6 +301,7 @@ impl ExecutorProcessTransport {
                 }
                 Ok(ExecProcessEvent::Exited { seq, .. }) => {
                     self.note_seq(seq);
+                    self.exit_seen = true;
                     // Wait for `Closed` before ending the rmcp stream so any
                     // output flushed during process shutdown can still be
                     // decoded into JSON-RPC messages.
@@ -353,26 +359,34 @@ impl ExecutorProcessTransport {
             )
             .await
             .map_err(io::Error::other)?;
+        // Process reads include output chunks but not the sequenced `Exited`
+        // and `Closed` events. The exit can be sequenced before output that
+        // the executor read after it, so an unseen exit may account for one
+        // missing sequence number between chunks. `Closed` is always last.
+        let mut unseen_exit_count = u64::from(response.exited && !self.exit_seen);
         for chunk in response.chunks {
             let expected_seq = self.last_seq.saturating_add(1);
             if chunk.seq > expected_seq {
-                return Err(self.close_for_lost_output(expected_seq, chunk.seq));
+                if chunk.seq - expected_seq > unseen_exit_count {
+                    return Err(self.close_for_lost_output(expected_seq, chunk.seq));
+                }
+                unseen_exit_count = 0;
             }
             self.push_process_output_if_new(chunk);
             if self.closed {
                 return Ok(());
             }
         }
-        // Process reads include output chunks but not the sequenced `Exited`
-        // and `Closed` events. Account for those terminal events without
-        // allowing an evicted output chunk to be silently spliced into MCP.
-        let terminal_event_count = u64::from(response.exited) + u64::from(response.closed);
+        // Account for the remaining terminal events without allowing an
+        // evicted output chunk to be silently spliced into MCP.
+        let terminal_event_count = unseen_exit_count + u64::from(response.closed);
         let next_output_seq = response.next_seq.saturating_sub(terminal_event_count);
         let expected_seq = self.last_seq.saturating_add(1);
         if next_output_seq > expected_seq {
             return Err(self.close_for_lost_output(expected_seq, next_output_seq));
         }
         self.last_seq = self.last_seq.max(response.next_seq.saturating_sub(1));
+        self.exit_seen |= response.exited;
         if let Some(message) = response.failure {
             warn!(
                 "Remote MCP server process failed ({}): {message}",

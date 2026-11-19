@@ -83,6 +83,8 @@ async fn misalignment_continuation_requires_current_review_and_submits_once() ->
             server.start_thread(&app.config).await?.session
         };
         let thread_id = session.thread_id;
+        // Cyber access programs need the OpenAI provider; Corbanu's test default is Z.AI.
+        session.model_provider_id = "openai".into();
         // Resend local restrictions restored after reconnect, rather than inheriting server settings.
         session.approval_policy = AskForApproval::OnRequest;
         session.permission_profile = PermissionProfile::read_only();
@@ -91,7 +93,8 @@ async fn misalignment_continuation_requires_current_review_and_submits_once() ->
         app.chat_widget.handle_thread_session(session);
         if !reject {
             app.chat_widget.update_account_state(
-                (!has_chatgpt_account).then_some(crate::status::StatusAccountDisplay::ApiKey),
+                (!has_chatgpt_account)
+                    .then_some(crate::status::StatusAccountDisplay::ApiKey { env_var: None }),
                 /*plan_type*/ None,
                 has_chatgpt_account,
                 /*has_codex_backend_auth*/ has_chatgpt_account,

@@ -738,8 +738,9 @@ impl LocalAgentControl {
             .or(options.parent_thread_id);
         // Corbanu (PF-23-S03): a child inherits its live parent's effective security policy.
         // A handle whose tree does not hold the parent's binding (a control materialized for
-        // another tree) spawns through the parent's own control, which does; a parent with
-        // no binding anywhere refuses the spawn.
+        // another tree) borrows the parent's policy and session for this spawn, as main does;
+        // the child still joins this handle's agent tree. A parent with no binding anywhere
+        // refuses the spawn.
         if let Some(parent_thread_id) = parent_thread_id
             && self
                 .runtime
@@ -763,8 +764,13 @@ impl LocalAgentControl {
                         "live parent has no effective security policy: {error}"
                     ))
                 })?;
+            let mut control = self.clone();
+            control.session_id = parent_control.session_id;
+            control.runtime.security_policy = parent_control.runtime.security_policy;
+            control.runtime.trusted_security_controller =
+                parent_control.runtime.trusted_security_controller;
             drop(membership);
-            return Box::pin(parent_control.spawn_agent_internal(
+            return Box::pin(control.spawn_agent_internal(
                 config,
                 initial_input,
                 session_source,
@@ -951,6 +957,7 @@ impl LocalAgentControl {
             membership,
             SpawnOwner::Local,
         );
+        pending_spawn.forget_registration_on_cancel(Arc::clone(&self.runtime.registry));
         let edge_write_started_at = Instant::now();
         let control = self.clone();
         let source = notification_source.clone();

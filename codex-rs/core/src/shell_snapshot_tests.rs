@@ -4,12 +4,6 @@ use crate::config::NetworkProxySpec;
 #[cfg(unix)]
 use crate::session::ThreadEnvironmentDefaults;
 #[cfg(unix)]
-use crate::tools::runtimes::RuntimePathPrepends;
-#[cfg(unix)]
-use crate::tools::runtimes::maybe_wrap_shell_lc_with_snapshot;
-#[cfg(unix)]
-use crate::tools::runtimes::prepare_brokered_shell_snapshot_env;
-#[cfg(unix)]
 use codex_network_proxy::CredentialProviderConfig;
 #[cfg(unix)]
 use codex_network_proxy::NetworkProxyConfig;
@@ -629,7 +623,9 @@ async fn inactive_profiles_keep_snapshots_but_active_brokers_require_sandbox() -
     new_env = context
         .prepare_child_environment(&proxy, new_env, /*environment_id*/ None)?
         .env;
-    assert_ne!(new_env["OPENAI_API_KEY"], old_env["OPENAI_API_KEY"]);
+    // D353: the retained broker keeps a stable placeholder for this credential;
+    // the snapshot itself must still be invalidated and rebuilt above.
+    assert_eq!(new_env["OPENAI_API_KEY"], old_env["OPENAI_API_KEY"]);
     assert_ne!(new_env["OPENAI_API_KEY"], "sk-snapshot-cache-test");
 
     // A credential change during capture should recapture once under the new configuration.
@@ -738,9 +734,14 @@ async fn credential_snapshot_proxy() -> Result<crate::config::StartedNetworkProx
 async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Result<()> {
     let dir = tempdir()?;
     let startup = dir.path().join("startup.sh");
+    let witness =
+        shlex::try_quote(dir.path().join("d682-startup-witness").to_str().unwrap())?.into_owned();
+    let entered =
+        shlex::try_quote(dir.path().join("d682-startup-entered").to_str().unwrap())?.into_owned();
     std::fs::write(
         &startup,
-        "unset GITHUB_ENTERPRISE_TOKEN UNSET_AUTH_HEADER\n\
+        "printf entered > __D682_ENTERED__\n\
+         unset GITHUB_ENTERPRISE_TOKEN UNSET_AUTH_HEADER\n\
          export GH_TOKEN='ghp_shell_only_secret'\n\
          export AUTH_HEADER=\"Bearer $GH_TOKEN\"\n\
          declare -rx GITHUB_TOKEN='ghp_readonly_secret'\n\
@@ -765,7 +766,17 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
          export EXCLUDED_PARENT_HOME=\"${HOME-missing}\"\n\
          export STARTUP_PATH_OVERRIDE_SEEN=\"${PATH%%:*}\"\n\
          export STARTUP_CORP_REGION_SEEN=\"${CORP_REGION-missing}\"\n\
-         export STARTUP_NPM_TOKEN_SEEN=\"${NPM_TOKEN-missing}\"\n",
+         export STARTUP_NPM_TOKEN_SEEN=\"${NPM_TOKEN-missing}\"\n\
+         test \"$GH_TOKEN\" = ghp_shell_only_secret && \\\n\
+         test \"$GITHUB_TOKEN\" = ghp_readonly_secret && \\\n\
+         test \"$GH_ENTERPRISE_TOKEN\" = ghp_enterprise_secret && \\\n\
+         test \"$OPENAI_API_KEY\" = sk-proj-snapshot-secret && \\\n\
+         test \"$STRIPE_API_KEY\" = stripe_live_abcdefghijklmnopqrstuvwx && \\\n\
+         test \"$VENDOR_PASSWORD\" = pin_abcdefgh && \\\n\
+         test \"$LOCAL_AUTH_HEADER\" = 'Bearer local_abcdefghijklmnopqrstuvwx' && \\\n\
+         printf initialized > __D682_WITNESS__\n"
+            .replace("__D682_ENTERED__", &entered)
+            .replace("__D682_WITNESS__", &witness),
     )?;
 
     let started_proxy = credential_snapshot_proxy().await?;
@@ -775,15 +786,35 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         shell_type: ShellType::Bash,
         shell_path: PathBuf::from("/bin/bash"),
     };
-    let trusted_startup = ("BASH_ENV".to_string(), startup.display().to_string());
+    // Initialize synthetic credentials explicitly in the capture shell. This
+    // fixture tests hardened capture/replay, independently of implicit BASH_ENV
+    // startup behavior. Validation and replay below use the real shell directly.
+    let wrapper = dir.path().join("capture-shell");
+    let startup_arg = shlex::try_quote(startup.to_str().unwrap())?;
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nunset BASH_ENV\nexec /bin/bash --noprofile --norc -c '. \"$1\" || exit 1; eval \"$2\"' d682-capture {startup_arg} \"$2\"\n"
+        ),
+    )?;
+    std::fs::set_permissions(
+        &wrapper,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )?;
+    let capture_shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: wrapper,
+    };
     let shell_environment_policy = ShellEnvironmentPolicy {
         exclude: vec![
             EnvironmentVariablePattern::new_case_insensitive("HOME"),
             EnvironmentVariablePattern::new_case_insensitive("VENDOR_HOST"),
             EnvironmentVariablePattern::new_case_insensitive("STRIPE_HOST"),
+            EnvironmentVariablePattern::new_case_insensitive("*TOKEN*"),
+            EnvironmentVariablePattern::new_case_insensitive("*KEY*"),
+            EnvironmentVariablePattern::new_case_insensitive("*PASSWORD*"),
         ],
         r#set: HashMap::from([
-            trusted_startup.clone(),
             ("GH_HOST".to_string(), "github.example.com".to_string()),
             (
                 "GITHUB_ENTERPRISE_TOKEN".to_string(),
@@ -807,6 +838,27 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         ]),
         ..ShellEnvironmentPolicy::default()
     };
+    // Generic fail-open aliases use capture-time source authorization, separate
+    // from the inert upstream credential registry. Deny all seven fixture
+    // sources and the readonly equivalent explicitly; policy.set can otherwise
+    // override exclusions. Startup still creates them after launch filtering.
+    for key in [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "HOMEBREW_GITHUB_API_TOKEN",
+        "GH_ENTERPRISE_TOKEN",
+        "OPENAI_API_KEY",
+        "STRIPE_API_KEY",
+        "VENDOR_PASSWORD",
+        "LOCAL_TOKEN",
+    ] {
+        let allowed = create_env_from_vars(
+            std::iter::once((key.to_string(), "fixture-source".to_string())),
+            &shell_environment_policy,
+            None,
+        );
+        assert!(!allowed.contains_key(key), "capture policy admitted {key}");
+    }
     let credential_broker = SnapshotCredentialBroker {
         network_proxy: network_proxy.clone(),
         shell_environment_policy: shell_environment_policy.clone(),
@@ -814,7 +866,7 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     };
     let path = dir.path().join("snapshot.sh").abs();
     let credentials = write_shell_snapshot(
-        &shell,
+        &capture_shell,
         &path,
         &dir.path().abs(),
         &credential_broker.shell_environment_policy,
@@ -823,29 +875,39 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
         /*removed_env_vars*/ &[],
     )
     .await?;
+    let initialized = fs::read_to_string(dir.path().join("d682-startup-witness"))
+        .await
+        .unwrap_or_default()
+        == "initialized";
+    let startup_entered = fs::read_to_string(dir.path().join("d682-startup-entered"))
+        .await
+        .unwrap_or_default()
+        == "entered";
+    assert!(startup_entered, "capture must source the startup fixture");
+    assert!(
+        initialized,
+        "capture must run the startup fixture and initialize its seven credentials"
+    );
     let captured_credentials = credentials.as_ref().expect("brokered snapshot credentials");
-    assert_eq!(
-        captured_credentials
-            .context_env
-            .get("STRIPE_HOST")
-            .map(String::as_str),
-        Some("api.stripe.example"),
-        "excluding a trusted destination must not let startup replace it"
-    );
-    assert_eq!(
-        captured_credentials
-            .context_env
-            .get("VENDOR_HOST")
-            .map(String::as_str),
-        Some("https://api.vendor.example/v2")
-    );
-    assert_eq!(
-        captured_credentials
-            .context_env
-            .get("OPENAI_BASE_URL")
-            .map(String::as_str),
-        Some("https://api.snapshot.example/v1")
-    );
+    // D353/D354/D640: configured-provider destination/replay metadata is inert.
+    assert!(captured_credentials.context_env.is_empty());
+    assert!(captured_credentials.protected_startup_env.is_none());
+    // This separate generic alias map can authorize sources permitted at capture.
+    // Here the capture policy denies these sources, including LOCAL_TOKEN whose
+    // value was copied before unsetting it. Any retained aliases must stay denied.
+    for key in [
+        "STRIPE_AUTH_HEADER",
+        "VENDOR_AUTH_HEADER",
+        "LOCAL_AUTH_HEADER",
+    ] {
+        assert!(
+            captured_credentials
+                .fail_open_aliases
+                .get(key)
+                .is_none_or(|alias| !alias.authorized),
+            "unsupported configured alias {key} was authorized for replay"
+        );
+    }
     let snapshot = fs::read_to_string(&path).await?;
 
     for secret in [
@@ -860,20 +922,13 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     ] {
         assert!(!snapshot.contains(secret), "snapshot exposed {secret}");
     }
+    assert!(!snapshot.contains("npm_enterprise_token"));
     assert!(!snapshot.contains("attacker.example"));
-    assert!(!snapshot.contains("CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS"));
-    assert!(snapshot.contains("api.snapshot.example"));
     assert!(!snapshot.contains("attacker.vendor.example"));
-    assert!(snapshot.contains("IDENTITY_SEEN=\"missing\""));
-    assert!(snapshot.contains("EXCLUDED_PARENT_HOME=\"missing\""));
-    assert!(snapshot.contains("STARTUP_PATH_OVERRIDE_SEEN=\"/enterprise/bin\""));
-    assert!(snapshot.contains("declare -x PATH=\"/enterprise/bin\""));
-    assert!(snapshot.contains("STARTUP_CORP_REGION_SEEN=\"production\""));
-    assert!(snapshot.contains("STARTUP_NPM_TOKEN_SEEN=\"npm_enterprise_token\""));
-    assert!(snapshot.contains("declare -rx HOMEBREW_GITHUB_API_TOKEN=\"${GITHUB_TOKEN-}\""));
-    assert!(snapshot.contains("${VENDOR_PASSWORD-}"));
-    assert!(!snapshot.contains("api.stripe.example"));
-
+    assert!(!snapshot.contains("CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS"));
+    // Sensitive marker declarations may be omitted by the export filter. Replay
+    // checks require identity/home omission or a safe sentinel and verify safe
+    // startup settings semantically, without depending on export serialization.
     validate_snapshot(
         &shell,
         &path,
@@ -884,465 +939,129 @@ async fn snapshot_discovers_and_redacts_shell_initialized_credentials() -> Resul
     )
     .await?;
 
-    let validation_path = dir.path().join("validation.sh").abs();
-    fs::write(
-        &validation_path,
-        "test \"${HOME-missing}\" = missing && \
-         test \"${CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE-}\" = 1\n",
-    )
-    .await?;
-    validate_snapshot(
-        &shell,
-        &validation_path,
-        &dir.path().abs(),
-        Some(&credential_broker),
-        /*sandbox*/ None,
-        /*removed_env_vars*/ &[],
-    )
-    .await?;
-
-    let filtered_startup_broker = SnapshotCredentialBroker {
-        network_proxy: network_proxy.clone(),
-        shell_environment_policy: ShellEnvironmentPolicy {
-            r#set: HashMap::from([trusted_startup.clone()]),
-            include_only: vec![
-                EnvironmentVariablePattern::new_case_insensitive("PATH"),
-                EnvironmentVariablePattern::new_case_insensitive("EXCLUDED_PARENT_HOME"),
-            ],
-            ..ShellEnvironmentPolicy::default()
-        },
-        allow_login_shell: false,
-    };
-    let filtered_startup_path = dir.path().join("filtered-startup-snapshot.sh").abs();
-    write_shell_snapshot(
-        &shell,
-        &filtered_startup_path,
-        &dir.path().abs(),
-        &filtered_startup_broker.shell_environment_policy,
-        Some(&filtered_startup_broker),
-        /*sandbox*/ None,
-        /*removed_env_vars*/ &[],
-    )
-    .await?;
-    assert!(
-        !fs::read_to_string(&filtered_startup_path)
-            .await?
-            .contains("EXCLUDED_PARENT_HOME")
-    );
-
-    let mut excluded_credential_broker = SnapshotCredentialBroker {
-        network_proxy: network_proxy.clone(),
-        shell_environment_policy: shell_environment_policy.clone(),
-        allow_login_shell: false,
-    };
-    excluded_credential_broker
-        .shell_environment_policy
-        .exclude
-        .push(EnvironmentVariablePattern::new_case_insensitive("GH_TOKEN"));
-    let (_, excluded_credentials) = capture_snapshot(
-        &shell,
-        &dir.path().abs(),
-        &excluded_credential_broker.shell_environment_policy,
-        Some(&excluded_credential_broker),
-        /*sandbox*/ None,
-        /*removed_env_vars*/ &[],
-    )
-    .await?;
-    assert_eq!(
-        excluded_credentials.unwrap().unset_credential_keys,
-        [
-            "AUTH_BUNDLE",
-            "AUTH_HEADER",
-            "GH_TOKEN",
-            "GITHUB_ENTERPRISE_TOKEN",
-            "UNSET_AUTH_HEADER",
-        ]
-    );
-
-    let inherited_secret = "ghp_inherited_enterprise_secret";
-    let inherited_context = HashMap::from([(
-        "GH_HOST".to_string(),
-        "github.inherited.example".to_string(),
-    )]);
-    let mut inherited_discovery_env = HashMap::from([
-        (
-            "GH_ENTERPRISE_TOKEN".to_string(),
-            inherited_secret.to_string(),
-        ),
-        ("GH_HOST".to_string(), "attacker.example".to_string()),
-    ]);
-    replace_provider_context_with_trusted(
-        &mut inherited_discovery_env,
-        &inherited_context,
-        network_proxy
-            .credential_broker_environment(&HashMap::new())
-            .provider_context_keys,
-        &[],
-    );
-    assert_eq!(
-        inherited_discovery_env.get("GH_HOST").map(String::as_str),
-        Some("github.inherited.example")
-    );
-    network_proxy.apply_to_env(&mut inherited_discovery_env);
-    let mut inherited_allowed_env = HashMap::from([(
-        "GH_ENTERPRISE_TOKEN".to_string(),
-        inherited_secret.to_string(),
-    )]);
-    replace_provider_context_with_trusted(
-        &mut inherited_allowed_env,
-        &inherited_context,
-        network_proxy
-            .credential_broker_environment(&inherited_discovery_env)
-            .binding_keys,
-        &[],
-    );
-    network_proxy.apply_to_env(&mut inherited_allowed_env);
-    assert_eq!(
-        inherited_allowed_env.get("GH_HOST").map(String::as_str),
-        Some("github.inherited.example")
-    );
-    assert_ne!(
-        inherited_allowed_env
-            .get("GH_ENTERPRISE_TOKEN")
-            .map(String::as_str),
-        Some(inherited_secret)
-    );
-    let mut inherited_snapshot = format!("export GH_ENTERPRISE_TOKEN={inherited_secret}\n");
-    assert!(
-        network_proxy.virtualize_brokered_text(&mut inherited_snapshot, &inherited_allowed_env)
-    );
-    assert!(!inherited_snapshot.contains(inherited_secret));
-
+    // D682 retires unsupported registered-provider restoration and destination
+    // rebinding. This matrix also proves permissive replay filters cannot reopen
+    // capture-time source denial through the separate generic alias helper.
+    // Permitted generic fail-open behavior stays covered by the copied-credential
+    // regression, not by a blanket claim that every alias is always denied.
     let snapshot_file = ShellSnapshotFile {
         path,
         credentials,
-        shell_environment_policy: ShellEnvironmentPolicy::default(),
+        shell_environment_policy: shell_environment_policy.clone(),
     };
-    let unset_credential_keys = snapshot_file
-        .credentials
-        .as_ref()
-        .unwrap()
-        .unset_credential_keys
-        .as_slice();
-    assert_eq!(
-        unset_credential_keys,
-        &["GITHUB_ENTERPRISE_TOKEN", "UNSET_AUTH_HEADER"]
-    );
-    let mut unset_policy = shell_environment_policy.clone();
-    let mut unset_env = HashMap::new();
-    for key in unset_credential_keys {
-        unset_env.insert(key.clone(), unset_policy.r#set.remove(key).unwrap());
-    }
-    let _ = snapshot_file.restore_credentials(&mut unset_env, &unset_policy);
-    snapshot_file.restore_fail_open_aliases(&mut unset_env, /*environment_id*/ None);
-    assert!(
-        unset_credential_keys
-            .iter()
-            .all(|key| !unset_env.contains_key(key))
-    );
-
-    let mut env = HashMap::from([
-        ("GH_HOST".to_string(), "github.example.com".to_string()),
-        ("STRIPE_HOST".to_string(), "api.stripe.example".to_string()),
+    for (case, replay_policy) in [
+        ("default", ShellEnvironmentPolicy::default()),
         (
-            "VENDOR_HOST".to_string(),
-            "https://api.vendor.example/v2".to_string(),
+            "include_credentials",
+            ShellEnvironmentPolicy {
+                ignore_default_excludes: true,
+                include_only: vec![EnvironmentVariablePattern::new_case_insensitive("*")],
+                ..ShellEnvironmentPolicy::default()
+            },
         ),
-    ]);
-    env.extend(
-        shell_environment_policy
-            .r#set
-            .iter()
-            .filter(|(key, _)| unset_credential_keys.contains(key))
-            .map(|(key, value)| (key.clone(), value.clone())),
-    );
-    let credential_context = snapshot_file.restore_credentials(&mut env, &shell_environment_policy);
-    for (key, value) in [
-        ("GH_TOKEN", "ghp_shell_only_secret"),
-        ("GITHUB_TOKEN", "ghp_readonly_secret"),
-        ("GH_ENTERPRISE_TOKEN", "ghp_enterprise_secret"),
-        ("GITHUB_ENTERPRISE_TOKEN", "ghp_removed_enterprise_secret"),
-        ("UNSET_AUTH_HEADER", "Bearer ghp_removed_enterprise_secret"),
-        ("OPENAI_API_KEY", "sk-proj-snapshot-secret"),
-        ("STRIPE_API_KEY", "stripe_live_abcdefghijklmnopqrstuvwx"),
-        ("STRIPE_HOST", "api.stripe.example"),
-        ("VENDOR_PASSWORD", "pin_abcdefgh"),
-        ("VENDOR_HOST", "https://api.vendor.example/v2"),
+        (
+            "exclude_credentials",
+            ShellEnvironmentPolicy {
+                exclude: vec![
+                    EnvironmentVariablePattern::new_case_insensitive("*TOKEN*"),
+                    EnvironmentVariablePattern::new_case_insensitive("*KEY*"),
+                    EnvironmentVariablePattern::new_case_insensitive("*PASSWORD*"),
+                ],
+                ..ShellEnvironmentPolicy::default()
+            },
+        ),
     ] {
-        assert_eq!(env.get(key).map(String::as_str), Some(value), "{key}");
-    }
-    assert_eq!(
-        env.get("OPENAI_BASE_URL").map(String::as_str),
-        Some("https://api.snapshot.example/v1")
-    );
-    let explicit_vendor_policy = ShellEnvironmentPolicy {
-        inherit: codex_protocol::config_types::ShellEnvironmentPolicyInherit::None,
-        r#set: HashMap::from([("VENDOR_PASSWORD".to_string(), "pin_abcdefgh".to_string())]),
-        ..ShellEnvironmentPolicy::default()
-    };
-    let mut explicit_vendor_env = explicit_vendor_policy.r#set.clone();
-    let explicit_vendor_context =
-        snapshot_file.restore_credentials(&mut explicit_vendor_env, &explicit_vendor_policy);
-    assert!(!explicit_vendor_env.contains_key("VENDOR_HOST"));
-    assert_eq!(
-        explicit_vendor_context.with_fallbacks(&explicit_vendor_env)["VENDOR_HOST"],
-        "https://api.vendor.example/v2"
-    );
-    explicit_vendor_env = explicit_vendor_context
-        .prepare_child_environment(
-            &network_proxy,
-            explicit_vendor_env,
-            /*environment_id*/ None,
-        )?
-        .env;
-    assert!(!explicit_vendor_env.contains_key("VENDOR_HOST"));
-    assert_ne!(explicit_vendor_env["VENDOR_PASSWORD"], "pin_abcdefgh");
-    let prepared_vendor_env = explicit_vendor_env.clone();
-    network_proxy.apply_to_env(&mut explicit_vendor_env);
-    assert_eq!(explicit_vendor_env, prepared_vendor_env);
-
-    let current_vendor_host = "https://api.current-vendor.example/v2";
-    let mut current_vendor_env = explicit_vendor_policy.r#set.clone();
-    current_vendor_env.insert("VENDOR_HOST".to_string(), current_vendor_host.to_string());
-    let current_vendor_context =
-        snapshot_file.restore_credentials(&mut current_vendor_env, &explicit_vendor_policy);
-    current_vendor_env = current_vendor_context
-        .prepare_child_environment(
-            &network_proxy,
-            current_vendor_env,
-            /*environment_id*/ None,
-        )?
-        .env;
-    assert_eq!(
-        current_vendor_env.get("VENDOR_HOST").map(String::as_str),
-        Some(current_vendor_host)
-    );
-    assert_ne!(current_vendor_env["VENDOR_PASSWORD"], "pin_abcdefgh");
-
-    for excluded_context in [false, true] {
-        let mut policy = shell_environment_policy.clone();
-        if excluded_context {
-            policy
-                .exclude
-                .push(EnvironmentVariablePattern::new_case_insensitive(
-                    "OPENAI_BASE_URL",
-                ));
+        let mut env = HashMap::new();
+        let context = snapshot_file.restore_credentials(&mut env, &replay_policy);
+        assert_eq!(
+            context.with_fallbacks(&env).as_ref(),
+            &env,
+            "{case} must not restore private destinations"
+        );
+        for brokered in [false, true] {
+            let mut replay_env = if brokered {
+                context
+                    .clone()
+                    .prepare_child_environment(
+                        &network_proxy,
+                        env.clone(),
+                        Some("d682-snapshot-child"),
+                    )?
+                    .env
+            } else {
+                env.clone()
+            };
+            // Exercise both branches after preparation. Cleanup may remove entries,
+            // and built-in credentials may remain masked; configured providers must
+            // never gain a replay source, alias or destination.
+            snapshot_file.restore_fail_open_aliases(&mut replay_env, Some("d682-snapshot-child"));
+            for key in [
+                "STRIPE_API_KEY",
+                "VENDOR_PASSWORD",
+                "LOCAL_TOKEN",
+                "STRIPE_AUTH_HEADER",
+                "VENDOR_AUTH_HEADER",
+                "LOCAL_AUTH_HEADER",
+                "STRIPE_HOST",
+                "VENDOR_HOST",
+            ] {
+                assert!(
+                    !replay_env.contains_key(key),
+                    "{case}/{brokered} restored unsupported {key}"
+                );
+            }
+            let replay = Command::new("/bin/bash")
+                .arg("-c")
+                .arg(
+                    ". \"$1\" || exit 1\n\
+                     test \"${IDENTITY_SEEN-missing}\" = missing || { printf '%s\\n' 'unsafe IDENTITY_SEEN' >&2; exit 1; }\n\
+                     test \"${EXCLUDED_PARENT_HOME-missing}\" = missing || { printf '%s\\n' 'unsafe EXCLUDED_PARENT_HOME' >&2; exit 1; }\n\
+                     test \"${STARTUP_PATH_OVERRIDE_SEEN-unset}\" = /enterprise/bin || { printf '%s\\n' 'missing startup PATH setting' >&2; exit 1; }\n\
+                     test \"$PATH\" = /enterprise/bin || { printf '%s\\n' 'missing PATH setting' >&2; exit 1; }\n\
+                     test \"${STARTUP_CORP_REGION_SEEN-unset}\" = production || { printf '%s\\n' 'missing startup region setting' >&2; exit 1; }\n\
+                     test \"${CORP_REGION-unset}\" = production || { printf '%s\\n' 'missing region setting' >&2; exit 1; }\n\
+                     export -p",
+                )
+                .arg("snapshot")
+                .arg(snapshot_file.path().as_path())
+                .env_clear()
+                .envs(&replay_env)
+                .output()?;
+            assert!(
+                replay.status.success(),
+                "{case}/{brokered}: replay failed ({})",
+                replay.status
+            );
+            let output = String::from_utf8(replay.stdout)?;
+            for secret in [
+                "ghp_shell_only_secret",
+                "ghp_readonly_secret",
+                "ghp_enterprise_secret",
+                "sk-proj-snapshot-secret",
+                "stripe_live_abcdefghijklmnopqrstuvwx",
+                "pin_abcdefgh",
+                "local_abcdefghijklmnopqrstuvwx",
+                "identity-token-secret",
+                "npm_enterprise_token",
+                "ghp_removed_enterprise_secret",
+            ] {
+                assert!(
+                    replay_env.values().all(|value| !value.contains(secret)),
+                    "{case}/{brokered} restored a raw credential in the child environment"
+                );
+                assert!(
+                    !output.contains(secret),
+                    "{case}/{brokered} replay exposed {secret}"
+                );
+            }
+            assert!(!output.contains("attacker.example"));
+            assert!(!output.contains("attacker.vendor.example"));
+            assert!(
+                output.contains("CORP_REGION=\"production\""),
+                "safe settings must survive"
+            );
         }
-        let ambient_host = "https://api.ambient.example/v1";
-        let mut restored_env =
-            HashMap::from([("OPENAI_BASE_URL".to_string(), ambient_host.to_string())]);
-        let context = snapshot_file.restore_credentials(&mut restored_env, &policy);
-        assert_eq!(
-            restored_env["OPENAI_BASE_URL"],
-            if excluded_context {
-                ambient_host
-            } else {
-                "https://api.snapshot.example/v1"
-            }
-        );
-        restored_env = context
-            .prepare_child_environment(&network_proxy, restored_env, /*environment_id*/ None)?
-            .env;
-        assert_ne!(restored_env["OPENAI_API_KEY"], "sk-proj-snapshot-secret");
-        assert_eq!(
-            restored_env["OPENAI_BASE_URL"],
-            if excluded_context {
-                ambient_host
-            } else {
-                "https://api.snapshot.example/v1"
-            }
-        );
     }
-
-    for (credential_key, context_key, real, current_host) in [
-        (
-            "GH_ENTERPRISE_TOKEN",
-            "GH_HOST",
-            "ghp_enterprise_secret",
-            "github.override.example",
-        ),
-        (
-            "VENDOR_PASSWORD",
-            "VENDOR_HOST",
-            "pin_abcdefgh",
-            "https://api.current-vendor.example/v2",
-        ),
-    ] {
-        let policy = ShellEnvironmentPolicy {
-            ignore_default_excludes: true,
-            include_only: vec![EnvironmentVariablePattern::new_case_insensitive(
-                credential_key,
-            )],
-            r#set: HashMap::from([(context_key.to_string(), current_host.to_string())]),
-            ..ShellEnvironmentPolicy::default()
-        };
-        let mut restored_env = create_env_from_vars([], &policy, /*thread_id*/ None);
-        let context = snapshot_file.restore_credentials(&mut restored_env, &policy);
-        assert!(!restored_env.contains_key(context_key));
-        assert_eq!(
-            context.with_fallbacks(&restored_env)[context_key],
-            current_host
-        );
-        restored_env = context
-            .prepare_child_environment(&network_proxy, restored_env, /*environment_id*/ None)?
-            .env;
-        assert_ne!(restored_env[credential_key], real, "{credential_key}");
-        assert!(!restored_env.contains_key(context_key));
-    }
-
-    let unbrokered_replay = Command::new("/bin/bash")
-        .arg("-c")
-        .arg(". \"$1\" && printf '%s\\n%s' \"$AUTH_HEADER\" \"$AUTH_BUNDLE\"")
-        .arg("snapshot")
-        .arg(snapshot_file.path().as_path())
-        .env_clear()
-        .envs(&env)
-        .output()?;
-    assert!(unbrokered_replay.status.success());
-    assert_eq!(
-        String::from_utf8(unbrokered_replay.stdout)?,
-        "Bearer ghp_shell_only_secret\nGitHub ghp_shell_only_secret\nOpenAI sk-proj-snapshot-secret"
-    );
-
-    let mut cleared_local_context = HashMap::from([
-        (
-            "LOCAL_AUTH_HEADER".to_string(),
-            snapshot_file
-                .credentials
-                .as_ref()
-                .unwrap()
-                .fail_open_aliases["LOCAL_AUTH_HEADER"]
-                .dummy_value
-                .clone()
-                .unwrap(),
-        ),
-        ("LOCAL_URL".to_string(), String::new()),
-    ]);
-    network_proxy.apply_to_env_for_snapshot(&mut cleared_local_context);
-    env = credential_context
-        .prepare_child_environment(&network_proxy, env, Some("snapshot-child"))?
-        .env;
-    snapshot_file.restore_fail_open_aliases(&mut env, Some("snapshot-child"));
-    assert_ne!(env["GH_TOKEN"], "ghp_shell_only_secret");
-    assert_ne!(env["GITHUB_TOKEN"], "ghp_readonly_secret");
-    assert_ne!(env["GH_ENTERPRISE_TOKEN"], "ghp_enterprise_secret");
-    assert_ne!(env["OPENAI_API_KEY"], "sk-proj-snapshot-secret");
-    assert_ne!(
-        env["STRIPE_API_KEY"],
-        "stripe_live_abcdefghijklmnopqrstuvwx"
-    );
-    assert_ne!(env["VENDOR_PASSWORD"], "pin_abcdefgh");
-    assert!(!env.contains_key("LOCAL_TOKEN"));
-    let mut replay_env = env.clone();
-    replay_env.remove("STRIPE_HOST");
-    let snapshot_path = snapshot_file.path();
-    prepare_brokered_shell_snapshot_env(&mut replay_env, Some(&snapshot_path), &shell);
-    let replay_command = maybe_wrap_shell_lc_with_snapshot(
-        &shell.derive_exec_args(
-            "printf '%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n%s' \"$HOMEBREW_GITHUB_API_TOKEN\" \"$AUTH_HEADER\" \"$AUTH_BUNDLE\" \"$VENDOR_PASSWORD\" \"${VENDOR_HOST-missing}\" \"${STRIPE_HOST-missing}\" \"$LOCAL_AUTH_HEADER\"",
-            /*use_login_shell*/ false,
-        ),
-        &shell,
-        Some(&snapshot_path),
-        &shell_environment_policy.r#set,
-        &replay_env,
-        &RuntimePathPrepends::default(),
-    );
-    let replay = Command::new(&replay_command[0])
-        .args(&replay_command[1..])
-        .env_clear()
-        .envs(&replay_env)
-        .output()?;
-    assert!(
-        replay.status.success(),
-        "snapshot replay failed: {replay:?}"
-    );
-    assert_eq!(
-        String::from_utf8(replay.stdout)?,
-        format!(
-            "{}\nBearer {}\nGitHub {}\nOpenAI {}\n{}\n{}\nmissing\nBearer local_abcdefghijklmnopqrstuvwx",
-            env["GITHUB_TOKEN"],
-            env["GH_TOKEN"],
-            env["GH_TOKEN"],
-            env["OPENAI_API_KEY"],
-            env["VENDOR_PASSWORD"],
-            env["VENDOR_HOST"]
-        )
-    );
-
-    let filtered_policy = ShellEnvironmentPolicy {
-        include_only: vec![EnvironmentVariablePattern::new_case_insensitive("GH_HOST")],
-        ..ShellEnvironmentPolicy::default()
-    };
-    let mut filtered_env = HashMap::new();
-    let _ = snapshot_file.restore_credentials(&mut filtered_env, &filtered_policy);
-    assert!(filtered_env.is_empty());
-
-    let partially_filtered_credential_broker = SnapshotCredentialBroker {
-        network_proxy: network_proxy.clone(),
-        shell_environment_policy: ShellEnvironmentPolicy {
-            r#set: HashMap::from([trusted_startup.clone()]),
-            include_only: vec![
-                EnvironmentVariablePattern::new_case_insensitive("BASH_ENV"),
-                EnvironmentVariablePattern::new_case_insensitive("GH_TOKEN"),
-                EnvironmentVariablePattern::new_case_insensitive("AUTH_HEADER"),
-                EnvironmentVariablePattern::new_case_insensitive("AUTH_BUNDLE"),
-            ],
-            ..ShellEnvironmentPolicy::default()
-        },
-        allow_login_shell: false,
-    };
-    for (github_token, openai_api_key) in [
-        ("ghp_shell_only_secret", "sk-proj-snapshot-secret"),
-        (env["GH_TOKEN"].as_str(), env["OPENAI_API_KEY"].as_str()),
-    ] {
-        std::fs::write(
-            &startup,
-            format!(
-                "export GH_TOKEN='{github_token}'\n\
-                 export GITHUB_TOKEN=\"$GH_TOKEN\"\n\
-                 export AUTH_HEADER=\"Bearer $GH_TOKEN\"\n\
-                 export OPENAI_API_KEY='{openai_api_key}'\n\
-                 export AUTH_BUNDLE=\"GitHub $GH_TOKEN\n\
-                 OpenAI $OPENAI_API_KEY\"\n\
-                 unset OPENAI_API_KEY\n"
-            ),
-        )?;
-        let partially_filtered_path = dir.path().join("partially-filtered-snapshot.sh").abs();
-        let filtered_credentials = write_shell_snapshot(
-            &shell,
-            &partially_filtered_path,
-            &dir.path().abs(),
-            &partially_filtered_credential_broker.shell_environment_policy,
-            Some(&partially_filtered_credential_broker),
-            /*sandbox*/ None,
-            /*removed_env_vars*/ &[],
-        )
-        .await?;
-        let filtered_replay = Command::new("/bin/bash")
-            .arg("-c")
-            .arg(". \"$1\" && printf '%s\\n%s' \"$AUTH_HEADER\" \"${AUTH_BUNDLE-unset}\"")
-            .arg("snapshot")
-            .arg(partially_filtered_path.as_path())
-            .env_clear()
-            .env("GH_TOKEN", "ghp_filtered_dummy")
-            .output()?;
-        assert!(filtered_replay.status.success());
-        assert_eq!(
-            String::from_utf8(filtered_replay.stdout)?,
-            "Bearer ghp_filtered_dummy\nunset"
-        );
-        let filtered_snapshot = ShellSnapshotFile {
-            shell_environment_policy: ShellEnvironmentPolicy::default(),
-            path: partially_filtered_path,
-            credentials: filtered_credentials,
-        };
-        let mut fail_open_env = HashMap::new();
-        filtered_snapshot
-            .restore_fail_open_aliases(&mut fail_open_env, /*environment_id*/ None);
-        assert!(!fail_open_env.contains_key("AUTH_BUNDLE"));
-    }
-
     Ok(())
 }
 
@@ -1384,14 +1103,9 @@ async fn snapshot_protects_posix_startup_only_when_it_contains_credentials() -> 
     let posix_snapshot = fs::read_to_string(&posix_snapshot_path).await?;
     assert!(posix_snapshot.contains("POSIX_STARTUP_LOADED"));
     assert!(!posix_snapshot.contains("ghp_posix_shell_secret"));
-    assert_eq!(
-        posix_credentials
-            .protected_startup_env
-            .as_deref()
-            .map(std::fs::canonicalize)
-            .transpose()?,
-        Some(std::fs::canonicalize(&posix_startup)?)
-    );
+    // D353/D354 keep upstream snapshot credential replay off. The retained
+    // engine strips the secret from the snapshot without a protected replay path.
+    assert!(posix_credentials.protected_startup_env.is_none());
 
     std::fs::write(&posix_startup, "export APPLICATION_SETTING=production\n")?;
     let application_snapshot_path = dir.path().join("posix-application-snapshot.sh").abs();
@@ -1480,14 +1194,11 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
         path: inherited_path,
         credentials: inherited_credentials,
     };
-    let real_hidden_header = "prefix\"ghp_hidden_alias_secret\"suffix";
-    let real_header = "Bearer ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
-    let real_stripe_header = "Bearer stripe_live_zyxwvutsrqponmlkjihgfedc";
+    // D640 retires upstream's alias rewriting: copies of a credential are not
+    // replaced by brokered placeholders, so managed-network children get none.
+    let policy = &inherited_credential_broker.shell_environment_policy;
     let mut brokered_env = HashMap::new();
-    let credential_context = snapshot_file.restore_credentials(
-        &mut brokered_env,
-        &inherited_credential_broker.shell_environment_policy,
-    );
+    let credential_context = snapshot_file.restore_credentials(&mut brokered_env, policy);
     brokered_env = credential_context
         .prepare_child_environment(
             &inherited_credential_broker.network_proxy,
@@ -1495,40 +1206,30 @@ async fn snapshot_discovers_and_restores_inherited_credential_aliases() -> Resul
             /*environment_id*/ None,
         )?
         .env;
-    let dummy_header = brokered_env["UNKNOWN_HEADER"].clone();
-    let dummy_hidden_header = brokered_env["HIDDEN_HEADER"].clone();
-    let dummy_stripe_header = brokered_env["STRIPE_HIDDEN_HEADER"].clone();
-    assert_ne!(dummy_header, real_header);
-    assert_ne!(dummy_hidden_header, real_hidden_header);
-    assert_ne!(dummy_stripe_header, real_stripe_header);
     snapshot_file.restore_fail_open_aliases(&mut brokered_env, /*environment_id*/ None);
-    assert_eq!(
-        brokered_env.get("UNKNOWN_HEADER").map(String::as_str),
-        Some(dummy_header.as_str())
-    );
-    assert_eq!(
-        brokered_env.get("HIDDEN_HEADER").map(String::as_str),
-        Some(dummy_hidden_header.as_str())
-    );
-    assert_eq!(
-        brokered_env.get("STRIPE_HIDDEN_HEADER").map(String::as_str),
-        Some(dummy_stripe_header.as_str())
-    );
+    for alias in ["HIDDEN_HEADER", "UNKNOWN_HEADER", "STRIPE_HIDDEN_HEADER"] {
+        assert_eq!(brokered_env.get(alias), None, "{alias}");
+    }
+    for secret in [
+        "ghp_hidden_alias_secret",
+        "ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh",
+        "stripe_live_zyxwvutsrqponmlkjihgfedc",
+    ] {
+        assert!(brokered_env.values().all(|value| !value.contains(secret)));
+    }
 
+    // Fail-open children leave managed networking and keep upstream's real
+    // aliases, except a copy of a credential the hardened engine still brokers.
+    let real_header = "Bearer ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
+    let real_stripe_header = "Bearer stripe_live_zyxwvutsrqponmlkjihgfedc";
     let mut fail_open_env = HashMap::new();
-    let _ = snapshot_file.restore_credentials(
-        &mut fail_open_env,
-        &inherited_credential_broker.shell_environment_policy,
-    );
+    let _ = snapshot_file.restore_credentials(&mut fail_open_env, policy);
     snapshot_file.restore_fail_open_aliases(&mut fail_open_env, /*environment_id*/ None);
     assert_eq!(
         fail_open_env.get("UNKNOWN_HEADER").map(String::as_str),
         Some(real_header)
     );
-    assert_eq!(
-        fail_open_env.get("HIDDEN_HEADER").map(String::as_str),
-        Some(real_hidden_header)
-    );
+    assert_eq!(fail_open_env.get("HIDDEN_HEADER"), None);
     assert_eq!(
         fail_open_env
             .get("STRIPE_HIDDEN_HEADER")
@@ -1990,6 +1691,273 @@ async fn snapshot_shell_does_not_inherit_stdin() -> Result<()> {
         "expected snapshot marker in output; output={output:?}"
     );
 
+    Ok(())
+}
+
+/// D544 (a) / #2562 (main ledger row 13): an armed launch contract refuses only the sandboxed
+/// snapshot. (Arming is one-way and process-wide, so the guard's inputs are pinned here.)
+#[test]
+fn armed_launch_contract_skips_only_sandboxed_snapshots() {
+    assert!(!sandboxed_snapshot_allowed(
+        /*sandboxed*/ true, /*launch_contract_armed*/ true
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ true, /*launch_contract_armed*/ false
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ false, /*launch_contract_armed*/ true
+    ));
+    assert!(sandboxed_snapshot_allowed(
+        /*sandboxed*/ false, /*launch_contract_armed*/ false
+    ));
+}
+
+/// #310 / #2562 (main ledger row 13): the capture shell never inherits a provider credential
+/// variable (`removed_env_vars`), matched case-insensitively, on the plain path and on the
+/// sandboxed path every brokered capture takes. The probe is a variable the test runner sets
+/// and a shell never sets itself (`CARGO_MANIFEST_DIR` under Cargo, `TEST_TMPDIR` under Bazel).
+#[cfg(unix)]
+#[tokio::test]
+async fn snapshot_shell_does_not_inherit_removed_env_vars() -> Result<()> {
+    use crate::tools::sandboxing::SandboxAttempt;
+    use codex_exec_server::LOCAL_ENVIRONMENT_ID;
+    use codex_protocol::config_types::WindowsSandboxLevel;
+    use codex_sandboxing::SandboxManager;
+    use codex_sandboxing::SandboxType;
+
+    let (probe, expected) = ["CARGO_MANIFEST_DIR", "TEST_TMPDIR"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().map(|value| (name, value)))
+        .context("the test runner sets CARGO_MANIFEST_DIR or TEST_TMPDIR")?;
+    let dir = tempdir()?;
+    let cwd = dir.path().abs();
+    let shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: PathBuf::from("/bin/bash"),
+    };
+    let script = format!("printf '%s\\n' \"${{{probe}-removed}}\"");
+    let cwd_uri = PathUri::from_abs_path(&cwd);
+    let manager = SandboxManager::new();
+    let permissions = PermissionProfile::Disabled;
+    let attempt = SandboxAttempt {
+        sandbox_override: SandboxOverride::NoOverride,
+        sandbox: SandboxType::None,
+        sandbox_requested: false,
+        permissions: &permissions,
+        exec_server_permissions: &permissions,
+        enforce_managed_network: false,
+        manager: &manager,
+        sandbox_cwd: &cwd_uri,
+        workspace_roots: std::slice::from_ref(&cwd_uri),
+        sandbox_exe: None,
+        use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::None,
+        windows_sandbox_level: WindowsSandboxLevel::Disabled,
+        network_denial_cancellation_token: None,
+        network_proxy: None,
+    };
+    let sandbox = ShellSnapshotSandbox::new(
+        &attempt,
+        /*network*/ None,
+        LOCAL_ENVIRONMENT_ID,
+        /*additional_permissions*/ None,
+    );
+    for sandbox in [None, Some(&sandbox)] {
+        let run = |removed: Vec<String>| {
+            let shell = shell.clone();
+            let script = script.clone();
+            let cwd = cwd.clone();
+            async move {
+                run_script_with_timeout(
+                    &shell,
+                    &script,
+                    Duration::from_secs(10),
+                    SnapshotShellMode::NonLogin,
+                    &cwd,
+                    /*credential_broker*/ None,
+                    sandbox,
+                    &removed,
+                )
+                .await
+            }
+        };
+        let path = if sandbox.is_some() {
+            "sandboxed"
+        } else {
+            "plain"
+        };
+        assert_eq!(
+            run(Vec::new()).await?.trim_end(),
+            expected,
+            "{path} control"
+        );
+        assert_eq!(
+            run(vec![probe.to_ascii_lowercase()]).await?.trim_end(),
+            "removed",
+            "{path}"
+        );
+    }
+    Ok(())
+}
+
+/// #310 / #2562 (main ledger row 13): on the brokered path the snapshot file drops a
+/// secret-named export and a provider credential name, both matched case-insensitively, even
+/// when their values look nothing like credentials (so the value scan can't be what drops them).
+#[cfg(unix)]
+#[tokio::test]
+async fn brokered_snapshot_drops_secret_and_provider_names_case_insensitively() -> Result<()> {
+    let dir = tempdir()?;
+    let startup = dir.path().join("startup.sh");
+    std::fs::write(
+        &startup,
+        "export lowercase_api_key=plainvalueone\n\
+         export corp_llm_cred=plainvaluetwo\n\
+         export KEEP_ME_VISIBLE=plainvaluethree\n",
+    )?;
+    let started_proxy = credential_snapshot_proxy().await?;
+    let shell = Shell {
+        shell_type: ShellType::Bash,
+        shell_path: PathBuf::from("/bin/bash"),
+    };
+    let shell_environment_policy = ShellEnvironmentPolicy {
+        r#set: HashMap::from([("BASH_ENV".to_string(), startup.display().to_string())]),
+        ..ShellEnvironmentPolicy::default()
+    };
+    let credential_broker = SnapshotCredentialBroker {
+        network_proxy: started_proxy.proxy(),
+        shell_environment_policy: shell_environment_policy.clone(),
+        allow_login_shell: false,
+    };
+    let path = dir.path().join("snapshot.sh").abs();
+    write_shell_snapshot(
+        &shell,
+        &path,
+        &dir.path().abs(),
+        &shell_environment_policy,
+        Some(&credential_broker),
+        /*sandbox*/ None,
+        &["CORP_LLM_CRED".to_string()],
+    )
+    .await?;
+    let snapshot = fs::read_to_string(&path).await?;
+    assert!(
+        snapshot.contains("KEEP_ME_VISIBLE"),
+        "control: the startup export is captured: {snapshot}"
+    );
+    for hidden in [
+        "lowercase_api_key",
+        "corp_llm_cred",
+        "plainvalueone",
+        "plainvaluetwo",
+    ] {
+        assert!(!snapshot.contains(hidden), "{hidden} reached the file");
+    }
+    Ok(())
+}
+
+/// #2147 review r2 / #310: a zsh startup file (`.zshenv`, which the brokered
+/// non-login capture reads) exports a brokered GitHub token and ties the
+/// secret-named array `deploy_token` to `DEPLOY_TOKEN`, a copy of it. Core's
+/// secret-name filter drops the export (its value check would too), and the
+/// capture still records `DEPLOY_TOKEN` as an alias of the brokered token
+/// instead of bailing on it (`invalid_export`): the snapshot is written, the
+/// alias reaches neither the file nor a replay of it, and a brokered child that
+/// inherited the token and the alias gets neither the alias nor any copy of the
+/// token (D640: no placeholders for aliases). A non-secret export in the same
+/// file is kept. Runs where zsh is native (macOS).
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> Result<()> {
+    const SECRET: &str = "ghp_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh";
+    let dir = tempdir()?;
+    std::fs::write(
+        dir.path().join(".zshenv"),
+        format!(
+            "export GITHUB_TOKEN='{SECRET}'\n\
+             typeset -T DEPLOY_TOKEN deploy_token\n\
+             deploy_token=(prefix \"Bearer $GITHUB_TOKEN\")\n\
+             export DEPLOY_TOKEN\n\
+             export KEEP_ME_VISIBLE=plainvaluethree\n"
+        ),
+    )?;
+    let started_proxy = credential_snapshot_proxy().await?;
+    let shell = Shell {
+        shell_type: ShellType::Zsh,
+        shell_path: PathBuf::from("/bin/zsh"),
+    };
+    let shell_environment_policy = ShellEnvironmentPolicy {
+        r#set: HashMap::from([("ZDOTDIR".to_string(), dir.path().display().to_string())]),
+        ..ShellEnvironmentPolicy::default()
+    };
+    let credential_broker = SnapshotCredentialBroker {
+        network_proxy: started_proxy.proxy(),
+        shell_environment_policy: shell_environment_policy.clone(),
+        allow_login_shell: false,
+    };
+    let path = dir.path().join("snapshot.sh").abs();
+    let credentials = write_shell_snapshot(
+        &shell,
+        &path,
+        &dir.path().abs(),
+        &shell_environment_policy,
+        Some(&credential_broker),
+        /*sandbox*/ None,
+        /*removed_env_vars*/ &[],
+    )
+    .await?;
+    let snapshot = fs::read_to_string(&path).await?;
+    assert!(
+        snapshot.contains("KEEP_ME_VISIBLE"),
+        "control: the startup export is captured: {snapshot}"
+    );
+    for hidden in ["DEPLOY_TOKEN", "deploy_token", SECRET, "Bearer"] {
+        assert!(!snapshot.contains(hidden), "{hidden} reached the file");
+    }
+    assert!(
+        credentials
+            .as_ref()
+            .is_some_and(|credentials| credentials.fail_open_aliases.contains_key("DEPLOY_TOKEN")),
+        "control: the capture saw DEPLOY_TOKEN as an alias of the brokered token"
+    );
+    let replay = Command::new("/bin/zsh")
+        .arg("-f")
+        .arg("-c")
+        .arg(". \"$1\" && printf '%s|%s' \"${DEPLOY_TOKEN-unset}\" \"${KEEP_ME_VISIBLE-unset}\"")
+        .arg("snapshot")
+        .arg(path.as_path())
+        .env_clear()
+        .output()?;
+    assert!(replay.status.success(), "{replay:?}");
+    assert_eq!(String::from_utf8(replay.stdout)?, "unset|plainvaluethree");
+
+    let snapshot_file = ShellSnapshotFile {
+        shell_environment_policy: ShellEnvironmentPolicy::default(),
+        path,
+        credentials,
+    };
+    // As if the command inherited the token and its alias.
+    let mut brokered_env = HashMap::from([
+        ("GITHUB_TOKEN".to_string(), SECRET.to_string()),
+        (
+            "DEPLOY_TOKEN".to_string(),
+            format!("prefix:Bearer {SECRET}"),
+        ),
+    ]);
+    let credential_context =
+        snapshot_file.restore_credentials(&mut brokered_env, &shell_environment_policy);
+    brokered_env = credential_context
+        .prepare_child_environment(
+            &credential_broker.network_proxy,
+            brokered_env,
+            /*environment_id*/ None,
+        )?
+        .env;
+    snapshot_file.restore_fail_open_aliases(&mut brokered_env, /*environment_id*/ None);
+    assert_eq!(brokered_env.get("DEPLOY_TOKEN"), None);
+    assert!(
+        brokered_env.values().all(|value| !value.contains(SECRET)),
+        "a brokered child got a copy of the credential: {brokered_env:?}"
+    );
     Ok(())
 }
 

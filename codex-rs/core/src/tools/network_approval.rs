@@ -1117,14 +1117,18 @@ impl NetworkApprovalService {
             retry_reason: Some(policy_denial_message.clone()),
             network_approval_context: Some(network_approval_context.clone()),
         };
-        let user_prompt = pending_owner.review_user_prompt(
-            session,
-            &turn_context,
-            owner_call
-                .as_ref()
-                .map(|call| call.trigger.call_id.as_str()),
-            &policy_denial_message,
-            session.request_user_approval(&action, &approval_context),
+        // Keep the prompt future out of each nested approval frame on the proxy's
+        // polling stack. Boxing preserves its lazy polling and cancellation behavior.
+        let user_prompt = Box::pin(
+            pending_owner.review_user_prompt(
+                session,
+                &turn_context,
+                owner_call
+                    .as_ref()
+                    .map(|call| call.trigger.call_id.as_str()),
+                &policy_denial_message,
+                session.request_user_approval(&action, &approval_context),
+            ),
         );
         let approval =
             session.request_approval_with_user_prompt(&action, &approval_context, user_prompt);
@@ -1572,7 +1576,8 @@ fn environment_owner_network_spec(
         environment.map_or(
             codex_network_proxy::LocalBindingPolicy::DefaultFalse,
             |environment| {
-                crate::windows_sandbox::local_binding_policy_for_sandbox(
+                // Attachment-owned network policy is remote-only (`session/environment.rs`).
+                crate::windows_sandbox::remote_local_binding_policy_for_sandbox(
                     environment.config().windows_sandbox_type,
                     environment.executor_platform_os.as_deref(),
                 )
@@ -1702,10 +1707,19 @@ pub(crate) async fn remote_network_proxy_launch(
     };
     let launch = network
         .remote_launch_config(
-            crate::windows_sandbox::local_binding_policy_for_sandbox(
-                environment.config().windows_sandbox_type,
-                environment.executor_platform_os.as_deref(),
-            ),
+            // Environment hooks also launch here for the local environment, which keeps
+            // the local rule; D616 applies to remote executors.
+            if environment.environment.is_remote() {
+                crate::windows_sandbox::remote_local_binding_policy_for_sandbox(
+                    environment.config().windows_sandbox_type,
+                    environment.executor_platform_os.as_deref(),
+                )
+            } else {
+                crate::windows_sandbox::local_binding_policy_for_sandbox(
+                    environment.config().windows_sandbox_type,
+                    environment.executor_platform_os.as_deref(),
+                )
+            },
             credential_masking,
         )
         .await

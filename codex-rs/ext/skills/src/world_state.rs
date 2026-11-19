@@ -1,6 +1,7 @@
 use crate::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_extension_api::PreviousWorldStateSection;
 use codex_extension_api::RenderedWorldStateFragment;
+use codex_extension_api::WorldStateContextMode;
 use codex_extension_api::WorldStateSectionContribution;
 use codex_protocol::models::ContentItemMetadata;
 use codex_protocol::models::input_text;
@@ -42,6 +43,7 @@ struct CatalogSnapshot {
 pub(crate) fn executor_skills_world_state_section(
     body: Option<String>,
     include_instructions: bool,
+    context_mode: WorldStateContextMode,
     previous_snapshot: Option<&serde_json::Value>,
     on_render: CatalogRenderCallback,
 ) -> WorldStateSectionContribution {
@@ -66,6 +68,14 @@ pub(crate) fn executor_skills_world_state_section(
         "includeInstructions": include_instructions,
         "lastAvailableFingerprint": last_available_fingerprint,
     });
+    // A replacing adapter would otherwise discard the saved catalog during reconnect.
+    // Keep its names as explicitly unavailable reference text; discovery still controls access.
+    let unavailable_body = previous_snapshot
+        .filter(|_| context_mode == WorldStateContextMode::ReplaceSections && include_instructions)
+        .and_then(|previous| previous.get("body").and_then(serde_json::Value::as_str))
+        .map(|catalog| format!(
+            "\n## Skills update\nThe following catalog is retained for reference while the selected environment is unavailable.\n{catalog}{NO_EXECUTOR_SKILLS_BODY}"
+        ));
     let retained_body = body.clone();
     let contribution = WorldStateSectionContribution::new(SKILLS_WORLD_STATE_ID, move |previous| {
             if let PreviousWorldStateSection::Known(previous) = &previous
@@ -75,7 +85,8 @@ pub(crate) fn executor_skills_world_state_section(
                 if previous.get("body").and_then(serde_json::Value::as_str) == body.as_deref() {
                     return (Some(snapshot.clone()), None);
                 }
-                if let Some(body) = body.as_deref()
+                if context_mode == WorldStateContextMode::AppendOnly
+                    && let Some(body) = body.as_deref()
                     && previous.get("lastAvailableFingerprint").and_then(serde_json::Value::as_str)
                         == Some(blake3::hash(body.as_bytes()).to_hex().as_str())
                 {
@@ -96,7 +107,7 @@ pub(crate) fn executor_skills_world_state_section(
                     return (Some(snapshot.clone()), None);
                 }
                 None if !include_instructions => HIDDEN_EXECUTOR_SKILLS_BODY,
-                None => NO_EXECUTOR_SKILLS_BODY,
+                None => unavailable_body.as_deref().unwrap_or(NO_EXECUTOR_SKILLS_BODY),
             };
             on_render();
             (
@@ -207,6 +218,10 @@ fn skills_world_state_section(
         None => contribution,
     }
 }
+
+#[cfg(test)]
+#[path = "world_state_tests.rs"]
+mod tests;
 
 pub(crate) fn host_skills_world_state_section(
     body: Option<String>,

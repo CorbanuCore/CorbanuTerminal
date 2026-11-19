@@ -40,7 +40,7 @@ fn pf_30_s01_native_tool_and_mcp_origins_bind_before_admission() {
         else {
             panic!("tool shape")
         };
-        assert_eq!(call_id, "call-1");
+        assert_eq!(call_id.as_deref(), Some("call-1"));
         assert!(!output.text_content().unwrap().contains("<system>"));
         assert!(output.text_content().unwrap().contains("untrusted"));
     }

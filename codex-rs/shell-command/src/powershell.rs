@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -6,79 +7,167 @@ use crate::command_safety::try_parse_powershell_commands;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
-const POWERSHELL_FLAGS: &[&str] = &["-nologo", "-noprofile", "-command", "-c"];
+mod cli;
 
 /// Prefixed command for powershell shell calls to request UTF-8 console output.
 pub const UTF8_OUTPUT_PREFIX: &str =
     "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n";
 
+/// `command` with [`UTF8_OUTPUT_PREFIX`] before its `-Command` script, which
+/// becomes one argument (PowerShell joins a script's arguments with spaces
+/// anyway). Any other command is returned as it is.
 pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
-    let Some((_, script)) = extract_powershell_command(command) else {
+    let Some((
+        _,
+        cli::Invocation {
+            run: cli::Run::Command { start, script },
+            ..
+        },
+    )) = read_invocation(command)
+    else {
         return command.to_vec();
     };
 
-    let trimmed = script.trim_start();
-    let script = if trimmed.starts_with(UTF8_OUTPUT_PREFIX) {
-        script.to_string()
+    let script = if script.trim_start().starts_with(UTF8_OUTPUT_PREFIX) {
+        script.into_owned()
     } else {
         format!("{UTF8_OUTPUT_PREFIX}{script}")
     };
 
-    let mut command: Vec<String> = command[..(command.len() - 1)]
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
-    command.push(script);
-    command
+    let mut prefixed = command[..start].to_vec();
+    prefixed.push(script);
+    prefixed
 }
 
-/// Extract the PowerShell script body from an invocation such as:
+/// Which PowerShell a command line is written for: `pwsh` (PowerShell 7) and
+/// `powershell` (Windows PowerShell 5.1) read different parameters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PowershellKind {
+    Pwsh,
+    WindowsPowershell,
+}
+
+impl PowershellKind {
+    /// The kind a PowerShell program name (`pwsh`, `C:\…\PowerShell.EXE`)
+    /// runs.
+    pub(crate) fn of(shell: &str) -> Self {
+        let name = std::path::Path::new(shell)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(shell)
+            .to_ascii_lowercase();
+        // #2568: Windows drops trailing dots and spaces (`pwsh.exe.`).
+        let name = name.trim_end_matches(['.', ' ']);
+        let stem = name.strip_suffix(".exe").unwrap_or(name);
+        if stem.trim_end_matches(['.', ' ']) == "pwsh" {
+            Self::Pwsh
+        } else {
+            Self::WindowsPowershell
+        }
+    }
+}
+
+/// Whether `program` names a PowerShell this crate reads command lines of
+/// (`pwsh`, `powershell.exe`, `C:\…\pwsh.exe`).
+pub fn is_powershell_program(program: &str) -> bool {
+    matches!(
+        detect_shell_type(PathBuf::from(program)),
+        Some(ShellType::PowerShell)
+    )
+}
+
+/// `command` read as PowerShell reads its command line (#2568); `None` when
+/// `command[0]` is not a PowerShell.
+fn read_invocation(command: &[String]) -> Option<(&str, cli::Invocation<'_>)> {
+    let shell = command.first()?;
+    if !is_powershell_program(shell) {
+        return None;
+    }
+    Some((shell, cli::read(command, PowershellKind::of(shell))))
+}
+
+/// Extract the script a PowerShell invocation runs, as PowerShell reads it:
 ///
 /// - ["pwsh", "-NoProfile", "-Command", "Get-ChildItem -Recurse | Select-String foo"]
-/// - ["powershell.exe", "-Command", "Write-Host hi"]
-/// - ["powershell", "-NoLogo", "-NoProfile", "-Command", "...script..."]
+/// - ["powershell.exe", "-c", "git status", "; git push"] runs
+///   `git status ; git push`: PowerShell joins every argument after
+///   `-Command` with spaces (#2568).
+/// - ["pwsh", "-EncodedCommand", "<base64 of UTF-16LE>"], decoded.
 ///
-/// Returns (`shell`, `script`) when the first arg is a PowerShell executable and a
-/// `-Command` (or `-c`) flag is present followed by a script string.
-pub fn extract_powershell_command(command: &[String]) -> Option<(&str, &str)> {
-    if command.len() < 3 {
+/// Returns (`shell`, `script`); `None` for any other command, including a
+/// PowerShell invocation whose script cannot be read (see
+/// [`unread_powershell_command_line`]).
+pub fn extract_powershell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    let (shell, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::Command { script, .. } => Some((shell, script)),
+        cli::Run::Encoded(script) => Some((shell, Cow::Owned(script))),
+        cli::Run::File(_) | cli::Run::Unreadable | cli::Run::Interactive => None,
+    }
+}
+
+/// [`extract_powershell_command`] for a plain `-Command` (or `-c`)
+/// invocation only, with no other parameter than `-NoLogo`, `-NoProfile`,
+/// `-NonInteractive`, `-STA` or `-MTA`.
+pub fn extract_plain_powershell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    let (shell, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::Command { script, .. } if invocation.plain => Some((shell, script)),
+        _ => None,
+    }
+}
+
+/// #2568 (D553): a PowerShell command line whose script rules cannot read.
+#[derive(Debug, PartialEq, Eq)]
+pub enum UnreadPowershell<'a> {
+    /// `-File`: the script file and its arguments, which rules see as a
+    /// command; the file's content is not read.
+    File(&'a [String]),
+    /// Known literal prefixes in a script that cannot be fully lowered.
+    /// These may only add prompt or forbidden matches.
+    Partial(Vec<Vec<String>>),
+    /// A command line this reader cannot read the way PowerShell reads it:
+    /// an unknown or unsupported parameter, a script from stdin,
+    /// `-CommandWithArgs` with arguments, an `-EncodedCommand` that does not
+    /// decode.
+    Unreadable,
+}
+
+/// The way `command`, a PowerShell invocation, runs a script rules cannot
+/// read; `None` for other commands and scripts fully lowered into a plain
+/// command list. A PowerShell invocation without a script can read stdin.
+pub fn unread_powershell_command_line(command: &[String]) -> Option<UnreadPowershell<'_>> {
+    let (_, invocation) = read_invocation(command)?;
+    match invocation.run {
+        cli::Run::File(file) => Some(UnreadPowershell::File(file)),
+        cli::Run::Unreadable | cli::Run::Interactive => Some(UnreadPowershell::Unreadable),
+        cli::Run::Command { script, .. } => unread_script(&script),
+        cli::Run::Encoded(script) => unread_script(&script),
+    }
+}
+
+fn unread_script(script: &str) -> Option<UnreadPowershell<'static>> {
+    if try_parse_powershell_commands(script).is_some() {
         return None;
     }
-
-    let shell = &command[0];
-    if !matches!(
-        detect_shell_type(PathBuf::from(shell)),
-        Some(ShellType::PowerShell)
-    ) {
-        return None;
-    }
-
-    // Find the first occurrence of -Command (accept common short alias -c as well)
-    let mut i = 1usize;
-    while i + 1 < command.len() {
-        let flag = &command[i];
-        // Reject unknown flags
-        if !POWERSHELL_FLAGS.contains(&flag.to_ascii_lowercase().as_str()) {
-            return None;
-        }
-        if flag.eq_ignore_ascii_case("-Command") || flag.eq_ignore_ascii_case("-c") {
-            let script = &command[i + 1];
-            return Some((shell, script));
-        }
-        i += 1;
-    }
-    None
+    let prefixes = crate::command_safety::powershell_restrictive_prefixes(script);
+    Some(if prefixes.is_empty() {
+        UnreadPowershell::Unreadable
+    } else {
+        UnreadPowershell::Partial(prefixes)
+    })
 }
 
 /// Parse the script body from a top-level PowerShell wrapper into argv-like commands.
 ///
-/// This only unwraps the `-Command`/`-c` body from a PowerShell invocation we
-/// already recognize, then lowers the script in-process.
+/// This only unwraps the script of a PowerShell invocation we already
+/// recognize (every argument after `-Command`, `-EncodedCommand` decoded),
+/// then lowers the script in-process.
 pub fn parse_powershell_command_into_plain_commands(
     command: &[String],
 ) -> Option<Vec<Vec<String>>> {
     let (_, script) = extract_powershell_command(command)?;
-    try_parse_powershell_commands(script)
+    try_parse_powershell_commands(&script)
 }
 
 /// Parse literal PowerShell commands without starting a PowerShell executable.
@@ -253,6 +342,127 @@ mod tests {
         ];
 
         assert_eq!(prefix_powershell_script_with_utf8(&cmd), cmd);
+    }
+
+    fn words(line: &[&str]) -> Vec<String> {
+        line.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn powershell_kind_follows_windows_name_rules() {
+        use super::PowershellKind;
+        for (shell, kind) in [
+            ("pwsh", PowershellKind::Pwsh),
+            ("pwsh.exe", PowershellKind::Pwsh),
+            ("PWSH.EXE", PowershellKind::Pwsh),
+            ("pwsh.exe.", PowershellKind::Pwsh),
+            ("pwsh.exe. ", PowershellKind::Pwsh),
+            ("powershell", PowershellKind::WindowsPowershell),
+            ("powershell.exe.", PowershellKind::WindowsPowershell),
+        ] {
+            assert_eq!(PowershellKind::of(shell), kind, "{shell:?}");
+        }
+    }
+
+    #[test]
+    fn prefix_keeps_every_script_argument() {
+        // #2568: the trailing arguments stay in the script PowerShell runs,
+        // joined as PowerShell joins them.
+        assert_eq!(
+            prefix_powershell_script_with_utf8(&words(&[
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                "git status",
+                "; git push",
+            ])),
+            words(&[
+                "pwsh",
+                "-NoProfile",
+                "-Command",
+                &format!("{UTF8_OUTPUT_PREFIX}git status ; git push"),
+            ])
+        );
+        for line in [
+            &["pwsh", "-EncodedCommand", "ZwBpAHQA"][..],
+            &["pwsh", "-File", "x.ps1", "-c", "y"],
+            &["pwsh", "-NoExit", "-Command", "git status"],
+            &["pwsh"],
+            &["bash", "-c", "git status"],
+        ] {
+            let command = words(line);
+            assert_eq!(prefix_powershell_script_with_utf8(&command), command);
+        }
+    }
+
+    #[test]
+    fn extracts_the_script_powershell_runs() {
+        let script = |line: &[&str]| {
+            extract_powershell_command(&words(line)).map(|(_, script)| script.into_owned())
+        };
+        assert_eq!(
+            script(&["powershell.exe", "-Command", "git status", "; git push"]).as_deref(),
+            Some("git status ; git push")
+        );
+        assert_eq!(
+            script(&["pwsh", "-NonInteractive", "-c", "git push"]).as_deref(),
+            Some("git push")
+        );
+        assert_eq!(
+            script(&["pwsh", "-EncodedCommand", "ZwBpAHQA"]).as_deref(),
+            Some("git")
+        );
+        assert_eq!(script(&["pwsh", "-NoExit", "-c", "git push"]), None);
+        assert_eq!(script(&["pwsh", "-File", "x.ps1"]), None);
+        assert_eq!(script(&["bash", "-c", "git push"]), None);
+
+        let plain = |line: &[&str]| {
+            super::extract_plain_powershell_command(&words(line))
+                .map(|(_, script)| script.into_owned())
+        };
+        assert_eq!(
+            plain(&["pwsh", "-NoProfile", "-c", "git", "push"]).as_deref(),
+            Some("git push")
+        );
+        assert_eq!(plain(&["pwsh", "-ep", "Bypass", "-c", "git push"]), None);
+        assert_eq!(plain(&["pwsh", "-ec", "ZwBpAHQA"]), None);
+    }
+
+    #[test]
+    fn reports_unread_command_lines() {
+        use super::UnreadPowershell;
+        use super::unread_powershell_command_line;
+        for line in [
+            &["pwsh", "-NoExit", "-c", "git push"][..],
+            &["powershell.exe", "-Version", "2", "-Command", "git push"],
+            &["powershell.exe", "git", "push"],
+            &["pwsh", "-Command", "-"],
+            &["pwsh", "-ec", "!!!"],
+            &["pwsh", "-cwa", "$args", "x"],
+            &["pwsh", "-nop"],
+        ] {
+            assert_eq!(
+                unread_powershell_command_line(&words(line)),
+                Some(UnreadPowershell::Unreadable),
+                "{line:?}"
+            );
+        }
+        let file = words(&["pwsh", "-File", "x.ps1", "a"]);
+        assert_eq!(
+            unread_powershell_command_line(&file),
+            Some(UnreadPowershell::File(&file[2..]))
+        );
+        for line in [
+            &["pwsh", "-c", "git push"][..],
+            &["pwsh", "-ec", "ZwBpAHQA"],
+            &["git", "push"],
+        ] {
+            assert_eq!(
+                unread_powershell_command_line(&words(line)),
+                None,
+                "{line:?}"
+            );
+        }
     }
 
     #[cfg(windows)]

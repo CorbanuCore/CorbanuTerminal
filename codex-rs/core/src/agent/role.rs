@@ -175,11 +175,20 @@ async fn apply_role_to_config_inner(
     let Some(config_file) = role.config_file.as_ref() else {
         return Ok(());
     };
-    let role_layer_toml =
+    let mut role_layer_toml =
         load_role_layer_toml(config, config_file, is_built_in, role.source, role_name).await?;
     reject_stricter_unapplied_permissions(config, &role_layer_toml)?;
-    let unapplied_keys =
+    let mut unapplied_keys =
         unapplied_role_keys(&role_layer_toml, Some(config.model_provider_id.as_str()));
+    // D525: project roles cannot change skill settings. Remove the whole table before
+    // applying typed overrides as well as the projected layer, and name it in the warning.
+    if role.source == AgentRoleSource::Project
+        && let Some(table) = role_layer_toml.as_table_mut()
+        && table.remove("skills").is_some()
+    {
+        unapplied_keys.push("skills".to_string());
+        unapplied_keys.sort();
+    }
     if !unapplied_keys.is_empty() {
         tracing::warn!(
             "{}",
@@ -259,12 +268,27 @@ async fn apply_role_to_config_inner(
     // not the caller's runtime one, so an Orc spawned from an xhigh Troll doesn't silently
     // inherit xhigh. A user role keeps the caller's runtime effort.
     if is_built_in && overrides.model_reasoning_effort.is_none() {
-        next_config.model_reasoning_effort = next_config
+        let configured = next_config
             .config_layer_stack
             .effective_config()
             .get("model_reasoning_effort")
             .and_then(TomlValue::as_str)
             .and_then(|value| ReasoningEffort::from_str(value).ok());
+        // The configured effort maps as config load mapped it, for the provider and model it
+        // was loaded for.
+        next_config.model_reasoning_effort = match (
+            configured,
+            config.configured_reasoning_effort_mapping.as_ref(),
+        ) {
+            (Some(configured), Some(mapping))
+                if configured == mapping.configured
+                    && next_config.model_provider_id == mapping.model_provider_id
+                    && next_config.model == mapping.model =>
+            {
+                Some(mapping.mapped.clone())
+            }
+            (configured, _) => configured,
+        };
     }
     *config = next_config;
     Ok(())

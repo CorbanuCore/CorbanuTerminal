@@ -67,7 +67,7 @@ async fn gateway_oauth_login_updates_existing_requests() -> Result<()> {
             r#"
 model_provider = "gateway"
 [model_providers.gateway]
-name = "OpenAI"
+name = "Fixture Gateway"
 requires_openai_auth = true
 base_url = "{url}/v1"
 wire_api = "responses"
@@ -174,7 +174,7 @@ delivery = {{ kind = "header", name = "X-Gateway-Authorization" }}
         response,
         GatewayOAuthReadResponse {
             provider_id: "gateway".to_string(),
-            provider_name: "OpenAI".to_string(),
+            provider_name: "Fixture Gateway".to_string(),
             required: true,
             status: Some(GatewayOAuthStatus::Succeeded),
             error: None,

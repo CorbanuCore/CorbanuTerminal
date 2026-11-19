@@ -1,0 +1,75 @@
+[
+  {
+    "case": "gpt-6.2-astra",
+    "model": "gpt-6.2-astra",
+    "effort": "low",
+    "nonce": "PLAN_QA_aae100e3d6a8b123",
+    "checks": {
+      "all_requested_models_in_picker": true,
+      "assistant_nonce": true,
+      "exact_model_and_effort": true,
+      "compat_version_0167": true,
+      "http_200_and_completed": true,
+      "persisted_completion": true,
+      "secret_scan": true
+    },
+    "request_models": [
+      "gpt-6.2-astra"
+    ],
+    "response_models": [
+      "gpt-6.2-astra"
+    ],
+    "statuses": [
+      200
+    ],
+    "elapsed_seconds": 14.96
+  },
+  {
+    "case": "gpt-6.2-sol",
+    "model": "gpt-6.2-sol",
+    "effort": "low",
+    "nonce": "PLAN_QA_04cfba673d360beb",
+    "checks": {
+      "assistant_nonce": true,
+      "exact_model_and_effort": true,
+      "compat_version_0167": true,
+      "http_200_and_completed": true,
+      "persisted_completion": true,
+      "secret_scan": true
+    },
+    "request_models": [
+      "gpt-6.2-sol"
+    ],
+    "response_models": [
+      "gpt-6.2-sol"
+    ],
+    "statuses": [
+      200
+    ],
+    "elapsed_seconds": 4.87
+  },
+  {
+    "case": "gpt-6-astra",
+    "model": "gpt-6-astra",
+    "effort": "low",
+    "nonce": "PLAN_QA_bc6508d1c3ced7bd",
+    "checks": {
+      "assistant_nonce": true,
+      "exact_model_and_effort": true,
+      "compat_version_0167": true,
+      "http_200_and_completed": true,
+      "persisted_completion": true,
+      "secret_scan": true
+    },
+    "request_models": [
+      "gpt-6-astra"
+    ],
+    "response_models": [
+      "gpt-6-astra"
+    ],
+    "statuses": [
+      200
+    ],
+    "elapsed_seconds": 4.86
+  }
+]

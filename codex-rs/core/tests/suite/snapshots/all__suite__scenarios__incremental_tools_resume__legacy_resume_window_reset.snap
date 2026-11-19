@@ -1,5 +1,6 @@
 ---
 source: core/tests/suite/scenarios_incremental_tools_resume.rs
+assertion_line: 135
 expression: "context_snapshot::format_request_history_snapshot(\"A resumed legacy window retains its generated prefix; rebuilding the next window emits no incremental notice. A later update appends one developer notice, changed definitions, then the removal notice. Unchanged turns and another restart preserve that pair without duplication.\",\n&requests,\n&ContextSnapshotOptions::default().rewrite_known_segments().include_request_settings(),)"
 ---
 Scenario: A resumed legacy window retains its generated prefix; rebuilding the next window emits no incremental notice. A later update appends one developer notice, changed definitions, then the removal notice. Unchanged turns and another restart preserve that pair without duplication.
@@ -16,8 +17,8 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=f1d0adb3566d1b59):
-        - namespace/functions; hash=dfb4b8684addc20d
+00:additional_tools/developer (2; hash=1d06db5a623cd4d9):
+        - namespace/functions; hash=18ff1d39424e431d
           - custom/exec
           - function/wait
           - function/exec_command
@@ -26,6 +27,8 @@ Settings:
           - function/new_context
           - function/get_context_remaining
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:
@@ -57,8 +60,8 @@ Settings:
 ## Window 2 (after request 2: input diverged at item 03)
 Settings: same as window 1
 -- request 3 (turn) --
-00:additional_tools/developer (2; hash=f1d0adb3566d1b59):
-        - namespace/functions; hash=dfb4b8684addc20d
+00:additional_tools/developer (2; hash=1d06db5a623cd4d9):
+        - namespace/functions; hash=18ff1d39424e431d
           - custom/exec
           - function/wait
           - function/exec_command
@@ -67,6 +70,8 @@ Settings: same as window 1
           - function/new_context
           - function/get_context_remaining
           - custom/apply_patch
+          - function/structured_edit
+          - function/structured_write
           - function/view_image
         - tool_search: # Tool discovery  Searches over deferred tool metadata with BM25 and exposes matching tools for t...; args=[limit, query]; hash=b573ed69c0b0e6c7
 01:message/developer:

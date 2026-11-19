@@ -1,10 +1,11 @@
 use crate::bash::extract_bash_command;
 use crate::bash::try_parse_shell;
 use crate::bash::try_parse_word_only_commands_sequence;
-use crate::powershell::extract_powershell_command;
+use crate::powershell::extract_plain_powershell_command;
 use codex_protocol::parse_command::ParsedCommand;
 use shlex::split as shlex_split;
 use shlex::try_join as shlex_try_join;
+use std::borrow::Cow;
 use std::path::PathBuf;
 
 pub fn shlex_join(tokens: &[String]) -> String {
@@ -37,8 +38,13 @@ pub fn tokenize_powershell_command(command: &str) -> Vec<String> {
 }
 
 /// Extracts the shell and script from a command, regardless of platform
-pub fn extract_shell_command(command: &[String]) -> Option<(&str, &str)> {
-    extract_bash_command(command).or_else(|| extract_powershell_command(command))
+/// #2568: a PowerShell invocation only when it is a plain `-Command`, so a
+/// display never hides parameters such as `-WorkingDirectory` or an
+/// encoded script behind its script.
+pub fn extract_shell_command(command: &[String]) -> Option<(&str, Cow<'_, str>)> {
+    extract_bash_command(command)
+        .map(|(shell, script)| (shell, Cow::Borrowed(script)))
+        .or_else(|| extract_plain_powershell_command(command))
 }
 
 /// DO NOT REVIEW THIS CODE BY HAND
@@ -1434,9 +1440,9 @@ pub fn parse_command_impl(command: &[String]) -> Vec<ParsedCommand> {
             normalized
         });
     if let Some((_, script)) =
-        extract_powershell_command(powershell_command.as_deref().unwrap_or(command))
+        extract_plain_powershell_command(powershell_command.as_deref().unwrap_or(command))
     {
-        let tokens = tokenize_powershell_command(script);
+        let tokens = tokenize_powershell_command(&script);
         if tokens
             .first()
             .is_some_and(|executable| executable == "Get-Content")

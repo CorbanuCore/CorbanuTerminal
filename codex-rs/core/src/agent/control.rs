@@ -429,6 +429,8 @@ impl LocalAgentControl {
         start_options: TurnStartOptions,
     ) -> CodexResult<String> {
         let thread = state.get_thread(agent_id).await?;
+        #[cfg(test)]
+        state.capture_user_input_for_tests(agent_id, &input);
         // PF-30-S02: record the sender's standing on this exact input before submitting it.
         Box::pin(register_agent_input_origin(state, agent_id, sender, &input)).await;
         let result = match thread
@@ -588,31 +590,63 @@ impl LocalAgentControl {
         // so a message is never lost or delivered twice. Upstream's in-memory queue for
         // unloaded recipients is not durable and takes no new mail.
         {
-            // A known recipient that is not loaded (an evicted V2 manager whose child just
-            // finished, say) has the message admitted to the durable mailbox; its reload
-            // recovers it. Holding the thread map keeps this atomic with publication of a
-            // reloaded session, whose recovery then runs after the admission.
-            let threads = state.threads.read().await;
-            if !threads.contains_key(&agent_id) {
+            // Publication takes this same recipient gate before the map write. Recheck
+            // residency under the gate so arrivals queued behind publication use the live
+            // session; earlier admissions finish before publication/recovery can proceed.
+            let admission = state.mailbox_admission.lock(agent_id).await;
+            let unloaded_state_db = {
+                let threads = state.threads.read().await;
+                (!threads.contains_key(&agent_id)).then(|| {
+                    threads
+                        .get(&context.sender_thread_id)
+                        .and_then(|sender| sender.state_db())
+                })
+            };
+            if let Some(state_db) = unloaded_state_db {
                 // As upstream's unloaded path: a tree that is shutting down takes no new mail.
-                let _membership = self.runtime.admit_start()?;
+                let membership = self.runtime.admit_start()?;
                 self.runtime.ensure_agent_known(agent_id)?;
-                // Read the sender's database handle from the held map: taking the thread map
-                // again here could deadlock behind a queued writer.
-                let state_db = threads
-                    .get(&context.sender_thread_id)
-                    .and_then(|sender| sender.state_db());
-                let submission_id = self
-                    .admit_for_unloaded_recipient(agent_id, state_db, communication)
-                    .await?;
-                drop(threads);
-                crate::agent_communication::emit_agent_communication_send(
-                    &submission_id,
-                    &context,
-                    log_content.as_deref(),
-                    agent_id,
-                );
-                return Ok(submission_id);
+                let control = self.clone();
+                let state = Arc::clone(state);
+                // Once DB work starts, cancellation must not let publication overtake a
+                // still-committing write or skip lifecycle retention. Tree shutdown also
+                // waits for this admitted operation through its membership.
+                return tokio::spawn(async move {
+                    let _membership = membership;
+                    let _admission = admission;
+                    #[cfg(test)]
+                    state
+                        .mailbox_admission
+                        .pause_admission(
+                            crate::thread_manager::mailbox_admission::AdmissionStage::BeforeWrite,
+                        )
+                        .await;
+                    let submission_id = control
+                        .admit_for_unloaded_recipient(agent_id, state_db, communication)
+                        .await?;
+                    #[cfg(test)]
+                    state.mailbox_admission.pause_admission(
+                        crate::thread_manager::mailbox_admission::AdmissionStage::BeforeRetention,
+                    ).await;
+                    if let Some(delivery) = delivery {
+                        control.runtime.mailboxes.retain_durable_delivery(
+                            agent_id,
+                            submission_id.clone(),
+                            delivery,
+                        )?;
+                    }
+                    crate::agent_communication::emit_agent_communication_send(
+                        &submission_id,
+                        &context,
+                        log_content.as_deref(),
+                        agent_id,
+                    );
+                    // Keep the manager alive until the operation has finished, even if its
+                    // caller disappears while the database is writing.
+                    drop(state);
+                    Ok(submission_id)
+                })
+                .await?;
             }
         }
         let submission_id = self
@@ -862,6 +896,11 @@ impl LocalAgentControl {
         root_thread_id: ThreadId,
     ) -> CodexResult<()> {
         let state = self.runtime.upgrade()?;
+        let restored_v2_identities = state
+            .get_thread(root_thread_id)
+            .await?
+            .multi_agent_version()
+            == Some(MultiAgentVersion::V2);
         let Some(agent_graph_store) = state.agent_graph_store() else {
             return Ok(());
         };
@@ -883,6 +922,17 @@ impl LocalAgentControl {
             }
         };
         for thread_id in descendant_ids {
+            // V2 startup has already reserved identities in graph order. Do not retry failed
+            // reads or resurrect path collisions through the legacy source-only restoration.
+            if restored_v2_identities
+                && self
+                    .runtime
+                    .registry
+                    .agent_metadata_for_thread(thread_id)
+                    .is_none()
+            {
+                continue;
+            }
             let stored_thread = match state
                 .read_stored_thread(ReadThreadParams {
                     thread_id,
@@ -902,7 +952,11 @@ impl LocalAgentControl {
                     continue;
                 }
             };
-            self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+            if restored_v2_identities {
+                self.ensure_thread_security_inheritance(thread_id, &stored_thread.source);
+            } else {
+                self.restore_thread_spawn_metadata(thread_id, &stored_thread.source);
+            }
         }
         Ok(())
     }
@@ -927,24 +981,38 @@ impl LocalAgentControl {
             .contains(&agent_id))
     }
 
-    /// #1701: the names `list_agents` gives the loaded agents `caller`
-    /// spawned, directly or through its own agents.
-    pub(crate) async fn spawn_descendant_agent_names(
+    /// Apply the V1 ownership check before a registered agent can be cold-loaded
+    /// or closed. Unknown ids retain the handlers' not-found behavior.
+    pub(crate) async fn is_foreign_agent(
         &self,
         caller: ThreadId,
-    ) -> CodexResult<Vec<String>> {
-        Ok(self
-            .runtime
-            .live_thread_spawn_descendants(caller)
-            .await?
-            .into_iter()
-            .map(|thread_id| {
-                self.get_agent_metadata(thread_id)
-                    .and_then(|metadata| metadata.agent_path)
-                    .map(|path| path.to_string())
-                    .unwrap_or_else(|| thread_id.to_string())
-            })
-            .collect())
+        agent_id: ThreadId,
+    ) -> CodexResult<bool> {
+        let state = self.runtime.upgrade()?;
+        if state.get_thread(agent_id).await.is_ok() {
+            // Re-check the live ancestry after loading; persisted metadata must
+            // not override a loaded thread's actual parent.
+            return Ok(!self
+                .runtime
+                .live_thread_spawn_descendants(caller)
+                .await?
+                .contains(&agent_id));
+        }
+        if self.get_agent_metadata(agent_id).is_none() {
+            // Do not let a target that appears after this check bypass ownership.
+            return Err(CodexErr::ThreadNotFound(agent_id));
+        }
+        let Some(store) = state.agent_graph_store() else {
+            return Ok(true);
+        };
+        let descendants = store
+            .list_thread_spawn_descendants(
+                caller,
+                Some(codex_agent_graph_store::ThreadSpawnEdgeStatus::Open),
+            )
+            .await
+            .map_err(|err| CodexErr::Fatal(format!("failed to check agent ownership: {err}")))?;
+        Ok(!descendants.contains(&agent_id))
     }
 
     /// #1756: the names `list_agents` gives the agents `caller` spawned,
@@ -1299,22 +1367,28 @@ impl LocalAgentControl {
         let Some(parent_thread_id) = session_source.parent_thread_id() else {
             return Ok(());
         };
-        let state = self.runtime.upgrade()?;
-        let parent_thread = state.get_thread(parent_thread_id).await?;
-        parent_thread
-            .session
-            .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
-            .await
-            .map_err(|err| {
+        let prepared = async {
+            let state = self.runtime.upgrade()?;
+            let parent_thread = state.get_thread(parent_thread_id).await?;
+            parent_thread
+                .session
+                .try_ensure_rollout_materialized(codex_thread_store::PersistContext::Standard)
+                .await
+                .map_err(|err| {
+                    CodexErr::Fatal(format!(
+                        "failed to materialize native agent parent {parent_thread_id}: {err}"
+                    ))
+                })?;
+            parent_thread.flush_rollout().await.map_err(|err| {
                 CodexErr::Fatal(format!(
-                    "failed to materialize native agent parent {parent_thread_id}: {err}"
+                    "failed to flush native agent parent {parent_thread_id}: {err}"
                 ))
-            })?;
-        parent_thread.flush_rollout().await.map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to flush native agent parent {parent_thread_id}: {err}"
-            ))
-        })
+            })
+        }
+        .await;
+        // Shutdown stops the parent's persistence too; report the shutdown, as upstream's
+        // child admission would, rather than the failure it caused.
+        prepared.map_err(|err| self.runtime.shutdown_error().unwrap_or(err))
     }
 
     /// Persists the child before publishing its durable Core graph edge.

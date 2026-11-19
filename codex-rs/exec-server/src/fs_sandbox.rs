@@ -926,12 +926,15 @@ mod tests {
             FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
                     pattern: pattern.to_string(),
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ),
         ]);
         let sandbox_context = crate::FileSystemSandboxContext {
-            windows_sandbox_selection: codex_file_system::WindowsSandboxSelection::RestrictedToken,
+            // Read denials require the elevated backend; keep testing how the
+            // accepted wrapper request binds this relative denial to its cwd.
+            windows_sandbox_selection: codex_file_system::WindowsSandboxSelection::Elevated,
             ..sandbox_context_with_cwd(&policy, cwd_uri)
         };
         selected.close().expect("remove selected directory");
@@ -949,7 +952,8 @@ mod tests {
                 .find(|entry| { matches!(entry.path, FileSystemPath::GlobPattern { .. }) }),
             Some(FileSystemSandboxEntry::new(
                 FileSystemPath::GlobPattern {
-                    pattern: absolute_pattern
+                    pattern: absolute_pattern,
+                    scan: None,
                 },
                 FileSystemAccessMode::Deny,
             ))

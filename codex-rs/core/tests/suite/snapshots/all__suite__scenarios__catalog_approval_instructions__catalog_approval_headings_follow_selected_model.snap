@@ -16,14 +16,14 @@ Settings:
   stream: true
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=23179252be1abe5f):
+00:additional_tools/developer (2; hash=2d33a2169e73bbd2):
         - namespace/functions; hash=9962be1e4c2d492b
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=c826e5b07fd2820f
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=8a34f5456d3b83aa
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -64,14 +64,14 @@ Settings:
 Settings: relative to window 1
   model: "catalog-approval-headings-b"
 -- request 2 (turn) --
-00:additional_tools/developer (2; hash=23179252be1abe5f):
+00:additional_tools/developer (2; hash=2d33a2169e73bbd2):
         - namespace/functions; hash=9962be1e4c2d492b
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=c826e5b07fd2820f
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=8a34f5456d3b83aa
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -110,10 +110,15 @@ Settings: relative to window 1
 05:message/assistant:
     I can inspect the workspace with the current permissions.
 06:message/developer:
+    This is an incremental tools update. Previously declared tools remain available for direct calls unless ...here, its latest definition replaces the earlier one. [hash=bceb65fad1afdf9c]
+07:additional_tools/developer (1; hash=2eb087927a10fa75):
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=23dcbc665036f4b5
+          - function/spawn_agent
+08:message/developer:
     <model_instructions>
     The current model is catalog-approval-headings-b.
     </model_instructions>
-07:message/developer:
+09:message/developer:
     <permissions instructions>
     Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The san... permits reading files. Network access is restricted. [hash=be7da4425f89053c]
     # Permission Requests
@@ -131,10 +136,10 @@ Settings: relative to window 1
 
     `approvals_reviewer` is `auto_review`: Sandbox escalations with require_escalated will be reviewed for c...he risk and send a final message to ask for approval. [hash=c592d119d24cd2d6]
     </permissions instructions>
-08:message/user:
+10:message/user:
     Continue with the selected model.
 -- request 3 (turn) --
-09:message/assistant:
+11:message/assistant:
     The selected model's approval instructions are now active.
-10:message/user:
+12:message/user:
     Continue without changing permissions.

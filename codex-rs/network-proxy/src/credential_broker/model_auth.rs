@@ -31,6 +31,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 /// Request header carrying the signed broker frame.
 pub const MODEL_BROKER_FRAME_HEADER: &str = FRAME_HEADER;
@@ -102,6 +103,10 @@ pub struct ModelCredentialBrokerOptions {
     pub withheld_env: Vec<String>,
 }
 
+/// SMQ-2: shortest held key [`ModelCredentialBroker::take_env_copies`] looks
+/// for in other variables (D685 matches 8+ bytes anywhere in a value).
+pub const ENV_COPY_MIN_KEY_BYTES: usize = 8;
+
 /// A broker process holding Core's model-provider keys.
 #[derive(Clone)]
 pub struct ModelCredentialBroker {
@@ -155,9 +160,9 @@ impl ModelCredentialBroker {
                 pin_connections: false,
             },
         )?;
-        Ok(Self {
-            client: Arc::new(client),
-        })
+        let client = Arc::new(client);
+        super::model_snapshot::register(client.clone());
+        Ok(Self { client })
     }
 
     /// Hands `value` to the broker. The returned credential holds no copy.
@@ -210,6 +215,62 @@ impl ModelCredentialBroker {
         }
     }
 
+    /// SMQ-2: removes every variable whose value contains a key the broker
+    /// holds (D685's known-credential check, one fingerprint request) from
+    /// this process's environment, value bytes overwritten, so a copy under
+    /// another name (a header, prefixed or embedded value) is not inherited
+    /// by commands either. Returns the names removed (never values).
+    ///
+    /// Keys shorter than [`ENV_COPY_MIN_KEY_BYTES`] are not looked for: such
+    /// placeholders (`local`, `EMPTY`) would match ordinary words in `PATH`.
+    /// Every value is checked before anything is removed: on Windows a
+    /// removal overwrites other heap copies of its value, which could hide a
+    /// later copy from the check.
+    ///
+    /// Fails closed: if the values cannot be checked, or a matching variable
+    /// is still set afterwards, an error is returned (nothing is removed when
+    /// the check fails) and the caller must not use the broker.
+    pub fn take_env_copies(&self) -> Result<Vec<String>, ModelCredentialBrokerError> {
+        let vars: Vec<(std::ffi::OsString, Zeroizing<String>)> = std::env::vars_os()
+            .filter(|(_, value)| !value.is_empty())
+            .map(|(name, value)| {
+                let bytes = Zeroizing::new(value.into_encoded_bytes());
+                (
+                    name,
+                    Zeroizing::new(String::from_utf8_lossy(&bytes).into_owned()),
+                )
+            })
+            .collect();
+        let texts: Vec<&str> = vars.iter().map(|(_, value)| value.as_str()).collect();
+        let found = self
+            .client
+            .model_credential_occurrences(&texts, ENV_COPY_MIN_KEY_BYTES)?;
+        let mut taken = Vec::new();
+        let mut kept = false;
+        for ((name, _), found) in vars.iter().zip(found) {
+            if !found {
+                continue;
+            }
+            match name.to_str() {
+                Some(name) => {
+                    // A value that is not Unicode is removed but not returned
+                    // on Windows; what decides is that the name is gone.
+                    drop(super::env_scrub::take_env_var(name));
+                    if std::env::var_os(name).is_some() {
+                        kept = true;
+                    } else {
+                        taken.push(name.to_string());
+                    }
+                }
+                None => kept = true,
+            }
+        }
+        if kept {
+            return Err(ModelCredentialBrokerError::Unavailable);
+        }
+        Ok(taken)
+    }
+
     /// Registers the key for `provider_key_id` without Core reading it: the
     /// first variable in `env_names` handed over with
     /// [`Self::take_env_keys`], else the stored provider key, which the
@@ -244,6 +305,16 @@ impl ModelCredentialBroker {
 
     pub fn is_alive(&self) -> bool {
         self.client.is_alive()
+    }
+
+    /// Snapshot-only query; no raw keys or request authority leave the holder.
+    pub fn known_credential_occurs_in(
+        &self,
+        text: &str,
+    ) -> Result<bool, ModelCredentialBrokerError> {
+        self.client
+            .model_credential_occurs_in(text)
+            .map_err(Into::into)
     }
 
     /// The broker's private socket (see [`ModelCredential::socket_path`]).

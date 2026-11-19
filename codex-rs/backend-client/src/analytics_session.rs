@@ -7,6 +7,7 @@ use codex_http_client::HttpClientFactory;
 use codex_login::AuthManager;
 use codex_login::AuthManagerConfig;
 use codex_login::CodexAuth;
+use codex_login::NamedChatgptAccount;
 use codex_protocol::account::PlanType;
 use std::sync::Arc;
 
@@ -28,8 +29,13 @@ pub struct AnalyticsSession {
 
 impl AnalyticsSession {
     /// Load local ChatGPT credentials and the current server plan using the configured HTTP policy.
+    ///
+    /// D562 (#2381): `session_account` is the named sign-in account the
+    /// session runs on, if any. Its sign-in is then used, never the default
+    /// login (which is only read from disk to reach the account's manager).
     pub async fn from_config(
         config: &impl AuthManagerConfig,
+        session_account: Option<NamedChatgptAccount>,
         http_client_factory: HttpClientFactory,
     ) -> Result<Self, String> {
         let auth_manager =
@@ -38,6 +44,10 @@ impl AnalyticsSession {
                 .map_err(|_| {
                     "Couldn't load local sign-in. Sign in with ChatGPT and retry.".to_string()
                 })?;
+        let auth_manager = match session_account {
+            Some(account) => auth_manager.for_named_account_loaded(account).await,
+            None => auth_manager,
+        };
         let auth = auth_manager
             .auth()
             .await

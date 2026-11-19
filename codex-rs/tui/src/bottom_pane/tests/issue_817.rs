@@ -42,6 +42,7 @@ fn child_exec_request() -> ApprovalRequest {
         ],
         network_approval_context: None,
         additional_permissions: None,
+        kind: Default::default(),
     })
 }
 
@@ -86,9 +87,10 @@ fn answers(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<Answe
                 op: Op::ResolveElicitation { .. },
                 ..
             } => Some(Answer::Elicitation),
-            AppEvent::CodexOp(crate::app_command::AppCommand::UserInputAnswer { .. }) => {
-                Some(Answer::Question)
-            }
+            AppEvent::SubmitThreadOp {
+                op: crate::app_command::AppCommand::UserInputAnswer { .. },
+                ..
+            } => Some(Answer::Question),
             AppEvent::OpenUrlInBrowser { .. } => Some(Answer::Link),
             _ => None,
         })
@@ -365,17 +367,21 @@ fn issue_817_typing_on_across_a_request_swap_answers_nothing() {
     let features = Features::with_defaults();
     let mut pane = guarded_pane(AppEventSender::new(tx_raw));
     let start = Instant::now();
-    pane.push_approval_request(exec_request(), &features);
+    let first_request = exec_request();
+    let ApprovalRequest::Exec(first) = first_request.clone() else {
+        unreachable!("exec request");
+    };
+    pane.push_approval_request(first_request, &features);
     pane.push_approval_request(child_exec_request(), &features);
     pane.pre_draw_tick_at(start);
 
     let at = start + Duration::from_secs(2);
     press_at(&mut pane, &[KeyCode::Char('p')], at);
-    let ApprovalRequest::Exec(first) = exec_request() else {
-        unreachable!("exec request");
-    };
     assert!(
-        pane.dismiss_app_server_request(&ResolvedAppServerRequest::ExecApproval { id: first.id })
+        pane.dismiss_app_server_request(&ResolvedAppServerRequest::ExecApproval {
+            thread_id: first.thread_id.to_string(),
+            id: first.id,
+        })
     );
     pane.pre_draw_tick_at(at + Duration::from_millis(16));
     press_at(
@@ -459,12 +465,16 @@ fn issue_817_text_typed_into_a_resolved_request_does_not_hold_the_next() {
         let start = Instant::now();
         let resolved = match kind {
             Kind::Exec => {
-                pane.push_approval_request(exec_request(), &features);
-                pane.push_approval_request(child_exec_request(), &features);
-                let ApprovalRequest::Exec(first) = exec_request() else {
+                let first_request = exec_request();
+                let ApprovalRequest::Exec(first) = first_request.clone() else {
                     unreachable!("exec request");
                 };
-                ResolvedAppServerRequest::ExecApproval { id: first.id }
+                pane.push_approval_request(first_request, &features);
+                pane.push_approval_request(child_exec_request(), &features);
+                ResolvedAppServerRequest::ExecApproval {
+                    thread_id: first.thread_id.to_string(),
+                    id: first.id,
+                }
             }
             Kind::Question => {
                 pane.push_user_input_request(user_input_request());

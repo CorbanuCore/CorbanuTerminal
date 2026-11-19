@@ -110,6 +110,8 @@ mod integrity;
 #[cfg(target_os = "windows")]
 mod integrity_leases;
 #[cfg(target_os = "windows")]
+mod integrity_registry;
+#[cfg(target_os = "windows")]
 mod logging;
 #[cfg(target_os = "windows")]
 mod logon_launch;
@@ -176,6 +178,9 @@ mod window_station;
 mod winutil;
 #[cfg(target_os = "windows")]
 mod workspace_acl;
+
+#[cfg(target_os = "windows")]
+mod world_writable;
 
 pub mod credential_watch;
 mod deny_read_resolver;
@@ -351,6 +356,8 @@ pub use elevated_impl::run_windows_sandbox_capture_for_permission_profile as run
 #[cfg(target_os = "windows")]
 pub use file_write::write_file_atomically;
 #[cfg(target_os = "windows")]
+mod provisioning_files;
+#[cfg(target_os = "windows")]
 pub use helper_materialization::resolve_exe_for_launch;
 #[cfg(target_os = "windows")]
 pub use hide_users::hide_current_user_profile_dir;
@@ -476,6 +483,8 @@ pub use provisioning_client::refresh_registered_core_via_service;
 pub use provisioning_client::register_desktop_installation;
 #[cfg(target_os = "windows")]
 pub use provisioning_client::start_windows_sandbox_service_for_setup;
+#[cfg(target_os = "windows")]
+pub use provisioning_files::open_provisioning_entry;
 #[cfg(target_os = "windows")]
 pub use provisioning_protocol::FramedProvisioningMessage;
 #[cfg(target_os = "windows")]

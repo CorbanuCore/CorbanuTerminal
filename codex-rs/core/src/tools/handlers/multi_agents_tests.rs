@@ -119,6 +119,9 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+#[path = "multi_agents_ownership_tests.rs"]
+mod ownership;
+
 fn model_facing_error_message(error: &FunctionCallError) -> Option<&str> {
     match error {
         FunctionCallError::RespondToModel(message)
@@ -772,11 +775,18 @@ async fn spawn_agent_limit_failure_emits_bounded_metric() {
     .expect("create in-memory metrics client");
     let (mut session, mut turn) = make_session_and_context().await;
     turn.session_telemetry = turn.session_telemetry.clone().with_metrics(metrics.clone());
+    let manager = thread_manager();
+    // Corbanu (PF-23-S03): a child inherits its live parent's security policy, so a spawn
+    // from a parent that isn't running is refused before the thread limit is checked.
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.thread_id = root.thread_id;
     let mut config = (*turn.config).clone();
     config.agent_max_threads = Some(0);
     config.apps_mcp_product_sku = Some("codex".to_string());
     turn.config = Arc::new(config);
-    let manager = thread_manager();
     set_agent_control(&mut session, manager.agent_control());
 
     let Err(err) = SpawnAgentHandler::default()
@@ -966,6 +976,11 @@ async fn spawn_agent_explicit_runtime_supports_required_multimodel_pairs() {
         (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.5"),
         (KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL),
         (ZAI_PROVIDER_ID, "glm-5.3"),
+        // D703 moves these beyond the all-provider description's 32-row cap.
+        // The description is not an allowlist for exact runtime selection.
+        (OPENROUTER_PROVIDER_ID, "minimax/minimax-m3"),
+        ("openai", "gpt-5.6-luna"),
+        ("vercel-anthropic-fast", "zai/glm-5.2-fast"),
     ];
 
     for (provider, model) in expected {
@@ -1083,6 +1098,26 @@ async fn spawn_agent_accepts_exact_configured_model_even_when_catalog_hidden() {
     assert_eq!(snapshot.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(snapshot.model, "gpt-5.5");
     assert_eq!(success, Some(true));
+}
+
+#[tokio::test]
+async fn spawn_agent_unknown_model_points_to_authorized_lookup() {
+    let (session, turn) = make_session_and_context().await;
+    let mut config = (*turn.config).clone();
+    let step_context = StepContext::for_test(Arc::new(turn));
+    let err = apply_requested_spawn_agent_model_overrides(
+        &session,
+        &step_context,
+        &mut config,
+        Some("unknown-model-2577"),
+        /*requested_reasoning_effort*/ None,
+    )
+    .await
+    .expect_err("unknown model must fail");
+    assert_eq!(
+        err,
+        "Unknown model `unknown-model-2577` for spawn_agent. Call `list_models` to discover authorized picker-visible models; follow `next_offset` for every page."
+    );
 }
 
 #[tokio::test]
@@ -2638,6 +2673,12 @@ async fn multi_agent_v2_list_agents_lists_only_the_callers_agents() {
         .expect("other root should start");
     set_agent_control(&mut session, manager.agent_control());
     session.thread_id = root.thread_id;
+    // Register on the handler's control before the foreign spawn. Each call to
+    // manager.agent_control() creates a separate registry.
+    session
+        .services
+        .local_agent_runtime
+        .register_session_root(root.thread_id, /*current_parent_thread_id*/ None);
     let mut config = (*turn.config).clone();
     config
         .features
@@ -8792,9 +8833,10 @@ async fn settle_agent_waits_for_the_spawn_turn_after_an_error() {
     );
 }
 
-/// #2000: a child agent whose role sets permissions (so its config is rebuilt
-/// from the session's starting layers, without the Windows sandbox set up
-/// since) still gets the session's raised Windows sandbox.
+/// #2000: a child agent whose role changes its config still gets the session's
+/// raised Windows sandbox. On main the role rebuilt the config from the session's
+/// starting layers, which dropped it; upstream's role application keeps it, and
+/// the spawn override restores it to a config that lost it anyway.
 #[tokio::test]
 async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     use crate::windows_sandbox::WindowsSandboxLevelExt;
@@ -8804,10 +8846,16 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
         .await
         .expect("codex home should be created");
     let role_config_path = turn.config.codex_home.as_path().join("sandbox-role.toml");
-    tokio::fs::write(&role_config_path, "sandbox_mode = \"workspace-write\"\n")
-        .await
-        .expect("role config should be written");
     let mut config = (*turn.config).clone();
+    // A model as well, so the role takes upstream's copy-and-apply path, not its
+    // no-override early return.
+    let model = config.model.clone().expect("test config sets a model");
+    tokio::fs::write(
+        &role_config_path,
+        format!("model = \"{model}\"\nsandbox_mode = \"workspace-write\"\n"),
+    )
+    .await
+    .expect("role config should be written");
     config.agent_roles.insert(
         "sandbox-role".to_string(),
         AgentRoleConfig {
@@ -8826,7 +8874,14 @@ async fn issue_2000_a_role_rebuilt_child_keeps_the_raised_windows_sandbox() {
     crate::agent::role::apply_role_to_config(&mut config, Some("sandbox-role"))
         .await
         .expect("role should apply");
-    // The role rebuilt the config from the starting layers.
+    // Upstream's role application keeps the session's raised level (main rebuilt the
+    // config from the starting layers here, dropping it).
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&config),
+        WindowsSandboxLevel::Elevated
+    );
+    // A config that lost the level, as main's rebuilt one did, gets it back from the turn.
+    config.set_windows_elevated_sandbox_enabled(/*value*/ false);
     assert_eq!(WindowsSandboxLevel::from_config(&config), starting);
     apply_spawn_agent_runtime_overrides(&mut config, &turn).expect("runtime overrides");
     assert_eq!(

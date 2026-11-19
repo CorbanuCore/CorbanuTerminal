@@ -5,6 +5,7 @@
 //! for that machine; nothing reaches the executor. Permissive is unchanged,
 //! and so is a remote Linux machine.
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -14,7 +15,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_security_policy::SecurityLevel;
 use core_test_support::responses::ev_assistant_message;
@@ -100,11 +100,14 @@ async fn fake_executor(host: Host) -> anyhow::Result<(String, Arc<Mutex<Vec<Stri
                         "environment/info" => json!({ "id": id, "result": info(host) }),
                         _ => {
                             let sandboxed = !request["params"]["sandbox"].is_null();
-                            seen.lock().expect("methods").push(if sandboxed {
-                                format!("{method} sandboxed")
-                            } else {
-                                method
-                            });
+                            let image = request["params"]["path"]
+                                .as_str()
+                                .is_some_and(|path| path.ends_with("picture.png"));
+                            seen.lock().expect("methods").push(format!(
+                                "{method}{}{}",
+                                if image { " image" } else { "" },
+                                if sandboxed { " sandboxed" } else { "" },
+                            ));
                             json!({
                                 "id": id,
                                 "error": { "code": -32601, "message": "not served by the fake" },
@@ -146,7 +149,6 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("test config should allow feature update");
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -189,16 +191,13 @@ async fn run(level: SecurityLevel, host: Host, call: Call) -> anyhow::Result<Out
     )
     .await;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "go".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let warnings = Mutex::new(Vec::new());
     wait_for_event(&test.codex, |event| {
@@ -290,12 +289,11 @@ async fn issue_2050_remote_windows_without_its_sandbox_refuses_commands_and_file
                     && !image
                         .reached
                         .iter()
-                        .any(|method| method.ends_with(" sandboxed"))
+                        .any(|method| method.ends_with(" sandboxed") || method.contains(" image"))
             } else {
-                image
-                    .reached
-                    .iter()
-                    .any(|method| method.ends_with(" sandboxed"))
+                // Read-all policies omit the RPC sandbox context. Count access to the
+                // requested image itself, never unrelated session metadata lookups.
+                image.reached.iter().any(|method| method.contains(" image"))
             };
             if !ok {
                 wrong.push(format!(
@@ -340,7 +338,6 @@ async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protecte
                     .features
                     .enable(Feature::SourceEnvelopes)
                     .expect("test config should allow feature update");
-                config.use_experimental_unified_exec_tool = true;
                 config
                     .features
                     .enable(Feature::UnifiedExec)
@@ -387,16 +384,13 @@ async fn issue_2050_a_real_windows_executor_without_its_sandbox_refuses_protecte
         )
         .await;
         test.codex
-            .submit(Op::UserInput {
-                items: vec![UserInput::Text {
+            .start_or_steer_turn(
+                TurnInputRequest::user_input(vec![UserInput::Text {
                     text: "go".into(),
                     text_elements: Vec::new(),
-                }],
-                final_output_json_schema: None,
-                responsesapi_client_metadata: None,
-                additional_context: Default::default(),
-                thread_settings: Default::default(),
-            })
+                }])
+                .with_thread_settings(Default::default()),
+            )
             .await?;
         wait_for_event(&test.codex, |event| {
             matches!(event, EventMsg::TurnComplete(_))

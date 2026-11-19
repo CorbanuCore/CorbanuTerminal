@@ -111,6 +111,7 @@ fn model_edit_profile_tag(turn_context: &TurnContext) -> &'static str {
     "other"
 }
 
+#[cfg(test)]
 pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bool {
     if turn_context.structured_edit_fallback_enabled() {
         return true;
@@ -119,11 +120,12 @@ pub(crate) fn structured_edit_protocol_enabled(turn_context: &TurnContext) -> bo
     native_structured_edit_protocol_enabled(turn_context)
 }
 
+#[cfg(test)]
 pub(crate) fn native_structured_edit_protocol_enabled(turn_context: &TurnContext) -> bool {
     native_structured_edit_protocol_enabled_for(turn_context, turn_context.model_info())
 }
 
-/// [`native_structured_edit_protocol_enabled`] for the model a step plans tools for.
+/// Whether native structured edits are enabled for the model a step plans tools for.
 pub(crate) fn native_structured_edit_protocol_enabled_for(
     turn_context: &TurnContext,
     model_info: &ModelInfo,

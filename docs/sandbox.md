@@ -38,6 +38,28 @@ described below, because that sandbox can't block reads. With the default
 sandbox selected, nothing changes: if its setup hasn't run yet, the first
 sandboxed command runs it.
 
+### Full access at Moderate or Aggressive
+
+A full-access permission profile still uses the elevated sandbox at these
+security levels. This combination has a known limitation
+([#2021](https://github.com/CorbanuCore/CorbanuTerminal/issues/2021)):
+a command in a private user-profile folder can fail with Windows error 267,
+and setup or commands can be very slow. The sandbox account does not
+automatically have your account's access to every folder.
+
+Error 267 means the working directory is invalid or inaccessible to the
+sandbox account. Check that the directory exists. A verified workaround for
+project work is a directory outside private user-profile folders with
+`sandbox_mode = "workspace-write"` and `[windows] sandbox = "elevated"`,
+keeping your security level. This limits writable access to the workspace
+and configured writable roots; it does not repair full access. Moving the
+project alone, while keeping full access, does not resolve the reported delay.
+
+Workspace-write alone is not a verified workaround for a private folder:
+in testing, PowerShell launched there but started at `C:\`, and relative
+file writes failed. Check the command's actual working directory and output;
+a successful shell exit code alone does not prove that it used your project.
+
 ### Remote Windows machines
 
 The same rule applies where the commands actually run (#2050, D510). When
@@ -113,6 +135,17 @@ On Windows, Corbanu Terminal can sandbox commands in two ways. The **default
 sandbox** needs a one-time Administrator setup. The **non-admin sandbox**
 (also called the unelevated or legacy sandbox) needs no setup, but it protects
 less.
+
+Terminal commands in this sandbox receive Ctrl-C even when Corbanu starts
+from an elevated launcher that suppresses Ctrl-C. Programs may still handle
+Ctrl-C themselves or read it as raw input. The packaged console launcher runs
+with the command's existing restricted token and job; it changes no access
+controls. Custom Windows builds must also build `codex-conpty-launcher` and
+keep it beside the Corbanu executable or in its `codex-resources` directory.
+Bare executable names are resolved using the command's environment and working
+directory. Use an absolute executable path when that choice must be exact.
+If the launcher cannot start the requested program, the terminal reports the
+startup error and exits with code 1.
 
 **What the non-admin sandbox stops.** Sandboxed commands run at Low
 integrity. In both Read Only and workspace-write modes they can't create,
@@ -306,15 +339,42 @@ more than 20,000 entries or 64 MiB of files, with a subfolder that can't be
 listed, or with a name that isn't valid Unicode, is flagged after every
 command. A link inside one is recorded by its target only: a change to the
 file or folder it points to isn't flagged (the non-admin sandbox doesn't
-protect those either). And the records themselves (in
-`%LOCALAPPDATA%\CorbanuTerminalSandbox`) aren't protected from a command
-whose writable folder contains them, such as your whole user folder.
+protect those either). The records folder
+(`%LOCALAPPDATA%\CorbanuTerminalSandbox`) is denied to elevated commands
+whose writable folder contains it (D453). D598 also refuses existing
+records owned by a sandbox account; see recovery below.
 Its commands run as their own Windows account, so what they create is owned
 by that account, and git refuses such a repository ("dubious ownership")
 unless a `safe.directory` setting trusts it. Corbanu Terminal flags these
 anyway: many git setups trust every folder (`safe.directory = *`), and a
 change inside one of your own repositories (a hook, `core.hooksPath`) is
 never refused.
+
+### Untrusted Windows sandbox records
+
+D598 (#1953), under the product specification's **P0 `/security` levels**
+requirement to enforce controls outside the model, refuses sandbox launches
+that need records owned by an account other than the host user,
+Administrators or SYSTEM. Reparse-point entries and Low-integrity registry
+folders are refused too. Ownership is checked before using existing records,
+including the registry lock, session files and temporary files. The elevated
+watch cannot silently turn off because those records are untrusted.
+
+If you see this refusal, stop all Corbanu sessions and their sandbox commands.
+Preserve the reported records for inspection. Do not take ownership of them
+or copy their contents into new trusted files: an untrusted account may have
+changed the recorded paths or omitted changes.
+
+Restore the records from a known-good backup, if available, after checking
+any project metadata changed since that backup. Otherwise have an
+administrator review the affected writable roots and their `.git`, `.codex`
+and `.agents` contents before retiring the untrusted records. Restore the
+Medium integrity labels on roots used by the legacy sandbox, and remove only
+its verified stale delete-child denies; do not derive that repair list from
+the untrusted JSON. Preserve or reconstruct the pending project-metadata
+confirmations before resuming. The sandbox intentionally stays blocked until
+trusted records are restored; automatically clearing the registry could lose
+those confirmations and leave old labels or denies behind.
 
 **Bare repositories a command plants.** Git also uses a folder that holds
 `HEAD`, `objects` and `refs` as a repository (a bare repository), and reads

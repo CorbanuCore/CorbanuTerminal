@@ -3,6 +3,7 @@
 //! Command metrics exclude prewarm and measure lookup/capture wait before replay.
 //! File replay admits larger shell state while environment replay keeps its launch budget.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -57,6 +58,10 @@ const MAX_SNAPSHOT_ATTEMPTS: usize = 3;
 
 #[path = "shell_snapshot_credentials.rs"]
 mod credentials;
+#[path = "shell_snapshot_filter.rs"]
+mod filter;
+
+use filter::SnapshotCredentialFilter;
 
 #[derive(Clone, Copy)]
 enum SnapshotReplay {
@@ -370,6 +375,15 @@ impl ShellSnapshotCache {
                 params.argv[2]
             )
         };
+        if shell_type == ShellType::Bash {
+            // Corbanu #2356: privileged mode skips BASH_ENV but not bash's
+            // remote-shell rule, which sources ~/.bashrc when stdin is a socket
+            // (as under the Linux sandbox) or SSH_CLIENT is set. That would rerun
+            // startup and reintroduce exports the snapshot filtered.
+            prepared
+                .command
+                .insert(shell_start + 1, "--norc".to_string());
+        }
 
         telemetry.shell_snapshot_command(wait, availability, "used");
         Ok(reader)
@@ -388,6 +402,14 @@ async fn capture_snapshot(
     credential_brokers: &RemoteCredentialBrokerCache,
 ) -> CaptureResult {
     let proxy = prepared.credential_snapshot_proxy(params);
+    // D641 (a), #2392: under main's engine the launch keeps its broker markers so a
+    // failed capture falls back still marked. Upstream's capture expects them restored
+    // and removed, so it runs with that environment, exactly as before.
+    let capture_env = proxy.map_or(Cow::Borrowed(&prepared.env), |proxy| {
+        let mut env = prepared.env.clone();
+        proxy.restore_and_disable_brokered_credentials(&mut env, &mut []);
+        Cow::Owned(env)
+    });
     let mut script = snapshot_source_capture_script(
         shell_type,
         SnapshotCaptureOptions {
@@ -412,6 +434,8 @@ done
 "#,
         );
     }
+    // Corbanu #2356: every variable's raw value, for the credential filter.
+    script.push_str(&codex_shell_command::shell_snapshot::snapshot_values_script(shell_type));
     // Probe under the exact capture sandbox, including its /proc fallback and
     // read policy. Keep cached env replay when descriptor paths cannot be opened.
     let probe = if shell_type == ShellType::Sh {
@@ -453,7 +477,7 @@ done
         .args(args)
         .current_dir(prepared.cwd.as_path())
         .env_clear()
-        .envs(&prepared.env)
+        .envs(capture_env.iter())
         .env_remove(CODEX_TOOL_CALL_ID_ENV_VAR)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -529,6 +553,8 @@ done
                 internal_error("shell snapshot capture timed out".to_string()),
             )
         })??;
+    // Raw startup values, credentials included, stay only in executor memory.
+    let output = zeroize::Zeroizing::new(output);
 
     let marker = format!("\0{SOURCE_MARKER}\0");
     let marker_end = output
@@ -560,10 +586,33 @@ done
         }
         SnapshotReplay::Environment
     };
+    // Corbanu #2356: #310's names and #2314's credential values, as for core's
+    // snapshot file, before anything is cached or replayed.
+    let (captured, values) = filter::split_values(shell_type, captured)?;
+    let launch_values = capture_env
+        .iter()
+        .map(|(name, value)| (name.as_str(), value.as_str()))
+        .chain(values.iter().map(|(name, value)| (*name, value.as_ref())));
     let snapshot = if let Some(proxy) = proxy {
-        credentials::prepare(params, captured, replay, proxy, credential_brokers).await?
+        credentials::prepare(
+            params,
+            captured,
+            launch_values,
+            replay,
+            proxy,
+            credential_brokers,
+        )
+        .await?
     } else {
-        parse_snapshot(shell_type, captured, params.env_policy.as_ref(), replay)?
+        let credential_filter =
+            SnapshotCredentialFilter::new(launch_values, params.env_policy.as_ref())?;
+        parse_snapshot(
+            shell_type,
+            captured,
+            params.env_policy.as_ref(),
+            replay,
+            Some(&credential_filter),
+        )?
     };
     child.preserve_helpers();
     Ok(snapshot)
@@ -574,6 +623,8 @@ fn parse_snapshot(
     output: &[u8],
     env_policy: Option<&ExecEnvPolicy>,
     replay: SnapshotReplay,
+    // `None` on the broker path, which checks its own replay script.
+    credential_filter: Option<&SnapshotCredentialFilter<'_>>,
 ) -> CaptureResult {
     let captured = CapturedSnapshot::parse(shell_type, output).ok_or_else(|| {
         (
@@ -609,7 +660,11 @@ fn parse_snapshot(
             let (name, value) = std::str::from_utf8(entry).ok()?.split_once('=')?;
             Some((name.to_string(), value.to_string()))
         })
+        .filter(|(name, value)| credential_filter.is_none_or(|filter| filter.keep(name, value)))
         .collect::<HashMap<_, _>>();
+    if let Some(filter) = credential_filter {
+        filter.ensure_clean(&state)?;
+    }
     if environment.contains_key(PROXY_ACTIVE_ENV_KEY) {
         strip_managed_proxy_env(&mut environment);
     }

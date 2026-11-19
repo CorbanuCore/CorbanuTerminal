@@ -5,12 +5,15 @@
 //! starts no turn when the switch goes off; the waiting work goes with the
 //! next turn someone starts.
 
+use codex_core::TurnInputRequest;
+use codex_protocol::turn_input::NotSubmittedReason;
 use std::sync::Arc;
 use std::time::Duration;
 
 use codex_core::CodexThread;
+use codex_core::StartIfIdleSubmission;
 use codex_core::StartThreadOptions;
-use codex_core::TryStartTurnIfIdleRejectionReason;
+use codex_core::TurnInput;
 use codex_core::security_level_change::LevelBasis;
 use codex_core::security_revocation::HumanRevocation;
 use codex_core::security_revocation::commit_human_revocation;
@@ -97,6 +100,7 @@ async fn mail(codex: &CodexThread, text: &str, trigger_turn: bool) -> anyhow::Re
                 text.to_string(),
                 trigger_turn,
             ),
+            start_options: Default::default(),
         })
         .await?;
     Ok(())
@@ -116,16 +120,13 @@ async fn assert_no_turn_starts(codex: &CodexThread, what: &str) {
 /// A person types `text`; returns once the turn is complete.
 async fn person_types(codex: &CodexThread, text: &str) -> anyhow::Result<()> {
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: text.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     wait_for_event(codex, |event| matches!(event, EventMsg::TurnComplete(_))).await;
     Ok(())
@@ -189,6 +190,7 @@ async fn issue_507_switch_off_does_not_start_a_child_agent() -> anyhow::Result<(
                 "parent task: pf507-child-task".to_string(),
                 /*trigger_turn*/ true,
             ),
+            start_options: Default::default(),
         })
         .await?;
     assert_no_turn_starts(&child, "switch on").await;
@@ -267,24 +269,33 @@ async fn issue_507_no_automatic_idle_turn_while_the_switch_is_on() -> anyhow::Re
     let test = builder().build_with_auto_env(&server).await?;
 
     switch(&test, HumanRevocation::KillSwitchOn)?;
-    let refused = test
-        .codex
-        .try_start_turn_if_idle(vec![user_message_item("continue the goal: pf507-goal")])
-        .await
-        .expect_err("no automatic turn while the switch is on");
-    assert_eq!(
-        refused.reason(),
-        TryStartTurnIfIdleRejectionReason::KillSwitch
+    // Automatic idle work is a response item, as the goal extension submits it,
+    // never user input.
+    let automatic = || {
+        TurnInputRequest::new(TurnInput::ResponseItem(user_message_item(
+            "continue the goal: pf507-goal",
+        )))
+    };
+    let refused = test.codex.start_turn_if_idle(automatic()).await?;
+    assert!(
+        matches!(
+            refused,
+            StartIfIdleSubmission::NotSubmitted {
+                reason: NotSubmittedReason::KillSwitch
+            }
+        ),
+        "no automatic turn while the switch is on: {refused:?}"
     );
     assert_no_turn_starts(&test.codex, "switch on").await;
     switch(&test, HumanRevocation::KillSwitchOff)?;
     assert_no_turn_starts(&test.codex, "switch turned off").await;
     assert_eq!(captured.requests().len(), 0, "nothing reached the model");
 
-    test.codex
-        .try_start_turn_if_idle(vec![user_message_item("continue the goal: pf507-goal")])
-        .await
-        .map_err(|err| anyhow::anyhow!("{:?}", err.reason()))?;
+    let started = test.codex.start_turn_if_idle(automatic()).await?;
+    assert!(
+        matches!(started, StartIfIdleSubmission::Started { .. }),
+        "asked for again after the switch is off: {started:?}"
+    );
     wait_for_event(&test.codex, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })

@@ -309,6 +309,38 @@ model_provider = "openai"
 }
 
 #[tokio::test]
+async fn edited_role_effort_applies_without_selected_override() {
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    assert_eq!(config.model_reasoning_effort, None);
+    let role_path = write_role_config(
+        &home,
+        "effort-default.toml",
+        "model_reasoning_effort = \"low\"",
+    )
+    .await;
+    config.agent_roles.insert(
+        "custom".to_string(),
+        AgentRoleConfig {
+            config_file: Some(role_path.clone()),
+            source: crate::config::AgentRoleSource::User,
+            ..Default::default()
+        },
+    );
+
+    let mut original = config.clone();
+    apply_role_to_config(&mut original, Some("custom"))
+        .await
+        .expect("original role default");
+    assert_eq!(original.model_reasoning_effort, Some(ReasoningEffort::Low));
+
+    fs::write(&role_path, "model_reasoning_effort = \"high\"").expect("edit role default");
+    apply_role_to_config(&mut config, Some("custom"))
+        .await
+        .expect("edited role default");
+    assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
+}
+
+#[tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
     let (home, mut config) = test_config_with_cli_overrides(vec![
         (
@@ -727,7 +759,8 @@ async fn apply_user_role_provider_choice_is_bounded() {
         base_url: Some("http://127.0.0.1:9/v1".to_string()),
         ..Default::default()
     };
-    let cases: [(&str, fn(&mut Config), &str); 5] = [
+    type ProviderChoiceCase<'a> = (&'a str, fn(&mut Config), &'a str);
+    let cases: [ProviderChoiceCase<'_>; 5] = [
         (
             "model = \"m\"\nmodel_provider = \"amazon-bedrock\"\n\n[model_providers.amazon-bedrock.aws]\nregion = \"us-west-2\"\n",
             |_| {},
@@ -1207,6 +1240,66 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
     assert_eq!(config.model.as_deref(), Some("gpt-5.5"));
     assert_eq!(config.model_provider_id, OPENAI_PROVIDER_ID);
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
+}
+
+#[tokio::test]
+async fn project_role_warns_when_skill_settings_are_ignored() {
+    use tracing::instrument::WithSubscriber;
+
+    let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
+    register_user_role(
+        &home,
+        &mut config,
+        r#"developer_instructions = "Stay focused"
+[skills]
+include_instructions = false
+[skills.bundled]
+enabled = false
+[[skills.config]]
+name = "demo-skill"
+enabled = false
+"#,
+    )
+    .await;
+    config.agent_roles.get_mut("custom").expect("role").source = AgentRoleSource::Project;
+    let parent_instructions = config.include_skill_instructions;
+    let parent_bundled =
+        codex_config::bundled_skills_enabled_from_stack(&config.config_layer_stack);
+    let parent_rules = codex_config::skill_config_rules_from_stack(&config.config_layer_stack);
+
+    let buffer: &'static std::sync::Mutex<Vec<u8>> =
+        Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
+    let subscriber = tracing_subscriber::fmt()
+        .with_ansi(false)
+        .with_max_level(tracing::Level::WARN)
+        .with_writer(tracing_test::internal::MockWriter::new(buffer))
+        .finish();
+    apply_role_to_config(&mut config, Some("custom"))
+        .with_subscriber(subscriber)
+        .await
+        .expect("project role applies its supported settings");
+
+    let logs = String::from_utf8(
+        buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone(),
+    )
+    .expect("role warning should be valid UTF-8");
+    assert!(logs.contains("sets skills, which an agent spawned with this role does not apply"));
+    assert_eq!(
+        config.developer_instructions.as_deref(),
+        Some("Stay focused")
+    );
+    assert_eq!(config.include_skill_instructions, parent_instructions);
+    assert_eq!(
+        codex_config::bundled_skills_enabled_from_stack(&config.config_layer_stack),
+        parent_bundled
+    );
+    assert_eq!(
+        codex_config::skill_config_rules_from_stack(&config.config_layer_stack),
+        parent_rules
+    );
 }
 
 #[cfg_attr(windows, ignore)]

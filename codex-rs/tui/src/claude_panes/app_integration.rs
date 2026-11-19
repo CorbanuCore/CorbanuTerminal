@@ -249,11 +249,12 @@ impl App {
             };
 
             match app_server
-                .resume_thread(
+                .resume_thread_with_permission_overrides(
                     &self.local_settings.reloaded(&self.config),
                     self.config.clone(),
                     thread_id,
                     crate::app_server_session::ResumeModelSettings::RestoreFromThread,
+                    self.launch_approval_resume_permissions(),
                 )
                 .await
             {

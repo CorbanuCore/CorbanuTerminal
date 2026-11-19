@@ -1071,7 +1071,7 @@ fn scenarios() -> Vec<ScenarioSpec> {
             },
         },
         ScenarioSpec {
-            name: "simple_command_escalation_granular_sandbox_enabled_requires_approval",
+            name: "simple_command_escalation_granular_sandbox_enabled_rejects",
             approval_policy: Granular(GranularApprovalConfig {
                 sandbox_approval: true,
                 rules: true,
@@ -1085,16 +1085,11 @@ fn scenarios() -> Vec<ScenarioSpec> {
             },
             sandbox_permissions: SandboxPermissions::RequireEscalated,
             features: vec![],
-            outcome: Outcome::ExecApprovalWithAmendment {
-                decision: ReviewDecision::denied("rejected by user"),
-                expected_reason: None,
-                expected_execpolicy_amendment: Some(ExpectedExecPolicyAmendment::Prefix(&[
-                    "echo",
-                    "known-safe-escalation",
-                ])),
-            },
+            // D618: escalation is only offered under OnRequest, even when Granular
+            // would allow sandbox prompts.
+            outcome: Outcome::Auto,
             expectation: Expectation::CommandFailure {
-                output_contains: "rejected by user",
+                output_contains: "you cannot ask for escalated permissions",
             },
         },
         ScenarioSpec {
@@ -3446,27 +3441,38 @@ GH_TOKEN = "{REAL_GITHUB_TOKEN}"
     )
     .await?;
     if snapshot_unavailable {
-        let warning = wait_for_event(&test.codex, |event| {
-            matches!(event, EventMsg::Warning(_) | EventMsg::TurnComplete(_))
+        let event = wait_for_event(&test.codex, |event| {
+            matches!(
+                event,
+                EventMsg::Warning(_) | EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
+            )
         })
         .await;
-        let EventMsg::Warning(warning) = warning else {
-            panic!("expected credential masking fallback warning, got {warning:?}");
-        };
-        insta::allow_duplicates! {
-            insta::assert_snapshot!(warning.message, @r"Credential masking is unavailable because a protected shell snapshot could not be created. This command will run with unmasked credentials.");
-        }
+        assert!(
+            matches!(event, EventMsg::TurnComplete(_)),
+            "hardened masking must complete without a fail-open warning or approval: {event:?}"
+        );
+    } else {
+        wait_for_completion_without_approval(&test).await;
     }
-    wait_for_completion_without_approval(&test).await;
 
     let output = responses.requests()[1].function_call_output(call_id);
     if snapshot_unavailable {
         assert!(test.session_configured.network_proxy.is_some());
+        let result = parse_result(&output);
+        let dummy = result
+            .stdout
+            .lines()
+            .nth(1)
+            .context("masked credential without a shell snapshot")?;
+        assert!(dummy.starts_with("ghp_"));
+        assert_eq!(dummy.len(), REAL_GITHUB_TOKEN.len());
+        assert_ne!(dummy, REAL_GITHUB_TOKEN);
         assert_eq!(
-            parse_result(&output),
+            result,
             CommandResult {
                 exit_code: Some(0),
-                stdout: format!("west\n{REAL_GITHUB_TOKEN}\n\nproxy-active\nsandbox-denied\n"),
+                stdout: format!("west\n{dummy}\n1\nproxy-active\nsandbox-denied\n"),
             },
         );
         assert!(
@@ -3569,8 +3575,9 @@ GH_TOKEN = "{REAL_GITHUB_TOKEN}"
         assert!(values[1].starts_with("ghp_"));
         assert_ne!(values[1], REAL_GITHUB_TOKEN);
         if mode == "flat_managed" {
-            assert!(values[2].starts_with("custom_"));
-            assert_eq!(values[2].len(), REAL_CUSTOM_TOKEN.len());
+            // D353/D354 keep configured providers off under the hardened broker.
+            // Their variables are withheld, rather than restored as upstream dummies.
+            assert_eq!(values[2], "");
             assert_ne!(values[2], REAL_CUSTOM_TOKEN);
         }
         return Ok(());
@@ -4113,7 +4120,9 @@ allow_local_binding = true
                 .set_legacy_sandbox_policy(sandbox_policy_for_config)
                 .expect("set sandbox policy");
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to be enabled"
@@ -4400,7 +4409,9 @@ allow_local_binding = true
         .with_config(move |config| {
             config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to be enabled"
@@ -4608,7 +4619,9 @@ allow_local_binding = true
                 .set_legacy_sandbox_policy(SandboxPolicy::DangerFullAccess, cwd.as_path())
                 .expect("test setup should allow sandbox policy");
         });
-    let test = builder.build(&server).await?;
+    // Keep session construction off this large test future's stack. These
+    // approval cases must fit the normal 8 MiB test stack without enlarging it.
+    let test = Box::pin(builder.build(&server)).await?;
     assert!(
         !test.config.managed_network_requirements_enabled(),
         "expected managed network requirements to stay inactive in danger-full-access"

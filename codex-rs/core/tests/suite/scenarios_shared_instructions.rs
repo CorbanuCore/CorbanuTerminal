@@ -29,7 +29,14 @@ const UPDATED: &str = "Never send email.";
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn running_descendants_refresh_only_shared_thread_instructions(shared: bool) -> Result<()> {
     let server = start_mock_server().await;
-    let test = test_codex().build_with_auto_env(&server).await?;
+    const BASE_INSTRUCTIONS: &str = "Keep these base instructions across shared-rule updates.";
+    let test = test_codex()
+        .with_config(|config| {
+            config.model_catalog = Some(upstream_model_catalog());
+            config.base_instructions = Some(BASE_INSTRUCTIONS.to_owned());
+        })
+        .build_with_auto_env(&server)
+        .await?;
     let provider = RecordingThreadInstructionsProvider::with_text(INITIAL);
     let provider = Arc::new(if shared { provider.shared() } else { provider });
     let root = test
@@ -53,6 +60,7 @@ async fn running_descendants_refresh_only_shared_thread_instructions(shared: boo
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..StartThreadOptions::new(test.config.clone())
             })
@@ -175,6 +183,11 @@ async fn running_descendants_refresh_only_shared_thread_instructions(shared: boo
             child.thread.shutdown_and_wait().await?;
             test.thread_manager.remove_thread(&child.thread_id).await;
         }
+        // Corbanu carries base instructions outside input; keep their preservation
+        // covered when the history snapshot no longer contains a developer message.
+        for request in &request_history {
+            assert_eq!(request.body_json()["instructions"], BASE_INSTRUCTIONS);
+        }
         insta::assert_snapshot!(
             "shared_instructions_update_running_descendants",
             context_snapshot::format_request_history_snapshot(
@@ -244,6 +257,7 @@ async fn guardian_tracks_shared_instruction_updates_in_running_descendants() -> 
                     agent_path: None,
                     agent_nickname: None,
                     agent_role: None,
+                    agent_class: None,
                 })),
                 ..StartThreadOptions::new(test.config.clone())
             })

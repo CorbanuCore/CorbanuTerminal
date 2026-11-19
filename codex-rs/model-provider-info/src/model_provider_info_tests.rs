@@ -52,6 +52,24 @@ fn runtime_internal_metadata_opt_in_is_not_serialized_or_configurable() {
 }
 
 #[test]
+fn builtin_openai_requires_destination_check_for_internal_metadata() {
+    for base_url in [
+        None,
+        Some("https://api.openai.com/v1"),
+        Some("https://chatgpt.com/backend-api/codex"),
+        Some("https://proxy.example/v1"),
+        Some("http://api.openai.com/v1"),
+        Some("https://api.openai.com.evil.example/v1"),
+    ] {
+        let providers = built_in_model_providers(base_url.map(str::to_owned));
+        assert!(
+            !providers[OPENAI_PROVIDER_ID].include_internal_metadata,
+            "the resolved destination must authorize metadata, not the provider name: {base_url:?}",
+        );
+    }
+}
+
+#[test]
 fn test_api_provider_applies_current_managed_residency() {
     let info = ModelProviderInfo {
         http_headers: Some(maplit::hashmap! {

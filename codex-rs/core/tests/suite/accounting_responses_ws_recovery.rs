@@ -98,6 +98,7 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
                     model_provider: Some("changed-fixture".into()),
                     ..Default::default()
                 },
+                reply: None,
             })
             .await?;
         tokio::time::timeout(Duration::from_secs(2), async {
@@ -423,12 +424,10 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
     wait_observations(&db, /*count*/ 4).await?;
     let before = turn_attempts(&db).await?;
     test.thread_manager
-        .fork_thread(
+        .fork_legacy_thread(
             codex_core::ForkSnapshot::Interrupted,
-            test.config.clone(),
+            codex_core::StartThreadOptions::new(test.config.clone()),
             test.codex.rollout_path().unwrap(),
-            /*thread_source*/ None,
-            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(turn_attempts(&db).await?, before);
@@ -558,10 +557,6 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
                 .features
                 .disable(codex_features::Feature::TokenBudget)
                 .unwrap();
-            config
-                .features
-                .disable(codex_features::Feature::RemoteCompactionV2)
-                .unwrap();
         })
         .build_with_auto_env(&server)
         .await?;
@@ -571,15 +566,32 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
     assert!(!events.iter().any(|e| matches!(e, EventMsg::Error(_))));
     let db = test.codex.state_db().unwrap();
     let before = turn_attempts(&db).await?;
+    let observations_before = turn_observations(&db).await?;
+    assert_eq!(observations_before.len(), 1);
     test.codex.submit(Op::Compact).await?;
+    let compaction = gate.next().await?;
+    assert!(compaction.body["input"].as_array().is_some_and(|input| {
+        input
+            .iter()
+            .any(|item| item["type"] == "compaction_trigger")
+    }));
+    compaction
+        .send(vec![
+            json!({
+                "type": "response.output_item.done",
+                "item": {"type": "compaction", "encrypted_content": "fixture"}
+            }),
+            responses::ev_completed("compact"),
+        ])
+        .await?;
     let compact_events = terminal(&test).await?;
     assert!(
         !compact_events
             .iter()
             .any(|event| matches!(event, EventMsg::Error(_)))
     );
-    // The legacy compaction endpoint records its own `compact:` attempt; the
-    // turn's own rows are unchanged.
+    // Remote v2 compaction records its own `compact:` attempt; the turn's
+    // own rows and measured usage are unchanged.
     let after = turn_attempts(&db).await?;
     assert_eq!(after[..before.len()], before[..]);
     assert_eq!(after.len(), before.len() + 1);
@@ -588,8 +600,13 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
         "{}",
         after[before.len()].turn
     );
-    assert_eq!(turn_observations(&db).await?.len(), 1);
-    counts(&gate, (1, 1, 1, 1));
+    let observations_after = turn_observations(&db).await?;
+    assert_eq!(observations_after.len(), observations_before.len() + 1);
+    assert_eq!(
+        observations_after[..observations_before.len()],
+        observations_before
+    );
+    counts(&gate, (1, 1, 2, 0));
     stop(&test).await;
     metadata_terminal_matrix(&server, 0..2).await
 }
@@ -657,15 +674,8 @@ async fn metadata_terminal_matrix(
                         end,
                     ])
                     .await?;
-                let fallback = kind == "response.incomplete";
-                if fallback {
-                    let retry = gate.next().await?;
-                    assert!(
-                        retry.http,
-                        "incomplete response retains native HTTP fallback"
-                    );
-                    retry.send(vec![json!({"type":"response.failed","response":{"error":{"code":"invalid_prompt","message":"fixture fallback"}}})]).await?;
-                }
+                // D659 preserves terminal typed errors. ResponseIncomplete does
+                // not retry via HTTP; its metadata and usage still count below.
                 let events = terminal(&test).await?;
                 let actual: Vec<_> = events
                     .iter()
@@ -689,7 +699,7 @@ async fn metadata_terminal_matrix(
                 );
                 let db = test.codex.state_db().unwrap();
                 let records = turn_attempts(&db).await?;
-                assert_eq!(records.len(), 1 + usize::from(fallback));
+                assert_eq!(records.len(), 1);
                 chain(&records);
                 assert_eq!(
                     turn_observations(&db).await?.len(),
@@ -705,19 +715,19 @@ async fn metadata_terminal_matrix(
                             } else {
                                 0
                             },
-                            unknown: i64::from(usage_kind != 2) + i64::from(fallback),
+                            unknown: i64::from(usage_kind != 2),
                         }),
                         known_usd: if usage_kind == 2 { "0.000644" } else { "0" }
                             .to_string()
                             .try_into()?,
-                        unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),
-                        attempts: 1 + i64::from(fallback),
+                        unknown_estimates: i64::from(usage_kind != 2),
+                        attempts: 1,
                         ..Default::default()
                     })
                 );
                 eprintln!("metadata matrix passed: mask={mask}, usage={usage_kind}, kind={kind}");
                 gate.no_pending().await;
-                counts(&gate, (1, 1, 1, usize::from(fallback)));
+                counts(&gate, (1, 1, 1, 0));
                 stop(&test).await;
             }
         }

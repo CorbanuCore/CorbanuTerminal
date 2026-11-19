@@ -6,4 +6,5 @@ mod powershell_parser;
 mod powershell_tree_sitter;
 
 pub mod is_dangerous_command;
+pub(crate) use powershell_tree_sitter::powershell_restrictive_prefixes;
 pub(crate) use powershell_tree_sitter::try_parse_powershell_commands;

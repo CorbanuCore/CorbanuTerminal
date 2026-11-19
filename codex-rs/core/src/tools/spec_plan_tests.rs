@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use codex_features::Feature;
+use codex_features::SleepToolMode;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_mcp::ToolInfo;
@@ -1203,6 +1204,36 @@ async fn multiple_environments_expose_environment_selectors() {
     ));
 }
 
+/// #2370: main offers edit tools only when the environment can write (#709). Under
+/// read-only, a model with `apply_patch_tool_type` gets no edit tools, unlike upstream.
+#[tokio::test]
+async fn edit_tools_follow_the_environment_permission_profile() {
+    let edit_tools = ["apply_patch", "structured_edit", "structured_write"];
+    let plan_for = |profile: PermissionProfile| {
+        probe(move |turn| {
+            set_environment_permission_profile(turn, profile);
+            set_feature(turn, Feature::ShellTool, /*enabled*/ true);
+            update_turn_settings_for_test(turn, |settings| {
+                Arc::make_mut(&mut settings.model_info).apply_patch_tool_type =
+                    Some(ApplyPatchToolType::Freeform);
+            });
+        })
+    };
+
+    let read_only = plan_for(PermissionProfile::read_only()).await;
+    read_only.assert_visible_contains(&["exec_command"]);
+    read_only.assert_visible_lacks(&edit_tools);
+    read_only.assert_registered_lacks(&edit_tools);
+
+    for writable in [
+        PermissionProfile::workspace_write(),
+        PermissionProfile::Disabled,
+    ] {
+        let plan = plan_for(writable).await;
+        plan.assert_visible_contains(&edit_tools);
+    }
+}
+
 #[tokio::test]
 async fn environment_tools_follow_the_step_context() {
     let (_session, mut turn) = make_session_and_context().await;
@@ -1263,8 +1294,28 @@ async fn sleep_tool_follows_current_time_config() {
 
 #[tokio::test]
 async fn released_sleep_tool_flag_still_exposes_sleep_without_time_reminders() {
+    // Upstream's released flag defaults to model-driven: a model without the clock tool
+    // and no time reminder gets no sleep tool.
+    let model_driven = probe(|turn| {
+        set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+    })
+    .await;
+    assert!(
+        !model_driven
+            .registered_names
+            .iter()
+            .any(|name| name.ends_with("sleep")),
+        "{:?}",
+        model_driven.registered_names
+    );
+
+    // `[features.sleep_tool] mode = "always_on"` (main's explicit opt-in) offers it
+    // without time reminders.
     let plan = probe(|turn| {
         set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.sleep_tool_mode = SleepToolMode::AlwaysOn;
+        });
     })
     .await;
 
@@ -1741,6 +1792,8 @@ async fn tool_namespaces_info_is_opt_in_and_tracks_mcp_exposure() {
 #[tokio::test]
 async fn candidate_model_plan_leaves_selected_model_and_inventory_unchanged() {
     let (_session, mut turn) = make_session_and_context().await;
+    // Corbanu offers edit tools only where the environment can write.
+    set_environment_permission_profile(&mut turn, PermissionProfile::workspace_write());
     set_features(&mut turn, &[Feature::ShellTool, Feature::UnifiedExec]);
     update_config(&mut turn, |config| {
         config.tool_registry.turn_metadata_includes_tool_info = true;
@@ -2981,13 +3034,38 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         });
     })
     .await;
-    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE]);
+    direct_model_only.assert_visible_contains(&[MULTI_AGENT_V2_NAMESPACE, "list_models"]);
+    assert_eq!(
+        direct_model_only.exposure("list_models"),
+        ToolExposure::DirectModelOnly
+    );
     direct_model_only.assert_visible_lacks(&["spawn_agent", "send_message", "wait_agent"]);
     assert_eq!(
         direct_model_only
             .exposure(&ToolName::namespaced(MULTI_AGENT_V2_NAMESPACE, "spawn_agent").to_string()),
         ToolExposure::DirectModelOnly
     );
+}
+
+#[tokio::test]
+async fn model_lookup_respects_override_visibility() {
+    let disabled = probe(|turn| {
+        set_feature(turn, Feature::Collab, /*enabled*/ false);
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ false);
+    })
+    .await;
+    disabled.assert_visible_lacks(&["list_models"]);
+    disabled.assert_registered_lacks(&["list_models"]);
+
+    let hidden = probe(|turn| {
+        set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
+        update_config(turn, |config| {
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = false;
+        });
+    })
+    .await;
+    hidden.assert_visible_lacks(&["list_models"]);
+    hidden.assert_registered_lacks(&["list_models"]);
 }
 
 #[tokio::test]
@@ -3002,6 +3080,16 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
                 OPENAI_PROVIDER_ID.to_string(),
             ]);
         });
+        let catalog = crate::tools::spec_plan::spawn_agent_available_models(
+            turn, /*supports_cross_provider_overrides*/ true,
+        );
+        for slug in ["gpt-5.6-sol", "gpt-6-astra"] {
+            assert!(catalog.iter().any(|model| model.model == slug));
+        }
+        assert!(catalog.iter().all(|model| matches!(
+            model.provider_id.as_deref(),
+            Some(OPENAI_PROVIDER_ID | OPENROUTER_PROVIDER_ID)
+        )));
     })
     .await;
     let v2_description = match v2.visible_spec("spawn_agent") {
@@ -3009,15 +3097,10 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
         other => panic!("expected v2 spawn_agent function spec, got {other:?}"),
     };
     assert!(
-        v2_description.contains("`openai` / `gpt-5.6-sol`"),
-        "v2 managers on third-party providers need the authorized cross-provider catalog"
+        v2_description.contains("Call `list_models`"),
+        "v2 managers on third-party providers need the authorized cross-provider lookup"
     );
-    assert!(
-        v2_description.contains(
-            "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
-        ),
-        "explicit model discovery must not require automatic-allocation economics"
-    );
+    v2.assert_visible_contains(&["list_models"]);
 
     let v1 = probe(|turn| {
         use_openrouter_provider(turn);
@@ -3269,7 +3352,10 @@ async fn v1_multi_agent_tools_defer_when_tool_search_available() {
     .await;
 
     plan.assert_visible_contains(&["tool_search"]);
+    plan.assert_registered_contains(&["list_models"]);
+    assert_eq!(plan.exposure("list_models"), ToolExposure::Deferred);
     plan.assert_visible_lacks(&[
+        "list_models",
         "spawn_agent",
         "send_input",
         "resume_agent",
@@ -3511,6 +3597,10 @@ async fn non_mcp_namespaced_tools_are_flattened_and_resolved_without_namespace_t
             |turn| {
                 configure_turn(turn);
                 set_feature(turn, Feature::SleepTool, /*enabled*/ true);
+                // These models have no clock tool; offer sleep regardless of the model.
+                update_config(turn, |config| {
+                    config.sleep_tool_mode = SleepToolMode::AlwaysOn;
+                });
             },
             ToolPlanInputs {
                 extension_tool_executors: vec![Arc::new(TestNamespaceExtensionTool {
@@ -3811,24 +3901,28 @@ async fn multi_agent_v2_namespace_is_supported_by_bedrock_provider() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_bedrock_workers_only_delegate_when_model_supports_v2() {
-    for (model, model_multi_agent_version, supports_delegation) in [
+async fn multi_agent_v2_bedrock_workers_delegate_unless_native_tools_disabled() {
+    for (model, model_multi_agent_version, disable_native_tools, supports_delegation) in [
         (
             AMAZON_BEDROCK_GPT_5_6_SOL_MODEL_ID,
             Some(MultiAgentVersion::V2),
+            false,
             true,
         ),
         (
             AMAZON_BEDROCK_GPT_5_6_LUNA_MODEL_ID,
             Some(MultiAgentVersion::V1),
             false,
+            true,
         ),
-        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, false),
+        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, false, true),
+        (AMAZON_BEDROCK_GPT_5_5_MODEL_ID, None, true, false),
     ] {
         let plan = probe(|turn| {
             set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
             update_config(turn, |config| {
                 config.multi_agent_v2.tool_namespace = Some("agents".to_string());
+                config.multi_agent_v2.disable_native_tools = disable_native_tools;
             });
             use_bedrock_provider(turn);
             update_turn_settings_for_test(turn, |settings| {
@@ -3884,6 +3978,7 @@ async fn code_mode_only_can_expose_namespaced_multi_agent_v2_as_normal_tools() {
             "exec",
             "wait",
             "request_user_input",
+            "list_models",
             "agents",
             "spawn_agent_plaintext",
             "send_message_plaintext",
@@ -4168,6 +4263,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             codex_code_mode::WAIT_TOOL_NAME,
             "request_user_input",
             // Multi-agent v2 tools.
+            "list_models",
             MULTI_AGENT_V2_NAMESPACE,
             "spawn_agent_plaintext",
             "send_message_plaintext",

@@ -439,7 +439,10 @@ impl HttpClientBuilder {
     }
 
     fn base_reqwest_builder(self) -> reqwest::ClientBuilder {
-        let mut builder = reqwest::Client::builder();
+        // The pinned hyper version can reuse HTTP/1 connections even after sending
+        // `Connection: close` if the server ignores it. Enforce closure locally
+        // instead of relying on the peer, including for cached route transports.
+        let mut builder = reqwest::Client::builder().pool_max_idle_per_host(/*max*/ 0);
         #[cfg(windows)]
         if let Some(path) = self.windows_proxy_pipe_path {
             builder = builder.windows_named_pipe(path);

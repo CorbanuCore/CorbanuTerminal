@@ -253,6 +253,7 @@ mod config_refresh;
 mod confirmed_aggressive;
 pub(crate) mod context_window;
 mod daemon_recovery;
+mod detached_agent_config;
 mod environment;
 mod extension_interruption;
 pub(crate) mod extension_metrics;
@@ -2746,7 +2747,7 @@ impl Session {
                 .step_settings
                 .resolve_model_info(
                     self.services.models_manager.as_ref(),
-                    &configuration.model_info_overrides,
+                    &configuration.effective_model_info_overrides(),
                 )
                 .await;
             if let Some(effort) = config
@@ -4132,6 +4133,7 @@ impl Session {
         rx_approve.await.unwrap_or(ReviewDecision::Abort)
     }
 
+    #[cfg(test)]
     pub(crate) async fn request_permissions_for_environment(
         self: &Arc<Self>,
         step_context: &Arc<StepContext>,
@@ -4150,8 +4152,8 @@ impl Session {
             })
     }
 
-    /// [`Self::request_permissions_for_environment`], or `Err` with why when
-    /// the request was refused before anyone was asked (#584).
+    /// Request permissions, or return `Err` with why the request was refused
+    /// before anyone was asked (#584).
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "active turn checks and turn state updates must remain atomic"
@@ -4228,6 +4230,18 @@ impl Session {
                 retry_reason: None,
                 network_approval_context: None,
             };
+            // D625 (a) (ii): the post-taint dispatch check's answer for this
+            // call reaches its review, so an automatic reviewer that requirements
+            // reloaded since then never answers alone.
+            tokio::select! {
+                biased;
+                _ = cancellation_token.cancelled() => return Ok(None),
+                confirmed = crate::security::protected_surface::confirm_policy_request_review(
+                    self,
+                    step_context,
+                    &call_id,
+                ) => confirmed?,
+            }
             let decision = tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => return Ok(None),
@@ -4686,10 +4700,6 @@ impl Session {
         }
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
     pub(crate) async fn active_turn_context_and_strict_auto_review(
         &self,
     ) -> Option<(
@@ -4708,22 +4718,14 @@ impl Session {
         Some((turn_context, settings, environments, strict_auto_review))
     }
 
-    async fn active_task_turn_context(&self) -> Option<Arc<TurnContext>> {
-        let active = self.active_turn.lock().await;
-        let task = active.as_ref()?.task.as_ref()?;
-        Some(Arc::clone(&task.turn_context))
-    }
-
-    /// The running turn's own grants for `environment_id`, as later commands
-    /// and file tools may use them (#245; D51: none after a security transition).
+    /// The captured turn's own grants for `environment_id`, even after another turn starts.
+    /// D658: background cells retain their turn; D51 still ends grants at a security transition.
     pub(crate) async fn granted_turn_permissions(
         &self,
+        turn_context: &TurnContext,
         environment_id: &str,
     ) -> Option<AdditionalPermissionProfile> {
-        let granted = self
-            .active_task_turn_context()
-            .await?
-            .granted_turn_permissions(environment_id);
+        let granted = turn_context.granted_turn_permissions(environment_id);
         self.usable_grant(granted).await
     }
 
@@ -4797,14 +4799,6 @@ impl Session {
             config.sqlite.home().to_path_buf(),
             configs,
         )
-    }
-
-    /// Whether strict auto-review is on for the running turn under the policy
-    /// in force (D51: not after a security transition).
-    pub(crate) async fn strict_auto_review_enabled_for_turn(&self) -> bool {
-        self.active_task_turn_context()
-            .await
-            .is_some_and(|turn_context| turn_context.strict_auto_review_enabled())
     }
 
     /// The session's grants for `environment_id`, as later commands and file
@@ -5677,8 +5671,20 @@ impl Session {
         // Corbanu (#1545): the whole communication, its mailbox message id
         // included, so a resume knows it was applied (`applied_agent_message_ids`).
         let mut persisted = (*communication).clone();
-        if let ResponseItem::AgentMessage { id, .. } = &response_item.item {
+        // #2339: the order it took live, which input accepted before it but recorded
+        // after it does not share.
+        persisted.recorded_input_order = Some(order);
+        if let ResponseItem::AgentMessage {
+            id,
+            internal_chat_message_metadata_passthrough,
+            ..
+        } = &response_item.item
+        {
             persisted.id = id.clone();
+            // The recorded item's metadata (its turn, creation time and the collaboration
+            // provenance of its content), so a resume rebuilds the same item.
+            persisted.internal_chat_message_metadata_passthrough =
+                internal_chat_message_metadata_passthrough.clone();
         }
         self.persist_rollout_items(&[RolloutItem::InterAgentCommunication(persisted)])
             .await;
@@ -7448,6 +7454,10 @@ mod pending_mailbox_wake_tests;
 mod stale_poll_mail_tests;
 
 #[cfg(test)]
+#[path = "windows_sandbox_settings_tests.rs"]
+mod windows_sandbox_settings_tests;
+
+#[cfg(test)]
 #[path = "account_switch_tests.rs"]
 mod account_switch_tests;
 
@@ -7458,6 +7468,10 @@ mod home_access_session_tests;
 #[cfg(test)]
 #[path = "approval_options_tests.rs"]
 mod approval_options_tests;
+
+#[cfg(test)]
+#[path = "d658_grant_tests.rs"]
+mod d658_grant_tests;
 
 #[cfg(test)]
 #[path = "stale_approval_tests.rs"]

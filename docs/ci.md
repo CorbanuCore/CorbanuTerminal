@@ -7,7 +7,7 @@ before checkout with no executed steps, which created red status noise without
 testing the code.
 
 Which Rust tests a PR runs: the tests of the crates it changes, on Linux
-(below, #1972), and for five crates also on macOS (non-blocking, #1989);
+(below, #1972), and for five crates also on macOS (required, #1989);
 codex-core's security suites on Linux and macOS; native Windows tests for some
 crates. The whole Linux suite runs only postmerge
 (`rust-ci-full`) and in the nightly Bazel job, so a PR that breaks a crate it
@@ -24,7 +24,8 @@ doesn't change (through a dependency) shows up on `main`.
   the shared sccache/cargo-home caches (typically 6-10 minutes) and has a
   20-minute timeout. The job is `rust-ci-lint-build.yml`, shared with
   postmerge `rust-ci-full`, which also runs the musl dev and musl release legs.
-  The full Linux test suite stays postmerge only.
+  The dedicated full Linux test workflow stays postmerge; the changed-crate
+  job below also runs every workspace member for broad changes.
 - Windows clippy (`rust-ci / Lint/Build — windows-2022 - x86_64-pc-windows-msvc`):
   the same `cargo clippy --tests -D warnings` for the Windows msvc dev target
   (#717), so `cfg(unix)`-gated imports, helpers and `mut`s that are unused on
@@ -47,8 +48,8 @@ doesn't change (through a dependency) shows up on `main`.
   target-platform Python that Bazel lacks there, so no Bazel job runs them on
   Windows (#1856). The `app-server` group therefore runs app-server's unit-test
   targets only; core's and app-server's integration tests run in the
-  non-blocking Cargo job below. code-mode-host and code-mode-runtime run no
-  tests on Windows at all, unit tests included.
+  non-blocking Cargo job below, along with code-mode-host and code-mode-runtime's
+  unit and integration tests.
   Other PRs skip it; a change to its workflow
   (`rust-ci-windows-native-tests.yml`) runs every group, but changes to
   `.bazelrc`, other Bazel files or the crates these depend on don't (nightly
@@ -59,26 +60,34 @@ doesn't change (through a dependency) shows up on `main`.
   as long as the Windows argument comment lint that already runs on PRs
   (90-minute timeout); every group together took about 51 minutes on #1852
   (37 minutes before `utils/pty` and `app-server` were added).
+  On Windows, each `core-unit-tests` shard uses one libtest thread to limit
+  concurrent SQLite fixture setup within the shard (#1448). Other native test
+  targets retain their existing thread settings and time budgets; serializing
+  every target made the network-proxy suite exceed its 300-second budget.
+  Bazel's action scheduling and CPU tags, cross-built Windows settings, and
+  product pool sizes and timeouts are unchanged.
   Bazel gives the sharded core, tui and app-server unit tests its usual three
   attempts.
   This job and the nightly one also give `//codex-rs/login:login-unit-tests`
   one re-run (`--flaky_test_attempts`) for the intermittent #691 test. If that
   test fails both attempts again, add it to the skip list in `.bazelrc`'s
   `windows-native-tests` config.
-- Windows integration tests for codex-core and codex-app-server
-  (`windows-integration-tests / codex-core` and `... / codex-app-server`,
-  #1856), on PRs that change one of those crates; a change to the workflow
-  (`windows-integration-tests.yml`), its known-failure list or script, or
-  `codex-rs/.config/nextest.toml` runs both. They run
-  `cargo nextest run -p <crate> --test '*'` on windows-2022 (msvc). The first
-  native runs found 13 codex-core and 19 codex-app-server failures (#1967,
-  #1968, #1969); they are listed in
-  `.github/windows-integration-known-failures.txt`, excluded, and named in the
-  job summary, so any other failure turns the job red. It is a separate
-  workflow, not part of `CI required` (which neither waits for it nor fails
-  with it), until those are fixed. It has no compile cache: about 22 minutes to
-  build, then about 5 (core) or 13 (app-server) minutes of tests (60-minute
-  timeout).
+- Windows integration tests for codex-core and codex-app-server, plus unit and
+  integration tests for codex-code-mode-host and codex-code-mode-runtime
+  (`windows-integration-tests`, #1856), on PRs that change those crates.
+  Runtime changes also select the host. Changes to the workflow, its
+  known-failure list or selector, setup-ci action, nextest configuration,
+  workspace manifest, lockfile or Rust toolchain run all four packages.
+  Core and app-server run `cargo nextest run -p <crate> --test '*'` on
+  windows-2022 (msvc); the code-mode crates use `--lib --tests` and do not
+  build core's helper binaries. The known-failure list is now empty after
+  #1977, #2007, #2017 and #2341: the final #2341 run passed all 994 core and
+  806 app-server integration tests. Any future native-reproduced exclusions
+  must name an issue in `.github/windows-integration-known-failures.txt`
+  and are shown in the job summary. This remains a separate non-blocking
+  workflow: `CI required` neither waits for it nor fails with it. It has no
+  compile cache; core/app-server take about 22 minutes to build and 5/13
+  minutes to test (60-minute timeout per package).
 - Windows gnullvm cross shards
   (`Bazel test on windows-latest for x86_64-pc-windows-gnullvm shard N/4`,
   `bazel.yml` `test-windows-shard`), meant to run the `*-windows-cross`
@@ -101,15 +110,21 @@ doesn't change (through a dependency) shows up on `main`.
   `codex-rs` crate under which the PR changes any file
   (`.github/scripts/changed_crate_test_packages.py`), including crates Cargo
   makes members only because a member depends on them by path, such as
-  `codex-windows-sandbox` (#2027). It does not add the
-  crates that depend on them, and a `Cargo.lock`-only change runs nothing. It
+  `codex-windows-sandbox` (#2027). Cargo metadata supplies transitive reverse
+  dependencies, including optional, dev, build and target-specific path edges
+  (#1989). Affected `core_test_support`, `app_test_support` and
+  `mcp_test_support` are selected too; Cargo already makes them implicit
+  members. (`mcp_test_support` currently declares no unit-test target.)
+  At more than 32 affected packages, it selects every member instead of
+  truncating coverage. Workspace manifest, lockfile, toolchain, Cargo/nextest
+  configuration and removed crate manifests also select every member. It
   runs codex-core's remote-aware tests locally, without postmerge's Docker
   remote environment. It first builds the helper binaries some suites
   start from other crates (`codex`, the code-mode host, the Linux sandbox, the
   rmcp-client test servers, the wallet daemon) and installs the packaged
-  ripgrep. A change to the job itself, `rust-ci.yml`, the workspace
-  `Cargo.toml`, the toolchain or nextest config runs `codex-rmcp-client`'s
-  tests. It uses postmerge's
+  ripgrep. A change to the job itself or `rust-ci.yml` selects
+  `codex-rmcp-client` and its reverse dependents, currently exceeding the cap
+  and running every member. It uses postmerge's
   `ci-test` profile and restores its sccache (saves nothing). Before this no
   Linux or macOS PR job ran most crates' tests: #1963 went green while
   breaking two rmcp-client tests. Part of `CI results (required)` whenever it
@@ -117,28 +132,32 @@ doesn't change (through a dependency) shows up on `main`.
   rmcp-client, 24 for codex-core and 46 for every crate at once (an upstream
   sync), against the roughly 35 minutes `CI required` already takes.
 - Tests of the changed crates on macOS
-  (`rust-ci changed crate tests (macOS) / <crate>`, #1989, owner decision
-  D503): the same `cargo nextest run -p <crate>` on macos-15, one crate per
+  (`macOS changed crate tests / <crate>`, #1989, owner decisions
+  D503/D623): the same `cargo nextest run -p <crate>` on macos-15, one crate per
   leg, for the crates with macOS-only code paths that no other job tests on
   macOS: `codex-sandboxing` (Seatbelt), `codex-exec-server` (macOS process and
   file-system sandboxes), `codex-keyring-store` (Keychain),
   `codex-process-hardening` and `codex-network-proxy` (native certificates,
-  the credential broker's memory scan). It selects them as the Linux job does
+  the credential broker's memory scan). It selects directly changed crates
   (`.github/scripts/macos_changed_crate_tests.py`, using the shared
-  `cargo_packages` list); a change to the job, its scripts or actions, the
+  `cargo_packages` list), without Linux's reverse-dependency expansion; a change to the job, its scripts or actions, the
   workspace `Cargo.toml`, the toolchain or nextest config runs all five.
   Known macOS failures are listed with their issues in
   `.github/macos-changed-crate-known-failures.txt`, excluded, and named in the
-  job summary (#2069). It is a separate workflow, not part of
-  `CI required`, until it has a cost and flake record. It restores the macOS
+  job summary (#2069). After the one-week observation window, D623 makes
+  this reusable workflow part of `CI required`. Failed or cancelled selection
+  or selected tests block merges; an empty successful selection permits a
+  skipped matrix. Main pushes and manual runs test all five crates.
+  It restores the macOS
   core security sccache (saves nothing). Trial (#2068): 1.6 to 7 minutes per
   crate; `codex-login` (14 minutes, it builds codex-core) and `codex-vault` (no
   macOS-only code) passed but are left out.
 - Core security tests (`rust-ci / Core security tests — ubuntu-24.04` and
   `— macos-15`, #512, #553, #902): codex-core's `security::` unit tests and
   selected integration suites on Linux and macOS, on every `codex-rs` change.
-- Full Rust nextest suite on Linux x64: postmerge only (`postmerge-ci` →
-  `rust-ci-full`), not on PRs.
+- Full Rust nextest workflow on Linux x64 (`postmerge-ci` → `rust-ci-full`):
+  postmerge, including remote-mode coverage. Broad PR changes run all members
+  in the required changed-crate job above, in local mode.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 

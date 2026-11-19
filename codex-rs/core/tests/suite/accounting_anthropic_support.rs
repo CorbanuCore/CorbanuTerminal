@@ -1,9 +1,9 @@
 use anyhow::Result;
+use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_features::Feature;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
 use codex_state::StateRuntime;
 use codex_state::accounting::Attempt;
@@ -140,16 +140,13 @@ pub async fn observations(db: &StateRuntime) -> Result<Vec<Observation>> {
 
 pub async fn submit(test: &TestCodex) -> Result<()> {
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "accounting native fixture".into(),
                 text_elements: vec![],
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     Ok(())
 }

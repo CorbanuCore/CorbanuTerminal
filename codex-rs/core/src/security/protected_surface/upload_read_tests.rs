@@ -15,7 +15,7 @@ fn entry(path: FileSystemPath, access: FileSystemAccessMode) -> FileSystemSandbo
 
 fn path(path: &Path) -> FileSystemPath {
     FileSystemPath::Path {
-        path: AbsolutePathBuf::from_absolute_path(path).unwrap(),
+        path: AbsolutePathBuf::from_absolute_path(path).unwrap().into(),
     }
 }
 

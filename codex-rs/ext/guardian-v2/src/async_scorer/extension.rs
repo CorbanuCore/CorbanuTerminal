@@ -33,9 +33,16 @@ use super::sampler::LunaSampler;
 use super::score::GuardianV2ScoreProgress;
 use super::trusted_skills::TrustedSkillRoots;
 
+/// D604 (owner decision, 2026-11-16): background scoring stays off until its
+/// transcript transport passes Corbanu's outbound disclosure gate. Flip only with
+/// that gate and a new security sign-off.
+pub(super) const BACKGROUND_SCORING_DISCLOSURE_GATED: bool = false;
+
 #[derive(Clone)]
 pub(super) struct GuardianV2Extension {
     auth_manager: Arc<AuthManager>,
+    /// Always `BACKGROUND_SCORING_DISCLOSURE_GATED` outside this crate's unit tests.
+    scoring_transport_permitted: bool,
     pub(super) event_sink: Arc<dyn ExtensionEventSink>,
     pub(super) thread_manager: Weak<ThreadManager>,
 }
@@ -71,39 +78,34 @@ impl ThreadLifecycleContributor<Config> for GuardianV2Extension {
                     .requirements()
                     .constrain_guardian_policy(&mut policy, &model.slug);
             }
-            let scoring_enabled = policy.scoring_enabled();
-            let sampler_config = super::startup::sampler_config(
-                &input,
-                Arc::clone(&self.auth_manager),
-                self.thread_manager.upgrade(),
-            )
-            .await;
-
+            // D604: background risk scoring sends the transcript through its own sampler,
+            // outside Corbanu's outbound disclosure gate. Keep it off whatever the model
+            // catalog or `guardianv2` settings say, and never build its transport.
+            let scoring_enabled = self.scoring_transport_permitted && policy.scoring_enabled();
+            input.thread_store.remove::<ConversationBackend>();
+            input.thread_store.remove::<LunaSampler>();
+            let sampler = if self.scoring_transport_permitted {
+                let sampler_config = super::startup::sampler_config(
+                    &input,
+                    Arc::clone(&self.auth_manager),
+                    self.thread_manager.upgrade(),
+                )
+                .await;
+                let sampler = input
+                    .thread_store
+                    .get_or_init(|| LunaSampler::new(sampler_config));
+                input
+                    .thread_store
+                    .insert(ConversationBackend::new(Arc::clone(&sampler)));
+                Some(sampler)
+            } else {
+                None
+            };
             if scoring_enabled && guardian_config.transcript.include_images {
                 input
                     .thread_store
                     .get_or_init(NodeReplReviewEvidence::default)
                     .enable_image_capture();
-            }
-            input.thread_store.remove::<ConversationBackend>();
-            input.thread_store.remove::<LunaSampler>();
-            let sampler = input
-                .thread_store
-                .get_or_init(|| LunaSampler::new(sampler_config));
-            input
-                .thread_store
-                .insert(ConversationBackend::new(Arc::clone(&sampler)));
-            input
-                .thread_store
-                .remove::<super::decisions::DecisionsSampler>();
-            if input
-                .config
-                .features
-                .enabled(Feature::GuardianV2DecisionsComparison)
-                && let Some(decisions_sampler) =
-                    super::startup::decisions_sampler(&input, &self.auth_manager)
-            {
-                input.thread_store.insert(decisions_sampler);
             }
             input.thread_store.insert(guardian_config);
             input.thread_store.insert(GuardianV2ScoreProgress::new(
@@ -123,6 +125,7 @@ impl ThreadLifecycleContributor<Config> for GuardianV2Extension {
             // Keep the sampler available for later automatic review, but do not
             // prewarm while User approval mode or Full Access is selected.
             if scoring_enabled
+                && let Some(sampler) = sampler
                 && input.config.approvals_reviewer == ApprovalsReviewer::AutoReview
                 && !has_full_access(
                     input.config.permissions.approval_policy.value(),
@@ -190,8 +193,39 @@ pub fn install(
     auth_manager: Arc<AuthManager>,
     thread_manager: Weak<ThreadManager>,
 ) {
+    install_with_scoring_transport(
+        registry,
+        auth_manager,
+        thread_manager,
+        BACKGROUND_SCORING_DISCLOSURE_GATED,
+    );
+}
+
+/// Unit tests of the dormant scorer only: builds its transport despite D604, against
+/// local mock servers. Production code cannot reach this.
+#[cfg(test)]
+pub(super) fn install_with_ungated_scoring_for_tests(
+    registry: &mut ExtensionRegistryBuilder<Config>,
+    auth_manager: Arc<AuthManager>,
+    thread_manager: Weak<ThreadManager>,
+) {
+    install_with_scoring_transport(
+        registry,
+        auth_manager,
+        thread_manager,
+        /*scoring_transport_permitted*/ true,
+    );
+}
+
+fn install_with_scoring_transport(
+    registry: &mut ExtensionRegistryBuilder<Config>,
+    auth_manager: Arc<AuthManager>,
+    thread_manager: Weak<ThreadManager>,
+    scoring_transport_permitted: bool,
+) {
     let extension = Arc::new(GuardianV2Extension {
         auth_manager,
+        scoring_transport_permitted,
         event_sink: registry.event_sink(),
         thread_manager,
     });
@@ -206,3 +240,7 @@ pub fn install(
 #[cfg(test)]
 #[path = "extension_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "scoring_gate_tests.rs"]
+mod scoring_gate_tests;

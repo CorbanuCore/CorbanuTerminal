@@ -34,7 +34,11 @@ impl StartupWarningsCell {
         let mcp_servers: BTreeSet<_> = servers.into_iter().collect();
         let sign_in_servers = match failure_reason {
             Some(McpServerStartupFailureReason::ReauthenticationRequired) => mcp_servers.clone(),
-            None => BTreeSet::new(),
+            // Corbanu: the OpenAI account, not the MCP server, needs signing in again; the
+            // provider-health notice (`chatwidget/provider_health.rs`) says so, not an MCP sign-in.
+            Some(McpServerStartupFailureReason::OpenAiAccountReauthenticationRequired) | None => {
+                BTreeSet::new()
+            }
         };
         Self {
             mcp_details: mcp_servers
@@ -76,11 +80,17 @@ impl HistoryCell for StartupWarningsCell {
     }
 
     fn live_raw_lines(&self) -> Vec<Line<'static>> {
-        Vec::new()
+        self.messages
+            .iter()
+            .flat_map(|message| new_warning_event(message.clone()).live_raw_lines())
+            .collect()
     }
 
-    fn display_lines(&self, _width: u16) -> Vec<Line<'static>> {
-        Vec::new()
+    fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
+        self.messages
+            .iter()
+            .flat_map(|message| new_warning_event(message.clone()).display_lines(width))
+            .collect()
     }
 
     fn warning_keys(&self) -> Vec<WarningKey<'_>> {

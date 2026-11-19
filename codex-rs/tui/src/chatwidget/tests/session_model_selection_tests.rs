@@ -19,6 +19,8 @@ async fn session_model_selection_accepts_final_choices_without_saving() {
             _ => ReasoningEffortConfig::High,
         };
         let mut preset = get_available_model(&chat, "gpt-5.5");
+        // The bundled catalog hides gpt-5.5; the quick picker lists only visible rows.
+        preset.show_in_picker = true;
         preset.default_reasoning_effort = effort.clone();
         preset.supported_reasoning_efforts = vec![ReasoningEffortPreset {
             effort: effort.clone(),
@@ -69,6 +71,8 @@ async fn session_model_selection_notifies_the_original_task_after_each_final_ast
         let thread_id = ThreadId::new();
         chat.thread_id = Some(thread_id);
         let mut preset = get_available_model(&chat, "gpt-5.5");
+        // The bundled catalog hides gpt-5.5; the quick picker lists only visible rows.
+        preset.show_in_picker = true;
         preset.model = "gpt-6-astra".into();
         let effort = if picker == "advanced" {
             ReasoningEffortConfig::Max
@@ -154,8 +158,9 @@ async fn session_model_selection_hides_conflicting_shortcut() {
     assert!(!popup.contains("s session"), "{popup}");
     while rx.try_recv().is_ok() {}
     chat.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
+    // Main's picker applies a choice as a model selection plus its effort.
     assert!(
         std::iter::from_fn(|| rx.try_recv().ok())
-            .any(|event| matches!(event, AppEvent::ApplyModelSelection { .. }))
+            .any(|event| matches!(event, AppEvent::UpdateModelSelection { .. }))
     );
 }

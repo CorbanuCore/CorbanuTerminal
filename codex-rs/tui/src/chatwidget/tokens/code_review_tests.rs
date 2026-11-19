@@ -48,8 +48,37 @@ async fn inspect_until(
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn accounting_cost_shows_code_review_under_the_conversation() -> anyhow::Result<()> {
+// This fixture records direct HTTP requests. Other TUI tests permanently arm
+// process-wide launch/broker state, so run the real session in a fresh process.
+#[test]
+fn accounting_cost_shows_code_review_under_the_conversation() -> anyhow::Result<()> {
+    const CHILD_ENV: &str = "CORBANU_CODE_REVIEW_ACCOUNTING_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        return tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(/*val*/ 2)
+            .enable_all()
+            .build()?
+            .block_on(accounting_cost_shows_code_review_under_the_conversation_body());
+    }
+    let output = std::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "chatwidget::tokens::code_review_tests::accounting_cost_shows_code_review_under_the_conversation",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CHILD_ENV, "1")
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "isolated test failed\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+async fn accounting_cost_shows_code_review_under_the_conversation_body() -> anyhow::Result<()> {
     core_test_support::skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());

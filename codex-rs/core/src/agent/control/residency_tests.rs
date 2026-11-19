@@ -4,12 +4,15 @@ use crate::agent::LocalAgentControl;
 use crate::codex_thread::CodexThread;
 use crate::config::Config;
 use crate::config::test_config;
+use crate::state_db_bridge::init_state_db;
 use crate::thread_manager::ThreadManagerState;
 use codex_features::Feature;
 use codex_login::CodexAuth;
+use codex_protocol::AgentPath;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::ThreadSource;
@@ -19,19 +22,36 @@ use codex_protocol::protocol::TurnCompleteEvent;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
+#[test_case::test_case(false; "without_state_db")]
+#[test_case::test_case(true; "with_state_db")]
 #[tokio::test]
-async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
+async fn residency_slot_reservation_unloads_oldest_idle_v2_agent_with_volatile_mail(sqlite: bool) {
     let mut config = test_config().await;
     let _ = config.features.enable(Feature::MultiAgentV2);
+    if sqlite {
+        config.features.enable(Feature::Sqlite).unwrap();
+    } else {
+        config.features.disable(Feature::Sqlite).unwrap();
+    }
     config.multi_agent_v2.max_concurrent_threads_per_session = 2;
     let temp_home = tempfile::tempdir().expect("create temp home");
     config.codex_home = temp_home.path().to_path_buf().try_into().unwrap();
     config.cwd = temp_home.path().to_path_buf().try_into().unwrap();
-    let manager = ThreadManager::with_models_provider_and_home_for_tests(
+    let state_db = if sqlite {
+        Some(
+            init_state_db(&config)
+                .await
+                .expect("sqlite state db should initialize"),
+        )
+    } else {
+        None
+    };
+    let manager = ThreadManager::with_models_provider_home_and_state_for_tests(
         CodexAuth::from_api_key("dummy"),
         config.model_provider.clone(),
         config.codex_home.to_path_buf(),
         Arc::new(codex_exec_server::EnvironmentManager::default_for_tests()),
+        state_db,
     );
     let root = manager
         .start_thread(StartThreadOptions::new(config.clone()))
@@ -54,9 +74,23 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
         .await
         .expect("first resident slot");
     let first =
-        spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker-1").await;
+        spawn_v2_subagent(&control, &state, config.clone(), root.thread_id, "worker_1").await;
     first_slot.commit(first.thread_id);
     mark_thread_completed(first.thread.as_ref()).await;
+    assert_eq!(first.thread.state_db().is_some(), sqlite);
+    let queued = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::try_from("/root/worker_1").unwrap(),
+        Vec::new(),
+        "keep this note without a durable mailbox row".to_string(),
+        /*trigger_turn*/ false,
+    );
+    first
+        .thread
+        .session
+        .input_queue
+        .enqueue_mailbox_communication(queued.clone().into(), Default::default())
+        .await;
 
     let second_slot = control
         .reserve_v2_residency_slot(
@@ -74,6 +108,15 @@ async fn residency_slot_reservation_unloads_oldest_idle_v2_agent() {
         },
         Ok(_) => panic!("expected evicted thread to be missing"),
     }
+    assert_eq!(
+        control.runtime.mailboxes.take(first.thread_id),
+        vec![queued.into()],
+        "mail without a durable row is handed back to the controller"
+    );
+    assert!(
+        control.runtime.mailboxes.take(first.thread_id).is_empty(),
+        "the stored message can be taken only once"
+    );
     let second = spawn_v2_subagent(&control, &state, config, root.thread_id, "worker-2").await;
     second_slot.commit(second.thread_id);
 

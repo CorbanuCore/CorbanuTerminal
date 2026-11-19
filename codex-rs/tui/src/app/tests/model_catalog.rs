@@ -13,6 +13,12 @@ fn all_model_presets() -> Vec<ModelPreset> {
     crate::test_support::TEST_MODEL_PRESETS.clone()
 }
 
+fn presets_without(model: &str) -> Vec<ModelPreset> {
+    let mut presets = all_model_presets();
+    presets.retain(|preset| preset.model != model);
+    presets
+}
+
 fn bedrock_model_presets() -> Vec<ModelPreset> {
     create_model_provider(
         ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
@@ -126,7 +132,7 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
         (expected.clone(), expected)
     );
     app.chat_widget.update_account_state(
-        Some(StatusAccountDisplay::ApiKey),
+        Some(StatusAccountDisplay::ApiKey { env_var: None }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,
@@ -152,7 +158,9 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
     let mut config = app.config.clone();
     config.service_tier = None;
     config.features.enable(Feature::FastMode)?;
-    for (model, expected_tier) in [(None, fast), (Some("gpt-5.6-terra"), Some("default"))] {
+    // The server picks the default from its own catalog. Corbanu's bundled default models
+    // (Z.AI's, and OpenAI's gpt-6-sol) list no default service tier, unlike upstream's.
+    for (model, expected_tier) in [(None, None), (Some("gpt-5.6-terra"), Some("default"))] {
         config.model = model.map(str::to_string);
         let started = app_server.start_thread(&config).await?;
         assert_eq!(started.session.service_tier.as_deref(), expected_tier);
@@ -163,6 +171,9 @@ async fn model_picker_refresh_updates_app_catalog_from_app_server() -> Result<()
 
 fn model_presets_with_test_upgrades() -> Vec<ModelPreset> {
     let mut presets = all_model_presets();
+    // The bundled catalog may list a real gpt-5.2 with its own migration copy;
+    // this fixture's retired model must be the only one.
+    presets.retain(|preset| preset.model != "gpt-5.2");
     let mut preset = presets
         .iter()
         .find(|preset| preset.model == "gpt-5.5")
@@ -242,6 +253,9 @@ async fn model_migration_prompt_skips_hidden_gpt_targets() {
 fn retired_model_migration_respects_catalog_metadata() {
     for model in ["gpt-5.4-mini", "gpt-5.4", "openai.gpt-5.4"] {
         let mut presets = model_presets_with_test_upgrades();
+        // Corbanu's catalog keeps gpt-5.4 and gpt-5.4-mini as hidden rows without an upgrade;
+        // this fixture's catalog row for `model` must be the only one.
+        presets.retain(|preset| preset.model != model);
         let current = presets
             .iter_mut()
             .find(|preset| preset.model == "gpt-5.2")
@@ -296,22 +310,22 @@ fn select_model_availability_nux_does_not_fall_back_to_older_announcement() {
     });
     let gpt_5 = presets
         .iter_mut()
-        .find(|preset| preset.model == "gpt-5.6-terra")
-        .expect("gpt-5.6-terra preset present");
+        .find(|preset| preset.model == "gpt-5.4")
+        .expect("gpt-5.4 preset present");
     gpt_5.availability_nux = Some(ModelAvailabilityNux {
-        message: "gpt-5.6-terra is available".to_string(),
+        message: "gpt-5.4 is available".to_string(),
     });
     let gpt_5_2 = presets
         .iter_mut()
-        .find(|preset| preset.model == "gpt-5.5")
-        .expect("gpt-5.5 preset present");
+        .find(|preset| preset.model == "gpt-5.4-mini")
+        .expect("gpt-5.4-mini preset present");
     gpt_5_2.availability_nux = Some(ModelAvailabilityNux {
-        message: "gpt-5.5 is available".to_string(),
+        message: "gpt-5.4-mini is available".to_string(),
     });
 
     let selected = select_model_availability_nux(
         &presets,
-        &model_availability_nux_config(&[("gpt-5.6-terra", MODEL_AVAILABILITY_NUX_MAX_SHOW_COUNT)]),
+        &model_availability_nux_config(&[("gpt-5.4", MODEL_AVAILABILITY_NUX_MAX_SHOW_COUNT)]),
     );
 
     assert_eq!(selected, None);
@@ -325,15 +339,15 @@ fn select_model_availability_nux_uses_existing_model_order_as_priority() {
     });
     let first = presets
         .iter_mut()
-        .find(|preset| preset.model == "gpt-5.5")
-        .expect("gpt-5.5 preset present");
+        .find(|preset| preset.model == "gpt-5.4-mini")
+        .expect("gpt-5.4-mini preset present");
     first.availability_nux = Some(ModelAvailabilityNux {
         message: "first".to_string(),
     });
     let second = presets
         .iter_mut()
-        .find(|preset| preset.model == "gpt-5.6-terra")
-        .expect("gpt-5.6-terra preset present");
+        .find(|preset| preset.model == "gpt-5.4")
+        .expect("gpt-5.4 preset present");
     second.availability_nux = Some(ModelAvailabilityNux {
         message: "second".to_string(),
     });
@@ -343,7 +357,7 @@ fn select_model_availability_nux_uses_existing_model_order_as_priority() {
     assert_eq!(
         selected,
         Some(StartupTooltipOverride {
-            model_slug: "gpt-5.6-terra".to_string(),
+            model_slug: "gpt-5.4".to_string(),
             message: "second".to_string(),
         })
     );
@@ -418,8 +432,15 @@ async fn prepare_startup_tooltip_override_suppresses_model_availability_nux() {
 async fn accepted_model_migration_persists_target_default_reasoning_effort() -> Result<()> {
     let mut migration_copies = Vec::new();
     for (model, replacement, provider_id, presets) in [
-        ("gpt-5.4", "gpt-6-sol", "openai", all_model_presets()),
-        ("gpt-5.4-mini", "gpt-6-luna", "openai", all_model_presets()),
+        // Corbanu's catalog keeps gpt-5.4 and gpt-5.4-mini as hidden rows without an upgrade;
+        // the retired-model fallback applies once they leave the catalog, as upstream's has.
+        ("gpt-5.4", "gpt-6-sol", "openai", presets_without("gpt-5.4")),
+        (
+            "gpt-5.4-mini",
+            "gpt-6-luna",
+            "openai",
+            presets_without("gpt-5.4-mini"),
+        ),
         ("gpt-5.5", "gpt-6-sol", "openai", all_model_presets()),
         ("gpt-5.6-luna", "gpt-6-luna", "openai", all_model_presets()),
         ("gpt-5.6-terra", "gpt-6-sol", "openai", all_model_presets()),
@@ -525,11 +546,11 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
     assert_snapshot!(migration_copies.join("\n"), @r"
     GPT-5.4 is no longer available
 
-    Codex now uses GPT-6 Sol in place of GPT-5.4. Switch to GPT-6 Sol to continue.
+    Corbanu Terminal now uses GPT-6 Sol in place of GPT-5.4. Switch to GPT-6 Sol to continue.
 
     GPT-5.4 Mini is no longer available
 
-    Codex now uses GPT-6 Luna in place of GPT-5.4 Mini. Switch to GPT-6 Luna to continue.
+    Corbanu Terminal now uses GPT-6 Luna in place of GPT-5.4 Mini. Switch to GPT-6 Luna to continue.
 
     Meet GPT-6 Sol
 
@@ -547,9 +568,9 @@ async fn accepted_model_migration_persists_target_default_reasoning_effort() -> 
 
     Our latest Sol is more intelligent and more efficient so your usage limits go further. This model is a great daily driver for complex tasks, especially coding.
 
-    GPT-5.4 on Amazon Bedrock is no longer offered in Codex
+    GPT-5.4 on Amazon Bedrock is no longer offered in Corbanu Terminal
 
-    Codex now uses GPT-6 Sol on Amazon Bedrock in place of GPT-5.4 on Amazon Bedrock. Switch to GPT-6 Sol on Amazon Bedrock to continue.
+    Corbanu Terminal now uses GPT-6 Sol on Amazon Bedrock in place of GPT-5.4 on Amazon Bedrock. Switch to GPT-6 Sol on Amazon Bedrock to continue.
     ");
     Ok(())
 }

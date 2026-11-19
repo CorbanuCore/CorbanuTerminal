@@ -188,6 +188,16 @@ pub(crate) fn external_agent_block_reason_for_home(codex_home: &Path) -> Option<
     external_agent_block_reason_in(active, load(codex_home).enforced(), live_level(codex_home))
 }
 
+/// D621 (#2310): whether this process launched under Aggressive (set once,
+/// after every Aggressive row was verified; a failed check refuses the launch).
+pub(crate) fn launched_aggressive() -> bool {
+    #[cfg(test)]
+    if let Some((active, _)) = test_levels::LEVELS.get() {
+        return active == ChosenLevel::Aggressive;
+    }
+    context().is_some_and(|context| context.active == ChosenLevel::Aggressive)
+}
+
 /// Stand-in active and saved levels for the Claude pane gate tests, on the
 /// current thread only.
 #[cfg(test)]

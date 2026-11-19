@@ -225,6 +225,7 @@ mod quit_thread_record;
 mod render;
 mod resize_reflow_cap;
 mod resume_launch;
+mod resume_notice;
 mod resume_permissions;
 mod resume_picker;
 mod screen_reader;
@@ -769,6 +770,37 @@ pub(crate) async fn start_app_server_for_picker(
 pub(crate) async fn start_embedded_app_server_for_picker(
     config: &Config,
 ) -> color_eyre::Result<AppServerSession> {
+    start_embedded_app_server_for_picker_with_cli(config, test_provider_session_flags(config)).await
+}
+
+/// Test configs may pick their provider in memory (chat widget fixtures choose it from the
+/// test model); an embedded server reloads config from disk for resume and input checks, so it
+/// must see the same provider or each resume is refused as a provider mismatch. Only other
+/// built-in providers: the server already defaults to OpenAI, and a custom in-memory provider
+/// is not in the server's config. A test that chose the server's model or provider in its
+/// own `config.toml` keeps that choice.
+#[cfg(test)]
+pub(crate) fn test_provider_session_flags(config: &Config) -> Vec<(String, toml::Value)> {
+    let provider = config.model_provider_id.clone();
+    let server_chooses_model = std::fs::read_to_string(config.codex_home.join("config.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|table| table.contains_key("model") || table.contains_key("model_provider"));
+    (!server_chooses_model
+        && provider != codex_model_provider_info::OPENAI_PROVIDER_ID
+        && codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+            .contains_key(&provider))
+    .then(|| ("model_provider".to_string(), toml::Value::String(provider)))
+    .into_iter()
+    .collect()
+}
+
+/// [`start_embedded_app_server_for_picker`] with session-flag overrides for the server's own loads.
+#[cfg(test)]
+pub(crate) async fn start_embedded_app_server_for_picker_with_cli(
+    config: &Config,
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+) -> color_eyre::Result<AppServerSession> {
     let mut target = AppServerTarget::Embedded;
     let mut state_db = init_state_db_for_app_server_target(config, &target).await?;
     // Keep the shared test fixture's frame independent of embedded startup size.
@@ -776,7 +808,7 @@ pub(crate) async fn start_embedded_app_server_for_picker(
         &mut target,
         Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        cli_kv_overrides,
         LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
@@ -1753,7 +1785,7 @@ async fn run_ratatui_app(
             .enabled(codex_features::Feature::NamedAccounts)
     {
         // Esc leaves this picker: a new session would need onboarding (#555).
-        let selection = match select_resume_launch_session(
+        let (selection, fallback_notice) = match select_resume_launch_session(
             &mut tui,
             &mut startup_draft,
             &cli,
@@ -1831,7 +1863,7 @@ async fn run_ratatui_app(
             session_log::log_session_end();
             return Ok(fatal_exit_info(message));
         }
-        early_resume_selection = Some(selection);
+        early_resume_selection = Some((selection, fallback_notice));
     }
     let requires_provider_onboarding = startup_provider.requires_provider_onboarding;
     let default_login_forced_method =
@@ -2063,6 +2095,7 @@ async fn run_ratatui_app(
         crate::render::highlight::set_syntax_theme(theme);
     }
 
+    let mut resume_fallback_notice = None;
     let mut session_selection = if cli.agents_overview {
         resume_picker::SessionSelection::AgentsOverview
     } else if use_fork {
@@ -2171,7 +2204,7 @@ async fn run_ratatui_app(
             resume_picker::SessionSelection::StartFresh
         }
     } else if is_resume_launch(&cli) {
-        let selection = match early_resume_selection.take() {
+        let (selection, fallback_notice) = match early_resume_selection.take() {
             Some(selection) => selection,
             None => match select_resume_launch_session(
                 &mut tui,
@@ -2193,6 +2226,7 @@ async fn run_ratatui_app(
                 }
             },
         };
+        resume_fallback_notice = fallback_notice;
         match selection {
             ResumeLaunchSelection::Missing(id_str) => {
                 shutdown_app_server_if_present(app_server.take()).await;
@@ -2731,6 +2765,7 @@ async fn run_ratatui_app(
         prompt,
         images,
         session_selection,
+        resume_fallback_notice,
         startup_resume_model_override,
         feedback,
         is_first_run,

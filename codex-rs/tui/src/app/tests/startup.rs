@@ -909,13 +909,16 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
         );
     }
 
-    // After the drain has settled a fresh explicit decision works normally.
-    app.handle_tui_event(
-        &mut tui,
-        &mut app_server,
-        TuiEvent::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE)),
-    )
-    .await?;
+    // After the drain has settled a fresh explicit decision works normally. In Corbanu's
+    // approval prompt the decision key highlights its option and Enter confirms it.
+    for key in [KeyCode::Char('y'), KeyCode::Enter] {
+        app.handle_tui_event(
+            &mut tui,
+            &mut app_server,
+            TuiEvent::Key(KeyEvent::new(key, KeyModifiers::NONE)),
+        )
+        .await?;
+    }
     assert!(!app.chat_widget.has_active_modal());
 
     // Overview can open before the first real input, and survives a server reconnect.
@@ -934,6 +937,8 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
                     "thread/list" | "thread/loaded/list" => {
                         serde_json::json!({"result": {"data": [], "nextCursor": null}})
                     }
+                    // Corbanu's reconnect also rereads the sign-in state.
+                    "getAuthStatus" => serde_json::json!({"result": {}}),
                     method => panic!("unexpected overview reconnect request: {method}"),
                 }))
             },
@@ -950,6 +955,7 @@ async fn unattended_modals_survive_unfinished_terminal_input() -> Result<()> {
         app.app_server_target.clone(),
         app.config.clone(),
         app.local_settings.clone(),
+        app.launch_approval_resume_permissions(),
         /*thread_id*/ None,
         /*remote_cwd*/ None,
         app_server.thread_tool_transport(),
@@ -1320,6 +1326,9 @@ async fn known_thread_started_preserves_session_without_reading_unmaterialized_r
             agent_path: None,
             is_running: false,
             is_closed: false,
+            last_result_message: None,
+            last_task_message: None,
+            model: None,
         })
     );
 }
@@ -1413,6 +1422,7 @@ async fn startup_slash_command_runs_after_startup_whatever_the_keystroke_timing(
                 session: test_thread_session(ThreadId::new(), test_path_buf("/tmp/project")),
                 turns: Vec::new(),
                 blocks_direct_input: false,
+                task_tools_available: false,
             }),
         )
         .await
@@ -1753,6 +1763,7 @@ async fn check_subagent_approval_routing(routing: ApprovalRouting) -> Result<()>
                 agent_path: None,
                 agent_nickname: None,
                 agent_role: None,
+                agent_class: None,
             }),
             parent_thread_id.into(),
             parent_thread_id,
@@ -1831,6 +1842,7 @@ async fn startup_thread_start_failure_returns_error() {
         &mut tui,
         Box::new(history_cell::StartupWarningsCell::new(vec![
             "Skill manifest is invalid.".to_string(),
+            "Security level Moderate needs the source_envelopes feature.".to_string(),
         ])),
     );
 
@@ -1849,6 +1861,7 @@ async fn startup_thread_start_failure_returns_error() {
 
     Startup warnings:
     Skill manifest is invalid.
+    Security level Moderate needs the source_envelopes feature.
     ");
     assert!(!app.pending_startup_thread_start);
     assert_eq!(app.primary_thread_id, None);
@@ -2134,9 +2147,9 @@ async fn check_provider_resume_retries(reopen_via: ProviderResumeRoute) -> Resul
         let home = app.config.codex_home.clone();
         let definition = "[model_providers.missing_provider]\nname = 'Saved provider'\nbase_url = 'http://127.0.0.1:12345/v1'\nwire_api = 'responses'\n";
         let config = if provider_configured {
-            format!("[tui]\nresume_cwd = 'current'\n{definition}")
+            format!("model_provider = 'openai'\n[tui]\nresume_cwd = 'current'\n{definition}")
         } else {
-            "[tui]\nresume_cwd = 'current'\n".to_string()
+            "model_provider = 'openai'\n[tui]\nresume_cwd = 'current'\n".to_string()
         };
         std::fs::write(home.join("config.toml"), config)?;
         crate::legacy_core::config::set_project_trust_level(

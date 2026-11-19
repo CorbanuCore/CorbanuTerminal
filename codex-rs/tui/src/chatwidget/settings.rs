@@ -76,7 +76,7 @@ impl ChatWidget {
         } else if !self.daybreak_account_eligible() {
             None
         } else {
-            match crate::daybreak::availability(&self.model_catalog.models) {
+            match crate::daybreak::availability(&self.model_catalog.models()) {
                 Some(true) => Some("Enable broader access for cybersecurity work"),
                 Some(false) => Some("Learn about broader access for cybersecurity work"),
                 None => Some("Manage broader access for cybersecurity work"),
@@ -288,6 +288,7 @@ impl ChatWidget {
     ) {
         // Account-update notifications are the identity boundary. The visible account fields can
         // be identical across two accounts, so always invalidate account-scoped requests and data.
+        self.clear_accounting_inspector();
         self.model_popup_request_id = None;
         let api_key_changed = matches!(
             self.status_account_display,
@@ -386,6 +387,16 @@ impl ChatWidget {
     /// widget. A retained pane can use a different provider from its parent, so copying only the
     /// ID leaves `/status`, wire-specific controls, and auth affordances describing the parent.
     pub(super) fn apply_thread_model_provider(&mut self, model_provider_id: String) {
+        self.project_thread_model_provider(model_provider_id);
+        self.refresh_model_dependent_surfaces();
+    }
+
+    /// [`Self::apply_thread_model_provider`] without refreshing the surfaces
+    /// that depend on the model, for a caller that sets the thread's model
+    /// next and refreshes them then. Refreshing in between judged the
+    /// previous model, which stopped upstream's fresh-task sparkle on a new
+    /// Astra task (#2312).
+    pub(super) fn project_thread_model_provider(&mut self, model_provider_id: String) {
         let model_provider = self
             .config
             .model_providers
@@ -401,7 +412,9 @@ impl ChatWidget {
                     ..Default::default()
                 }
             });
-        self.set_model_provider(model_provider_id, model_provider);
+        self.runtime_model_provider_base_url = model_provider.base_url.clone();
+        self.config.model_provider_id = model_provider_id;
+        self.config.model_provider = model_provider;
     }
 
     pub(crate) fn current_model(&self) -> &str {

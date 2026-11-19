@@ -2007,6 +2007,7 @@ dependencies = [
  "codex-hooks",
  "codex-http-client",
  "codex-image-generation-extension",
+ "codex-keyring-store",
  "codex-log-guard",
  "codex-login",
  "codex-mcp",
@@ -3061,6 +3062,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-test",
  "url",
+ "urlencoding",
  "uuid",
  "walkdir",
  "which 8.0.0",
@@ -3259,11 +3261,13 @@ dependencies = [
  "codex-http-client",
  "codex-linux-sandbox",
  "codex-log-guard",
+ "codex-model-provider-info",
  "codex-mxc-sandbox",
  "codex-network-proxy",
  "codex-otel",
  "codex-protocol",
  "codex-sandboxing",
+ "codex-secret-broker",
  "codex-shell-command",
  "codex-skills",
  "codex-test-binary-support",
@@ -3310,6 +3314,7 @@ dependencies = [
  "which 8.0.0",
  "windows-sys 0.61.2",
  "wiremock",
+ "zeroize",
 ]
 
 [[package]]
@@ -3747,7 +3752,6 @@ dependencies = [
  "codex-model-provider-info",
  "codex-prompts",
  "codex-protocol",
- "codex-protocol-test-support",
  "codex-utils-cargo-bin",
  "codex-websocket-client",
  "core_test_support",
@@ -4660,8 +4664,10 @@ dependencies = [
  "tokio",
  "tracing",
  "ts-rs",
+ "urlencoding",
  "uuid",
  "wildmatch",
+ "zeroize",
 ]
 
 [[package]]
@@ -4909,6 +4915,7 @@ dependencies = [
  "codex-utils-path-uri",
  "codex-utils-pty",
  "codex-windows-sandbox",
+ "codex-windows-sandbox-test-support",
  "dunce",
  "libc",
  "pretty_assertions",
@@ -14003,6 +14010,7 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest 0.10.7",
+ "sha2-asm",
 ]
 
 [[package]]
@@ -14014,6 +14022,15 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "digest 0.11.3",
+]
+
+[[package]]
+name = "sha2-asm"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b845214d6175804686b2bd482bcffe96651bb2d1200742b712003504a2dac1ab"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

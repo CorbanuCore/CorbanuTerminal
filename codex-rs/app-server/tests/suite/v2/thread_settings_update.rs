@@ -57,6 +57,18 @@ async fn confirm_permission(
     thread_id: &str,
     policy: codex_app_server_protocol::AskForApproval,
 ) -> Result<()> {
+    confirm_permission_with_writable_root(mcp, thread_id, policy, None).await
+}
+
+// D639 keeps approved commands inside their sandbox. A running-work fixture
+// therefore needs a writable control directory, while its authority probes
+// remain outside that directory.
+async fn confirm_permission_with_writable_root(
+    mcp: &mut TestAppServer,
+    thread_id: &str,
+    policy: codex_app_server_protocol::AskForApproval,
+    writable_root: Option<&std::path::Path>,
+) -> Result<()> {
     let request = mcp
         .send_thread_settings_update_request(ThreadSettingsUpdateParams {
             thread_id: thread_id.into(),
@@ -65,6 +77,15 @@ async fn confirm_permission(
             sandbox_policy: Some(
                 if policy == codex_app_server_protocol::AskForApproval::Never {
                     SandboxPolicy::DangerFullAccess
+                } else if let Some(root) = writable_root {
+                    SandboxPolicy::WorkspaceWrite {
+                        writable_roots: vec![codex_utils_absolute_path::AbsolutePathBuf::try_from(
+                            root,
+                        )?],
+                        network_access: false,
+                        exclude_tmpdir_env_var: true,
+                        exclude_slash_tmp: true,
+                    }
                 } else {
                     SandboxPolicy::ReadOnly {
                         network_access: false,
@@ -90,7 +111,7 @@ async fn confirm_permission(
 fn write_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
     app_test_support::create_command_execution_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys; pathlib.Path(sys.argv[1]).write_text('executed')".into(),
             path.to_string_lossy().into_owned(),
@@ -135,9 +156,9 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 fn counted_permission_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
     app_test_support::create_command_execution_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
-            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('a').write('executed\\n')"
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('ab').write(b'executed\\n')"
                 .into(),
             path.to_string_lossy().into_owned(),
         ],
@@ -225,10 +246,12 @@ async fn thread_settings_f05_pending_accept_runs_once_and_next_turn_is_full() ->
 async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     let fixture = TempDir::new()?;
-    let old = fixture.path().join("old");
+    let control = fixture.path().join("control");
+    std::fs::create_dir(&control)?;
+    let old = control.join("old");
     let new = fixture.path().join("new");
     let (_home, server, mut mcp, thread) = native_permission_fixture(
-        fixture.path(),
+        &control,
         vec![
             counted_permission_probe(&old, "old")?,
             create_final_assistant_message_sse_response("old done")?,
@@ -237,7 +260,13 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
         ],
     )
     .await?;
-    confirm_permission(&mut mcp, &thread, AskForApproval::UnlessTrusted).await?;
+    confirm_permission_with_writable_root(
+        &mut mcp,
+        &thread,
+        AskForApproval::UnlessTrusted,
+        Some(&control),
+    )
+    .await?;
     assert!(!old.exists());
     start_text_turn(&mut mcp, thread.clone()).await?;
     let approval = pending_permission_probe(&mut mcp, "old").await?;
@@ -268,14 +297,14 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
 fn permission_barrier(fixture: &std::path::Path) -> Result<String> {
     app_test_support::create_command_execution_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             concat!(
                 "import pathlib,sys,time; p=pathlib.Path(sys.argv[1]); ",
-                "(p/'started').open('a').write('executed\\n'); deadline=time.monotonic()+50\n",
+                "(p/'started').open('ab').write(b'executed\\n'); deadline=time.monotonic()+50\n",
                 "while not (p/'release').exists() and time.monotonic()<deadline: time.sleep(.01)\n",
                 "assert (p/'release').exists(), 'fixture barrier expired'\n",
-                "(p/'finished').open('a').write('executed\\n')"
+                "(p/'finished').open('ab').write(b'executed\\n')"
             )
             .into(),
             fixture.to_string_lossy().into_owned(),
@@ -325,12 +354,14 @@ async fn inflight_permission_case(
 ) -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     let fixture = TempDir::new()?;
+    let control = fixture.path().join("control");
+    std::fs::create_dir(&control)?;
     let continuation = fixture.path().join("continuation");
     let next = fixture.path().join("next");
     let (_home, server, mut mcp, thread) = native_permission_fixture(
-        fixture.path(),
+        &control,
         vec![
-            permission_barrier(fixture.path())?,
+            permission_barrier(&control)?,
             counted_permission_probe(&continuation, "continuation")?,
             create_final_assistant_message_sse_response("old done")?,
             counted_permission_probe(&next, "next")?,
@@ -338,14 +369,14 @@ async fn inflight_permission_case(
         ],
     )
     .await?;
-    confirm_permission(&mut mcp, &thread, initial).await?;
+    confirm_permission_with_writable_root(&mut mcp, &thread, initial, Some(&control)).await?;
     start_text_turn(&mut mcp, thread.clone()).await?;
     if initial == AskForApproval::UnlessTrusted {
         let approval = pending_permission_probe(&mut mcp, "in-flight").await?;
         mcp.send_response(approval, serde_json::json!({"decision": "accept"}))
             .await?;
     }
-    wait_permission_barrier(fixture.path()).await?;
+    wait_permission_barrier(&control).await?;
     let selected = if initial == AskForApproval::Never {
         AskForApproval::UnlessTrusted
     } else {
@@ -353,15 +384,15 @@ async fn inflight_permission_case(
     };
     confirm_permission(&mut mcp, &thread, selected).await?;
     read_thread_with_turns(&mut mcp, &thread).await?;
-    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 0)?;
-    std::fs::write(fixture.path().join("release"), "continue")?;
+    assert_permission_effects(&control.join("started"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("finished"), /*count*/ 0)?;
+    std::fs::write(control.join("release"), "continue")?;
     let old_approvals = finish_probe(&mut mcp, "continuation").await?;
     assert_eq!(
         old_approvals,
         usize::from(initial == AskForApproval::UnlessTrusted)
     );
-    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("finished"), /*count*/ 1)?;
     assert_permission_effects(&continuation, usize::from(initial == AskForApproval::Never))?;
     start_text_turn(&mut mcp, thread).await?;
     let next_approvals = finish_probe(&mut mcp, "next").await?;
@@ -370,8 +401,8 @@ async fn inflight_permission_case(
         usize::from(selected == AskForApproval::UnlessTrusted)
     );
     assert_permission_effects(&next, usize::from(selected == AskForApproval::Never))?;
-    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("started"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("finished"), /*count*/ 1)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 5);
     Ok(())
 }
@@ -399,25 +430,27 @@ async fn rapid_permission_case(
 ) -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     let fixture = TempDir::new()?;
+    let control = fixture.path().join("control");
+    std::fs::create_dir(&control)?;
     let probe = fixture.path().join("settled");
     let (_home, server, mut mcp, thread) = native_permission_fixture(
-        fixture.path(),
+        &control,
         vec![
-            permission_barrier(fixture.path())?,
+            permission_barrier(&control)?,
             create_final_assistant_message_sse_response("old done")?,
             counted_permission_probe(&probe, "settled")?,
             create_final_assistant_message_sse_response("new done")?,
         ],
     )
     .await?;
-    confirm_permission(&mut mcp, &thread, final_policy).await?;
+    confirm_permission_with_writable_root(&mut mcp, &thread, final_policy, Some(&control)).await?;
     start_text_turn(&mut mcp, thread.clone()).await?;
     if final_policy == AskForApproval::UnlessTrusted {
         let approval = pending_permission_probe(&mut mcp, "in-flight").await?;
         mcp.send_response(approval, serde_json::json!({"decision": "accept"}))
             .await?;
     }
-    wait_permission_barrier(fixture.path()).await?;
+    wait_permission_barrier(&control).await?;
     let opposite = if final_policy == AskForApproval::Never {
         AskForApproval::UnlessTrusted
     } else {
@@ -455,9 +488,9 @@ async fn rapid_permission_case(
             }
         );
     }
-    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 0)?;
-    std::fs::write(fixture.path().join("release"), "continue")?;
+    assert_permission_effects(&control.join("started"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("finished"), /*count*/ 0)?;
+    std::fs::write(control.join("release"), "continue")?;
     assert_eq!(finish_probe(&mut mcp, "in-flight").await?, 0);
     start_text_turn(&mut mcp, thread).await?;
     assert_eq!(
@@ -465,8 +498,8 @@ async fn rapid_permission_case(
         usize::from(final_policy == AskForApproval::UnlessTrusted)
     );
     assert_permission_effects(&probe, usize::from(final_policy == AskForApproval::Never))?;
-    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("started"), /*count*/ 1)?;
+    assert_permission_effects(&control.join("finished"), /*count*/ 1)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 4);
     Ok(())
 }
@@ -674,7 +707,7 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
     let barrier_deadline = barrier_timeout - DEFAULT_TIMEOUT;
     let barrier = app_test_support::create_command_execution_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+float(sys.argv[3])\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)".into(),
             ready.to_string_lossy().into_owned(),
@@ -1105,13 +1138,15 @@ async fn preserve_running_authority_after_confirmation(
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ServerRequest;
     let fixture = TempDir::new()?;
-    let ready = fixture.path().join("ready");
-    let release = fixture.path().join("release");
-    let completed = fixture.path().join("completed");
+    let control = fixture.path().join("control");
+    std::fs::create_dir(&control)?;
+    let ready = control.join("ready");
+    let release = control.join("release");
+    let completed = control.join("completed");
     let probe = fixture.path().join("probe");
     let barrier = app_test_support::create_command_execution_sse_response(
         vec![
-            "python3".into(),
+            if cfg!(windows) { "python" } else { "python3" }.into(),
             "-c".into(),
             "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+50\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)\nassert pathlib.Path(sys.argv[2]).exists(); pathlib.Path(sys.argv[3]).write_text('approved work completed')".into(),
             ready.to_string_lossy().into_owned(),
@@ -1136,7 +1171,13 @@ async fn preserve_running_authority_after_confirmation(
         .build_initialized_with_timeout(Duration::from_secs(60))
         .await?;
     let thread = start_thread(&mut mcp).await?.thread;
-    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    confirm_permission_with_writable_root(
+        &mut mcp,
+        &thread.id,
+        AskForApproval::UnlessTrusted,
+        Some(&control),
+    )
+    .await?;
     start_text_turn(&mut mcp, thread.id.clone()).await?;
     let ServerRequest::CommandExecutionRequestApproval { request_id, params } =
         timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??

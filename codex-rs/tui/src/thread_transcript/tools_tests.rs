@@ -256,6 +256,151 @@ fn historical_command_fallbacks_preserve_status_output_and_group_boundaries() {
 }
 
 #[test]
+fn command_jobs_survive_replay_with_recorded_and_missing_process_ids() {
+    let cwd = test_path_buf("/workspace").abs();
+    let mut snapshots = Vec::new();
+    for status in [
+        CommandExecutionStatus::Completed,
+        CommandExecutionStatus::Failed,
+        CommandExecutionStatus::InProgress,
+        CommandExecutionStatus::Declined,
+        CommandExecutionStatus::Refused,
+    ] {
+        for recorded_pid in [Some("42"), None] {
+            let mut item = command_item(status.clone());
+            if let ThreadItemPayload::CommandExecution {
+                process_id,
+                duration_ms,
+                aggregated_output,
+                ..
+            } = &mut item
+            {
+                *process_id = recorded_pid.map(str::to_owned);
+                *duration_ms = Some(1250);
+                *aggregated_output = Some("saved output".to_owned());
+            }
+            let cells = thread_items_to_transcript_cells(
+                /*thread_id*/ None,
+                &cwd,
+                [item],
+                RawReasoningVisibility::Hidden,
+                /*config*/ None,
+            );
+            assert_eq!(cells.len(), 1);
+            let cell = &cells[0];
+            assert_eq!(cell.transcript_animation_tick(), None);
+            let raw = cell
+                .raw_lines()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let pid = recorded_pid.unwrap_or("not reported");
+            let job = format!(
+                "job: pid={pid} · call=command · cwd=/tmp/project · output=thread transcript"
+            );
+            assert!(raw.contains(&job), "{raw}");
+            let detailed = cell
+                .transcript_lines(/*width*/ 120)
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(detailed.contains(&job), "{detailed}");
+            snapshots.push(format!("{status:?}, pid={pid}\n{detailed}"));
+        }
+    }
+    insta::assert_snapshot!(snapshots.join("\n\n"));
+}
+
+#[test]
+fn job_metadata_does_not_add_short_command_disclosure() {
+    use crate::history_cell::ActivityDisclosure;
+    use crate::history_cell::HistoryCell;
+
+    let mut item = command_item(CommandExecutionStatus::Completed);
+    if let ThreadItemPayload::CommandExecution {
+        aggregated_output, ..
+    } = &mut item
+    {
+        *aggregated_output = Some("ok".to_owned());
+    }
+    let mut cell = CommandHistory::from_item(item).unwrap().into_cell();
+    assert_eq!(cell.activity_disclosure(80), None);
+    assert!(
+        cell.raw_lines()
+            .iter()
+            .any(|line| line.to_string().contains("job: pid=not reported"))
+    );
+    cell.group.push_detail(Arc::new(PlainHistoryCell::new(vec![
+        "Retained reasoning".into(),
+    ])));
+    assert_eq!(
+        cell.activity_disclosure(80),
+        Some(ActivityDisclosure::Generic)
+    );
+}
+
+#[test]
+fn grouped_commands_keep_each_job_in_order() {
+    let cwd = test_path_buf("/workspace").abs();
+    let items = [("read-first", "101"), ("read-second", "202")].map(|(call_id, pid)| {
+        let mut item = command_item(CommandExecutionStatus::Completed);
+        if let ThreadItemPayload::CommandExecution {
+            id,
+            command,
+            command_actions,
+            process_id,
+            aggregated_output,
+            ..
+        } = &mut item
+        {
+            *id = call_id.to_owned();
+            *process_id = Some(pid.to_owned());
+            *command = "cat README.md".to_owned();
+            *command_actions = vec![CommandAction::Read {
+                command: command.clone(),
+                name: "README.md".to_owned(),
+                path: LegacyAppPathString::from_string("/tmp/project/README.md"),
+            }];
+            *aggregated_output = Some(format!("output for {call_id}"));
+        }
+        item
+    });
+    let cells = thread_items_to_transcript_cells(
+        /*thread_id*/ None,
+        &cwd,
+        items,
+        RawReasoningVisibility::Hidden,
+        /*config*/ None,
+    );
+    assert_eq!(cells.len(), 1);
+    let cell = &cells[0];
+    let raw = cell
+        .raw_lines()
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(raw.matches("output=thread transcript").count(), 2);
+    assert!(raw.find("call=read-first").unwrap() < raw.find("call=read-second").unwrap());
+    for width in [20, 40] {
+        assert!(
+            cell.transcript_lines(width)
+                .iter()
+                .all(|line| line.width() <= usize::from(width))
+        );
+    }
+    let detailed = cell
+        .transcript_lines(/*width*/ 120)
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(detailed);
+}
+
+#[test]
 fn agent_tool_fallbacks_preserve_status_without_duplicating_v2_activity() {
     let cwd = test_path_buf("/workspace").abs();
     let mut snapshots = Vec::new();
@@ -315,6 +460,7 @@ fn agent_tool_fallbacks_preserve_status_without_duplicating_v2_activity() {
             model: None,
             reasoning_effort: None,
             agents_states: Default::default(),
+            provider_account: None,
         };
         let cells = thread_items_to_transcript_cells(
             /*thread_id*/ None,

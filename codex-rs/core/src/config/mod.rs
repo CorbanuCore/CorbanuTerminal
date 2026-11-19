@@ -90,7 +90,6 @@ use codex_mcp::McpPluginAttribution;
 use codex_mcp::McpProtocolMode;
 use codex_mcp::McpServerRegistration;
 use codex_mcp::ResolvedMcpCatalog;
-use codex_memories_read::memory_root;
 use codex_model_provider::ChatgptBaseUrl;
 use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
 use codex_model_provider::ProviderCapabilities;
@@ -145,6 +144,7 @@ use codex_protocol::config_types::Verbosity;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::config_types::WindowsSandboxLevel;
+use codex_protocol::intersect_effective_permission_profiles;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::BaseInstructionsProvenance;
 use codex_protocol::models::PermissionProfile;
@@ -155,7 +155,9 @@ use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::DenyReadValidator;
 use codex_protocol::permissions::DenyReadViolation;
+use codex_protocol::permissions::FileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath;
+use codex_protocol::permissions::FileSystemSandboxKind;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSandboxPolicyContext;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -700,6 +702,93 @@ impl Permissions {
     }
 }
 
+/// Upstream's test for saved profiles holding materialized filesystem grants:
+/// concrete readable path or glob entries rather than symbolic workspace roots.
+fn has_materialized_path_entries(profile: &PermissionProfile) -> bool {
+    profile
+        .file_system_sandbox_policy()
+        .entries
+        .iter()
+        .any(|entry| {
+            entry.access.can_read()
+                && matches!(
+                    entry.path,
+                    FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. }
+                )
+        })
+}
+
+/// #2376: a conservative containment check for when the two profiles cannot be
+/// intersected. `current` is within `saved` if it grants no write at all, reads
+/// no more than `saved` (which must read everything, with no denials) and has
+/// network only when `saved` does.
+fn is_read_only_within(current: &PermissionProfile, saved: &PermissionProfile) -> bool {
+    let (current_file_system, current_network) = current.to_runtime_permissions();
+    let (saved_file_system, saved_network) = saved.to_runtime_permissions();
+    matches!(current, PermissionProfile::Managed { .. })
+        && current_file_system.kind == FileSystemSandboxKind::Restricted
+        && !current_file_system
+            .entries
+            .iter()
+            .any(|entry| entry.access.can_write())
+        && saved_file_system.has_full_disk_read_access()
+        && (!current_network.is_enabled() || saved_network.is_enabled())
+}
+
+/// #2384 / D650: fail-closed fallback when a removed named profile's snapshot
+/// cannot bound the current profile: the current profile with every write
+/// downgraded to read and no network. It is never broader than the current
+/// profile and grants no write or network access the snapshot might lack.
+fn without_writes_or_network(current: &PermissionProfile) -> PermissionProfile {
+    let (mut file_system, _) = current.to_runtime_permissions();
+    if !matches!(current, PermissionProfile::Managed { .. })
+        || file_system.kind != FileSystemSandboxKind::Restricted
+    {
+        return PermissionProfile::read_only();
+    }
+    for entry in &mut file_system.entries {
+        if entry.access.can_write() {
+            entry.access = FileSystemAccessMode::Read;
+        }
+    }
+    PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted)
+}
+
+/// #2384 / D650: caps the current profile by a saved executor-enforced
+/// (`External`) profile. `None` keeps `current`.
+///
+/// The saved profile is never restored: under `External` Codex applies no sandbox
+/// and Corbanu's own protections (protected reads, the macOS keychain denial) are
+/// off, and the executor that enforced it may be gone on resume. The only grant
+/// Codex can still withhold is network access the saved thread did not have.
+/// `Disabled` stays as it is: Codex enforces no filesystem or network limits under
+/// either profile, and only `Disabled` keeps Corbanu's protections.
+fn bound_by_saved_external_network(
+    current: PermissionProfile,
+    saved_network: NetworkSandboxPolicy,
+) -> Option<PermissionProfile> {
+    if saved_network.is_enabled() {
+        return None;
+    }
+    match current {
+        PermissionProfile::Managed {
+            file_system,
+            network: NetworkSandboxPolicy::Enabled,
+        } => Some(PermissionProfile::Managed {
+            file_system,
+            network: NetworkSandboxPolicy::Restricted,
+        }),
+        PermissionProfile::External {
+            network: NetworkSandboxPolicy::Enabled,
+        } => Some(PermissionProfile::External {
+            network: NetworkSandboxPolicy::Restricted,
+        }),
+        PermissionProfile::Managed { .. }
+        | PermissionProfile::External { .. }
+        | PermissionProfile::Disabled => None,
+    }
+}
+
 // A profile override only inherits the selected profile's proxy/allowlist config
 // when Codex is still responsible for the network policy. `Disabled` means no
 // outer sandbox, so starting the managed proxy would narrow the override.
@@ -791,6 +880,16 @@ pub enum AccountingMode {
         scope: uuid::Uuid,
         approved_endpoint: String,
     },
+}
+
+/// Corbanu: a configured reasoning effort that config load mapped to another one for the
+/// provider and model it was loaded for (the legacy Ambient/Z.AI mapping).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfiguredReasoningEffortMapping {
+    pub model_provider_id: String,
+    pub model: Option<String>,
+    pub configured: ReasoningEffort,
+    pub mapped: ReasoningEffort,
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -1240,6 +1339,10 @@ pub struct Config {
     /// Value to use for `reasoning.effort` when making a request using the
     /// Responses API.
     pub model_reasoning_effort: Option<ReasoningEffort>,
+    /// Corbanu: the configured `model_reasoning_effort` that config load mapped to another
+    /// effort for this provider and model (the legacy Ambient/Z.AI mapping), with the effort
+    /// it became. A built-in crew role that re-reads the configured effort maps it the same way.
+    pub configured_reasoning_effort_mapping: Option<ConfiguredReasoningEffortMapping>,
     /// Optional Plan-mode-specific reasoning effort override used by the TUI.
     ///
     /// When unset, Plan mode uses the built-in Plan preset default (currently
@@ -1973,7 +2076,10 @@ pub async fn load_gpu_runtime_model_provider_records(
         );
         return Vec::new();
     };
-    let sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home_with_nfs_enforcement(
+        sqlite_home,
+        /*enforce_delete_on_nfs*/ false,
+    );
     if !sqlite.has_existing_state_db() {
         return Vec::new();
     }
@@ -4507,14 +4613,6 @@ impl Config {
             &mut constrained_windows_sandbox_mode,
             &mut startup_warnings,
         )?;
-        // #1976 (D491): say at start why agent commands and file tools will
-        // be refused. MXC reports no restricted-token/elevated level, so it
-        // counts as unsandboxed here until S3b qualifies it.
-        if crate::security::windows_unsandboxed::applies(security_level, windows_sandbox_level) {
-            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
-                security_level,
-            ));
-        }
         let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
             use std::env;
 
@@ -4554,19 +4652,21 @@ impl Config {
             sandbox_mode.is_none()
                 && permission_profile.is_none()
                 && default_permissions_override.is_none()
-                && persisted_permission_profile_id.is_none()
+                // #2384 / D650: managed `allowed_permission_profiles` keep upstream's
+                // behaviour on purpose: the administrator's policy picks the profile
+                // (the managed default or the allowed saved profile id), even where
+                // that is broader than the thread's saved permissions.
                 && requirements_toml.allowed_permission_profiles.is_none()
-                // Executor-owned enforcement and materialized grants are not portable
-                // thread defaults. Reject the original mode before preserving denials.
-                && !matches!(profile, PermissionProfile::External { .. })
-                && !profile.file_system_sandbox_policy().entries.iter().any(|entry| {
-                    entry.access.can_read()
-                        && matches!(entry.path, FileSystemPath::Path { .. } | FileSystemPath::GlobPattern { .. })
-                })
-                && permission_profile_catalog::permission_profile_satisfies_requirements(
-                    &config_layer_stack,
-                    profile,
-                )
+                // Executor-owned enforcement is not a portable thread default: a saved
+                // `External` profile is never restored, it only narrows the current
+                // profile below (#2384), and that result is checked when applied.
+                // Saved profiles with materialized grants are bounded below instead
+                // of rejected (#2376).
+                && (matches!(profile, PermissionProfile::External { .. })
+                    || permission_profile_catalog::permission_profile_satisfies_requirements(
+                        &config_layer_stack,
+                        profile,
+                    ))
         });
         let persisted_permission_profile_id = if sandbox_mode.is_some()
             || permission_profile.is_some()
@@ -4590,6 +4690,14 @@ impl Config {
             requirements_toml,
             &mut startup_warnings,
         )?;
+        // #2384 / D650: a thread saved under a named profile also carries that
+        // profile's snapshot. While the id still resolves, the thread follows the
+        // profile's current definition (upstream); once the id is gone or invalid,
+        // the configured default it falls back to is capped by the snapshot below.
+        let persisted_profile_id_unresolved = persisted_permission_profile_id.is_some()
+            && !effective_permission_selection.persisted_profile_id_was_provided;
+        let persisted_permission_profile = persisted_permission_profile
+            .filter(|_| persisted_permission_profile_id.is_none() || persisted_profile_id_unresolved);
         if effective_permission_selection.has_profiles()
             && !matches!(
                 permission_config_syntax,
@@ -4637,6 +4745,18 @@ impl Config {
             && codex_sandboxing::windows_mxc_available();
         let local_windows_sandbox_type =
             resolve_windows_sandbox_type(windows_sandbox_type, prefer_mxc);
+        // #1976 (D491): say at start why agent commands and file tools will be
+        // refused. D522 (a): judged on the backend actually selected, so MXC
+        // counts as no sandbox however it was chosen (including `prefer_mxc`
+        // over a configured elevated or restricted-token sandbox).
+        if crate::security::windows_unsandboxed::applies(
+            security_level,
+            startup_notice_sandbox_level(local_windows_sandbox_type, windows_sandbox_level),
+        ) {
+            startup_warnings.push(crate::security::windows_unsandboxed::startup_notice(
+                security_level,
+            ));
+        }
         let legacy_windows_sandbox_level = windows_sandbox_level_for_legacy_checks(
             local_windows_sandbox_type,
             windows_sandbox_level,
@@ -4829,6 +4949,61 @@ impl Config {
                 Vec::new(),
             )
         };
+        // #2376 (Corbanu): a resumed thread never gets broader permissions than it
+        // persisted. Saved profiles with materialized grants (workspace roots stored
+        // as concrete paths, `.git`/`.codex` protections, extra writable roots) are
+        // not restored as-is: upstream re-derives them from the current defaults and
+        // workspace roots, so callers can narrow the roots. Bound that re-derived
+        // profile by the saved one, so a broader default (e.g. full access) cannot
+        // replace a restricted thread. If the two cannot be intersected safely, keep
+        // the current profile only when it is provably no broader (it writes nothing),
+        // and otherwise the saved profile exactly.
+        // #2384 / D650: a saved `External` profile is never restored; it only removes
+        // network access the thread did not have. The snapshot of a removed or
+        // invalid named profile always bounds the fallback default, even without
+        // materialized grants, and is never restored as-is: if the two cannot be
+        // intersected, the default loses its writes and network instead.
+        let persisted_permission_profile = persisted_permission_profile.and_then(|saved| {
+            let roots = workspace_roots
+                .iter()
+                .map(PathUri::from_abs_path)
+                .chain(profile_workspace_roots.iter().cloned())
+                .collect::<Vec<_>>();
+            let current = permission_profile
+                .clone()
+                .materialize_project_roots_with_path_uris(&roots);
+            if let PermissionProfile::External { network } = saved {
+                return bound_by_saved_external_network(current, network);
+            }
+            let saved = if persisted_profile_id_unresolved {
+                saved.materialize_project_roots_with_path_uris(&roots)
+            } else if !has_materialized_path_entries(&saved) {
+                return Some(saved);
+            } else {
+                saved
+            };
+            match intersect_effective_permission_profiles(&current, &saved, resolved_cwd.as_path())
+            {
+                Ok(bounded) if bounded == current => None,
+                Ok(bounded) => Some(bounded),
+                Err(_) if is_read_only_within(&current, &saved) => None,
+                // #2384: removing a profile must not bring its grants back.
+                Err(err) if persisted_profile_id_unresolved => {
+                    tracing::warn!(
+                        error = %err,
+                        "removed permission profile's snapshot cannot bound the current defaults; resuming without writes or network"
+                    );
+                    Some(without_writes_or_network(&current))
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "saved thread permissions cannot be bounded by the current defaults; restoring them unchanged"
+                    );
+                    Some(saved)
+                }
+            }
+        });
         if let Some(saved) = persisted_permission_profile {
             let (mut saved_file_system, saved_network) = saved.to_runtime_permissions();
             saved_file_system.preserve_deny_read_restrictions_from(&file_system_sandbox_policy);
@@ -5461,10 +5636,22 @@ impl Config {
                 || zai_chat_provider_selected)
         {
             cfg.model_reasoning_effort
+                .clone()
                 .map(normalize_ambient_reasoning_effort)
         } else {
-            cfg.model_reasoning_effort
+            cfg.model_reasoning_effort.clone()
         };
+        let configured_reasoning_effort_mapping = cfg
+            .model_reasoning_effort
+            .clone()
+            .zip(model_reasoning_effort.clone())
+            .filter(|(configured, mapped)| configured != mapped)
+            .map(|(configured, mapped)| ConfiguredReasoningEffortMapping {
+                model_provider_id: model_provider_id.clone(),
+                model: model.clone(),
+                configured,
+                mapped,
+            });
         let notices = cfg.notice.unwrap_or_default();
         let service_tier = match service_tier_override {
             Some(Some(service_tier)) => Some(service_tier),
@@ -5974,6 +6161,7 @@ impl Config {
                 .and_then(|auto_review| auto_review.circuit_break_action)
                 .unwrap_or_default(),
             model_reasoning_effort,
+            configured_reasoning_effort_mapping,
             plan_mode_reasoning_effort: cfg.plan_mode_reasoning_effort,
             model_reasoning_summary: cfg.model_reasoning_summary,
             model_supports_reasoning_summaries: cfg.model_supports_reasoning_summaries,
@@ -6692,13 +6880,26 @@ fn narrow_project_provider_allowlist(
     Some(allowed)
 }
 
+/// #1976 (D491), D522 (a): the Windows sandbox level the start-up notice is
+/// judged on. MXC counts as no sandbox however it was selected, as it does
+/// for the refusals themselves (`tools::orchestrator::unsandboxed_check_level`).
+fn startup_notice_sandbox_level(
+    local_windows_sandbox_type: SandboxType,
+    windows_sandbox_level: WindowsSandboxLevel,
+) -> WindowsSandboxLevel {
+    if local_windows_sandbox_type == SandboxType::WindowsMxc {
+        WindowsSandboxLevel::Disabled
+    } else {
+        windows_sandbox_level
+    }
+}
+
 /// PF-23-S03: the strictest security level any enabled config layer sets.
 /// A later layer (a repository's `.codex/config.toml`, a profile, a `-c`
 /// override) can raise the level but never lower it.
 pub(crate) fn layered_security_floor(stack: &ConfigLayerStack) -> SecurityLevel {
     stack
         .layers_high_to_low()
-        .into_iter()
         .filter_map(|layer| {
             layer
                 .config
@@ -6735,3 +6936,7 @@ mod project_security_startup_tests;
 #[cfg(test)]
 #[path = "windows_unsandboxed_startup_tests.rs"]
 mod windows_unsandboxed_startup_tests;
+
+#[cfg(test)]
+#[path = "persisted_permissions_tests.rs"]
+mod persisted_permissions_tests;

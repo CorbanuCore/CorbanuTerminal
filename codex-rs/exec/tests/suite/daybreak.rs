@@ -123,8 +123,11 @@ async fn exec_custom_provider_daybreak_uses_capability() -> anyhow::Result<()> {
             } else {
                 Some(responses::mount_sse_once(&server, responses::sse_completed("response")).await)
             };
+            // Corbanu's `cmd_with_server` also passes `-c model_provider="openai"`
+            // (the default provider here is Z.AI), which would replace the
+            // `proxy` provider this test configures; its base URL is in config.
             let assertion = test
-                .cmd_with_server(&server)
+                .cmd()
                 .env_remove("CODEX_ACCESS_TOKEN")
                 .args([
                     "--skip-git-repo-check",

@@ -175,6 +175,7 @@ async fn lifecycle_actions_stop_parked_voice_before_removing_owner() -> Result<(
                             agent_path: None,
                             agent_nickname: None,
                             agent_role: None,
+                            agent_class: None,
                         },
                     ),
                     codex_protocol::SessionId::from(root),

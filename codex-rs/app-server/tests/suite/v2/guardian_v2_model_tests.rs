@@ -55,6 +55,7 @@ use super::wait_for_luna_request;
 
 #[test_case("node_repl"; "browser")]
 #[test_case("cua_repl"; "computer use")]
+#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn computer_use_scoring_follows_model_review_requirement(
     server_name: &'static str,
@@ -155,6 +156,7 @@ async fn computer_use_scoring_follows_model_review_requirement(
 
 #[test_case(0.0; "low risk")]
 #[test_case(1.0; "high risk")]
+#[ignore = "D604 (#2562): background scoring stays off until disclosure-gated"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_programs_follow_each_turn_without_changing_parent_selection(
     luna_score: f64,

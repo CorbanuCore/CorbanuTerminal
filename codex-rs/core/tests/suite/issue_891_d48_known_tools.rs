@@ -8,6 +8,7 @@
 //! rule, a command that stays in the sandbox and Aggressive.
 #![cfg(target_os = "linux")]
 
+use codex_core::TurnInputRequest;
 use std::sync::Arc;
 
 use codex_core::config::Constrained;
@@ -45,7 +46,11 @@ const UNSHARE: &str = "unshare -Ur sh -c 'echo NAMESPACE-MADE-D$((40+8))'";
 /// The same as a plain command, which isn't a protected action: asked about
 /// in D48's own fresh prompt.
 const PLAIN: &str = "unshare -Ur printf NAMESPACE-MADE-%s D48";
+/// [`PLAIN`] behind `chroot /`, as in #2455.
+const CHROOTED: &str = "unshare -Ur chroot / printf NAMESPACE-MADE-%s D48";
 const NAMESPACE_MADE: &str = "NAMESPACE-MADE-D48";
+/// What the model's own shell prints if it runs (it never should).
+const OWN_SHELL_RAN: &str = "OWN-SHELL-RAN-D48";
 /// What `unshare` prints when a namespace is refused.
 const REFUSED: &str = "unshare failed: Operation not permitted";
 /// The #826 explanation added where the rule refused it.
@@ -63,21 +68,23 @@ const PROTECTED_ACTION: &str = "after untrusted content entered the session";
 /// How a call runs its command.
 #[derive(Clone, Copy, Debug)]
 enum Kind {
-    /// `shell_command` asking to run outside the sandbox, with a
-    /// justification.
+    /// `exec_command` asking to run outside the sandbox, with a
+    /// justification (formerly `shell_command`, which upstream removed).
     Escalated,
-    /// The same through `exec_command`.
+    /// The same with `exec_command`'s own arguments.
     EscalatedExec,
     /// The same through `exec_command` with a shell the model chose: a
-    /// copy of bash outside the system folders.
+    /// program named `bash` outside the system folders. Upstream only takes
+    /// the shell's type from the path the model names and runs the user's
+    /// own bash, so this program never runs.
     EscalatedExecOwnShell,
-    /// `shell_command` in the sandbox.
+    /// `exec_command` in the sandbox.
     Sandboxed,
 }
 
 fn step(call_id: &str, command: &str, kind: Kind, own_shell: &str) -> Vec<Value> {
     let (tool, mut arguments) = match kind {
-        Kind::Escalated | Kind::Sandboxed => ("shell_command", json!({ "command": command })),
+        Kind::Escalated | Kind::Sandboxed => ("exec_command", json!({ "cmd": command })),
         Kind::EscalatedExec => (
             "exec_command",
             json!({ "cmd": command, "yield_time_ms": 5_000 }),
@@ -101,8 +108,8 @@ fn step(call_id: &str, command: &str, kind: Kind, own_shell: &str) -> Vec<Value>
 #[derive(Clone, Copy, Debug)]
 struct Setup {
     level: SecurityLevel,
-    /// A "don't ask again" rule saved earlier for `unshare`.
-    saved_rule: bool,
+    /// Rules saved earlier ("don't ask again"); empty for none.
+    rules: &'static str,
     approval: AskForApproval,
     /// The automatic reviewer answers ordinary prompts.
     auto_review: bool,
@@ -161,27 +168,31 @@ async fn run(
     calls: &[(Kind, &'static str, ReviewDecision)],
 ) -> anyhow::Result<Vec<Call>> {
     let home = Arc::new(TempDir::new()?);
-    if setup.saved_rule {
+    if !setup.rules.is_empty() {
         std::fs::create_dir_all(home.path().join("rules"))?;
-        std::fs::write(
-            home.path().join("rules/default.rules"),
-            "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n",
-        )?;
+        std::fs::write(home.path().join("rules/default.rules"), setup.rules)?;
     }
     let mut steps = vec![vec![
         ev_response_created("call-first"),
         ev_function_call(
             "call-first",
-            "shell_command",
-            &json!({ "command": "echo first" }).to_string(),
+            "exec_command",
+            &json!({ "cmd": "echo first" }).to_string(),
         ),
         ev_completed("call-first"),
     ]];
     // A shell the model may name for `exec_command`, outside the system
-    // folders.
+    // folders: it says so in the output if it ever runs.
     let own_shell_dir = TempDir::new()?;
     let own_shell = own_shell_dir.path().join("bash");
-    std::os::unix::fs::symlink("/bin/bash", &own_shell)?;
+    std::fs::write(
+        &own_shell,
+        format!("#!/bin/sh\necho {OWN_SHELL_RAN}\nexec /bin/bash \"$@\"\n"),
+    )?;
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&own_shell, std::fs::Permissions::from_mode(0o755))?;
+    }
     let own_shell = own_shell.to_string_lossy().into_owned();
     let ids: Vec<String> = (0..calls.len()).map(|n| format!("call-d48-{n}")).collect();
     for (id, (kind, command, _)) in ids.iter().zip(calls) {
@@ -225,16 +236,13 @@ async fn run(
     // The "copy" of a known tool in a folder the agent can write.
     std::os::unix::fs::symlink("/usr/bin/unshare", test.cwd_path().join("unshare"))?;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "make a user namespace".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let mut asked: Vec<Vec<String>> = vec![Vec::new(); calls.len()];
     while let EventMsg::ExecApprovalRequest(request) = wait_for_event(&test.codex, |event| {
@@ -260,6 +268,7 @@ async fn run(
             })
             .await?;
     }
+    super::session_resources::shutdown(&test).await?;
     let requests = captured.requests();
     Ok(ids
         .iter()
@@ -282,9 +291,14 @@ async fn run(
         .collect())
 }
 
+/// "Don't ask again" rules for `unshare` and the command [`PLAIN`] runs
+/// (#2455: one for `unshare` alone no longer covers it).
+const SAVED_RULES: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n\
+                           prefix_rule(pattern=[\"printf\"], decision=\"allow\")\n";
+
 const MODERATE: Setup = Setup {
     level: SecurityLevel::Moderate,
-    saved_rule: false,
+    rules: "",
     approval: AskForApproval::OnRequest,
     auto_review: false,
 };
@@ -320,6 +334,9 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             ReviewDecision::denied("no"),
         ),
         (Kind::EscalatedExec, bwrap, ReviewDecision::denied("no")),
+        // A shell the model chose: only its type counts, the user's own bash
+        // runs the script (main ran the model's file, so it was not offered).
+        (Kind::EscalatedExecOwnShell, PLAIN, ReviewDecision::Approved),
     ];
     let not_offered: &[(Kind, &str, ReviewDecision)] = &[
         // An arbitrary command.
@@ -361,8 +378,6 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             "unshare -Ur true; unshare -Ur sh -c 'echo NAMESPACE-MADE-D$((40+8))'",
             ReviewDecision::Approved,
         ),
-        // A shell the model chose (the prompt shows only the script).
-        (Kind::EscalatedExecOwnShell, PLAIN, ReviewDecision::Approved),
         // A known tool that stays in the sandbox.
         (Kind::Sandboxed, UNSHARE, ReviewDecision::Approved),
     ];
@@ -404,6 +419,15 @@ async fn d48_after_untrusted_content_only_known_tools_are_offered() -> anyhow::R
             }
             // Podman and bwrap offered, declined: nothing ran.
             5 | 6 => call.asked.len() == 1 && call.warned() && !call.made,
+            // The model's shell named: offered as the plain command, and the
+            // model's program never ran.
+            7 => {
+                call.asked.len() == 1
+                    && call.warned()
+                    && call.allowed()
+                    && call.asked[0].contains(JUSTIFICATION)
+                    && !call.output.contains(OWN_SHELL_RAN)
+            }
             // Whether the shell expands the alias decides whether it runs.
             _ if call.command.contains("alias") => {
                 call.unwarned() && !call.made && (call.explained || !call.refused)
@@ -431,7 +455,7 @@ async fn d48_saved_rule_aggressive_approvals_off_and_auto_review() -> anyhow::Re
         (
             "saved rule",
             Setup {
-                saved_rule: true,
+                rules: SAVED_RULES,
                 ..MODERATE
             },
             PLAIN,
@@ -475,8 +499,64 @@ async fn d48_saved_rule_aggressive_approvals_off_and_auto_review() -> anyhow::Re
                 call.unwarned()
                     && call.refused
                     && !call.made
-                    && (!setup.saved_rule || call.asked.is_empty())
+                    && (setup.rules.is_empty() || call.asked.is_empty())
             }
+        };
+        if !ok {
+            wrong.push(format!("{name}: {call:#?}\noutput: {}", call.output));
+        }
+    }
+    assert_eq!(wrong, Vec::<String>::new());
+    Ok(())
+}
+
+/// #2455 (D670): after untrusted content under Moderate, D48's fresh prompt
+/// for a known tool doesn't get past a rule for the command it runs. A
+/// forbidden rule refuses it before anyone is asked; a prompt rule's reason
+/// is in D48's prompt, ahead of the warning; a saved rule for `unshare`
+/// alone doesn't cover the command, so the person is asked as without one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn issue2455_d48_prompt_keeps_inner_command_rules() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    skip_if_sandbox!(Ok(()));
+    const FORBIDDEN: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n\
+                             prefix_rule(pattern=[\"printf\"], decision=\"forbidden\")\n";
+    const PROMPT: &str = "prefix_rule(pattern=[\"printf\"], decision=\"prompt\")\n";
+    const UNSHARE_ONLY: &str = "prefix_rule(pattern=[\"unshare\"], decision=\"allow\")\n";
+    let mut wrong = Vec::new();
+    for (name, rules, command) in [
+        ("forbidden", FORBIDDEN, PLAIN),
+        ("forbidden behind chroot", FORBIDDEN, CHROOTED),
+        ("prompt", PROMPT, PLAIN),
+        ("prompt behind chroot", PROMPT, CHROOTED),
+        ("unshare only", UNSHARE_ONLY, PLAIN),
+    ] {
+        let calls = Box::pin(run(
+            Setup { rules, ..MODERATE },
+            &[(Kind::Escalated, command, ReviewDecision::Approved)],
+        ))
+        .await?;
+        let call = &calls[0];
+        eprintln!("{name}: {call:#?}");
+        let ok = if name.starts_with("forbidden") {
+            call.asked.is_empty()
+                && !call.made
+                && call
+                    .output
+                    .contains("policy forbids commands starting with `printf")
+        } else {
+            let policy_first = |reason: &String| {
+                reason
+                    .find("requires approval by policy")
+                    .is_some_and(|at| reason.find(WARNING).is_some_and(|warning| at < warning))
+            };
+            call.asked.len() == 1
+                && call.allowed()
+                && if name == "unshare only" {
+                    call.warned()
+                } else {
+                    call.asked.iter().all(policy_first)
+                }
         };
         if !ok {
             wrong.push(format!("{name}: {call:#?}\noutput: {}", call.output));

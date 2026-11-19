@@ -715,14 +715,21 @@ async fn external_auth_refreshes_on_unauthorized(model_path: &str) -> Result<()>
     create_config_toml(
         codex_home.path(),
         CreateConfigTomlParams {
-            model_provider_id: Some("routing".into()),
-            extra_provider_config: Some(format!(
-                "[model_providers.routing]\nname = \"OpenAI\"\nrequires_openai_auth = true\nbase_url = \"{}{model_path}\"\nrequest_max_retries = 0\nstream_max_retries = 0\n",
-                mock_server.uri(),
-            )),
+            model_provider_id: Some("openai".into()),
             chatgpt_base_url: Some(format!("{}/backend-api", backend.uri())),
             ..Default::default()
         },
+    )?;
+    // Corbanu refuses a custom provider named "OpenAI", so this uses the
+    // built-in OpenAI provider pointed at the mock.
+    let config_path = codex_home.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        format!(
+            "openai_base_url = \"{}{model_path}\"\n{}",
+            mock_server.uri(),
+            std::fs::read_to_string(&config_path)?
+        ),
     )?;
     write_models_cache(codex_home.path()).await?;
 
@@ -2984,9 +2991,19 @@ async fn login_account_chatgpt_uses_oauth_overrides() -> Result<()> {
             onboarding_entrypoint: None,
         }
     );
-    // Listing immediately after asynchronous login completion must use the new cloud provider.
-    let request = mcp.send_list_models_request(Default::default()).await?;
-    let models: codex_app_server_protocol::ModelListResponse = mcp.read_response(request).await?;
+    // Login completion changes the route immediately; discovery fills it in the background.
+    let models = timeout(DEFAULT_READ_TIMEOUT, async {
+        loop {
+            let request = mcp.send_list_models_request(Default::default()).await?;
+            let models: codex_app_server_protocol::ModelListResponse =
+                mcp.read_response(request).await?;
+            if !models.data.is_empty() {
+                return Ok::<_, anyhow::Error>(models);
+            }
+            tokio::time::sleep(Duration::from_millis(/*millis*/ 10)).await;
+        }
+    })
+    .await??;
     assert_eq!(
         models
             .data

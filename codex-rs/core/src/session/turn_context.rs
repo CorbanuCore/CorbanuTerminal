@@ -552,10 +552,15 @@ pub struct TurnContext {
     /// Direct operator turns in a managed child pane must not report their result to the
     /// child's structural parent.
     pub(crate) parent_completion_expected: Arc<AtomicBool>,
+    /// A pre-turn kill-switch or sign-in refusal keeps the existing input-rejection path.
+    pub(crate) turn_refused: Arc<AtomicBool>,
     pub(crate) terminal_error: Arc<Mutex<Option<ErrorEvent>>>,
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
+    /// D625 (a): policy requests the person allowed at the post-taint dispatch check.
+    pub(crate) post_taint_policy_answers:
+        Arc<crate::security::protected_surface::PostTaintPolicyAnswers>,
     pub(crate) repeated_tool_call_state: Arc<RepeatedToolCallState>,
     pub(crate) pending_tool_calls: Arc<crate::tools::parallel::PendingToolCalls>,
     /// Shares the session-owned store; session approvals remain live across turns. D520 (a):
@@ -651,10 +656,12 @@ impl TurnContext {
             extension_data,
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
+            turn_refused: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            post_taint_policy_answers: Arc::default(),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             pending_tool_calls: Arc::default(),
             session_grants: self.session_grants.clone(),
@@ -1157,10 +1164,12 @@ impl TurnContext {
             extension_data: Arc::clone(&self.extension_data),
             turn_timing_state: Arc::clone(&self.turn_timing_state),
             parent_completion_expected: Arc::clone(&self.parent_completion_expected),
+            turn_refused: Arc::clone(&self.turn_refused),
             terminal_error: Arc::clone(&self.terminal_error),
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
+            post_taint_policy_answers: Arc::clone(&self.post_taint_policy_answers),
             repeated_tool_call_state: Arc::clone(&self.repeated_tool_call_state),
             pending_tool_calls: Arc::clone(&self.pending_tool_calls),
             session_grants: self.session_grants.clone(),
@@ -1600,10 +1609,12 @@ impl Session {
             extension_data,
             turn_timing_state: Arc::new(TurnTimingState::default()),
             parent_completion_expected: Arc::new(AtomicBool::new(false)),
+            turn_refused: Arc::new(AtomicBool::new(false)),
             terminal_error: Arc::new(Mutex::new(None)),
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            post_taint_policy_answers: Arc::default(),
             repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             pending_tool_calls: Arc::default(),
             session_grants,
@@ -1747,7 +1758,7 @@ impl Session {
             .step_settings
             .resolve_model_info(
                 self.services.models_manager.as_ref(),
-                &session_configuration.model_info_overrides,
+                &session_configuration.effective_model_info_overrides(),
             )
             .await;
         // PF-84 (#572): Bedrock's own metadata after a switch to Bedrock.

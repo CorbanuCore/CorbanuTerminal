@@ -44,7 +44,10 @@ async fn consumer_roots_include_paginated_archived_descendants_and_keep_missing_
                         pages += 1;
                         if pages == 1 {
                             tokio::time::pause();
-                            tokio::time::advance(std::time::Duration::from_secs(/*secs*/ 31)).await;
+                            // A slow first page outlasts the 25-second descendant deadline but stays
+                            // under Corbanu's 30-second per-request limit on remote app-server
+                            // requests (`app-server-client/src/remote.rs`, REQUEST_TIMEOUT).
+                            tokio::time::advance(std::time::Duration::from_secs(/*secs*/ 29)).await;
                             tokio::time::resume();
                         }
                         let params = &request["params"];

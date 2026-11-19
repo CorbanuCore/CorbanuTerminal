@@ -474,16 +474,13 @@ async fn output_text_delta_before_item_added_is_recovered() -> anyhow::Result<()
     mount_sse_once(&server, stream).await;
 
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "please recover early output".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
 
     let mut deltas = Vec::new();

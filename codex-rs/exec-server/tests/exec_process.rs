@@ -114,7 +114,7 @@ async fn create_process_context(use_remote: bool) -> Result<ProcessContext> {
 
 #[cfg(target_os = "macos")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn codex_home_symlink_opt_out_respects_host_config_and_scope() -> Result<()> {
+async fn codex_home_symlink_roots_write_at_their_real_location() -> Result<()> {
     use codex_exec_server::WriteFileOptions;
     use common::exec_server::exec_server_with_env;
     use std::os::unix::fs::symlink;
@@ -163,23 +163,22 @@ async fn codex_home_symlink_opt_out_respects_host_config_and_scope() -> Result<(
                     Some(&sandbox),
                 )
                 .await;
-            assert_eq!(
+            // Main grants a symlinked writable root at its real location, so
+            // upstream's refusal and its host-config opt-out do not apply
+            // (S3a ledger row for sandboxing/src/seatbelt.rs; #2143): every
+            // root writes, whatever the host or checkout config says.
+            assert!(
                 result.is_ok(),
-                root == workspace.path() || (enabled == Some(true) && root == alias),
                 "root={root:?}, enabled={enabled:?}: {result:?}"
             );
-            if let Err(error) = result {
-                assert!(
-                    error
-                        .to_string()
-                        .contains("symlinked writable roots are not supported"),
-                    "{error}"
-                );
+            if root != workspace.path() {
+                let written = std::fs::read(target.path().join("output"))?;
+                assert_eq!(written, b"written", "root={root:?}, enabled={enabled:?}");
+                std::fs::remove_file(target.path().join("output"))?;
             }
         }
         server.shutdown().await?;
     }
-    assert_eq!(std::fs::read(target.path().join("output"))?, b"written");
     assert_eq!(std::fs::read(workspace.path().join("output"))?, b"written");
     Ok(())
 }
@@ -311,6 +310,7 @@ async fn shell_snapshot_v2_filters_profile_exports_and_stays_in_memory(
             "PATH".to_string(),
             "PROFILE_*".to_string(),
         ],
+        drop_url_password_values: false,
     };
     let (command_prefix, expected_prefix) = if shell_name == "sh" {
         ("", "")
@@ -419,6 +419,7 @@ async fn exec_metadata_overrides_policy_and_cached_snapshot(
             ("CODEX_TOOL_CALL_ID".into(), "policy-call".into()),
         ]),
         include_only: Vec::new(),
+        drop_url_password_values: false,
     };
     let thread_id = codex_protocol::ThreadId::from_string("019d25f0-6728-7ce2-908f-c3c187323e5b")?;
     let later_thread_id =
@@ -507,12 +508,12 @@ enum CredentialStartup {
 
 #[cfg(unix)]
 #[test_case(false, "bash", &["-lc", "-lc"], CredentialStartup::Inherited; "unmasked")]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-c", "-c", "-lc"], CredentialStartup::Inherited; "masked_bash"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-lc", "-lc"], CredentialStartup::Inherited; "bash_profile_fallback"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::OrdinaryLogin; "zsh_profile_gateway_fallback"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Inherited; "masked_zsh_inherited_credentials"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Profile; "masked_zsh_profile_credentials"))]
-#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::UnsupportedProfile; "zsh_unsupported_profile_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-c", "-c", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "masked_bash"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "bash", &["-lc", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "bash_profile_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::OrdinaryLogin => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "zsh_profile_gateway_fallback"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Inherited => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and inherited aliases are not rewritten (#2356)"]; "masked_zsh_inherited_credentials"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::Profile => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and the unmasked fallback is #2365 (#2356)"]; "masked_zsh_profile_credentials"))]
+#[cfg_attr(any(target_os = "linux", target_os = "macos"), test_case(true, "zsh", &["-lc", "-lc"], CredentialStartup::UnsupportedProfile => ignore["S3b (D353/D354): upstream credential engine is off; main engine brokers one-way, so startup files see placeholders and the unmasked fallback is #2365 (#2356)"]; "zsh_unsupported_profile_fallback"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial_test::serial(remote_exec_server)]
 async fn shell_snapshot_v2_remote_managed_proxy_uses_prepared_execution_context(
@@ -672,6 +673,7 @@ async fn shell_snapshot_v2_remote_managed_proxy_uses_prepared_execution_context(
             "PROFILE_*".to_string(),
             "OPENAI_API_KEY".to_string(),
         ],
+        drop_url_password_values: false,
     };
     if credential_masking {
         policy.include_only.extend(
@@ -1019,6 +1021,7 @@ async fn shell_snapshot_v2_capture_failure_falls_back_and_retries(
             home.path().to_string_lossy().into_owned(),
         )]),
         include_only: vec!["HOME".to_string(), "PATH".to_string()],
+        drop_url_password_values: false,
     };
     let mut params = ExecParams {
         metadata: Default::default(),
@@ -1145,7 +1148,17 @@ async fn remote_sandboxed_process_preserves_custom_arg0() -> Result<()> {
     let denied_file = outside_workspace.path().join("denied.txt");
     std::fs::write(&denied_file, b"denied")?;
     let cwd = PathUri::from_host_native_path(workspace.path())?;
+    // macOS Minimal permits reads under /tmp and /var/tmp (including their
+    // /private aliases), so TMPDIR may place this fixture in a readable root.
+    // Deny it explicitly so custom argv[0] must preserve sandbox enforcement.
     let policy = FileSystemSandboxPolicy::restricted(vec![
+        FileSystemSandboxEntry {
+            path: FileSystemPath::Path {
+                path: PathUri::from_host_native_path(&denied_file)?,
+            },
+            access: FileSystemAccessMode::Deny,
+            missing_path_behavior: None,
+        },
         FileSystemSandboxEntry {
             path: FileSystemPath::Special {
                 value: FileSystemSpecialPath::Minimal,

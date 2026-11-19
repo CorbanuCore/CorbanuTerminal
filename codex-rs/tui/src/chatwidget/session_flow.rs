@@ -139,7 +139,9 @@ impl ChatWidget {
         self.thread_provider_account = session.provider_account.clone();
         self.current_cwd = Some(session.cwd.to_path_buf());
         self.config.cwd = session.cwd.clone();
-        self.apply_thread_model_provider(session.model_provider_id.clone());
+        // The surfaces that depend on the model refresh below, once the
+        // session's model is set.
+        self.project_thread_model_provider(session.model_provider_id.clone());
         self.set_daybreak_enabled(self.daybreak_enabled);
         if connector_scope_changed {
             self.invalidate_connector_scope();
@@ -221,7 +223,7 @@ impl ChatWidget {
         let effort = self.effective_reasoning_effort();
         self.bottom_pane
             .set_active_reasoning_effort_baseline(effort.as_ref());
-        self.refresh_model_display();
+        self.refresh_model_dependent_surfaces();
         self.refresh_status_surfaces();
         if previous_thread_id != self.thread_id
             && self.should_prefetch_rate_limits()
@@ -248,7 +250,7 @@ impl ChatWidget {
                 &self.config,
                 &self.local_settings,
                 &model_for_header,
-                self.model_catalog.display_name(&session.model),
+                &self.model_catalog.display_name(&session.model),
                 &session,
                 self.show_welcome_banner,
                 startup_tooltip_override,

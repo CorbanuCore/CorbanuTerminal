@@ -1,8 +1,7 @@
 ---
 source: tui/src/app/tests.rs
-assertion_line: 2769
-expression: "render_bottom_popup(&app.chat_widget, 80)"
+expression: normalized
 ---
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
-  GPT-6.1-Sol default · /tmp/project · child-0 [worker] · ← for agents
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -- tok/s · child-0 [worker] · ← for agents

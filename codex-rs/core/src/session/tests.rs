@@ -353,12 +353,25 @@ impl StepContext {
     }
 }
 
+#[path = "tests/d618_escalation_policy_tests.rs"]
+mod d618_escalation_policy_tests;
 #[path = "dynamic_tools_tests.rs"]
 mod dynamic_tools_tests;
+#[path = "tests/d523_hook_origin_tests.rs"]
+mod d523_hook_origin_tests;
+#[path = "tests/failed_deferred_input_carry_tests.rs"]
+mod failed_deferred_input_carry_tests;
 mod guardian_tests;
 mod hard_abort_tool_output_tests;
+#[path = "tests/mailbox_queue_carry_tests.rs"]
+mod mailbox_queue_carry_tests;
 mod mcp_skill_dependency_tests;
 mod panicking_task_tests;
+#[path = "tests/readmission_carry_tests.rs"]
+mod readmission_carry_tests;
+mod steering_authority_tests;
+#[path = "tests/sync_authority_carry_tests.rs"]
+mod sync_authority_carry_tests;
 
 fn user_message(text: &str) -> ResponseItem {
     ResponseItem::Message {
@@ -1703,9 +1716,14 @@ async fn danger_full_access_tool_attempts_do_not_enforce_managed_network() -> an
 async fn issue_1001_aggressive_proxy_leaves_out_allow_rules_saved_outside_it() -> anyhow::Result<()>
 {
     let permission_profile = PermissionProfile::workspace_write();
+    // Upstream exposes no managed proxy for a disabled network spec ("Disabled specs ...
+    // must not be exposed"); enable it as the next test does.
     let network_spec = crate::config::NetworkProxySpec::from_config_and_constraints(
         NetworkProxyConfig::default(),
-        /*requirements*/ None,
+        Some(NetworkConstraints {
+            enabled: Some(true),
+            ..Default::default()
+        }),
         &permission_profile,
     )?;
     let session = make_session_with_config(move |config| {
@@ -2892,6 +2910,11 @@ async fn inter_agent_communication_waits_for_confirmed_delivery_persistence() {
                 item: ResponseItem::AgentMessage { .. },
                 metadata: Some(metadata),
             }) => Some(("communication", metadata.user_input_order)),
+            // Corbanu (#1545) persists the whole communication with its live input
+            // order (#2339), between the deliveries around it.
+            RolloutItem::InterAgentCommunication(communication) => {
+                Some(("communication", communication.recorded_input_order))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -2996,6 +3019,15 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         .expect("locally authored agent message should receive a creation timestamp");
     assert!(create_time.as_f64().is_some_and(|seconds| seconds > 0.0));
     expected_item.set_create_time_if_missing(create_time);
+    // Corbanu persists the whole communication (#1545) with the recorded item's metadata.
+    if let ResponseItem::AgentMessage {
+        internal_chat_message_metadata_passthrough,
+        ..
+    } = &expected_item
+    {
+        expected_communication.internal_chat_message_metadata_passthrough =
+            internal_chat_message_metadata_passthrough.clone();
+    }
 
     assert_eq!(
         strip_response_item_ids(&recorded_items),
@@ -3022,6 +3054,8 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         })
         .cloned()
         .collect::<Vec<_>>();
+    // #2339: with the input order it took live.
+    expected_communication.recorded_input_order = Some(0);
     let expected_persisted_items =
         vec![RolloutItem::InterAgentCommunication(expected_communication)];
     assert_eq!(
@@ -3038,6 +3072,71 @@ async fn record_inter_agent_communication_sets_turn_id_in_rollout_and_resume() {
         strip_response_item_ids(std::slice::from_ref(&expected_item))
     );
     assert_eq!(resumed_session.reserve_user_input_order().await, 1);
+}
+
+/// #2339: input accepted before a communication but recorded after it keeps the
+/// order it took at acceptance, and the communication keeps its own, on resume as
+/// live. Replaying the communication in physical order alone would give it the
+/// earlier input's order.
+#[tokio::test]
+async fn resume_keeps_communication_order_when_earlier_input_records_later() {
+    let (mut session, turn_context) = make_session_and_context().await;
+    let rollout_path = attach_thread_persistence(&mut session).await;
+    let accepted_first = session.reserve_user_input_order().await;
+    session
+        .record_inter_agent_communication(
+            &turn_context,
+            turn_context.model_info(),
+            InterAgentCommunication::new(
+                AgentPath::root().join("worker").expect("worker path"),
+                AgentPath::root(),
+                Vec::new(),
+                "child done".to_string(),
+                /*trigger_turn*/ false,
+            ),
+        )
+        .await;
+    let mut accepted = ResponseItemEnvelope::new(user_message("accepted before the mail"));
+    accepted.metadata.get_or_insert_default().user_input_order = Some(accepted_first);
+    session
+        .record_prepared_conversation_items(
+            &turn_context,
+            turn_context.model_info(),
+            vec![accepted],
+            Vec::new(),
+        )
+        .await;
+    session.flush_rollout().await.expect("rollout should flush");
+    let orders = |history: &ContextManager| {
+        history
+            .annotated_items()
+            .iter()
+            .map(|item| {
+                (
+                    matches!(item.item, ResponseItem::AgentMessage { .. }),
+                    item.metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.user_input_order),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let live = orders(&session.clone_history().await);
+    assert_eq!(live, vec![(true, Some(1)), (false, Some(0))]);
+
+    let InitialHistory::Resumed(resumed) = RolloutRecorder::get_rollout_history(&rollout_path)
+        .await
+        .expect("read rollout history")
+    else {
+        panic!("expected resumed rollout history");
+    };
+    let (resumed_session, _resumed_turn_context) = make_session_and_context().await;
+    resumed_session
+        .record_initial_history(InitialHistory::Resumed(resumed))
+        .await;
+    assert_eq!(orders(&resumed_session.clone_history().await), live);
+    assert_eq!(resumed_session.reserve_user_input_order().await, 2);
+    assert_eq!(session.reserve_user_input_order().await, 2);
 }
 
 #[tokio::test]
@@ -3937,7 +4036,8 @@ async fn issue1577_context_window_fill_keeps_thread_usage_counters() {
                 ..TokenUsage::default()
             },
             model_context_window: Some(context_window),
-            last_usage_includes_reasoning: Some(true),
+            // Upstream: the fill's synthetic last usage carries no reasoning breakdown.
+            last_usage_includes_reasoning: None,
         }),
         "the fill keeps the provider's counters and still marks the window full"
     );
@@ -5660,7 +5760,7 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
     const NOW_MS: i64 = 1_800_000_000_000;
     let state_home = tempfile::tempdir().expect("state home");
     let state = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(state_home.path().abs()),
+        codex_state::SqliteConfig::new_for_testing(state_home.path().abs()),
         "runtime-provider-test".to_string(),
     )
     .await
@@ -5735,7 +5835,7 @@ async fn session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_resele
 
     let sqlite_home = state_home.path().abs();
     let session = make_session_with_config(move |config| {
-        config.sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
+        config.sqlite = codex_state::SqliteConfig::new_for_testing(sqlite_home);
         assert!(!config.model_providers.contains_key(runtime_provider_id));
     })
     .await
@@ -6524,104 +6624,6 @@ async fn active_profile_update_rebuilds_network_proxy_config(
     assert_eq!(network.proxy_host_and_port(), "127.0.0.1:43128");
     assert!(!network.socks_enabled());
     assert_eq!(network.credential_broker_enabled(), credential_broker);
-    Ok(())
-}
-
-#[tokio::test]
-async fn active_profile_update_keeps_security_proxy_features() -> std::io::Result<()> {
-    let codex_home = tempfile::tempdir().expect("create codex home");
-    let cwd = tempfile::tempdir().expect("create cwd");
-    let web_profile = |port: u16| PermissionProfileToml {
-        description: None,
-        extends: None,
-        workspace_roots: None,
-        filesystem: Some(FilesystemPermissionsToml {
-            glob_scan_max_depth: None,
-            entries: std::collections::BTreeMap::from([(
-                ":minimal".to_string(),
-                FilesystemPermissionToml::Access(FileSystemAccessMode::Read),
-            )]),
-        }),
-        network: Some(NetworkToml {
-            enabled: Some(true),
-            proxy_url: Some(format!("http://127.0.0.1:{port}")),
-            enable_socks5: Some(false),
-            ..Default::default()
-        }),
-    };
-    let base_config = ConfigToml {
-        features: Some(
-            toml::from_str(
-                "network_proxy = true\nurl_destination_policy = true\nsecret_output_gate = true",
-            )
-            .expect("valid features"),
-        ),
-        default_permissions: Some("web-a".to_string()),
-        permissions: Some(PermissionsToml {
-            entries: std::collections::BTreeMap::from([
-                ("web-a".to_string(), web_profile(43128)),
-                ("web-b".to_string(), web_profile(43129)),
-            ]),
-        }),
-        ..Default::default()
-    };
-    std::fs::write(
-        codex_home.path().join(codex_config::CONFIG_TOML_FILE),
-        toml::to_string(&base_config).expect("serialize config"),
-    )?;
-    let build = |profile: &str| {
-        ConfigBuilder::default()
-            .codex_home(codex_home.path().to_path_buf())
-            .harness_overrides(ConfigOverrides {
-                cwd: Some(cwd.path().to_path_buf()),
-                default_permissions: Some(profile.to_string()),
-                ..Default::default()
-            })
-            .build()
-    };
-    let initial_config = Arc::new(build("web-a").await?);
-    let initial_network = initial_config
-        .permissions
-        .network
-        .as_ref()
-        .expect("initial profile should have a proxy");
-    assert!(initial_network.url_destination_policy_enabled());
-    assert!(initial_network.credential_response_gate_enabled());
-    let selected_config = build("web-b").await?;
-
-    let mut session_configuration = make_session_configuration_for_tests().await;
-    session_configuration.permission_profile_state = initial_config
-        .permissions
-        .permission_profile_state()
-        .clone();
-    session_configuration.original_config_do_not_use = Arc::clone(&initial_config);
-
-    let updated = session_configuration
-        .apply(
-            &SessionSettingsUpdate {
-                permission_profile: Some(selected_config.permissions.permission_profile().clone()),
-                active_permission_profile: selected_config.permissions.active_permission_profile(),
-                ..Default::default()
-            },
-            &[],
-        )
-        .expect("active profile update should apply");
-
-    let network = updated
-        .original_config_do_not_use
-        .permissions
-        .network
-        .as_ref()
-        .expect("selected profile proxy should become the session proxy config");
-    assert_eq!(network.proxy_host_and_port(), "127.0.0.1:43129");
-    assert!(
-        network.url_destination_policy_enabled(),
-        "url_destination_policy must survive a profile change"
-    );
-    assert!(
-        network.credential_response_gate_enabled(),
-        "secret_output_gate must survive a profile change"
-    );
     Ok(())
 }
 
@@ -7979,13 +7981,20 @@ pub(crate) struct TestFolders {
 pub(crate) type ProviderAuthSessionContext = (Session, TurnContext, TestFolders);
 
 pub(crate) async fn make_session_and_context_with_provider_auth() -> ProviderAuthSessionContext {
+    make_session_and_context_with_provider_auth_and_model(AMBIENT_DEFAULT_MODEL).await
+}
+
+/// As [`make_session_and_context_with_provider_auth`], with another catalogued Ambient model.
+pub(crate) async fn make_session_and_context_with_provider_auth_and_model(
+    model: &str,
+) -> ProviderAuthSessionContext {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let test_cwd = tempfile::tempdir().expect("create test cwd");
     write_test_provider_auth(codex_home.path());
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
         .harness_overrides(ConfigOverrides {
-            model: Some(AMBIENT_DEFAULT_MODEL.to_string()),
+            model: Some(model.to_string()),
             model_provider: Some(AMBIENT_PROVIDER_ID.to_string()),
             cwd: Some(test_cwd.path().to_path_buf()),
             ..Default::default()
@@ -10032,6 +10041,35 @@ pub(crate) async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 where
     F: FnOnce(&mut Config),
 {
+    make_session_and_context_with_extensions_and_rx(
+        auth,
+        dynamic_tools,
+        codex_home,
+        cwd,
+        configure_config,
+        start_submission_loop,
+        Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+    )
+    .await
+}
+
+/// As [`make_session_and_context_with_auth_config_home_and_rx`], with these extensions.
+pub(crate) async fn make_session_and_context_with_extensions_and_rx<F>(
+    auth: CodexAuth,
+    dynamic_tools: Vec<DynamicToolSpec>,
+    codex_home: &Path,
+    cwd: &Path,
+    configure_config: F,
+    start_submission_loop: bool,
+    extensions: Arc<codex_extension_api::ExtensionRegistry<Config>>,
+) -> (
+    Arc<Session>,
+    Arc<TurnContext>,
+    async_channel::Receiver<Event>,
+)
+where
+    F: FnOnce(&mut Config),
+{
     let (tx_sub, rx_sub) = async_channel::bounded(16);
     let (tx_event, rx_event) = async_channel::unbounded();
     let mut config = build_test_config(codex_home, cwd).await;
@@ -10203,7 +10241,7 @@ where
         agents_md_manager: Arc::new(AgentsMdManager::new(SessionInstructions::default())),
         plugins_manager,
         mcp_manager,
-        extensions: Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
+        extensions,
         session_extension_data: codex_extension_api::ExtensionData::new(
             agent_control.session_id().to_string(),
         ),
@@ -10364,7 +10402,7 @@ where
     (session, turn_context, rx_event)
 }
 
-async fn make_session_and_context_with_submission_loop_and_rx() -> (
+pub(crate) async fn make_session_and_context_with_submission_loop_and_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,
     async_channel::Receiver<Event>,
@@ -10399,6 +10437,30 @@ pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
 
 // Like make_session_and_context, but returns Arc<Session> and the event receiver
 // so tests can assert on emitted events.
+/// #2294: runs a test body on a thread with the stack production gives Core's runtime
+/// (`THREAD_STACK_SIZE_BYTES`, 16 MiB) instead of the test harness's 8 MiB. The approval and
+/// automatic-review paths these tests drive need more than 8 MiB in a debug build; production
+/// polls them on 16 MiB worker and review threads.
+pub(crate) fn block_on_production_stack<T, F>(test: T)
+where
+    T: FnOnce() -> F + Send + 'static,
+    F: std::future::Future<Output = ()>,
+{
+    std::thread::Builder::new()
+        .name("production-stack-test".to_string())
+        .stack_size(codex_async_utils::THREAD_STACK_SIZE_BYTES)
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime")
+                .block_on(Box::pin(test()));
+        })
+        .expect("test thread")
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+}
+
 pub(crate) async fn make_session_and_context_with_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,
@@ -13626,7 +13688,7 @@ async fn recv_skipping_mcp_startup(rx: &async_channel::Receiver<Event>, expected
     }
 }
 
-async fn expect_user_message_item_started(
+pub(crate) async fn expect_user_message_item_started(
     rx: &async_channel::Receiver<Event>,
     expected_content: &[UserInput],
 ) {
@@ -13981,53 +14043,6 @@ async fn set_total_token_usage(sess: &Session, total_token_usage: TokenUsage) {
 }
 
 #[tokio::test]
-async fn queue_only_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
-    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
-    let communication = InterAgentCommunication::new(
-        AgentPath::try_from("/root/worker").expect("worker path should parse"),
-        AgentPath::root(),
-        Vec::new(),
-        "late queue-only update".to_string(),
-        /*trigger_turn*/ false,
-    );
-    sess.spawn_task(
-        Arc::clone(&tc),
-        Vec::new(),
-        NeverEndingTask {
-            kind: TaskKind::Regular,
-            listen_to_cancellation_token: true,
-        },
-    )
-    .await;
-
-    sess.input_queue
-        .defer_mailbox_delivery_to_next_turn(&sess.active_turn, &tc.sub_id)
-        .await;
-    sess.input_queue
-        .enqueue_mailbox_communication(communication.clone().into(), Default::default())
-        .await;
-
-    assert!(
-        !sess.input_queue.has_pending_input(&sess.active_turn).await,
-        "queue-only mailbox mail should stay buffered once the current turn emitted its answer"
-    );
-    assert_eq!(
-        sess.input_queue
-            .get_pending_input(&sess.active_turn)
-            .await
-            .0,
-        Vec::new()
-    );
-
-    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
-
-    assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
-        vec![TurnInput::InterAgentCommunication(communication.into())],
-    );
-}
-
-#[tokio::test]
 async fn trigger_turn_mailbox_mail_waits_for_next_turn_after_answer_boundary() {
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     sess.spawn_task(
@@ -14122,7 +14137,10 @@ async fn active_turn_keeps_first_root_when_mail_coalesces(inherited_root: Option
     }
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess, &tc.sub_id)
+            .await
+            .0,
         vec![
             TurnInput::InterAgentCommunication(first.into()),
             TurnInput::InterAgentCommunication(second.into()),
@@ -14227,7 +14245,10 @@ async fn steered_input_reopens_mailbox_delivery_for_current_turn() {
     assert!(matches!(submission, TurnInputSubmission::Steered { .. }));
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess, &tc.sub_id)
+            .await
+            .0,
         vec![
             TurnInput::UserInput {
                 metadata: crate::session::UserInputMetadata {
@@ -14287,7 +14308,10 @@ async fn stale_defer_mailbox_delivery_does_not_override_steered_input() {
         .await;
 
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess, &tc.sub_id)
+            .await
+            .0,
         vec![
             TurnInput::UserInput {
                 metadata: crate::session::UserInputMetadata {
@@ -14359,7 +14383,10 @@ async fn tool_calls_reopen_mailbox_delivery_for_current_turn() {
     assert!(output.needs_follow_up);
     assert!(output.tool_future.is_some());
     assert_eq!(
-        (sess.input_queue.get_pending_input(&sess.active_turn).await).0,
+        sess.input_queue
+            .get_pending_input_for_running_task(&sess, &tc.sub_id)
+            .await
+            .0,
         vec![TurnInput::InterAgentCommunication(communication.into())],
     );
 }

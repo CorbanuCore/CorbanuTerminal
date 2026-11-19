@@ -219,7 +219,12 @@ fn issue_807_keychain_rule_alone_keeps_the_run_sandboxed_on_macos() {
     };
     assert_eq!(
         (
-            sandbox_override_for_first_attempt(SandboxPermissions::RequireEscalated, &skip, &with),
+            sandbox_override_for_first_attempt(
+                SandboxPermissions::RequireEscalated,
+                &skip,
+                &with,
+                /*already_approved*/ false,
+            ),
             sandbox_permissions_preserving_denied_reads(
                 SandboxPermissions::RequireEscalated,
                 &with
@@ -385,7 +390,7 @@ async fn windows_sandbox_env_preserves_denied_reads_or_rejects_unsupported_backe
     let overrides = request
         .windows_sandbox_filesystem_overrides
         .expect("elevated Windows sandbox should preserve deny-read overrides");
-    assert_eq!(overrides.additional_deny_read_paths, vec![denied_path]);
+    assert_eq!(overrides.additional_deny_read.paths(), vec![denied_path]);
     assert_eq!(request.windows_sandbox_workspace_roots, vec![cwd]);
 
     attempt.windows_sandbox_level =
@@ -399,9 +404,13 @@ async fn windows_sandbox_env_preserves_denied_reads_or_rejects_unsupported_backe
         )
         .await
         .expect_err("restricted-token Windows sandbox cannot enforce deny-read restrictions");
+    // Corbanu (#300): main's refusal explains how to switch to the elevated sandbox.
     assert_eq!(
         error.to_string(),
-        "unsupported operation: windows unelevated restricted-token sandbox cannot enforce deny-read restrictions directly; refusing to run unsandboxed"
+        format!(
+            "unsupported operation: {}",
+            codex_sandboxing::UNELEVATED_DENY_READ_REFUSAL
+        )
     );
 }
 
@@ -525,8 +534,8 @@ async fn exec_server_env_keeps_command_native_and_carries_sandbox_context() {
 /// PF-27-S02: drives `env_for` / `env_for_exec_server` with an explicit armed
 /// contract (the process-wide one is never armed in unit tests).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-#[test]
-fn pf_27_s02_env_for_applies_the_launch_contract() {
+#[tokio::test]
+async fn pf_27_s02_env_for_applies_the_launch_contract() {
     use crate::security::launch_contract::LaunchContract;
     use std::ffi::OsString;
 
@@ -554,6 +563,7 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
     };
     let linux_sandbox_exe = std::path::PathBuf::from("/bin/true");
     let mut attempt = SandboxAttempt {
+        sandbox_override: SandboxOverride::NoOverride,
         sandbox,
         sandbox_requested: true,
         permissions: &permissions,
@@ -562,10 +572,10 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
         manager: &manager,
         sandbox_cwd: &cwd_uri,
         workspace_roots: std::slice::from_ref(&cwd_uri),
-        codex_linux_sandbox_exe: Some(&linux_sandbox_exe),
+        sandbox_exe: Some(&linux_sandbox_exe),
         use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::None,
         windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
-        windows_sandbox_private_desktop: false,
         network_denial_cancellation_token: None,
         network_proxy: None,
     };
@@ -598,6 +608,7 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
             /*network*/ None,
             /*environment_id*/ None,
         )
+        .await
         .expect("protected launch");
     assert!(request.env.values().all(|value| value != RAW));
     assert!(
@@ -609,54 +620,74 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
 
     // Refused: login shell, raw argv, unsandboxed attempt, remote environment.
     assert!(
-        refusal(attempt.env_for_with_contract(
-            Some(&contract),
-            command(&["-lc", "true"], &[]),
-            options(),
-            /*network*/ None,
-            /*environment_id*/ None,
-        ))
+        refusal(
+            attempt
+                .env_for_with_contract(
+                    Some(&contract),
+                    command(&["-lc", "true"], &[]),
+                    options(),
+                    /*network*/ None,
+                    /*environment_id*/ None,
+                )
+                .await
+        )
         .contains("Protected launch refused: login shells")
     );
     assert!(
-        refusal(attempt.env_for_with_contract(
-            Some(&contract),
-            command(&["-c", &format!("echo {RAW}")], &[]),
-            options(),
-            /*network*/ None,
-            /*environment_id*/ None,
-        ))
+        refusal(
+            attempt
+                .env_for_with_contract(
+                    Some(&contract),
+                    command(&["-c", &format!("echo {RAW}")], &[]),
+                    options(),
+                    /*network*/ None,
+                    /*environment_id*/ None,
+                )
+                .await
+        )
         .contains("command line contains a managed secret")
     );
     assert!(
-        refusal(attempt.env_for_exec_server_with_contract(
-            Some(&contract),
-            command(&["-c", "true"], &[]),
-            options(),
-        ))
+        refusal(
+            attempt
+                .env_for_exec_server_with_contract(
+                    Some(&contract),
+                    command(&["-c", "true"], &[]),
+                    options(),
+                )
+                .await
+        )
         .contains("remote environment")
     );
     attempt.sandbox = SandboxType::None;
     attempt.sandbox_requested = false;
     assert!(
-        refusal(attempt.env_for_with_contract(
-            Some(&contract),
-            command(&["-c", "true"], &[]),
-            options(),
-            /*network*/ None,
-            /*environment_id*/ None,
-        ))
+        refusal(
+            attempt
+                .env_for_with_contract(
+                    Some(&contract),
+                    command(&["-c", "true"], &[]),
+                    options(),
+                    /*network*/ None,
+                    /*environment_id*/ None,
+                )
+                .await
+        )
         .contains("outside the OS sandbox")
     );
     // Without a contract the same unsandboxed launch is unchanged.
     assert_eq!(
-        refusal(attempt.env_for_with_contract(
-            /*contract*/ None,
-            command(&["-c", "true"], &[]),
-            options(),
-            /*network*/ None,
-            /*environment_id*/ None,
-        )),
+        refusal(
+            attempt
+                .env_for_with_contract(
+                    /*contract*/ None,
+                    command(&["-c", "true"], &[]),
+                    options(),
+                    /*network*/ None,
+                    /*environment_id*/ None,
+                )
+                .await
+        ),
         "accepted"
     );
 }
@@ -664,8 +695,8 @@ fn pf_27_s02_env_for_applies_the_launch_contract() {
 /// PF-27-S06: on Windows the contract accepts only launches that run under
 /// the elevated sandbox; the unelevated restricted-token one is refused.
 #[cfg(windows)]
-#[test]
-fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
+#[tokio::test]
+async fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
     use crate::security::launch_contract::LaunchContract;
     use codex_protocol::config_types::WindowsSandboxLevel;
 
@@ -682,6 +713,7 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
         .materialize_project_roots_with_workspace_roots(std::slice::from_ref(&cwd));
     let manager = SandboxManager::new();
     let mut attempt = SandboxAttempt {
+        sandbox_override: SandboxOverride::NoOverride,
         sandbox: SandboxType::WindowsRestrictedToken,
         sandbox_requested: true,
         permissions: &permissions,
@@ -690,14 +722,14 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
         manager: &manager,
         sandbox_cwd: &cwd_uri,
         workspace_roots: std::slice::from_ref(&cwd_uri),
-        codex_linux_sandbox_exe: None,
+        sandbox_exe: None,
         use_legacy_landlock: false,
+        windows_sandbox_type: SandboxType::WindowsRestrictedToken,
         windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
-        windows_sandbox_private_desktop: false,
         network_denial_cancellation_token: None,
         network_proxy: None,
     };
-    let launch = |attempt: &SandboxAttempt<'_>| {
+    let launch = async |attempt: &SandboxAttempt<'_>| {
         attempt
             .env_for_with_contract(
                 Some(&contract),
@@ -716,13 +748,16 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
                 /*network*/ None,
                 /*environment_id*/ None,
             )
+            .await
             .map(|_| ())
             .map_err(|err| err.to_string())
     };
-    let refused = launch(&attempt).expect_err("unelevated launch refused");
+    let refused = launch(&attempt)
+        .await
+        .expect_err("unelevated launch refused");
     assert!(refused.contains("unelevated Windows sandbox"), "{refused}");
     attempt.windows_sandbox_level = WindowsSandboxLevel::Elevated;
-    match launch(&attempt) {
+    match launch(&attempt).await {
         Ok(()) => {}
         // Before the elevated sandbox's first setup its users group does not
         // exist, and the launch is refused rather than left unprotected.
@@ -737,8 +772,8 @@ fn pf_27_s06_env_for_requires_the_elevated_windows_sandbox() {
 /// (`env_for`) refuses a profile with deny-read entries, as
 /// `process_exec_tool_call` does. The same profile without the deny entry,
 /// and the elevated backend, are unaffected.
-#[test]
-fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
+#[tokio::test]
+async fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
     use codex_protocol::config_types::WindowsSandboxLevel;
     use codex_protocol::models::PermissionProfile;
     use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -756,7 +791,7 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
     let (mut file_system, _) = base.to_runtime_permissions();
     file_system.entries.push(FileSystemSandboxEntry {
         path: FileSystemPath::Path {
-            path: secret.clone(),
+            path: secret.clone().into(),
         },
         access: FileSystemAccessMode::Deny,
         missing_path_behavior: None,
@@ -764,8 +799,9 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
     let denying =
         PermissionProfile::from_runtime_permissions(&file_system, NetworkSandboxPolicy::Restricted);
     let manager = SandboxManager::new();
-    let launch = |permissions: &PermissionProfile, level: WindowsSandboxLevel| {
+    let launch = async |permissions: &PermissionProfile, level: WindowsSandboxLevel| {
         SandboxAttempt {
+            sandbox_override: SandboxOverride::NoOverride,
             sandbox: SandboxType::WindowsRestrictedToken,
             sandbox_requested: true,
             permissions,
@@ -774,10 +810,10 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
             manager: &manager,
             sandbox_cwd: &cwd_uri,
             workspace_roots: std::slice::from_ref(&cwd_uri),
-            codex_linux_sandbox_exe: None,
+            sandbox_exe: None,
             use_legacy_landlock: false,
+            windows_sandbox_type: SandboxType::WindowsRestrictedToken,
             windows_sandbox_level: level,
-            windows_sandbox_private_desktop: false,
             network_denial_cancellation_token: None,
             network_proxy: None,
         }
@@ -798,9 +834,11 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
             /*network*/ None,
             /*environment_id*/ None,
         )
+        .await
     };
 
     let refused = launch(&denying, WindowsSandboxLevel::RestrictedToken)
+        .await
         .expect_err("the unelevated tool path must refuse a deny-read profile");
     assert_eq!(
         refused.to_string(),
@@ -810,8 +848,10 @@ fn sec_win_300_unelevated_tool_path_refuses_deny_read_profiles() {
         )
     );
     launch(&base, WindowsSandboxLevel::RestrictedToken)
+        .await
         .expect("a profile without deny-read entries still runs unelevated");
     let elevated = launch(&denying, WindowsSandboxLevel::Elevated)
+        .await
         .expect("the elevated backend enforces deny-read entries");
     assert!(
         elevated

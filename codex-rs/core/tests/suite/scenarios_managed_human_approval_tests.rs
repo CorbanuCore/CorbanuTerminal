@@ -113,6 +113,9 @@ justification = "A person must approve this command."
             read_permission_request_hook_inputs(test.codex_home_path())?.len(),
             index + 1,
         );
+        let offered = approval.effective_available_decisions();
+        assert!(!offered.contains(&ReviewDecision::ApprovedForSession));
+        assert!(offered.contains(&ReviewDecision::Approved));
         let id = approval
             .approval_id
             .context("human approval has a unique id")?;
@@ -134,7 +137,10 @@ justification = "A person must approve this command."
             .function_call_output_text(&call_id)
             .context("command result")?;
         if index == 0 {
-            assert!(output.contains("one-time human approval"), "{output}");
+            assert!(
+                output.contains("approval answer was not offered by this prompt"),
+                "{output}"
+            );
         } else {
             assert!(output.contains("checkpoint-ok"), "{output}");
         }

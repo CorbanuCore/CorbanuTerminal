@@ -405,11 +405,12 @@ impl App {
         }
 
         let (session, turns, live_attached) = match app_server
-            .resume_thread(
+            .resume_thread_with_permission_overrides(
                 &self.local_settings,
                 self.config.clone(),
                 thread_id,
                 crate::app_server_session::ResumeModelSettings::PreserveExistingThread,
+                self.launch_approval_resume_permissions(),
             )
             .await
         {
@@ -1028,16 +1029,27 @@ impl App {
             }
             Err(err) if self.recover_transport_error(&err) => {}
             Err(err) => {
-                let warnings = self
-                    .transcript_cells
-                    .iter()
-                    .find_map(|cell| {
-                        cell.as_any()
-                            .downcast_ref::<history_cell::StartupWarningsCell>()
-                    })
-                    .filter(|cell| cell.pending_header)
-                    .map(|cell| format!("\n\nStartup warnings:\n{}", cell.messages.join("\n")))
-                    .unwrap_or_default();
+                // Visible security notices are individual cells, while ordinary
+                // startup diagnostics remain grouped. Include both on a startup exit.
+                let pending_header = self.chat_widget.thread_id().is_none()
+                    && !self
+                        .transcript_cells
+                        .iter()
+                        .any(|cell| cell.as_any().is::<history_cell::SessionInfoCell>());
+                let details = if pending_header {
+                    history_cell::warning_entries(&self.transcript_cells)
+                        .into_iter()
+                        .map(|entry| entry.details)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    String::new()
+                };
+                let warnings = if details.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n\nStartup warnings:\n{details}")
+                };
                 return Err(color_eyre::eyre::eyre!(
                     "Failed to start a fresh session through the app server: {err}{warnings}"
                 ));

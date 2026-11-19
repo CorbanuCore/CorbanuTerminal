@@ -1,14 +1,16 @@
 ---
 source: tui/src/chatwidget/provider_manager.rs
+assertion_line: 1122
 expression: rendered
 ---
   Providers
   Configure providers and control whether they are eligible for use.
   Configured means credentials are present, not verified by the provider.
 
+
 › 1. OpenAI          Enabled · configured · current
   2. Claude Account  Inactive
   3. Corbanu API     Credential needs attention · r recover
 
   r recover credentials · Enter manage · Esc back
-  Press enter to confirm or esc to go back
+  enter select · esc back

@@ -2017,6 +2017,7 @@ mod tests {
                 reason: None,
                 cwd: absolute_path("/tmp"),
                 changes: HashMap::new(),
+                response_destination: ApprovalResponseDestination::Thread,
             }),
         ] {
             match &mut request {
@@ -2320,6 +2321,7 @@ mod tests {
 
     fn make_prefix_exec_request() -> ApprovalRequest {
         ApprovalRequest::Exec(ExecApprovalRequest {
+            kind: Default::default(),
             thread_id: ThreadId::new(),
             thread_label: None,
             id: "test".to_string(),
@@ -2469,8 +2471,13 @@ mod tests {
     #[test]
     fn armed_key_does_not_carry_over_to_the_next_request() {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let first_request = make_prefix_exec_request();
+        let ApprovalRequest::Exec(first_exec) = &first_request else {
+            unreachable!("exec request");
+        };
+        let first_thread_id = first_exec.thread_id.to_string();
         let mut view = make_overlay(
-            make_prefix_exec_request(),
+            first_request,
             AppEventSender::new(tx),
             Features::with_defaults(),
         );
@@ -2485,6 +2492,7 @@ mod tests {
         // Another client resolves the first request before Enter arrives.
         assert!(
             view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                thread_id: first_thread_id,
                 id: "test".to_string(),
             })
         );
@@ -2703,6 +2711,7 @@ mod tests {
             )
         });
         ApprovalRequest::Exec(ExecApprovalRequest {
+            kind: Default::default(),
             thread_id: ThreadId::new(),
             thread_label: None,
             id: "test".to_string(),
@@ -2985,8 +2994,13 @@ mod tests {
     #[test]
     fn persistent_key_then_request_dismissed_does_not_carry_over() {
         let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let first_request = make_prefix_exec_request();
+        let ApprovalRequest::Exec(first_exec) = &first_request else {
+            unreachable!("exec request");
+        };
+        let first_thread_id = first_exec.thread_id.to_string();
         let mut view = make_overlay(
-            make_prefix_exec_request(),
+            first_request,
             AppEventSender::new(tx),
             Features::with_defaults(),
         );
@@ -2997,6 +3011,7 @@ mod tests {
         // Another client answers the first request.
         assert!(
             view.dismiss_resolved_request(&ResolvedAppServerRequest::ExecApproval {
+                thread_id: first_thread_id,
                 id: "test".to_string(),
             })
         );
@@ -3575,6 +3590,7 @@ mod tests {
             reason: None,
             cwd: absolute_path("/tmp"),
             changes: HashMap::new(),
+            response_destination: ApprovalResponseDestination::Thread,
         });
         let view = make_overlay(request, tx, Features::with_defaults());
         assert_snapshot!(

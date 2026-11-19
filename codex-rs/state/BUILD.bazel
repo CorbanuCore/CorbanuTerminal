@@ -13,11 +13,17 @@ codex_rust_crate(
     ]),
     crate_name = "codex_state",
     # Several integration tests share this helper through `#[path]`.
-    integration_compile_data_extra = ["src/runtime/accounting_late_import_test_support.rs"],
-    test_shard_counts = {
-        # Windows runs database-heavy Rust tests serially within each shard.
-        "state-unit-tests": 4,
-    },
+    integration_compile_data_extra = [
+        "src/runtime/accounting_late_import_test_support.rs",
+        "tests/fixtures/accounting/pre-5bae-ledger.sql",
+    ],
+    # Wall-clock bounds still failed while other work occupied the Windows
+    # runner (#905, #1881). Keep main #1898's exclusive, serial target; the
+    # macro forbids combining this isolation with unit-test sharding.
+    unit_test_alone = [
+        "runtime::accounting::store::tests::expiry_at_the_detail_horizon_never_holds_up_another_writer",
+        "runtime::accounting::store::writer::tests::ten_sessions_on_one_home_wait_briefly_and_lose_no_record",
+    ],
     # Several unit tests bound how long a request waits on the state DB, and
     # use more than the one core Bazel reserves per test by default: libtest
     # runs one test per core unless RUST_TEST_THREADS says otherwise, and

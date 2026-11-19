@@ -1,3 +1,4 @@
+pub(crate) mod mailbox_admission;
 mod managed;
 mod shared_instructions;
 mod shutdown;
@@ -82,6 +83,7 @@ use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::CodexErr;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::ClientMcpExtensions;
 use codex_protocol::mcp::OPENAI_STANDARD_FORM_INPUT_EXTENSION_ID;
@@ -340,6 +342,9 @@ pub struct StartThreadOptions {
     pub disabled_plugin_ids: Option<Vec<String>>,
 }
 
+/// D624 (a): marks a reload whose session had seen untrusted content (`resume_thread_after_revert`).
+struct CarriedUntrustedContent;
+
 /// A private, non-sharing provider also detaches a resumed root from its previous live provider.
 struct InheritedThreadInstructions(Instructions);
 
@@ -526,6 +531,7 @@ pub(crate) struct ResumeThreadWithHistoryOptions {
 pub(crate) struct ThreadManagerState {
     // Eviction updates this registry and residency together, locking the registry first.
     pub(crate) threads: Arc<RwLock<HashMap<ThreadId, Arc<CodexThread>>>>,
+    pub(crate) mailbox_admission: mailbox_admission::MailboxAdmission,
     shared_thread_instructions: shared_instructions::SharedThreadInstructionsProviders,
     thread_created_tx: broadcast::Sender<ThreadId>,
     thread_id_generator: ThreadIdGenerator,
@@ -563,19 +569,21 @@ pub fn build_models_manager(
 ) -> SharedModelsManager {
     // PF-84: an OpenAI sign-in provider's list follows the account the
     // active session uses.
-    if let Some(manager) = crate::account_models_manager::AccountModelsManager::for_provider(
-        &config.model_provider,
-        Arc::clone(&auth_manager),
-        config.codex_home.to_path_buf(),
-        config.model_catalog.clone(),
-    ) {
-        return Arc::new(manager);
-    }
-    let provider = create_model_provider(config.model_provider.clone(), Some(auth_manager));
-    let manager = provider.models_manager(
-        config.codex_home.to_path_buf(),
-        config.model_catalog.clone(),
-    );
+    let manager: SharedModelsManager = if let Some(manager) =
+        crate::account_models_manager::AccountModelsManager::for_provider(
+            &config.model_provider,
+            Arc::clone(&auth_manager),
+            config.codex_home.to_path_buf(),
+            config.model_catalog.clone(),
+        ) {
+        Arc::new(manager)
+    } else {
+        let provider = create_model_provider(config.model_provider.clone(), Some(auth_manager));
+        provider.models_manager(
+            config.codex_home.to_path_buf(),
+            config.model_catalog.clone(),
+        )
+    };
     manager.set_api_key_model_discovery_enabled(
         config.features.enabled(Feature::ApiKeyModelDiscovery),
     );
@@ -712,6 +720,7 @@ impl ThreadManager {
         Self {
             state: Arc::new(ThreadManagerState {
                 threads: Arc::new(RwLock::new(HashMap::new())),
+                mailbox_admission: Default::default(),
                 shared_thread_instructions: Default::default(),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -922,6 +931,7 @@ impl ThreadManager {
         Self {
             state: Arc::new(ThreadManagerState {
                 threads: Arc::new(RwLock::new(HashMap::new())),
+                mailbox_admission: Default::default(),
                 shared_thread_instructions: Default::default(),
                 thread_created_tx,
                 thread_id_generator: default_thread_id_generator(),
@@ -1395,19 +1405,41 @@ impl ThreadManager {
         if let Some(control) = request.agent_control.control().local()
             && let Some(session_source) = request.options.session_source.as_ref()
         {
-            control
+            let prepared = control
                 .prepare_durable_thread_spawn_parent(
                     session_source,
                     request.options.config.ephemeral,
                 )
-                .await?;
+                .await;
+            match prepared {
+                // #1532: a resumed child was committed below its parent when it was spawned,
+                // so that parent's rollout already exists; resuming the child alone (a cold
+                // transcript, the agents overview) does not need the parent loaded.
+                Err(err)
+                    if matches!(request.options.initial_history, InitialHistory::Resumed(_))
+                        && matches!(
+                            err.details(),
+                            CodexErrorDetails::ThreadNotFound(missing)
+                                if session_source.parent_thread_id() == Some(*missing)
+                        ) => {}
+                prepared => prepared?,
+            }
         }
         // D530 (a): a child pane on a controller without the local backend is refused before
-        // it is spawned.
+        // it is spawned. A host factory replaces a Local controller in `spawn_thread`, so resolve
+        // that replacement first and check the controller the child would actually run on.
         if matches!(
             request.options.session_source,
             Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }))
         ) {
+            request.agent_control = self
+                .state
+                .resolve_host_agent_control(
+                    &request.options.initial_history,
+                    &mut request.options.reserved_thread_id,
+                    request.agent_control,
+                )
+                .await?;
             request.agent_control.control().local_or_unsupported()?;
         }
         let configured_child_security_level = request.options.config.security_level;
@@ -1567,6 +1599,53 @@ impl ThreadManager {
         parent_trace: Option<W3cTraceContext>,
         client_mcp_extensions: ClientMcpExtensions,
     ) -> CodexResult<NewThread> {
+        self.resume_thread_with_history_and_init(
+            config,
+            initial_history,
+            auth_manager,
+            parent_trace,
+            client_mcp_extensions,
+            ExtensionDataInit::default(),
+        )
+        .await
+    }
+
+    /// `thread/revert`'s reload. D624 (a): a session that had seen untrusted content before the
+    /// revert stays flagged, even when the remaining history no longer contains that content.
+    #[instrument(level = "trace", skip_all)]
+    pub async fn resume_thread_after_revert(
+        &self,
+        config: Config,
+        initial_history: InitialHistory,
+        auth_manager: Arc<AuthManager>,
+        parent_trace: Option<W3cTraceContext>,
+        client_mcp_extensions: ClientMcpExtensions,
+        untrusted_content_seen: bool,
+    ) -> CodexResult<NewThread> {
+        let mut thread_extension_init = ExtensionDataInit::default();
+        if untrusted_content_seen {
+            thread_extension_init.insert(CarriedUntrustedContent);
+        }
+        self.resume_thread_with_history_and_init(
+            config,
+            initial_history,
+            auth_manager,
+            parent_trace,
+            client_mcp_extensions,
+            thread_extension_init,
+        )
+        .await
+    }
+
+    async fn resume_thread_with_history_and_init(
+        &self,
+        config: Config,
+        initial_history: InitialHistory,
+        auth_manager: Arc<AuthManager>,
+        parent_trace: Option<W3cTraceContext>,
+        client_mcp_extensions: ClientMcpExtensions,
+        thread_extension_init: ExtensionDataInit,
+    ) -> CodexResult<NewThread> {
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
             .unwrap_or_else(|| (self.state.session_source.clone(), None));
@@ -1583,6 +1662,7 @@ impl ThreadManager {
             thread_source,
             parent_trace,
             client_mcp_extensions,
+            thread_extension_init,
             ..StartThreadOptions::new(config)
         };
         let resumed_thread = Box::pin(self.state.spawn_thread(ThreadSpawnRequest::new(
@@ -1997,6 +2077,35 @@ impl ThreadManager {
             .unwrap_or_default()
     }
 
+    /// User input the control plane handed to each thread, in order. Upstream delivers agent
+    /// input through `start_or_steer_turn` rather than `send_op`, so `captured_ops` does not see
+    /// it; this restores what main's tests read from the captured `Op::UserInput`.
+    #[cfg(test)]
+    pub(crate) fn captured_user_inputs(
+        &self,
+    ) -> Vec<(ThreadId, Vec<codex_protocol::user_input::UserInput>)> {
+        self.state
+            .ops_log
+            .as_ref()
+            .and_then(|ops_log| {
+                ops_log.lock().ok().map(|log| {
+                    log.iter()
+                        .filter_map(|(thread_id, op)| match op {
+                            Op::TurnInput { request, .. } => match &request.input {
+                                codex_protocol::turn_input::TurnInput::UserInput {
+                                    content,
+                                    ..
+                                } => Some((*thread_id, content.clone())),
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                        .collect()
+                })
+            })
+            .unwrap_or_default()
+    }
+
     /// The captured-ops log. `send_op` locks it right before it hands an op to the thread, so
     /// a test that holds it stops a sender at the hand-off.
     #[cfg(test)]
@@ -2006,6 +2115,31 @@ impl ThreadManager {
 }
 
 impl ThreadManagerState {
+    /// Records user input delivered through `start_or_steer_turn` for `captured_user_inputs`.
+    /// `captured_ops` filters these entries out, so its contents are unchanged.
+    #[cfg(test)]
+    pub(crate) fn capture_user_input_for_tests(
+        &self,
+        thread_id: ThreadId,
+        input: &[codex_protocol::user_input::UserInput],
+    ) {
+        if let Some(ops_log) = &self.ops_log
+            && let Ok(mut log) = ops_log.lock()
+        {
+            let (reply, _) = tokio::sync::oneshot::channel();
+            log.push((
+                thread_id,
+                Op::TurnInput {
+                    request: Box::new(codex_protocol::turn_input::TurnInputRequest::user_input(
+                        input.to_vec(),
+                    )),
+                    mode: codex_protocol::turn_input::TurnInputMode::StartOrSteer,
+                    reply,
+                },
+            ));
+        }
+    }
+
     pub(crate) fn shared_thread_instructions_provider(
         &self,
         root_thread_id: ThreadId,
@@ -2440,6 +2574,31 @@ impl ThreadManagerState {
             .unwrap_or_default()
     }
 
+    /// The controller a new thread runs on: a host factory replaces a Local controller, once;
+    /// a Provided controller is kept. D530 (a) checks the result before a child pane spawns.
+    async fn resolve_host_agent_control(
+        &self,
+        initial_history: &InitialHistory,
+        reserved_thread_id: &mut Option<ThreadId>,
+        agent_control: AgentControlInit,
+    ) -> CodexResult<AgentControlInit> {
+        let (Some(factory), AgentControlInit::Local(local)) =
+            (&self.agent_control_factory, &agent_control)
+        else {
+            return Ok(agent_control);
+        };
+        let thread_id = match initial_history {
+            InitialHistory::Resumed(resumed) => resumed.conversation_id,
+            InitialHistory::New | InitialHistory::Cleared | InitialHistory::Forked(_) => {
+                *reserved_thread_id.get_or_insert_with(|| local.runtime.generate_thread_id())
+            }
+        };
+        Ok(AgentControlInit::Provided {
+            control: factory(thread_id).await?,
+            runtime: local.runtime.clone(),
+        })
+    }
+
     /// Spawn a new thread with optional history and register it with the manager.
     async fn spawn_thread(&self, mut request: ThreadSpawnRequest) -> CodexResult<NewThread> {
         let cancellation = request
@@ -2575,6 +2734,9 @@ impl ThreadManagerState {
                     &config.workspace_roots,
                 )
             });
+        let carried_untrusted_content = thread_extension_init
+            .remove::<CarriedUntrustedContent>()
+            .is_some();
         let is_resumed_thread = matches!(&initial_history, InitialHistory::Resumed(_));
         if reserved_thread_id.is_some() && matches!(&initial_history, InitialHistory::Resumed(_)) {
             return Err(CodexErr::InvalidRequest(
@@ -2602,6 +2764,15 @@ impl ThreadManagerState {
                             "thread {} is already running with a different rollout path",
                             resumed.conversation_id
                         )));
+                    }
+                    // D624 (a): a copy reloaded meanwhile (between `thread/revert`'s unload
+                    // and its reload) is flagged too, never handed back unflagged.
+                    if carried_untrusted_content {
+                        thread
+                            .session
+                            .services
+                            .model_client()
+                            .note_unrecorded_input_for_taint();
                     }
                     let session_configured =
                         thread.startup_metadata().to_session_configured_event();
@@ -2640,22 +2811,9 @@ impl ThreadManagerState {
             )),
             (local, None) => local,
         };
-        let agent_control = match (&self.agent_control_factory, agent_control) {
-            (Some(factory), AgentControlInit::Local(local)) => {
-                let thread_id = match &initial_history {
-                    InitialHistory::Resumed(resumed) => resumed.conversation_id,
-                    InitialHistory::New | InitialHistory::Cleared | InitialHistory::Forked(_) => {
-                        *reserved_thread_id
-                            .get_or_insert_with(|| local.runtime.generate_thread_id())
-                    }
-                };
-                AgentControlInit::Provided {
-                    control: factory(thread_id).await?,
-                    runtime: local.runtime,
-                }
-            }
-            (_, control) => control,
-        };
+        let agent_control = self
+            .resolve_host_agent_control(&initial_history, &mut reserved_thread_id, agent_control)
+            .await?;
         let parent_thread_id = parent_thread_id
             .or_else(|| initial_history.get_resumed_parent_thread_id())
             .or(match &session_source {
@@ -2883,6 +3041,13 @@ impl ThreadManagerState {
         {
             session.services.mcp_runtime.enable_full_access_form_input();
         }
+        // D624 (a): set before the thread is published, so no turn can run unflagged.
+        if carried_untrusted_content {
+            session
+                .services
+                .model_client()
+                .note_unrecorded_input_for_taint();
+        }
         let finalize_result = self
             .finalize_thread_spawn(session, io, tracked_session_source, initial_host_config)
             .await;
@@ -2951,6 +3116,11 @@ impl ThreadManagerState {
             .mcp_ema_cancellation()
             .clone();
         {
+            // A prior unloaded admission must finish (including lifecycle retention) before
+            // this session becomes visible and its caller can recover the durable mailbox.
+            #[cfg(test)]
+            self.mailbox_admission.publishing.notify_one();
+            let _admission = self.mailbox_admission.lock(thread_id).await;
             let mut threads = self.threads.write().await;
             if let std::collections::hash_map::Entry::Vacant(e) = threads.entry(thread_id) {
                 if let Some(update) = initial_host_config {

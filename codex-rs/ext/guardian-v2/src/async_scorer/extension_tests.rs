@@ -225,7 +225,7 @@ async fn installed_extension_warms_connections_without_blocking_thread_start() -
     )));
     config.features.enable(Feature::GuardianV2)?;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::install(
+    super::install_with_ungated_scoring_for_tests(
         &mut builder,
         auth_manager,
         Arc::downgrade(&test.thread_manager),
@@ -296,7 +296,7 @@ async fn installed_extension_uses_http_after_warm_socket_auth_expires() -> Resul
     ));
     config.features.enable(Feature::GuardianV2)?;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::install(
+    super::install_with_ungated_scoring_for_tests(
         &mut builder,
         auth_manager.clone(),
         Arc::downgrade(&test.thread_manager),
@@ -962,9 +962,13 @@ async fn sample_configured_conversation_history_with_delivery(
         extensions.mcp_server_contributor(Arc::new(HostedMessagingServer(url)));
     }
     let builder = test_codex()
+        .with_config(|config| {
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
+        })
         .with_extensions(Arc::new(extensions.build()))
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
-        .with_model_info_override("codex-auto-review", |model_info| {
+        .with_model_info_override("test-guardian-review", |model_info| {
+            *model_info = core_test_support::model_catalog::guardian_test_model();
             model_info
                 .model_messages
                 .as_mut()
@@ -974,7 +978,9 @@ async fn sample_configured_conversation_history_with_delivery(
                 .expect("reviewer model should have Guardian policy")
                 .policy = Some(TEST_CATALOG_GUARDIAN_POLICY.to_owned());
         })
-        .with_model("gpt-5.5")
+        .with_model_info_override("gpt-5.5", |model| {
+            model.auto_review_model_override = Some("test-guardian-review".into());
+        })
         .with_config(move |config| {
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
             config.guardian_policy_config = guardian_policy;
@@ -1033,7 +1039,7 @@ async fn sample_configured_conversation_history_with_delivery(
     config.model_provider = provider_info;
     config.features.enable(Feature::GuardianV2)?;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::install(
+    super::install_with_ungated_scoring_for_tests(
         &mut builder,
         auth_manager,
         Arc::downgrade(&test.thread_manager),
@@ -2437,7 +2443,7 @@ async fn contributor_skips_required_models_in_standard_scope() -> Result<()> {
     let mut config = test.config.clone();
     config.model_provider = provider_info;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::install(
+    super::install_with_ungated_scoring_for_tests(
         &mut builder,
         auth_manager,
         Arc::downgrade(&test.thread_manager),
@@ -3249,9 +3255,17 @@ async fn assert_parent_compaction_reuse(parent_context_for_review: bool) -> Resu
 
     let thread_server = responses::start_mock_server().await;
     let test = test_codex()
+        .with_config(|config| {
+            config.model_catalog = Some(core_test_support::model_catalog::upstream_model_catalog());
+        })
+        .with_model_info_override("test-guardian-review", |model| {
+            *model = core_test_support::model_catalog::guardian_test_model();
+        })
+        .with_model_info_override("gpt-5.5", |model| {
+            model.auto_review_model_override = Some("test-guardian-review".into());
+        })
         .with_config(move |config| {
             config.approvals_reviewer = ApprovalsReviewer::AutoReview;
-
         })
         .with_pre_build_hook(|home| {
             std::fs::write(
@@ -3283,7 +3297,7 @@ async fn assert_parent_compaction_reuse(parent_context_for_review: bool) -> Resu
         .get_model_info(MODEL, &config.to_models_manager_config())
         .await;
     let mut builder = ExtensionRegistryBuilder::new();
-    super::install(
+    super::install_with_ungated_scoring_for_tests(
         &mut builder,
         auth_manager,
         Arc::downgrade(&test.thread_manager),
@@ -3828,6 +3842,3 @@ async fn cached_score_publication_rejects_delayed_results_without_changing_cover
     assert!(!progress.inspect(Some("active-overflow")).oversized);
     Ok(())
 }
-
-#[path = "decisions_lifecycle_tests.rs"]
-mod decisions_lifecycle_tests;

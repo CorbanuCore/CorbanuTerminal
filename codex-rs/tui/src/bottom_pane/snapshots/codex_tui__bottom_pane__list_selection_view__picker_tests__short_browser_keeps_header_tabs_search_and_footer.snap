@@ -1,5 +1,6 @@
 ---
 source: tui/src/bottom_pane/selection_picker_tests.rs
+assertion_line: 142
 expression: "snapshots.join(\"\\n---\\n\")"
 ---
 48×6:
@@ -31,7 +32,7 @@ expression: "snapshots.join(\"\\n---\\n\")"
 › Action 00  Ctrl+0
   Action 01  Ctrl+1
   Action 02  Ctrl+2
-↓
+↓                                       1 / 30
   left/right group · enter edit · esc close
 ---
 24×6:

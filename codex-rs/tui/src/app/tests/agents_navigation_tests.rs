@@ -27,10 +27,11 @@ async fn agents_navigation_opens_the_command_center_on_every_target() -> Result<
         );
         app.replace_chat_widget(ChatWidget::new_with_app_event(init));
         while events.try_recv().is_ok() {}
-        let composer = render_bottom_popup(&app.chat_widget, /*width*/ 96);
+        // Wide enough for Corbanu's longer footer to keep the navigation hint.
+        let composer = render_bottom_popup(&app.chat_widget, /*width*/ 120);
         let footer = composer.lines().last().expect("composer footer").trim();
         insta::allow_duplicates! {
-            insta::assert_snapshot!(normalize_snapshot_paths(footer), @"GPT-5.6-Sol default · /tmp/project · ← for agents");
+            insta::assert_snapshot!(normalize_snapshot_paths(footer), @"Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -- tok/s · ← for agents");
         }
         app.handle_tui_event(
             &mut tui,
@@ -109,7 +110,9 @@ async fn externally_archived_thread_keeps_advertised_agents_navigation() -> Resu
             .await?;
     }
     assert!(app.chat_widget.composer_is_empty());
-    assert!(render_bottom_popup(&app.chat_widget, /*width*/ 96).contains("for agents"));
+    // Wide enough for Corbanu's longer footer (provider and TPS) to keep the hint.
+    let footer = render_bottom_popup(&app.chat_widget, /*width*/ 140);
+    assert!(footer.contains("for agents"), "{footer}");
     app.handle_tui_event(
         &mut tui,
         &mut app_server,

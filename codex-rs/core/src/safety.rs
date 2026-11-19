@@ -8,6 +8,7 @@ use codex_protocol::permissions::LocalFileSystemPolicyMatcher;
 use codex_protocol::permissions::WritableLinkIntoReadOnlyPath;
 use codex_protocol::protocol::AskForApproval;
 use codex_sandboxing::get_platform_sandbox;
+use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use std::io;
 
@@ -59,7 +60,7 @@ impl PatchSandboxRoute {
                     .cwd
                     .to_abs_path()
                     .ok()
-                    .map(|cwd| cwd.into_path_buf());
+                    .map(AbsolutePathBuf::into_path_buf);
                 let links = native_cwd
                     .as_deref()
                     .map(|cwd| configured_policy.writable_links_into_read_only_paths(cwd))

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -378,7 +379,8 @@ fn write_secrets(
         ))
     })?;
     let write_result = match mode {
-        SetupMode::ProvisionOnly => write_file_atomically(&users_path, &users_json),
+        SetupMode::ProvisionOnly => crate::provisioning_files::check_output(&users_path)
+            .and_then(|()| write_file_atomically(&users_path, &users_json)),
         SetupMode::Full | SetupMode::InteractiveProvision | SetupMode::ReadAclsOnly => {
             std::fs::write(&users_path, users_json).map_err(anyhow::Error::from)
         }
@@ -387,7 +389,7 @@ fn write_secrets(
         anyhow::Error::new(SetupFailure::new(
             SetupErrorCode::HelperUsersFileWriteFailed,
             format!(
-                "write sandbox users file {} failed: {err}",
+                "write sandbox users file {} failed: {err:#}",
                 users_path.display()
             ),
         ))
@@ -409,6 +411,18 @@ pub(super) fn prepare_setup_marker(
     mode: SetupMode,
 ) -> Result<PreparedSetupMarker> {
     let marker_path = sandbox_dir(codex_home).join("setup_marker.json");
+    let marker_error = |err: anyhow::Error| {
+        anyhow::Error::new(SetupFailure::new(
+            SetupErrorCode::HelperSetupMarkerWriteFailed,
+            format!(
+                "prepare setup marker {} failed: {err:#}",
+                marker_path.display()
+            ),
+        ))
+    };
+    if mode == SetupMode::ProvisionOnly {
+        crate::provisioning_files::check_output(&marker_path).map_err(marker_error)?;
+    }
     match std::fs::remove_file(&marker_path) {
         Ok(()) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -458,6 +472,37 @@ pub(super) fn prepare_setup_marker(
         lpSecurityDescriptor: security_descriptor,
         bInheritHandle: 0,
     };
+    if mode == SetupMode::ProvisionOnly {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
+        use windows_sys::Win32::Storage::FileSystem::FILE_TRAVERSE;
+        use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
+        let result = (|| {
+            let parent = crate::open_directory_no_reparse(
+                marker_path.parent().context("marker parent")?,
+                FILE_TRAVERSE | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                crate::DirectoryOpenDisposition::OpenExisting,
+            )?;
+            let mut name = to_wide("setup_marker.json");
+            let handle = crate::no_reparse_dir::open_no_reparse_with_security(
+                parent.as_raw_handle(),
+                &mut name,
+                GENERIC_WRITE | SYNCHRONIZE,
+                /*share_access*/ 0,
+                /*disposition*/ 2,
+                /*create_options*/ 0x40 | 0x20,
+                security_descriptor,
+            )?;
+            Ok(PreparedSetupMarker::Retained(File::from(handle)))
+        })();
+        unsafe {
+            LocalFree(security_descriptor);
+        }
+        return result.map_err(marker_error);
+    }
     let marker_path_wide = to_wide(marker_path.as_os_str());
     let marker_handle = unsafe {
         CreateFileW(

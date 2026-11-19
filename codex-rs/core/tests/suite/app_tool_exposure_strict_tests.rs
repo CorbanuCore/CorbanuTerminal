@@ -4,6 +4,10 @@ use pretty_assertions::assert_eq;
 use std::sync::Mutex;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[tracing_test::traced_test]
 async fn strict_ignores_app_omissions_but_preserves_app_access() -> anyhow::Result<()> {
     let server = responses::start_mock_server().await;

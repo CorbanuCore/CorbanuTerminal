@@ -4,6 +4,7 @@ use anyhow::Result;
 use codex_core::TurnInputRequest;
 use codex_core::config::AgentRoleConfig;
 use codex_core::config::Config;
+use codex_core::config::CurrentTimeReminderConfig;
 use codex_features::Feature;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::protocol::EventMsg;
@@ -165,6 +166,14 @@ async fn root_service_tier_change_updates_existing_subagent(
         .with_config(move |config| {
             config.service_tier = initial_service_tier_owned;
             configure_priority_role(config);
+            config
+                .features
+                .enable(Feature::CurrentTimeReminder)
+                .expect("current-time reminder feature can be configured");
+            config.current_time_reminder = Some(CurrentTimeReminderConfig {
+                sleep_tool: true,
+                ..CurrentTimeReminderConfig::default()
+            });
         });
     let test = builder.build_with_auto_env(&server).await?;
     assert!(!test.config.features.enabled(Feature::StepModelSwitching));
@@ -194,9 +203,9 @@ async fn root_service_tier_change_updates_existing_subagent(
             ev_response_created("child-paused"),
             ev_function_call_with_namespace(
                 PAUSE_CALL_ID,
-                "collaboration",
-                "wait_agent",
-                &json!({ "timeout_ms": 30_000 }).to_string(),
+                "clock",
+                "sleep",
+                &json!({ "duration_ms": 30_000 }).to_string(),
             ),
             ev_completed("child-paused"),
         ]),
@@ -220,7 +229,8 @@ async fn root_service_tier_change_updates_existing_subagent(
     let original_child_service_tier = child.config_snapshot().await.service_tier;
     assert_eq!(original_child_service_tier.as_deref(), initial_service_tier);
     wait_for_event_match(child.as_ref(), |event| match event {
-        EventMsg::CollabWaitingBegin(request) if request.call_id == PAUSE_CALL_ID => Some(()),
+        // A child without descendants can sleep, but cannot use wait_agent as a pause.
+        EventMsg::ItemStarted(started) if started.item.id() == PAUSE_CALL_ID => Some(()),
         EventMsg::Error(error) => panic!("child failed before pausing: {}", error.message),
         EventMsg::TurnComplete(completed) => {
             panic!("child completed before pausing: {completed:?}")
@@ -314,6 +324,13 @@ async fn evicted_role_subagent_uses_root_service_tier_after_reload() -> Result<(
             config.service_tier = Some("priority".to_string());
             config.multi_agent_v2.max_concurrent_threads_per_session = 2;
             configure_priority_role(config);
+            // Reloading an evicted child resolves its persisted provider ID from the registry
+            // (#1129). Register this mock provider under the active ID so the reloaded child
+            // reaches the mock server, as a registered provider would in a real session.
+            config.model_providers.insert(
+                config.model_provider_id.clone(),
+                config.model_provider.clone(),
+            );
         });
     let test = builder.build_with_auto_env(&server).await?;
     let mut created_threads = test.thread_manager.subscribe_thread_created();

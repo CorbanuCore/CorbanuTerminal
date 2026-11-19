@@ -20,7 +20,10 @@ async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
             .set_composer_text(command.into(), Vec::new(), Vec::new());
         let draft = chat.bottom_pane.composer_draft_snapshot();
         chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(chat.bottom_pane.composer_draft_snapshot(), draft);
+        // Upstream's composer records the key press as activity; the draft itself is kept.
+        let mut kept = chat.bottom_pane.composer_draft_snapshot();
+        kept.last_composer_activity_at = draft.last_composer_activity_at;
+        assert_eq!(kept, draft);
         assert!(chat.accounting_inspector.is_none());
         assert!(ops.try_recv().is_err());
         let mut messages = Vec::new();
@@ -51,7 +54,7 @@ async fn accounting_inspect_command_without_account_auth() {
         assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests"));
     }
     assert!(ops.try_recv().is_err());
-    chat.clear_pending_token_activity_refreshes();
+    chat.clear_accounting_inspector();
     chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
     let cells = drain_insert_history(&mut rx);
     assert!(
@@ -1477,7 +1480,8 @@ async fn slash_rename_requests_and_prefills_an_editable_title_suggestion() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "Fix login timeout"
+        // Main's /rename names the pane (and its thread) through the app.
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "Fix login timeout"
     );
 }
 
@@ -1512,7 +1516,8 @@ async fn slash_rename_preserves_manual_edits_when_suggestion_arrives() {
 
     assert_matches!(
         rx.try_recv(),
-        Ok(AppEvent::CodexOp(Op::SetThreadName { name })) if name == "My own title"
+        // Main's /rename names the pane (and its thread) through the app.
+        Ok(AppEvent::RenameCurrentPane { name }) if name == "My own title"
     );
 }
 
@@ -1708,8 +1713,10 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
                 plugins_command_enabled: true,
                 token_activity_command_enabled: false,
                 service_tier_commands_enabled: true,
+                daybreak_command_description: None,
                 goal_command_enabled: true,
-                personality_command_enabled: true,
+                voice_command_enabled: false,
+                worktrees_enabled: true,
                 allow_elevate_sandbox: true,
                 side_conversation_active: false,
             },
@@ -2655,13 +2662,16 @@ async fn assert_daybreak_catalog_and_account_gates(provider_id: &str) {
         .set_composer_text(String::new(), Vec::new(), Vec::new());
     chat.bottom_pane
         .set_composer_text("/daybreak".to_string(), Vec::new(), Vec::new());
-    insta::assert_snapshot!(
+    // Not an inline snapshot: two tests share this helper, and insta treats a
+    // second run of one inline assertion in the same process as a loop, so
+    // whichever ran second failed under `cargo test` (#2312).
+    assert_eq!(
         render_bottom_popup(&chat, /*width*/ 80)
             .lines()
             .filter(|line| line.contains("broader access"))
             .collect::<Vec<_>>()
             .join("\n"),
-        @""
+        ""
     );
     chat.has_chatgpt_account = true;
     chat.status_account_display = None;
@@ -3267,6 +3277,8 @@ async fn slash_archive_cancellation_keeps_task_running() {
 
     assert!(!chat.bottom_pane.has_active_view());
     assert!(chat.bottom_pane.is_task_running());
+    // Submitting a slash command from the composer follows the transcript (#46910).
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
     assert_matches!(op_rx.try_recv(), Err(TryRecvError::Empty));
 }
@@ -3452,10 +3464,13 @@ async fn slash_delete_confirms_while_task_running() {
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(chat.bottom_pane.has_active_view());
+    // Submitting a slash command from the composer follows the transcript (#46910).
+    assert_matches!(rx.try_recv(), Ok(AppEvent::FollowTranscript));
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
     let popup = render_bottom_popup(&chat, /*width*/ 80);
     assert!(popup.contains("Delete this session?"));
-    assert!(popup.contains("Permanently delete this session now"));
+    // Corbanu's wider option label wraps this description at 80 columns.
+    assert!(popup.contains("Permanently delete this"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -4408,8 +4423,10 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
             plugins_command_enabled: true,
             token_activity_command_enabled: false,
             service_tier_commands_enabled: true,
+            daybreak_command_description: None,
             goal_command_enabled: true,
-            personality_command_enabled: true,
+            voice_command_enabled: false,
+            worktrees_enabled: true,
             allow_elevate_sandbox: true,
             side_conversation_active: false,
         }
@@ -4437,7 +4454,7 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
     assert!(
         !events
             .iter()
-            .any(|event| matches!(event, AppEvent::RefreshTokenActivity { .. })),
+            .any(|event| matches!(event, AppEvent::OpenAnalytics { .. })),
         "`/cost` reads the local ledger, not the account API"
     );
     let rendered = events

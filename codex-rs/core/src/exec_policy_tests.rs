@@ -37,9 +37,53 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use toml::Value as TomlValue;
 
+#[path = "exec_policy_nested_script_tests.rs"]
+mod nested_script_tests;
+#[path = "exec_policy_parser_issue_tests.rs"]
+mod parser_issue_tests;
+
+#[path = "exec_policy_quoted_script_tests.rs"]
+mod quoted_script_tests;
+#[path = "exec_policy_script_input_tests.rs"]
+mod script_input_tests;
+#[path = "exec_policy_script_property_tests.rs"]
+mod script_property_tests;
+
+#[path = "exec_policy_wrapper_tests.rs"]
+mod wrapper_tests;
+
+#[path = "exec_policy_launcher_tests.rs"]
+mod launcher_tests;
+
+#[path = "exec_policy_more_launcher_tests.rs"]
+mod more_launcher_tests;
+
+#[path = "exec_policy_xargs_su_tests.rs"]
+mod xargs_su_tests;
+
+#[path = "exec_policy_d696_tests.rs"]
+mod d696_tests;
+
+#[path = "exec_policy_rule_case_tests.rs"]
+mod rule_case_tests;
+
+#[path = "exec_policy_launcher_case_tests.rs"]
+mod launcher_case_tests;
+
+#[path = "exec_policy_shell_case_tests.rs"]
+mod shell_case_tests;
+
 #[cfg(windows)]
 #[path = "exec_policy_windows_tests.rs"]
 mod windows_tests;
+
+#[cfg(windows)]
+#[path = "exec_policy_powershell_parser_tests.rs"]
+mod powershell_parser_tests;
+
+#[cfg(windows)]
+#[path = "exec_policy_powershell_cli_tests.rs"]
+mod powershell_cli_tests;
 
 fn config_stack_for_dot_codex_folder(dot_codex_folder: &Path) -> ConfigLayerStack {
     let dot_codex_folder =
@@ -1220,14 +1264,23 @@ prefix_rule(pattern=["git"], decision="prompt")
 
 #[tokio::test]
 async fn requested_prefix_rule_can_approve_absolute_path_commands() {
+    let command = vec![
+        host_program_path("cargo"),
+        "install".to_string(),
+        "cargo-insta".to_string(),
+    ];
+    // D696: on Windows the path's file name is `cargo.exe`, which an allow
+    // rule for `cargo` no longer approves, so the requested prefix is not
+    // offered; the whole command is.
+    let amendment = if cfg!(windows) {
+        command.clone()
+    } else {
+        vec!["cargo".to_string(), "install".to_string()]
+    };
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
             policy_src: None,
-            command: vec![
-                host_program_path("cargo"),
-                "install".to_string(),
-                "cargo-insta".to_string(),
-            ],
+            command,
             approval_policy: AskForApproval::UnlessTrusted,
             permission_profile: PermissionProfile::read_only(),
             sandbox_permissions: SandboxPermissions::UseDefault,
@@ -1235,10 +1288,7 @@ async fn requested_prefix_rule_can_approve_absolute_path_commands() {
         },
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
-            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
-                "cargo".to_string(),
-                "install".to_string(),
-            ])),
+            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(amendment)),
         },
     )
     .await;
@@ -2413,11 +2463,6 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
     // This command should not be run without user approval unless there is
     // a proper sandbox in place to ensure safety.
     let sneaky_command = vec_str(&["pwsh", "-Command", "echo hi @(calc)"]);
-    let expected_amendment = Some(ExecPolicyAmendment::new(vec_str(&[
-        "pwsh",
-        "-Command",
-        "echo hi @(calc)",
-    ])));
     let (pwsh_approval_reason, expected_req) = if cfg!(windows) {
         (
             r#"On Windows, SandboxPolicy::ReadOnly should be assumed to mean
@@ -2425,7 +2470,9 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
                 safe" should require approval."#,
             ExecApprovalRequirement::NeedsApproval {
                 reason: None,
-                proposed_execpolicy_amendment: expected_amendment.clone(),
+                // The script is unread: approving literal argv must not
+                // create an always-allow rule for its contents.
+                proposed_execpolicy_amendment: None,
             },
         )
     } else {
@@ -2433,7 +2480,9 @@ async fn verify_approval_requirement_for_unsafe_powershell_command() {
             "On non-Windows, rely on the read-only sandbox to prevent harm.",
             ExecApprovalRequirement::Skip {
                 bypass_sandbox: false,
-                proposed_execpolicy_amendment: expected_amendment.clone(),
+                // #2601: no PowerShell script is read off Windows, so as on
+                // Windows its literal argv gets no always-allow rule.
+                proposed_execpolicy_amendment: None,
             },
         )
     };
@@ -2806,8 +2855,8 @@ fn strict_forbidden_matches_find_wrapped_vault_commands() {
     }
 }
 
-/// Strict rules (Aggressive) apply `forbidden` rules to wrapped forms;
-/// otherwise the policy behaves exactly as before. Paths resolve by file
+/// D553 applies rules through known wrappers in both modes. Strict rules
+/// (Aggressive) additionally cover loose shell forms. Paths resolve by file
 /// name in both modes, and strict matching never widens an allow.
 #[tokio::test]
 async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
@@ -2849,15 +2898,22 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
             "paths resolve in both modes"
         );
     }
-    // The `env` allow rule would run this outside the sandbox without a
-    // prompt; strict rules refuse it instead.
-    assert!(matches!(
-        requirement(&lenient, "env corbanu vault list").await,
-        ExecApprovalRequirement::Skip {
-            bypass_sandbox: true,
-            ..
+    // D553: the outer env allow cannot override the inner forbidden rule,
+    // even without Aggressive's additional loose-text matching.
+    for manager in [&lenient, &strict] {
+        for script in [
+            "env corbanu vault list",
+            "/usr/bin/env -i FOO=1 corbanu vault list",
+        ] {
+            assert!(
+                matches!(
+                    requirement(manager, script).await,
+                    ExecApprovalRequirement::Forbidden { ref reason } if reason.contains("no vault")
+                ),
+                "{script}"
+            );
         }
-    ));
+    }
     let agent_shaped = [
         "env corbanu vault list",
         "/usr/bin/env -i FOO=1 corbanu vault list",
@@ -2877,7 +2933,25 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
             "strict: {script}"
         );
     }
-    for script in &agent_shaped[2..] {
+    // #2543: rules read the commands of a script that is not plain, so
+    // these are refused without loose-text matching too.
+    // #2548 extends that to `eval` and a shell's literal here-document.
+    for script in [
+        agent_shaped[2],
+        agent_shaped[4],
+        agent_shaped[5],
+        agent_shaped[6],
+        agent_shaped[7],
+    ] {
+        assert!(
+            matches!(
+                requirement(&lenient, script).await,
+                ExecApprovalRequirement::Forbidden { ref reason } if reason.contains("no vault")
+            ),
+            "lenient: {script}"
+        );
+    }
+    for script in [agent_shaped[3]] {
         assert!(
             !matches!(
                 requirement(&lenient, script).await,
@@ -2891,7 +2965,9 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
         match requirement {
             ExecApprovalRequirement::Skip { .. } => 0,
             ExecApprovalRequirement::NeedsApproval { .. } => 1,
-            ExecApprovalRequirement::Forbidden { .. } => 2,
+            // Upstream's human-only approval is stricter than any approval.
+            ExecApprovalRequirement::NeedsHumanApproval { .. } => 2,
+            ExecApprovalRequirement::Forbidden { .. } => 3,
         }
     }
     for script in agent_shaped.into_iter().chain([
@@ -2922,9 +2998,8 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
 
 /// #441 (milestone AGG-19): with nested agents set to refuse, the Aggressive
 /// rule file refuses an agent's `corbanu exec` / `review` before any prompt,
-/// through absolute paths and `bash -lc` scripts, under strict rules. Forms
-/// only the launch check sees (`env corbanu exec`) still prompt first. The
-/// nested-launch rules match exactly: text that only mentions them (a commit
+/// through absolute paths, `bash -lc` scripts, and known wrappers (D553).
+/// The nested-launch rules match exactly: text that only mentions them (a commit
 /// message, a search) is not refused, unlike the vault rule.
 #[tokio::test]
 async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow::Result<()> {
@@ -2964,6 +3039,7 @@ async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow:
         "/opt/bin/corbanu exec hi",
         "cd /tmp && corbanu exec hi",
         "codex exec hi",
+        "env corbanu exec hi",
     ] {
         assert!(
             matches!(
@@ -2979,8 +3055,6 @@ async fn issue_441_nested_launch_rules_refuse_launches_but_not_text() -> anyhow:
         "rg \"codex exec\" docs",
         "corbanu --help | grep review",
         "corbanu --version",
-        // Accepted gap: the launch check refuses it after the prompt.
-        "env corbanu exec hi",
     ] {
         assert!(
             !matches!(
@@ -3062,10 +3136,9 @@ async fn issue_443_live_aggressive_adds_the_vault_rule() {
 
 /// #444 (AGG-30): "don't ask again" for `python3 src/notes.py list` must not
 /// carry a chained command. Under Aggressive's approval policy (untrusted) a
-/// chained command that is not read-only still asks, and a chained read-only
-/// one (`cat .env`) runs without a prompt but never bypasses the sandbox
-/// (whether `.env` itself is readable there is the sandbox profile's
-/// protected-path rules, not tested here).
+/// chained command that no rule allows still asks, read-only or not (upstream
+/// retired the known-safe list, #39630), and the amendment it offers covers
+/// only that command.
 #[tokio::test]
 async fn sec_444_remembered_prefix_does_not_cover_a_chained_command() {
     let policy_src = r#"
@@ -3099,9 +3172,15 @@ prefix_rule(pattern=["python3", "src/notes.py", "list"], decision="allow")
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
         },
-        ExecApprovalRequirement::Skip {
-            bypass_sandbox: false,
-            proposed_execpolicy_amendment: None,
+        // Upstream retired UnlessTrusted's known-safe list (#39630): every command no rule
+        // allows now asks, so the known-safe remainder is asked about too (main skipped it).
+        // The remembered prefix still covers only its own command.
+        ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: Some(ExecPolicyAmendment::new(vec![
+                "cat".to_string(),
+                ".env".to_string(),
+            ])),
         },
     )
     .await;

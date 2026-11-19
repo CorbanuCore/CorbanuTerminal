@@ -10,12 +10,13 @@ async fn clipped_full_access_confirmation_discloses_hidden_warning_text() {
         let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.set_feature_enabled(Feature::GuardianApproval, /*enabled*/ false);
         let current_model = chat.current_model().to_owned();
-        Arc::make_mut(&mut chat.model_catalog)
-            .models
-            .iter_mut()
-            .find(|model| model.model == current_model)
-            .expect("the selected model is in the catalog")
-            .model_specialty = specialty.map(str::to_owned);
+        chat.model_catalog.update_models(|models| {
+            models
+                .iter_mut()
+                .find(|model| model.model == current_model)
+                .expect("the selected model is in the catalog")
+                .model_specialty = specialty.map(str::to_owned);
+        });
         let preset = builtin_approval_presets()
             .into_iter()
             .find(|preset| preset.id == "full-access")
@@ -84,8 +85,10 @@ async fn permission_picker_retry_and_confirmation_follow_configured_bindings() {
     chat.open_full_access_confirmation(
         preset, /*return_to_permissions*/ true, /*profile_selection*/ None,
     );
-    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Corbanu's full-access confirmation starts on Cancel, so accept picks it directly.
     chat.handle_key_event(KeyEvent::from(KeyCode::F(/*n*/ 3)));
+    // Corbanu says that full access was not enabled before returning to the picker.
+    assert_matches!(rx.try_recv(), Ok(AppEvent::InsertHistoryCell(_)));
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenPermissionsPopup));
     assert!(rx.try_recv().is_err(), "cancel must not apply permissions");
 

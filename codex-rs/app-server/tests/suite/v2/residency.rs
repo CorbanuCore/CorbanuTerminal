@@ -33,6 +33,8 @@ async fn write_provider_config(
     transport: ModelTransport,
 ) -> Result<()> {
     let supports_websockets = matches!(transport, ModelTransport::Websocket);
+    // Corbanu refuses a custom provider named "OpenAI", and the built-in one
+    // takes no provider headers, so the custom provider gets its own name.
     let config = format!(
         r#"model = "gpt-5.4"
 approval_policy = "never"
@@ -43,7 +45,7 @@ model_provider = "custom-openai"
 shell_snapshot = false
 
 [model_providers.custom-openai]
-name = "OpenAI"
+name = "Residency test"
 base_url = "{model_base_url}/v1"
 wire_api = "responses"
 request_max_retries = 0

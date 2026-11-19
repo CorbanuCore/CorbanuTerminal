@@ -13,30 +13,62 @@ use std::ffi::OsString;
 
 pub(crate) const MCP_USER_AGENT: &str = concat!("codex-mcp-client/", env!("CARGO_PKG_VERSION"));
 
+/// One snapshot for both halves of an executor MCP launch's environment.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum McpInheritedEnv {
+    Configured,
+    Secretless,
+}
+
+impl McpInheritedEnv {
+    pub(crate) fn current() -> Self {
+        if codex_protocol::secretless_launch::is_armed() {
+            Self::Secretless
+        } else {
+            Self::Configured
+        }
+    }
+
+    pub(crate) fn allows_name(self, name: &str) -> bool {
+        self == Self::Configured
+            || codex_protocol::secretless_launch::is_launch_env_name_allowed(name)
+    }
+
+    /// #2324: as Corbanu's other protected launches, an inherited value that
+    /// embeds a URL password (`scheme://user:pass@host`) is dropped even when
+    /// its name is allowed. Literal server `env` values are not inherited.
+    pub(crate) fn allows_value(self, value: &std::ffi::OsStr) -> bool {
+        self == Self::Configured
+            || !codex_protocol::secretless_launch::value_has_url_password(&value.to_string_lossy())
+    }
+}
+
 pub(crate) fn create_env_for_mcp_server(
     extra_env: Option<HashMap<OsString, OsString>>,
     env_vars: &[McpServerEnvVar],
 ) -> Result<HashMap<OsString, OsString>> {
     let additional_env_vars = local_stdio_env_var_names(env_vars)?;
     // PF-27-S02: with secretless agent launch armed, inherited variables
-    // must pass the launch allowlist; literal `env` values from the server's
-    // own config are still applied below.
-    let armed = codex_protocol::secretless_launch::is_armed();
+    // must pass the launch allowlist and must not embed a URL password;
+    // literal `env` values from the server's own config are still applied
+    // below.
+    let inheritance = McpInheritedEnv::current();
     let mut env: HashMap<OsString, OsString> = DEFAULT_ENV_VARS
         .iter()
         .copied()
         .chain(additional_env_vars)
-        .filter(|var| !armed || codex_protocol::secretless_launch::is_launch_env_name_allowed(var))
+        .filter(|var| inheritance.allows_name(var))
         .filter_map(|var| env::var_os(var).map(|value| (OsString::from(var), value)))
+        .filter(|(_, value)| inheritance.allows_value(value))
         .collect();
     for name in CUSTOM_CA_ENV_KEYS {
-        if armed && !codex_protocol::secretless_launch::is_launch_env_name_allowed(name) {
+        if !inheritance.allows_name(name) {
             continue;
         }
         let Some(value) = env::var_os(name) else {
             continue;
         };
-        if value.is_empty() {
+        if value.is_empty() || !inheritance.allows_value(&value) {
             continue;
         }
         let value = std::path::absolute(value)?.into_os_string();
@@ -74,6 +106,7 @@ pub(crate) fn create_env_for_mcp_server(
 pub(crate) fn create_env_overlay_for_remote_mcp_server(
     extra_env: Option<HashMap<OsString, OsString>>,
     env_vars: &[McpServerEnvVar],
+    inheritance: McpInheritedEnv,
 ) -> HashMap<OsString, OsString> {
     // Remote stdio should inherit PATH/HOME/etc. from the executor side, not
     // from the orchestrator process. Only forward variables explicitly named
@@ -81,7 +114,9 @@ pub(crate) fn create_env_overlay_for_remote_mcp_server(
     let mut env: HashMap<OsString, OsString> = env_vars
         .iter()
         .filter(|var| !var.is_remote_source())
+        .filter(|var| inheritance.allows_name(var.name()))
         .filter_map(|var| env::var_os(var.name()).map(|value| (OsString::from(var.name()), value)))
+        .filter(|(_, value)| inheritance.allows_value(value))
         .chain(extra_env.unwrap_or_default())
         .collect();
     env.retain(|name, _| {
@@ -172,8 +207,7 @@ pub(crate) fn build_default_headers(
     Ok(headers)
 }
 
-#[cfg(unix)]
-pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
+pub(crate) const UNIX_DEFAULT_ENV_VARS: &[&str] = &[
     "HOME",
     "LOGNAME",
     "PATH",
@@ -186,6 +220,9 @@ pub(crate) const DEFAULT_ENV_VARS: &[&str] = &[
     "TMPDIR",
     "TZ",
 ];
+
+#[cfg(unix)]
+pub(crate) const DEFAULT_ENV_VARS: &[&str] = UNIX_DEFAULT_ENV_VARS;
 
 #[cfg(windows)]
 pub(crate) const DEFAULT_ENV_VARS: &[&str] =
@@ -288,6 +325,7 @@ mod tests {
                 OsString::from("rule"),
             )])),
             &[custom_var.into()],
+            McpInheritedEnv::Configured,
         );
 
         assert_eq!(
@@ -317,6 +355,7 @@ mod tests {
                     source: Some("local".to_string()),
                 },
             ],
+            McpInheritedEnv::Configured,
         );
 
         assert_eq!(

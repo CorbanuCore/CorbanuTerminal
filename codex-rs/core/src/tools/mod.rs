@@ -35,6 +35,9 @@ use crate::session::turn_context::TurnContext;
 pub(crate) use approvals::ApprovalContext;
 pub(crate) use approvals::ApprovalResolution;
 pub(crate) use approvals::ApprovalResolutionSource;
+// Only the unix-only protected-path tests use this re-export.
+#[cfg(all(test, unix))]
+pub(crate) use approvals::exec_command_cache_keys;
 use codex_features::Feature;
 use codex_protocol::exec_output::ExecToolCallOutput;
 use codex_protocol::openai_models::ModelInfo;

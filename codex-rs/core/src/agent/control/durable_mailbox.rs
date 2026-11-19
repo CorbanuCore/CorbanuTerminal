@@ -1,7 +1,8 @@
 //! Corbanu's durable agent mailbox (#1058, #1435, #1452, #1545): every inter-agent message is
 //! admitted to the state database before it is handed to the recipient's session, and
 //! recovered after a reload or restart, so a message is never lost or delivered twice.
-//! Upstream's `mailbox.rs` (in-memory mail for evicted sessions) is not used for new mail.
+//! `mailbox.rs` retains publication handles across eviction, but durable message content has
+//! only one owner: recovery from the database.
 
 use super::*;
 use codex_protocol::protocol::AgentMessageKind;
@@ -446,6 +447,13 @@ impl LocalAgentControl {
             }
         }
 
+        // Only the winning submission may take the retained publication into the new
+        // session. A competing sender that loses its reservation must not consume it.
+        let retained_delivery = self
+            .runtime
+            .mailboxes
+            .durable_delivery(agent_id, &message_id);
+        let message_delivery = message_delivery.or_else(|| retained_delivery.clone());
         let (parent_turn_id, root_turn_id) = if communication.trigger_turn {
             (
                 start_options.parent_turn_id.clone(),
@@ -468,13 +476,20 @@ impl LocalAgentControl {
             )
             .await;
         match &result {
-            Ok(_) => match last_task_message {
-                Some(last_task_message) => self
-                    .runtime
-                    .registry
-                    .update_last_task_message(agent_id, last_task_message),
-                None => self.runtime.registry.clear_last_task_message(agent_id),
-            },
+            Ok(_) => {
+                if retained_delivery.is_some() {
+                    self.runtime
+                        .mailboxes
+                        .clear_durable_delivery(agent_id, &message_id);
+                }
+                match last_task_message {
+                    Some(last_task_message) => self
+                        .runtime
+                        .registry
+                        .update_last_task_message(agent_id, last_task_message),
+                    None => self.runtime.registry.clear_last_task_message(agent_id),
+                }
+            }
             Err(_) => {
                 if let Some(state_db) = state_db.as_ref() {
                     let _ = state_db

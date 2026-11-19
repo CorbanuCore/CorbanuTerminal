@@ -227,6 +227,7 @@ async fn shell_snapshot_concurrent_replays_keep_independent_readers(
                             ),
                         ]),
                         include_only: Vec::new(),
+                        drop_url_password_values: false,
                     }),
                     shell_snapshot: Some(ShellSnapshotRequest {
                         scope_id: "parallel".to_string(),

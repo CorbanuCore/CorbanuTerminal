@@ -15,16 +15,16 @@ enum PolicyConfig {
     LegacyDisabled,
 }
 
-#[test_case(PolicyConfig::Model, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0; "model policy scores cua and preserves its cache across cells")]
+#[test_case(PolicyConfig::Model, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0 => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "model policy scores cua and preserves its cache across cells")]
 #[test_case(PolicyConfig::Model, GuardianReviewMode::Synchronous, GuardianReviewMode::Adaptive, 0, 2; "adaptive shell does not score browser wrappers")]
 #[test_case(PolicyConfig::Model, GuardianReviewMode::Synchronous, GuardianReviewMode::Synchronous, 0, 2; "synchronous policies do not score wrappers")]
-#[test_case(PolicyConfig::RequiredModel, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0; "required model preserves cua cache across cells")]
+#[test_case(PolicyConfig::RequiredModel, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0 => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "required model preserves cua cache across cells")]
 #[test_case(PolicyConfig::RequiredModel, GuardianReviewMode::Synchronous, GuardianReviewMode::Adaptive, 0, 2; "required model keeps non cua policies synchronous")]
-#[test_case(PolicyConfig::Legacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0; "legacy cua only still ignores wrappers")]
+#[test_case(PolicyConfig::Legacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0 => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "legacy cua only still ignores wrappers")]
 #[test_case(PolicyConfig::Legacy, GuardianReviewMode::Synchronous, GuardianReviewMode::Synchronous, 0, 0; "legacy models without cua review still do not score")]
-#[test_case(PolicyConfig::Legacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Adaptive, 2, 1; "legacy all tools still scores wrappers")]
+#[test_case(PolicyConfig::Legacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Adaptive, 2, 1 => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "legacy all tools still scores wrappers")]
 #[test_case(PolicyConfig::LegacyDisabled, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 0, 2; "legacy off still uses synchronous cua review")]
-#[test_case(PolicyConfig::RequiredLegacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0; "required legacy cua only still ignores wrappers")]
+#[test_case(PolicyConfig::RequiredLegacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Synchronous, 1, 0 => ignore["D604 (#2562): background scoring stays off until disclosure-gated"]; "required legacy cua only still ignores wrappers")]
 #[test_case(PolicyConfig::RequiredLegacy, GuardianReviewMode::Adaptive, GuardianReviewMode::Adaptive, 0, 2; "required legacy all tools still uses synchronous review")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_guardian_policy_scores_code_mode_cells(

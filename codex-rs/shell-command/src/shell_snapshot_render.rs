@@ -14,6 +14,25 @@ impl CapturedSnapshot<'_> {
         self.exports.retain(|export| keep(export.key));
     }
 
+    /// Corbanu #2314: like `retain_exports`, but `keep` also sees each export's
+    /// native declaration and, when the capture has a value section, its raw
+    /// value, so callers can drop exports that carry a credential under any name.
+    pub fn retain_exports_by_value(
+        &mut self,
+        mut keep: impl FnMut(&str, &str, Option<&str>) -> bool,
+    ) {
+        let values = self.values.as_deref().unwrap_or_default();
+        self.exports.retain(|export| {
+            // The last record wins, as in the shell that produced them.
+            let value = values
+                .iter()
+                .rev()
+                .find(|(name, _)| *name == export.key)
+                .map(|(_, value)| value.as_ref());
+            keep(export.key, &export.source, value)
+        });
+    }
+
     /// Render native functions, options, and aliases; the executor restores environment separately.
     pub fn render_state(&self) -> String {
         format!("{}{}", self.state, self.aliases)

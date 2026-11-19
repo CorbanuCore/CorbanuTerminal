@@ -4,7 +4,8 @@ use crate::runtime::busy_retry::retry_busy_within;
 use std::time::Duration;
 
 pub(super) const RATE_LIMIT_STATUS: i64 = 429;
-const DEFAULT_COOLDOWN_CAP_MS: i64 = 5 * 60 * 1000;
+/// A provider reset hint may be longer, but local blocking never exceeds one hour.
+pub(super) const MAX_PROVIDER_COOLDOWN_MS: i64 = 60 * 60 * 1000;
 /// About how long a throttle step on the turn's path waits for a busy state DB
 /// before the turn goes on with this process's in-memory throttle. These steps
 /// run on the short-wait pool (`StateRuntime::quick`): an attempt waits at most
@@ -54,6 +55,8 @@ pub struct ProviderRequestBlock {
     pub reason: ProviderRequestBlockReason,
     pub until_ms: i64,
     pub remaining_ms: i64,
+    /// Remaining provider reset hint, which does not extend the local block.
+    pub provider_reset_remaining_ms: i64,
     pub lease_owner: Option<String>,
     pub last_status: Option<i64>,
     pub last_request_id: Option<String>,
@@ -97,6 +100,7 @@ impl StateRuntime {
         now_ms: i64,
     ) -> anyhow::Result<Option<ProviderRequestBlock>> {
         let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
+        clamp_legacy_cooldown(&mut tx, key).await?;
 
         sqlx::query(
             r#"
@@ -135,6 +139,7 @@ ON CONFLICT(provider_id, model, key_fingerprint) DO UPDATE SET
         let row = sqlx::query(
             r#"
 SELECT
+    provider_reset_at_ms,
     cooldown_until_ms,
     lease_owner,
     lease_until_ms,
@@ -181,6 +186,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
     ) -> anyhow::Result<ProviderRequestLeaseDecision> {
         let lease_until_ms = now_ms.saturating_add(lease_ttl_ms.max(1));
         let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
+        clamp_legacy_cooldown(&mut tx, key).await?;
 
         sqlx::query(
             r#"
@@ -219,6 +225,7 @@ ON CONFLICT(provider_id, model, key_fingerprint) DO UPDATE SET
         let row = sqlx::query(
             r#"
 SELECT
+    provider_reset_at_ms,
     cooldown_until_ms,
     lease_owner,
     lease_until_ms,
@@ -308,6 +315,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         now_ms: i64,
     ) -> anyhow::Result<u64> {
         let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
+        clamp_legacy_cooldown(&mut tx, &lease.key).await?;
         let released = sqlx::query(
             r#"
 UPDATE provider_request_state
@@ -344,6 +352,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ? AND lease_owner = ?
         now_ms: i64,
     ) -> anyhow::Result<()> {
         let mut tx = crate::runtime::db_lock::begin_immediate(&self.pool).await?;
+        clamp_legacy_cooldown(&mut tx, key).await?;
         record_result_on_connection(&mut tx, key, result, now_ms).await?;
         tx.commit().await?;
         Ok(())
@@ -640,6 +649,8 @@ impl StateRuntime {
                 r#"
 UPDATE provider_request_state AS current SET
     cooldown_until_ms = MAX(current.cooldown_until_ms, named.cooldown_until_ms),
+    provider_reset_at_ms = MAX(current.provider_reset_at_ms, named.provider_reset_at_ms),
+    updated_at_ms = MAX(current.updated_at_ms, named.updated_at_ms),
     consecutive_429_count = MAX(current.consecutive_429_count, named.consecutive_429_count),
     last_status = CASE WHEN named.cooldown_until_ms > current.cooldown_until_ms
         THEN named.last_status ELSE current.last_status END,
@@ -733,6 +744,10 @@ fn block_from_row(
         reason,
         until_ms,
         remaining_ms: until_ms.saturating_sub(now_ms),
+        provider_reset_remaining_ms: row
+            .try_get::<i64, _>("provider_reset_at_ms")?
+            .saturating_sub(now_ms)
+            .max(0),
         lease_owner: row.try_get("lease_owner")?,
         last_status: row.try_get("last_status")?,
         last_request_id: row.try_get("last_request_id")?,
@@ -742,6 +757,25 @@ fn block_from_row(
         last_provider_input_tokens: row.try_get("last_provider_input_tokens")?,
         last_provider_cached_input_tokens: row.try_get("last_provider_cached_input_tokens")?,
     })
+}
+
+/// Clamp old rows before preflight updates their timestamp. Persist the clamp
+/// once, so repeated reads cannot slide the deadline forward. Preserve the old
+/// deadline as a hint; neither leases nor usage metadata are discarded.
+async fn clamp_legacy_cooldown(
+    conn: &mut sqlx::SqliteConnection,
+    key: &ProviderRequestKey,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "UPDATE provider_request_state SET provider_reset_at_ms = MAX(provider_reset_at_ms, cooldown_until_ms), cooldown_until_ms = updated_at_ms + ?1 WHERE provider_id = ?2 AND model = ?3 AND key_fingerprint = ?4 AND cooldown_until_ms > updated_at_ms + ?1",
+    )
+    .bind(MAX_PROVIDER_COOLDOWN_MS)
+    .bind(&key.provider_id)
+    .bind(&key.model)
+    .bind(&key.key_fingerprint)
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 /// Record how a request on `key` ended (`UnleasedRow::apply`), leaving any
@@ -767,7 +801,7 @@ ON CONFLICT(provider_id, model, key_fingerprint) DO NOTHING
     .await?;
     let row = sqlx::query(
         r#"
-SELECT consecutive_429_count, cooldown_until_ms
+SELECT consecutive_429_count, cooldown_until_ms, provider_reset_at_ms
 FROM provider_request_state
 WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         "#,
@@ -780,6 +814,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
     let existing = UnleasedRow {
         consecutive_429_count: row.try_get("consecutive_429_count")?,
         cooldown_until_ms: row.try_get("cooldown_until_ms")?,
+        provider_reset_at_ms: row.try_get("provider_reset_at_ms")?,
     };
     let Some(update) = existing.apply(result, now_ms) else {
         return Ok(());
@@ -788,6 +823,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         r#"
 UPDATE provider_request_state
 SET cooldown_until_ms = ?,
+    provider_reset_at_ms = ?,
     last_status = ?,
     last_request_id = ?,
     last_provider_input_tokens = COALESCE(?, last_provider_input_tokens),
@@ -798,6 +834,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         "#,
     )
     .bind(update.cooldown_until_ms)
+    .bind(update.provider_reset_at_ms)
     .bind(update.last_status)
     .bind(update.last_request_id)
     .bind(update.provider_input_tokens)
@@ -816,12 +853,14 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
 pub(super) struct UnleasedRow {
     pub(super) consecutive_429_count: i64,
     pub(super) cooldown_until_ms: i64,
+    pub(super) provider_reset_at_ms: i64,
 }
 
 /// What an unleased result writes.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct UnleasedUpdate {
     pub(super) cooldown_until_ms: i64,
+    pub(super) provider_reset_at_ms: i64,
     pub(super) last_status: Option<i64>,
     pub(super) last_request_id: Option<String>,
     pub(super) provider_input_tokens: Option<i64>,
@@ -856,8 +895,19 @@ impl UnleasedRow {
                 let cooldown = retry_after_ms
                     .filter(|ms| *ms > 0)
                     .unwrap_or_else(|| default_cooldown_ms(consecutive_429_count));
+                let provider_reset_at_ms = retry_after_ms
+                    .filter(|ms| *ms > 0)
+                    .map_or(0, |ms| now_ms.saturating_add(ms));
                 Some(UnleasedUpdate {
-                    cooldown_until_ms: self.cooldown_until_ms.max(now_ms.saturating_add(cooldown)),
+                    cooldown_until_ms: self
+                        .cooldown_until_ms
+                        .max(now_ms.saturating_add(cooldown))
+                        .min(now_ms.saturating_add(MAX_PROVIDER_COOLDOWN_MS)),
+                    provider_reset_at_ms: if cooling {
+                        self.provider_reset_at_ms.max(provider_reset_at_ms)
+                    } else {
+                        provider_reset_at_ms
+                    },
                     last_status: Some(RATE_LIMIT_STATUS),
                     last_request_id: request_id.clone(),
                     provider_input_tokens: None,
@@ -871,7 +921,8 @@ impl UnleasedRow {
                 request_id,
                 ..
             } => Some(UnleasedUpdate {
-                cooldown_until_ms: self.cooldown_until_ms,
+                cooldown_until_ms: 0,
+                provider_reset_at_ms: 0,
                 last_status: Some(i64::from(*status)),
                 last_request_id: request_id.clone(),
                 provider_input_tokens: None,
@@ -883,7 +934,8 @@ impl UnleasedRow {
                 input_tokens,
                 cached_input_tokens,
             } => Some(UnleasedUpdate {
-                cooldown_until_ms: self.cooldown_until_ms,
+                cooldown_until_ms: 0,
+                provider_reset_at_ms: 0,
                 last_status: Some(200),
                 last_request_id: None,
                 provider_input_tokens: input_tokens.map(|tokens| tokens.max(0)),
@@ -899,9 +951,13 @@ pub(super) fn default_cooldown_ms(consecutive_429_count: i64) -> i64 {
         count if count <= 1 => 30_000,
         2 => 60_000,
         3 => 120_000,
-        _ => DEFAULT_COOLDOWN_CAP_MS,
+        _ => (5 * 60 * 1000).min(MAX_PROVIDER_COOLDOWN_MS),
     }
 }
+
+#[cfg(test)]
+#[path = "provider_cooldown_tests.rs"]
+mod cooldown_tests;
 
 #[cfg(test)]
 mod tests {

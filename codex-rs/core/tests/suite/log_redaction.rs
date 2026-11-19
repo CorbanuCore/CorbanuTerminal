@@ -67,8 +67,8 @@ impl TraceSinks {
             "test-provider".to_string(),
         )
         .await?;
-        let log_db = codex_state::log_db::start(Arc::clone(&state_db));
         let feedback = codex_feedback::CodexFeedback::new();
+        let log_db = codex_state::log_db::start(Arc::clone(&state_db), Arc::new(feedback.clone()));
         static BRIDGE_LOG_RECORDS: Once = Once::new();
         BRIDGE_LOG_RECORDS.call_once(|| {
             // Another test's subscriber may have installed the bridge already.
@@ -204,6 +204,7 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
     codex
         .submit(Op::RunUserShellCommand {
             command: format!("printenv {SENTINEL_NAME} | wc -c"),
+            timeout_ms: None,
         })
         .await?;
     let EventMsg::ExecCommandEnd(end) =
@@ -212,11 +213,16 @@ async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()
         unreachable!()
     };
     let ExecCommandEndEvent {
-        stdout, exit_code, ..
+        aggregated_output,
+        exit_code,
+        ..
     } = &end;
     // The child saw the sentinel (value plus newline).
-    assert_eq!(*exit_code, 0, "{:?}", end.stderr);
-    assert_eq!(stdout.trim(), (SENTINEL_VALUE.len() + 1).to_string());
+    assert_eq!(*exit_code, 0, "{aggregated_output:?}");
+    assert_eq!(
+        aggregated_output.trim(),
+        (SENTINEL_VALUE.len() + 1).to_string()
+    );
 
     let log_text = sinks
         .assert_clean(guard, &["spawn_child_async"], &[SENTINEL_VALUE])
@@ -261,15 +267,15 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     let mut builder = test_codex().with_config(move |config| {
         config.cwd = cwd_path.abs();
         let provider = &mut config.model_provider;
-        provider.experimental_bearer_token = Some(PROVIDER_KEY.to_string());
+        provider.experimental_bearer_token = Some(PROVIDER_KEY.to_string().into());
         provider
             .http_headers
             .get_or_insert_default()
-            .insert("X-Sentinel".to_string(), HEADER_VALUE.to_string());
+            .insert("X-Sentinel".to_string(), HEADER_VALUE.to_string().into());
         provider
             .query_params
             .get_or_insert_default()
-            .insert("key".to_string(), QUERY_VALUE.to_string());
+            .insert("key".to_string(), QUERY_VALUE.to_string().into());
         config
             .permissions
             .shell_environment_policy
@@ -279,14 +285,14 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     let fixture = builder.build(&server).await?;
     let call_id = "trace-secret-shell";
     let args = serde_json::json!({
-        "command": format!("printenv {ENV_NAME} | wc -c"),
-        "timeout_ms": 5_000,
+        "cmd": format!("printenv {ENV_NAME} | wc -c"),
+        "yield_time_ms": 5_000,
     });
     let first = mount_sse_once(
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )
@@ -322,7 +328,7 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     let output = second
         .single_request()
         .function_call_output_text(call_id)
-        .context("function_call_output present for shell_command call")?;
+        .context("function_call_output present for exec_command call")?;
     assert!(
         output.contains(&(ENV_VALUE.len() + 1).to_string()),
         "{output}"
@@ -331,10 +337,11 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
     let log_text = sinks
         .assert_clean(
             guard,
-            &[
-                "spawn_child_async",
-                "experimental_bearer_token: Some(\"<redacted>\")",
-            ],
+            // The model's command runs through `exec_command` (unified exec),
+            // whose spawn logs no command line or environment. The call ID
+            // reaches both sinks with the model's stream; the tool run's own
+            // span is checked in the trace log below.
+            &[call_id, "experimental_bearer_token: Some(\"<redacted>\")"],
             &[
                 PROVIDER_KEY,
                 HEADER_VALUE,
@@ -350,10 +357,16 @@ async fn provider_credentials_and_tool_env_never_reach_trace_logs() -> anyhow::R
             && log_text.contains("\"set-cookie\": \"REDACTED\""),
         "the provider headers, the request URL and the response headers should be logged with values redacted"
     );
+    // The tool run itself reached the trace log (its span; the log DB keeps
+    // no span names), so the scan above also covered what it logged.
+    assert!(
+        log_text.contains("unified_exec.exec_command"),
+        "the tool run should be traced"
+    );
     Ok(())
 }
 
-/// The Responses websocket logs its handshake response headers at INFO; a
+/// The Responses websocket logs its handshake status at INFO; a response
 /// `set-cookie` value must not reach any sink.
 #[tokio::test]
 async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Result<()> {
@@ -387,13 +400,13 @@ async fn websocket_handshake_response_headers_never_reach_logs() -> anyhow::Resu
     let log_text = sinks
         .assert_clean(
             guard,
-            &["successfully connected to websocket"],
+            &["successfully connected to Responses WebSocket"],
             &[COOKIE_VALUE],
         )
         .await?;
     assert!(
-        log_text.contains("\"set-cookie\": \"REDACTED\""),
-        "the handshake headers should be logged with values redacted"
+        log_text.contains("status=101"),
+        "the successful handshake status should be logged without response headers"
     );
     Ok(())
 }
@@ -445,7 +458,11 @@ async fn websocket_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
     server.shutdown().await;
 
     let log_text = sinks
-        .assert_clean(guard, &["successfully connected to websocket"], &[API_KEY])
+        .assert_clean(
+            guard,
+            &["successfully connected to Responses WebSocket"],
+            &[API_KEY],
+        )
         .await?;
     // The bridge delivered tungstenite's records; only TRACE was dropped.
     assert!(
@@ -503,7 +520,8 @@ async fn http_api_key_never_reaches_trace_logs() -> anyhow::Result<()> {
 /// header, an API-key header, password options and an API-key query
 /// parameter) never reach the log sinks when the command runs under the
 /// platform sandbox (Seatbelt on macOS, the Linux sandbox helper on Linux).
-/// The command is still logged, with the values redacted.
+/// The model's stream line that carries the command is logged with the values
+/// redacted; `exec_command` itself logs no command line.
 #[tokio::test]
 async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::Result<()> {
     core_test_support::skip_if_sandbox!(Ok(()));
@@ -525,12 +543,12 @@ async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::
     let command = format!(
         "echo SBX-398-RAN; : curl -H 'Authorization: Bearer {bearer}' -H 'X-Api-Key: {api_key}' --password={password} 'https://api.example/v1?api_key={query}' --password {password_arg}"
     );
-    let args = serde_json::json!({ "command": command, "timeout_ms": 10_000 });
+    let args = serde_json::json!({ "cmd": command, "yield_time_ms": 10_000 });
     mount_sse_once(
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )
@@ -549,23 +567,20 @@ async fn sandboxed_command_line_credentials_never_reach_trace_logs() -> anyhow::
     let output = second
         .single_request()
         .function_call_output_text(call_id)
-        .context("function_call_output present for shell_command call")?;
+        .context("function_call_output present for exec_command call")?;
     assert!(output.contains("SBX-398-RAN"), "{output}");
 
-    let log_text = sinks
-        .assert_clean(guard, &["spawn_child_async"], &SECRETS)
-        .await?;
-    let spawn_line = log_text
-        .lines()
-        .find(|line| line.contains("spawn_child_async") && line.contains("SBX-398-RAN"))
-        .context("the sandboxed command should be logged")?;
+    // Main ran this through `shell_command`, whose `spawn_child_async` trace
+    // logged the (redacted) command line. Upstream removed that tool: the
+    // command now runs through `exec_command` (unified exec), whose spawn logs
+    // no command line. The call ID reaches both sinks with the model's stream
+    // (which carries the credentials), and no sink may hold any of them.
+    let log_text = sinks.assert_clean(guard, &[call_id], &SECRETS).await?;
+    // The tool run itself reached the trace log (its span; the log DB keeps
+    // no span names).
     assert!(
-        spawn_line.contains("Authorization: REDACTED")
-            && spawn_line.contains("--password=REDACTED")
-            && spawn_line.contains("api_key=REDACTED"),
-        "{spawn_line}"
+        log_text.contains("unified_exec.exec_command"),
+        "the tool run should be traced"
     );
-    #[cfg(target_os = "macos")]
-    assert!(spawn_line.contains("sandbox-exec"), "{spawn_line}");
     Ok(())
 }

@@ -15,6 +15,7 @@
 //!   child agent's prompt.
 #![cfg(any(target_os = "macos", target_os = "linux"))]
 
+use codex_core::TurnInputRequest;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -142,7 +143,6 @@ async fn run_with(
                 .features
                 .enable(Feature::SourceEnvelopes)
                 .expect("enable source envelopes");
-            config.use_experimental_unified_exec_tool = true;
             config
                 .features
                 .enable(Feature::UnifiedExec)
@@ -160,16 +160,13 @@ async fn run_with(
     );
     let thread = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "run the command".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::ExecApprovalRequest(approval) = wait_for_event(&test.codex, |event| {
         matches!(
@@ -537,7 +534,11 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
                 SPAWN_CALL,
                 "collaboration",
                 "spawn_agent",
-                &json!({ "message": CHILD_PROMPT, "task_name": "worker" }).to_string(),
+                // Upstream's MultiAgentV2 forks the parent's whole history by
+                // default, so the child's request would also carry SPAWN_CALL
+                // and get the parent's reply; this child starts fresh.
+                &json!({ "message": CHILD_PROMPT, "task_name": "worker", "fork_turns": "none" })
+                    .to_string(),
             ),
             ev_completed("parent-1"),
         ]),
@@ -568,7 +569,6 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
             ] {
                 config.features.enable(feature).expect("enable feature");
             }
-            config.use_experimental_unified_exec_tool = true;
         })
         // Host-sandbox security test: local executor on purpose (#708).
         .build(&server)
@@ -576,16 +576,13 @@ async fn issue_789_child_agent_prompt_offers_no_useless_grant() -> anyhow::Resul
     std::mem::forget(server);
     let parent = test.session_configured.thread_id;
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: PARENT_PROMPT.into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let child = tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {

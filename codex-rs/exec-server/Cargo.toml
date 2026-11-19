@@ -30,6 +30,7 @@ codex-build-info = { workspace = true }
 codex-config = { workspace = true }
 codex-core-plugin-common = { workspace = true }
 codex-http-client = { workspace = true }
+codex-model-provider-info = { workspace = true }
 codex-exec-server-protocol = { workspace = true }
 codex-file-system = { workspace = true }
 codex-file-watcher = { workspace = true }
@@ -37,6 +38,7 @@ codex-network-proxy = { workspace = true }
 codex-otel = { workspace = true }
 codex-protocol = { workspace = true }
 codex-sandboxing = { workspace = true }
+codex-secret-broker = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-skills = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
@@ -73,6 +75,7 @@ tokio-tungstenite = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
+zeroize = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 codex-linux-sandbox = { workspace = true }

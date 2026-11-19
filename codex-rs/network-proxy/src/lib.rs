@@ -12,6 +12,8 @@ mod config;
 mod connect_policy;
 mod connection_lifecycle;
 mod credential_broker;
+pub use credential_broker::ModelSnapshotScanError;
+pub use credential_broker::model_credential_occurs_in;
 mod destination;
 // PF-33-S03 contract. Parts are used only by its standalone test target
 // (tests/destination_contract.rs compiles the same file).
@@ -66,6 +68,7 @@ pub use config::NetworkUnixSocketPermissions;
 pub use config::StaticNetworkProxyConfig;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
+pub use credential_broker::BROKERED_CREDENTIALS_ENV_KEY;
 #[cfg(any(unix, windows))]
 pub use credential_broker::CODEX_CREDENTIAL_BROKER_ARG1;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
@@ -79,6 +82,7 @@ pub use credential_broker::IsolatedCredentialDispatcher;
 pub use credential_broker::IsolatedCredentialReceipt;
 pub use credential_broker::IsolatedCredentialRoute;
 pub use credential_broker::IsolatedCredentialUse;
+pub use credential_broker::KnownCredentialScanError;
 pub use credential_broker::ScopedCredentialCallbackError;
 pub use credential_broker::ScopedCredentialInjectionError;
 pub use credential_broker::ScopedCredentialResolver;
@@ -162,6 +166,7 @@ pub use runtime::ConfigReloader;
 pub use runtime::ConfigReloaderFuture;
 pub use runtime::ConfigState;
 pub use runtime::LocalBindingPolicy;
+pub use runtime::MXC_EXPLICIT_LOCAL_BINDING_REQUIRED;
 pub use runtime::NetworkProxyState;
 pub use secret_substitution::BodySecretReplacement;
 pub use secret_substitution::BodySecretSubstitutionConfig;

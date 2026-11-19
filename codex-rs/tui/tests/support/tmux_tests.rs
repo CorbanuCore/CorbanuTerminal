@@ -286,12 +286,17 @@ fn wait_failures_write_complete_redacted_artifacts() -> Result<()> {
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("visible:ok", Duration::from_secs(/*secs*/ 3))?;
     let error = pane
-        .wait_stable_contains("missing-sentinel", Duration::from_millis(/*millis*/ 250))
+        .wait_stable_scrollback_until(
+            "scrollback containing missing-sentinel",
+            Duration::from_millis(/*millis*/ 250),
+            /*lines*/ 100,
+            |screen| screen.contains("missing-sentinel"),
+        )
         .expect_err("missing sentinel should time out")
         .to_string();
 
     assert!(error.contains("missing-sentinel"));
-    assert!(error.contains("last viewport:"));
+    assert!(error.contains("last capture:"));
     assert!(error.contains("visible:ok"));
     let mut files = std::fs::read_dir(&artifact_dir)?
         .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().to_string()))
@@ -326,6 +331,9 @@ fn wait_failures_write_complete_redacted_artifacts() -> Result<()> {
          wait_failures_write_complete"
     );
     assert!(std::fs::read_to_string(artifact_dir.join("pane-metadata.txt"))?.contains("size=40x8"));
+    for file in ["viewport.txt", "scrollback.txt"] {
+        assert!(std::fs::read_to_string(artifact_dir.join(file))?.contains("visible:ok"));
+    }
     Ok(())
 }
 

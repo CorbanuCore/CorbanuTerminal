@@ -91,9 +91,11 @@ async fn daybreak_command_persists_and_confirms_each_selection() -> Result<()> {
     assert_eq!(starts[0]["daybreakEnabled"], true);
     assert!(starts[1]["daybreakEnabled"].is_null());
 
-    let started = server.start_thread(&app.config).await?;
+    let mut started = server.start_thread(&app.config).await?;
     let thread_id = started.session.thread_id;
     app.active_thread_id = Some(thread_id);
+    // Daybreak needs the OpenAI provider; Corbanu's test default is Z.AI.
+    started.session.model_provider_id = "openai".into();
     app.chat_widget.handle_thread_session_quiet(started.session);
     app.chat_widget.update_account_state(
         /*status_account_display*/ None, /*plan_type*/ None,
@@ -205,9 +207,9 @@ async fn daybreak_command_persists_and_confirms_each_selection() -> Result<()> {
     app.chat_widget.set_daybreak_enabled(/*enabled*/ true);
     app.chat_widget
         .set_feature_enabled(Feature::ApiKeyCyberAccessPrograms, /*enabled*/ false);
-    let models = app.chat_widget.model_catalog().models.clone();
+    let models = app.chat_widget.model_catalog().models();
     app.chat_widget.update_account_state(
-        Some(crate::status::StatusAccountDisplay::ApiKey),
+        Some(crate::status::StatusAccountDisplay::ApiKey { env_var: None }),
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,
@@ -491,7 +493,14 @@ pub(super) async fn start_recording_app_server_with_realtime_speech(
     let mut embedded = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        // A server given its own user config file keeps the provider that file selects.
+        if loader_overrides.user_config_path.is_some()
+            || loader_overrides.user_config_profile.is_some()
+        {
+            Vec::new()
+        } else {
+            crate::test_provider_session_flags(config)
+        },
         loader_overrides,
         /*strict_config*/ false,
         codex_config::CloudConfigBundleLoader::default(),
@@ -1872,7 +1881,7 @@ async fn older_external_server_starts_without_unsupported_dynamic_tools_or_histo
 
     let starts = recorded_params(&requests, "thread/start");
     assert_eq!(starts.len(), 6);
-    for attempts in starts.chunks_exact(3) {
+    for attempts in starts.as_chunks::<3>().0 {
         assert_eq!(attempts[0]["dynamicTools"][0]["type"], "namespace");
         assert_eq!(attempts[0]["historyMode"], "paginated");
         assert_eq!(attempts[1]["dynamicTools"], serde_json::Value::Null);
@@ -1972,6 +1981,9 @@ async fn check_dynamic_tool_requests(
     let backend = wiremock::MockServer::start().await;
     let backend_url = format!("{}/backend-api", backend.uri());
     let api_url = format!("{}/v1", backend.uri());
+    // Daybreak needs the OpenAI provider; Corbanu's built-in default is Z.AI.
+    app.config.model_provider_id = "openai".into();
+    app.config.model_provider = app.config.model_providers["openai"].clone();
     app.config.model_provider.base_url = Some(api_url.clone());
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = SqliteConfig::new_for_testing(codex_home.path().abs());
@@ -1988,7 +2000,7 @@ async fn check_dynamic_tool_requests(
     std::fs::write(
         codex_home.path().join("config.toml"),
         format!(
-            "daybreak = true\nmodel_catalog_json = {:?}\nchatgpt_base_url = {backend_url:?}\ncli_auth_credentials_store = \"file\"\nopenai_base_url = {api_url:?}\nfeatures.cli_daybreak = {rollout_enabled}\nfeatures.api_key_cyber_access_programs = {api_key_cyber_access_programs}\n",
+            "model_provider = \"openai\"\ndaybreak = true\nmodel_catalog_json = {:?}\nchatgpt_base_url = {backend_url:?}\ncli_auth_credentials_store = \"file\"\nopenai_base_url = {api_url:?}\nfeatures.cli_daybreak = {rollout_enabled}\nfeatures.api_key_cyber_access_programs = {api_key_cyber_access_programs}\n",
             catalog_path.display().to_string()
         ),
     )?;
@@ -3553,6 +3565,7 @@ async fn cold_paginated_subagent_transcript_excludes_inherited_parent_history() 
                 ),
                 agent_nickname: Some("worker".to_string()),
                 agent_role: Some("worker".to_string()),
+                agent_class: None,
             }),
             parent_thread_id.into(),
             parent_thread_id,
@@ -4168,6 +4181,17 @@ terminal_visualization_instructions = true
     )
     .await;
     let unsaved = app.chat_widget.thread_id().expect("unsaved thread");
+    // New threads now persist eagerly. Model unavailable rollout metadata explicitly so this
+    // still exercises the unsaved-history guard without making the session ephemeral (which
+    // independently disallows both worktree transitions).
+    let mut unsaved_session = app
+        .primary_session_configured
+        .clone()
+        .expect("fresh primary session");
+    unsaved_session.rollout_path = None;
+    app.primary_session_configured = Some(unsaved_session.clone());
+    app.chat_widget
+        .handle_thread_session_quiet(unsaved_session.clone());
     let path = app.chat_widget.rollout_path();
     assert!(path.is_none_or(|path| !rollout_path_is_resumable(&path)));
     let completed = test_turn("completed-unsaved-turn", TurnStatus::Completed, Vec::new());
@@ -4175,7 +4199,7 @@ terminal_visualization_instructions = true
         .store
         .lock()
         .await
-        .set_turns(vec![completed]);
+        .set_session(unsaved_session, vec![completed]);
     for mode in [ManagedWorktreeMode::Fork, ManagedWorktreeMode::New] {
         requests.lock().expect("request recorder lock").clear();
         app.handle_event(
@@ -4789,23 +4813,23 @@ fn session_lifecycle_avoids_redundant_subagent_metadata_reads() -> Result<()> {
                 .await?;
                 let backend_id = app_server.backend_id();
                 let root = app_server
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &app.local_settings,
                         app.config.clone(),
                         root_thread_id,
                         app.resume_model_settings(),
-                        app.resume_permission_settings(),
+                        app.resume_permission_overrides(&app.config),
                     )
                     .await?;
                 app.enqueue_primary_thread_session(root.session, root.turns)
                     .await?;
                 app_server
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &app.local_settings,
                         app.config.clone(),
                         child_thread_id,
                         app.resume_model_settings(),
-                        app.resume_permission_settings(),
+                        app.resume_permission_overrides(&app.config),
                     )
                     .await?;
                 let mut tui = crate::tui::test_support::make_test_tui()?;

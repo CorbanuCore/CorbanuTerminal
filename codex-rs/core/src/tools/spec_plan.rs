@@ -146,6 +146,9 @@ struct CoreToolPlanContext<'a> {
     wait_for_environment_tool_config: Option<&'a Arc<crate::WaitForEnvironmentToolConfig>>,
     default_agent_type_description: &'a str,
     wait_agent_timeouts: WaitAgentTimeoutOptions,
+    /// Effort-only changes reach the model as configuration updates (upstream's request-effort
+    /// baseline), so tool descriptions must not name the turn's effort.
+    reasoning_effort_updates: bool,
 }
 
 #[instrument(level = "trace", skip_all)]
@@ -177,6 +180,10 @@ pub(crate) fn build_tool_router(
         wait_for_environment_tool_config: wait_for_environment_tool_config.as_ref(),
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
+        reasoning_effort_updates: session
+            .services
+            .model_client()
+            .reasoning_effort_override_enabled(model_info),
     };
     let mut registry = ToolRegistry::with_tool_policy(Arc::clone(&session.tool_policy));
     add_core_tool_sources(&context, &mut registry);
@@ -344,6 +351,7 @@ pub(crate) fn build_core_tool_registry(
         wait_for_environment_tool_config,
         default_agent_type_description: &default_agent_type_description,
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
+        reasoning_effort_updates: false,
     };
     let mut registry = ToolRegistry::default();
     add_core_tool_sources(&context, &mut registry);
@@ -578,7 +586,7 @@ pub(crate) fn finalize_tool_router(
             collect_tool_namespaces_info(&registry, &code_mode_tool_names, &model_visible_specs)
         })
         .filter(|info| !info.is_empty());
-    let child_management_tools = required_child_management_tool_names(turn_context, model_info);
+    let child_management_tools = required_child_management_tool_names(turn_context);
 
     Ok(ToolRouter::from_parts(
         registry,
@@ -942,26 +950,21 @@ fn multi_agent_v2_enabled(turn_context: &TurnContext) -> bool {
     turn_context.multi_agent_version == MultiAgentVersion::V2
 }
 
-fn collab_tools_enabled(turn_context: &TurnContext, model_info: &ModelInfo) -> bool {
+fn collab_tools_enabled(turn_context: &TurnContext) -> bool {
     match turn_context.multi_agent_version {
         MultiAgentVersion::Disabled => false,
         MultiAgentVersion::V1 => !exceeds_thread_spawn_depth_limit(
             next_thread_spawn_depth(&turn_context.session_source),
             turn_context.config.agent_max_depth,
         ),
-        MultiAgentVersion::V2 => {
-            !turn_context.config.multi_agent_v2.disable_native_tools
-                && (turn_context.session_source.get_agent_path().is_none()
-                    || model_info.multi_agent_version == Some(MultiAgentVersion::V2))
-        }
+        // D648: every V2 thread can manage children, including models without
+        // catalog metadata. The explicit native-tools off switch still wins.
+        MultiAgentVersion::V2 => !turn_context.config.multi_agent_v2.disable_native_tools,
     }
 }
 
-fn required_child_management_tool_names(
-    turn_context: &TurnContext,
-    model_info: &ModelInfo,
-) -> Vec<ToolName> {
-    if !collab_tools_enabled(turn_context, model_info) {
+fn required_child_management_tool_names(turn_context: &TurnContext) -> Vec<ToolName> {
+    if !collab_tools_enabled(turn_context) {
         return Vec::new();
     }
 
@@ -1647,7 +1650,8 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         ));
     }
 
-    if environment_mode.has_environment() && edit_tools_allowed_by_permission_profile(turn_context)
+    if environment_mode.has_environment()
+        && edit_tools_allowed_by_permission_profile(turn_context, context.environments)
     {
         let include_environment_id = matches!(environment_mode, ToolEnvironmentMode::Multiple);
         if native_structured_edit_protocol_enabled_for(turn_context, context.model_info) {
@@ -1684,8 +1688,14 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     }
 }
 
-fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool {
-    let permission_profile = turn_context.permission_profile();
+/// Corbanu: edit tools are offered only when the step's environments can write. Like
+/// upstream's environment tools, this follows the step's environments, not the turn's
+/// initial ones.
+fn edit_tools_allowed_by_permission_profile(
+    turn_context: &TurnContext,
+    environments: &TurnEnvironmentSnapshot,
+) -> bool {
+    let permission_profile = turn_context.permission_profile_for_environments(environments);
     let file_system_policy = permission_profile.file_system_sandbox_policy();
     match file_system_policy.kind {
         FileSystemSandboxKind::Unrestricted | FileSystemSandboxKind::ExternalSandbox => true,
@@ -1703,7 +1713,7 @@ fn edit_tools_allowed_by_permission_profile(turn_context: &TurnContext) -> bool 
 #[instrument(level = "trace", skip_all)]
 fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut ToolRegistry) {
     let turn_context = context.turn_context;
-    if collab_tools_enabled(turn_context, context.model_info) {
+    if collab_tools_enabled(turn_context) {
         if multi_agent_v2_enabled(turn_context) {
             let model_messages = ResolvedModelMessages::from_model(context.model_info);
             let spawn_agent_description =
@@ -1727,12 +1737,30 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 agent_type_description(turn_context, context.default_agent_type_description);
             let hide_spawn_agent_metadata =
                 turn_context.config.multi_agent_v2.hide_spawn_agent_metadata;
+            if turn_context
+                .config
+                .multi_agent_v2
+                .expose_spawn_agent_model_overrides
+            {
+                registry.add_with_exposure(
+                    crate::tools::handlers::list_models::Handler {
+                        supports_cross_provider_overrides: true,
+                        // Sync spawn no longer exposes a service_tier selector.
+                        expose_service_tiers: false,
+                    },
+                    exposure,
+                );
+            }
             let spawn_options = SpawnAgentToolOptions {
                 available_models: spawn_agent_available_models(
                     turn_context,
                     /*supports_cross_provider_overrides*/ true,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
+                inherited_runtime: spawn_agent_inherited_runtime(
+                    turn_context,
+                    context.model_info,
+                    context.reasoning_effort_updates,
+                ),
                 agent_type_description,
                 // PF Terminal ships hierarchy roles (Nazgul, Troll, and Orc). They are
                 // real runtime profiles, not optional user configuration, so the native
@@ -1854,7 +1882,11 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     turn_context,
                     /*supports_cross_provider_overrides*/ false,
                 ),
-                inherited_runtime: spawn_agent_inherited_runtime(turn_context, context.model_info),
+                inherited_runtime: spawn_agent_inherited_runtime(
+                    turn_context,
+                    context.model_info,
+                    context.reasoning_effort_updates,
+                ),
                 agent_type_description,
                 // Built-in PF hierarchy roles remain selectable even when the operator has not
                 // created any custom role files.
@@ -1868,6 +1900,13 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
                 expose_account: turn_context.config.features.enabled(Feature::NamedAccounts),
             };
+            registry.add_with_exposure(
+                crate::tools::handlers::list_models::Handler {
+                    supports_cross_provider_overrides: false,
+                    expose_service_tiers: true,
+                },
+                exposure,
+            );
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
             registry.add_with_exposure(SendInputHandler, exposure);
             registry.add_with_exposure(ResumeAgentHandler, exposure);
@@ -1989,7 +2028,7 @@ fn v1_plain_function_subagents_enabled(turn_context: &TurnContext) -> bool {
     !namespace_tools_enabled(turn_context)
 }
 
-fn spawn_agent_available_models(
+pub(crate) fn spawn_agent_available_models(
     turn_context: &TurnContext,
     supports_cross_provider_overrides: bool,
 ) -> Vec<ModelPreset> {
@@ -2040,6 +2079,7 @@ fn spawn_agent_available_models(
 fn spawn_agent_inherited_runtime(
     turn_context: &TurnContext,
     model_info: &ModelInfo,
+    reasoning_effort_updates: bool,
 ) -> Option<SpawnAgentRuntime> {
     let model_provider = turn_context.config.model_provider_id.clone();
     turn_context
@@ -2057,6 +2097,9 @@ fn spawn_agent_inherited_runtime(
                 .filter(|_| turn_context.model_info().slug == model_info.slug)
                 .cloned()
                 .or_else(|| model_info.default_reasoning_level.clone()),
+            // #1532 (`thread_sample`): with effort updates the description must not change
+            // when only the turn's effort does (the child inherits that effort either way).
+            effort_follows_turn: reasoning_effort_updates,
             service_tier: turn_context.config.service_tier.clone(),
         })
 }

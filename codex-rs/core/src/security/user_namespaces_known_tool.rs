@@ -31,7 +31,7 @@ use std::path::Path;
 
 use codex_sandboxing::user_namespaces::KNOWN_TOOLS;
 use codex_shell_command::bash::extract_bash_command;
-use codex_shell_command::bash::parse_shell_script_into_commands;
+use codex_shell_command::bash::parse_shell_script_into_words_with_literal_flags;
 
 /// Folders a program may run from: the system's, and Nix's system-wide
 /// profiles.
@@ -70,27 +70,41 @@ pub(crate) fn known_tool(command: &[String], lookup: &Lookup<'_>) -> Option<&'st
             if !SHELLS.contains(&resolve(shell, lookup)?) {
                 return None;
             }
-            let mut commands = parse_shell_script_into_commands(script)?;
+            // Upstream's plain-command parse refuses a word bash may still
+            // expand anywhere in the script, which would stop offering
+            // `nix build .#hello`. The program and the wrappers before it must
+            // be literal; the tool's own arguments don't choose the program.
+            let mut commands = parse_shell_script_into_words_with_literal_flags(script)?;
             if commands.len() != 1 {
                 return None;
             }
             program_after_wrappers(&commands.pop()?, /*in_script*/ true, lookup)
         }
-        None => program_after_wrappers(command, /*in_script*/ false, lookup),
+        None => {
+            // An argv runs as given: every word is literal.
+            let words: Vec<(String, bool)> =
+                command.iter().map(|word| (word.clone(), true)).collect();
+            program_after_wrappers(&words, /*in_script*/ false, lookup)
+        }
     }
 }
 
 /// The known tool `words` (one simple command) runs, after the wrappers.
 /// `in_script`: the words are a shell script's, so its first word may be the
-/// builtin `exec` or `command`.
+/// builtin `exec` or `command`. Each word comes with whether its spelling is
+/// literal; a word that may still expand is never resolved as a program, a
+/// wrapper or a wrapper option.
 fn program_after_wrappers(
-    mut words: &[String],
+    mut words: &[(String, bool)],
     in_script: bool,
     lookup: &Lookup<'_>,
 ) -> Option<&'static str> {
     let mut first_word = true;
     loop {
-        let (first, rest) = words.split_first()?;
+        let ((first, first_literal), rest) = words.split_first()?;
+        if !first_literal {
+            return None;
+        }
         // A shell builtin only as the script's first word, by bare name;
         // anywhere else `exec` or `command` is whatever program has that name.
         let builtin = in_script && first_word && matches!(first.as_str(), "exec" | "command");
@@ -111,7 +125,11 @@ fn program_after_wrappers(
             _ => return KNOWN_TOOLS.iter().copied().find(|tool| *tool == name),
         };
         let mut at = 0;
-        while let Some(option) = rest.get(at).map(String::as_str) {
+        while let Some((option, literal)) = rest.get(at) {
+            let option = option.as_str();
+            if !literal {
+                return None;
+            }
             if option == "--" {
                 at += 1;
                 break;
@@ -121,7 +139,9 @@ fn program_after_wrappers(
             }
             at += 1;
             if takes_value.contains(&option) {
-                rest.get(at)?;
+                if !rest.get(at)?.1 {
+                    return None;
+                }
                 at += 1;
             } else if !(flags.contains(&option)
                 || (name == "env" && option.starts_with("--unset=")))

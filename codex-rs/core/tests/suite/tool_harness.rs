@@ -6,14 +6,10 @@ use std::fs;
 use std::future::Future;
 
 use assert_matches::assert_matches;
-<<<<<<< HEAD
 use codex_models_manager::bundled_models_response;
-||||||| 413492cd6c
-=======
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::plan_tool::StepStatus;
@@ -577,17 +573,13 @@ async fn structured_edit_tool_executes_via_apply_patch_events_inner() -> anyhow:
         turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
 
     codex
-<<<<<<< HEAD
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "please apply a structured edit".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd_path)),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_requests(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -600,8 +592,8 @@ async fn structured_edit_tool_executes_via_apply_patch_events_inner() -> anyhow:
                     },
                 }),
                 ..Default::default()
-            },
-        })
+            }),
+        )
         .await?;
 
     let mut saw_file_change_started = false;
@@ -728,16 +720,13 @@ async fn structured_write_tool_creates_file_via_apply_patch_events_inner() -> an
         turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
 
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "please create a file with structured_write".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                environments: Some(local_selections(cwd_path)),
+            }])
+            .with_thread_settings(ThreadSettingsOverrides {
+                environments: Some(local_requests(cwd_path)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
@@ -750,8 +739,8 @@ async fn structured_write_tool_creates_file_via_apply_patch_events_inner() -> an
                     },
                 }),
                 ..Default::default()
-            },
-        })
+            }),
+        )
         .await?;
 
     let mut saw_file_change_started = false;
@@ -921,15 +910,8 @@ async fn apply_patch_fallback_preserves_tools_and_uses_structured_edit_inner() -
         turn_permission_fields(PermissionProfile::Disabled, cwd_path.as_path());
 
     codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-||||||| 413492cd6c
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
-=======
         .start_or_steer_turn(
             TurnInputRequest::user_input(vec![UserInput::Text {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 text: "please apply a patch".into(),
                 text_elements: Vec::new(),
             }])
@@ -1043,12 +1025,12 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     let mut builder = test_codex().with_model("test-gpt-5-codex");
     let test = builder.build(&server).await?;
 
-    let command_args = json!({ "command": "echo same check", "login": false }).to_string();
+    let command_args = json!({ "cmd": "echo same check", "login": false }).to_string();
     let looping_responses = (1..=11)
         .map(|idx| {
             sse(vec![
                 ev_response_created(&format!("resp-{idx}")),
-                ev_function_call(&format!("call-{idx}"), "shell_command", &command_args),
+                ev_function_call(&format!("call-{idx}"), "exec_command", &command_args),
                 ev_completed(&format!("resp-{idx}")),
             ])
         })
@@ -1056,16 +1038,13 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     let mock = responses::mount_sse_sequence(&server, looping_responses).await;
 
     test.codex
-        .submit(Op::UserInput {
-            items: vec![UserInput::Text {
+        .start_or_steer_turn(
+            TurnInputRequest::user_input(vec![UserInput::Text {
                 text: "check it".into(),
                 text_elements: Vec::new(),
-            }],
-            final_output_json_schema: None,
-            responsesapi_client_metadata: None,
-            additional_context: Default::default(),
-            thread_settings: Default::default(),
-        })
+            }])
+            .with_thread_settings(Default::default()),
+        )
         .await?;
     let EventMsg::Error(error) =
         wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await
@@ -1094,7 +1073,7 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     for (idx, request) in requests.iter().enumerate().take(11).skip(4) {
         let (output, success) = call_output(request, &format!("call-{idx}"));
         assert!(
-            output.starts_with("Not run: this exact `shell_command` call"),
+            output.starts_with("Not run: this exact `exec_command` call"),
             "{output}"
         );
         assert_ne!(success, Some(true));

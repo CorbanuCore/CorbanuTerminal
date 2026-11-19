@@ -1269,6 +1269,7 @@ fn prune_planted(registry: &Path, absent: &[PathBuf]) -> Result<()> {
 /// The records of the session files in `registry` that can be read (a live
 /// session's file is shared for reading).
 fn session_records(registry: &Path) -> Result<Vec<SessionRecord>> {
+    crate::integrity_registry::check_registry(registry)?;
     let mut records = Vec::new();
     for entry in
         std::fs::read_dir(registry).with_context(|| format!("list {}", registry.display()))?
@@ -1288,6 +1289,7 @@ fn session_records(registry: &Path) -> Result<Vec<SessionRecord>> {
 }
 
 fn load_planted(registry: &Path) -> Result<PlantedMetadata> {
+    crate::integrity_registry::check_registry(registry)?;
     let path = registry.join(PLANTED_FILE);
     match std::fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes)
@@ -1511,30 +1513,47 @@ fn ensure_registry() -> Result<PathBuf> {
         match std::fs::symlink_metadata(dir) {
             Ok(meta) => {
                 if !meta.is_dir() || meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                    anyhow::bail!(
-                        "{} is not a plain folder, so the Windows sandbox can't keep its integrity label records there; remove it",
-                        dir.display()
-                    );
+                    return Err(crate::integrity_registry::refusal(
+                        dir,
+                        "not a plain records folder",
+                    ));
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 std::fs::create_dir(dir).with_context(|| format!("create {}", dir.display()))?;
             }
-            Err(err) => return Err(err).with_context(|| format!("inspect {}", dir.display())),
+            Err(err) => return Err(crate::integrity_registry::refusal(dir, err)),
         }
+        // D598: an inherited sandbox deny cannot restrict a foreign owner's
+        // WRITE_DAC. Refuse before changing labels or trusting any records.
+        crate::integrity_registry::check_path(dir)?;
         // SAFETY: reads and sets the label of a plain folder of the host's.
         unsafe {
             if effective_label_is_low(dir)? {
-                anyhow::bail!(
-                    "{} has a Low integrity label, so a sandboxed command may have made it; remove it",
-                    dir.display()
-                );
+                return Err(crate::integrity_registry::refusal(
+                    dir,
+                    "a Low integrity label means a sandboxed command may have made it",
+                ));
             }
-            label_private_dir_medium(dir)
-                .with_context(|| format!("label {} Medium", dir.display()))?;
+            label_private_dir_medium(dir).map_err(|err| private_label_error(dir, &err))?;
         }
     }
+    crate::integrity_registry::check_entries(&registry)?;
     Ok(registry)
+}
+
+/// #2584: one self-contained message (callers may print only the outermost
+/// one) with the Win32 cause and what the folder needs. The usual cause is a
+/// LocalAppData whose permissions give the user Modify but not Full control:
+/// the label needs WRITE_OWNER, which a user's own profile grants.
+fn private_label_error(dir: &Path, err: &anyhow::Error) -> anyhow::Error {
+    anyhow::anyhow!(
+        "label {} Medium: {err:#}. The non-admin sandbox keeps its records in this \
+         folder and must give it a Medium integrity label first, which needs \
+         Full control of the folder (WRITE_OWNER, as in your own AppData\\Local) \
+         and a file system that holds integrity labels",
+        dir.display()
+    )
 }
 
 fn lock(registry: &Path) -> Result<File> {
@@ -1597,6 +1616,7 @@ fn create_session(lease: &IntegrityLease, roots: &BTreeSet<PathBuf>) -> Result<(
 }
 
 fn load_labels(registry: &Path) -> Result<Labels> {
+    crate::integrity_registry::check_registry(registry)?;
     let path = registry.join(LABELS_FILE);
     match std::fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| {
@@ -1624,6 +1644,7 @@ fn save_labels(registry: &Path, labels: &Labels) -> Result<()> {
 }
 
 fn load_denies(registry: &Path) -> Result<DeleteChildDenies> {
+    crate::integrity_registry::check_registry(registry)?;
     let path = registry.join(DENIES_FILE);
     match std::fs::read(&path) {
         Ok(bytes) => serde_json::from_slice(&bytes).with_context(|| {
@@ -1681,3 +1702,7 @@ pub(crate) fn recorded_roots() -> Result<Vec<PathBuf>> {
     drop(lock);
     Ok(labels.roots.into_keys().collect())
 }
+
+#[cfg(test)]
+#[path = "integrity_leases_tests.rs"]
+mod tests;

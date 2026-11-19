@@ -3,10 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codex_core::CodexThread;
-<<<<<<< HEAD
-use codex_core::StartThreadOptions;
-||||||| 413492cd6c
-=======
 use codex_core::InputWaitOutcome;
 use codex_core::StartIfIdleSubmission;
 use codex_core::StartThreadOptions;
@@ -14,23 +10,14 @@ use codex_core::TurnInput;
 use codex_core::TurnInputRequest;
 use codex_core::TurnInputSubmission;
 use codex_core::TurnStartOptions;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_core::config::CurrentTimeReminderConfig;
 use codex_extension_items::ExtensionItem;
 use codex_extension_items::sleep::SleepItem;
 use codex_features::Feature;
-<<<<<<< HEAD
-use codex_models_manager::bundled_models_response;
-||||||| 413492cd6c
-=======
 use codex_history::RolloutItem;
 use codex_login::CodexAuth;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_models_manager::bundled_models_response;
 use codex_protocol::AgentPath;
-<<<<<<< HEAD
-use codex_protocol::items::CollabAgentTool;
-||||||| 413492cd6c
-=======
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
@@ -38,36 +25,24 @@ use codex_protocol::dynamic_tools::DynamicToolCallOutputContentItem;
 use codex_protocol::dynamic_tools::DynamicToolFunctionSpec;
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::items::CollabAgentTool;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::PermissionProfile;
-<<<<<<< HEAD
-use codex_protocol::openai_models::ToolMode;
-||||||| 413492cd6c
-=======
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+use codex_protocol::openai_models::ToolMode;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
-<<<<<<< HEAD
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
-||||||| 413492cd6c
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-=======
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::turn_input::CyberAccessProgram;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -559,6 +534,50 @@ impl codex_extension_api::ThreadLifecycleContributor<codex_core::config::Config>
     }
 }
 
+/// Main's 4038e24b14 check, kept beside upstream's wake test below: the
+/// queue-only mail that woke the sleeping root reaches the model with the
+/// next human turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn queue_only_agent_mail_wakes_sleeping_root_and_persists_message() {
+    const CHILD_MESSAGE: &str = "worker completed";
+
+    let (server, _completions) = start_streaming_sse_server(vec![
+        response_completed_chunks("resp-1"),
+        response_completed_chunks("resp-2"),
+    ])
+    .await;
+    let mut extensions =
+        codex_extension_api::ExtensionRegistryBuilder::<codex_core::config::Config>::new();
+    extensions.thread_lifecycle_contributor(Arc::new(SleepingRootExtension));
+    let codex = test_codex()
+        .with_model("gpt-5.4")
+        .with_extensions(Arc::new(extensions.build()))
+        .build_with_streaming_server(&server)
+        .await
+        .expect("build Codex test session")
+        .codex;
+
+    enqueue_queue_only_agent_mail(&codex, CHILD_MESSAGE).await;
+    wait_for_turn_complete(&codex).await;
+
+    assert_eq!(server.requests().await.len(), 1);
+    submit_user_input(&codex, "acknowledge the worker update").await;
+    wait_for_turn_complete(&codex).await;
+    assert_eq!(server.requests().await.len(), 2);
+    let requests = server.requests().await;
+    let second: Value = from_slice(&requests[1]).expect("parse second request");
+    assert!(
+        second["input"]
+            .as_array()
+            .expect("request input")
+            .iter()
+            .any(|item| {
+                item.get("type").and_then(Value::as_str) == Some("agent_message")
+                    && item["content"] == json!([{"type": "input_text", "text": CHILD_MESSAGE}])
+            })
+    );
+}
+
 #[test_case(false, Some("automation"), None, false; "live_root")]
 #[test_case(true, Some("automation"), None, false; "reloaded_root")]
 #[test_case(true, Some("automation"), Some("original-parent"), false; "reloaded_delegated")]
@@ -573,15 +592,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
 ) -> anyhow::Result<()> {
     const CHILD_MESSAGE: &str = "worker completed";
 
-<<<<<<< HEAD
-    let (server, _completions) = start_streaming_sse_server(vec![
-        response_completed_chunks("resp-1"),
-        response_completed_chunks("resp-2"),
-    ])
-||||||| 413492cd6c
-    let (server, _completions) =
-        start_streaming_sse_server(vec![response_completed_chunks("resp-1")]).await;
-=======
     let server = responses::start_mock_server().await;
     let requests = responses::mount_sse_sequence(
         &server,
@@ -591,7 +601,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
             responses::sse_completed("resp-wake"),
         ],
     )
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     .await;
     let mut extensions =
         codex_extension_api::ExtensionRegistryBuilder::<codex_core::config::Config>::new();
@@ -651,43 +660,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
     enqueue_queue_only_agent_mail(&test.codex, CHILD_MESSAGE).await;
     wait_for_turn_complete(&test.codex).await;
 
-<<<<<<< HEAD
-    assert_eq!(server.requests().await.len(), 1);
-    submit_user_input(&codex, "acknowledge the worker update").await;
-    wait_for_turn_complete(&codex).await;
-    assert_eq!(server.requests().await.len(), 2);
-    let requests = server.requests().await;
-    let second: Value = from_slice(&requests[1]).expect("parse second request");
-    assert!(
-        second["input"]
-            .as_array()
-            .expect("request input")
-            .iter()
-            .any(|item| {
-                item.get("type").and_then(Value::as_str) == Some("agent_message")
-                    && item["content"] == json!([{"type": "input_text", "text": CHILD_MESSAGE}])
-            })
-    );
-||||||| 413492cd6c
-    assert_eq!(server.requests().await.len(), 1);
-    let history = codex
-        .load_history(/*include_archived*/ true)
-        .await
-        .expect("load persisted thread history");
-    assert!(history.items.iter().any(|item| {
-        matches!(
-            item,
-            RolloutItem::ResponseItem(codex_protocol::models::ResponseItem::AgentMessage {
-                content,
-                ..
-            }) if content.iter().any(|content| matches!(
-                content,
-                codex_protocol::models::AgentMessageInputContent::InputText { text }
-                    if text == CHILD_MESSAGE
-            ))
-        )
-    }));
-=======
     let captured = requests.requests();
     let metadata = captured
         .iter()
@@ -723,26 +695,46 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
             vec![json!({"cyber": "standard"}); 2],
         );
     }
+    // Main holds queue-only mail for the next human turn after waking a sleeping root.
+    // Preserve the wake-attribution assertions above, then verify delivery and persistence.
+    let acknowledgement =
+        responses::mount_sse_once(&server, responses::sse_completed("resp-acknowledge")).await;
+    test.submit_turn("acknowledge the worker update").await?;
+    assert!(
+        acknowledgement
+            .single_request()
+            .body_contains_text(CHILD_MESSAGE)
+    );
+    test.codex.flush_rollout().await?;
     let history = test
         .codex
         .load_history(/*include_archived*/ true)
         .await
         .expect("load persisted thread history");
-    assert!(history.items.iter().any(|item| {
-        matches!(
-            item,
-            RolloutItem::ResponseItem(envelope)
-                if matches!(
-                    &envelope.item,
-                    codex_protocol::models::ResponseItem::AgentMessage { content, .. }
-                        if content.iter().any(|content| matches!(
-                            content,
-                            codex_protocol::models::AgentMessageInputContent::InputText { text }
-                                if text == CHILD_MESSAGE
-                        ))
-                )
-        )
-    }));
+    // Main's #1545 contract persists the communication, including delivery bookkeeping,
+    // then reconstructs its AgentMessage on resume.
+    let delivered_mail = history
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            RolloutItem::InterAgentCommunication(communication)
+                if communication.content == CHILD_MESSAGE =>
+            {
+                Some(communication)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(delivered_mail.len(), 1);
+    let communication = delivered_mail[0];
+    assert_eq!(
+        communication.author,
+        AgentPath::try_from("/root/worker").expect("worker path")
+    );
+    assert_eq!(communication.recipient, AgentPath::root());
+    assert!(!communication.trigger_turn);
+    assert!(communication.id.is_some());
+    assert!(communication.recorded_input_order.is_some());
 
     if parent.is_none() {
         return Ok(());
@@ -782,7 +774,6 @@ async fn queue_only_agent_mail_wakes_sleeping_root_with_previous_turn_context(
         (Some("composer"), Some("new-parent"), Some("new-root")),
     );
     Ok(())
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Clone, Copy)]
@@ -1280,17 +1271,10 @@ async fn any_new_input_interrupts_sleep(input: WaitInput) {
     wait_for_sleep_item_completed(&codex, FIRST_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_sleep_item_started(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
 
-<<<<<<< HEAD
     // Not `submit_agent_mail`: its barrier wait discards other events, and the mail can end
     // the sleep before the barrier's response arrives, which lost this completion (#349).
     // The sleep's completion already shows the mail was handled.
     enqueue_agent_mail(&codex, "new mailbox input", AgentMailDelivery::QueueOnly).await;
-||||||| 413492cd6c
-    submit_queue_only_agent_mail(&codex, "new mailbox input").await;
-=======
-    // The list-voices barrier can consume the sleep completion that we need to observe next.
-    enqueue_queue_only_agent_mail(&codex, "new mailbox input").await;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     wait_for_sleep_item_completed(&codex, SECOND_SLEEP_CALL_ID, SLEEP_DURATION_MS).await;
     wait_for_turn_complete(&codex).await;
 
@@ -2792,6 +2776,7 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
     pending_input: PendingInputAfterFailure,
 ) -> anyhow::Result<()> {
     const PENDING_MESSAGE: &str = "pending input must survive the failed compaction";
+    const TRIGGERING_PROMPT: &str = "prompt that needs compaction";
     let (release_failure, failure_gate) = oneshot::channel();
     let initial_output = match failure_point {
         CompactionFailurePoint::PreTurn => ev_message_item_done("initial", "first answer"),
@@ -2867,7 +2852,7 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
     if pending_input == PendingInputAfterFailure::QueuedMail {
         submit_queue_only_agent_mail(codex, PENDING_MESSAGE).await;
     }
-    submit_user_input(codex, "prompt that needs compaction").await;
+    submit_user_input(codex, TRIGGERING_PROMPT).await;
     tokio::time::timeout(
         std::time::Duration::from_secs(/*secs*/ 10),
         server.wait_for_request_count(/*count*/ 2),
@@ -2939,6 +2924,11 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
         .items
         .iter()
         .filter_map(|item| {
+            // Main's #1545 contract persists delivered mail as the communication itself.
+            if let RolloutItem::InterAgentCommunication(communication) = item {
+                return (communication.content == PENDING_MESSAGE)
+                    .then_some(communication.content.as_str());
+            }
             let RolloutItem::ResponseItem(envelope) = item else {
                 return None;
             };
@@ -2964,6 +2954,26 @@ async fn terminal_compaction_error_does_not_retry_pending_input(
         })
         .collect::<Vec<_>>();
     assert_eq!(saved_pending_messages, vec![PENDING_MESSAGE]);
+    // Main-merge-9 (#2453): the prompt admitted with the failed turn is saved exactly once.
+    let saved_triggering_prompts = history
+        .items
+        .iter()
+        .filter(|item| {
+            let RolloutItem::ResponseItem(envelope) = item else {
+                return false;
+            };
+            matches!(
+                &envelope.item,
+                ResponseItem::Message { role, content, .. }
+                    if role == "user"
+                        && content.iter().any(|content| matches!(
+                            content,
+                            ContentItem::InputText { text } if text == TRIGGERING_PROMPT
+                        ))
+            )
+        })
+        .count();
+    assert_eq!(saved_triggering_prompts, 1);
 
     // The failed turn must not poison a later explicit retry once compaction can succeed.
     submit_user_input(codex, "retry after quota resets").await;

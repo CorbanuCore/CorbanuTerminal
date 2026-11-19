@@ -32,7 +32,9 @@ async fn program_status_tracks_live_results_and_resolved_approvals() {
         },
     );
     statuses.push(chat.desired_program_status());
+    // Corbanu's approval prompt: a decision key highlights its option and Enter confirms it.
     chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     statuses.push(chat.desired_program_status());
     handle_turn_completed(&mut chat, "status-turn", /*duration_ms*/ None);
     statuses.push(chat.desired_program_status());

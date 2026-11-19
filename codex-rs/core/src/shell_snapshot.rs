@@ -42,6 +42,12 @@ use tokio::time::timeout;
 use tracing::Instrument;
 use tracing::info_span;
 
+#[path = "shell_snapshot_filter.rs"]
+mod filter;
+
+#[cfg(test)]
+#[path = "shell_snapshot_async_tests.rs"]
+mod async_tests;
 #[path = "shell_snapshot_sandbox.rs"]
 mod sandbox;
 
@@ -95,6 +101,7 @@ struct SnapshotCredentials {
     binding_context_credential_keys: HashMap<String, Vec<String>>,
 }
 
+#[derive(Clone)]
 struct SnapshotCredentialBroker {
     network_proxy: NetworkProxy,
     shell_environment_policy: ShellEnvironmentPolicy,
@@ -110,30 +117,6 @@ struct FailOpenAlias {
 const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
 const SNAPSHOT_RETENTION: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days retention.
 const SNAPSHOT_DIR: &str = "shell_snapshots";
-/// #310: shell snapshots are replayable files under the session home. Never
-/// persist conventional credential-bearing variables into them, whatever the
-/// shell environment policy admits. A name-based safeguard; runtime auth should
-/// still prefer the vault so provider secrets do not enter the process
-/// environment in the first place. Matched case-insensitively.
-const SECRET_EXPORT_NAME_PATTERNS: &[&str] = &[
-    "*_API_KEY",
-    "*_TOKEN",
-    "*_SECRET",
-    "*_PASSWORD",
-    "*_PASSWD",
-    "*_PRIVATE_KEY",
-    "*_CREDENTIAL",
-    "*_CREDENTIALS",
-    "*_SECRET_*",
-    "API_KEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSWD",
-    "PRIVATE_KEY",
-    "CREDENTIAL",
-    "CREDENTIALS",
-];
 
 impl ShellSnapshot {
     pub(crate) fn new(
@@ -221,7 +204,10 @@ impl ShellSnapshot {
         // PF-27-S02 launch contract (no refusal, no protected-read denial, no
         // environment scrub). While the contract is armed it is skipped; a
         // snapshot is only a speed-up, so skipping it fails closed.
-        if sandbox.is_some() && crate::security::launch_contract::active().is_some() {
+        if !sandboxed_snapshot_allowed(
+            sandbox.is_some(),
+            crate::security::launch_contract::active().is_some(),
+        ) {
             return None;
         }
         let snapshot_span = info_span!("shell_snapshot", thread_id = %config.session_id);
@@ -600,7 +586,11 @@ async fn write_shell_snapshot(
         removed_env_vars,
     )
     .await?;
+    write_filtered_snapshot(output_path, snapshot).await?;
+    Ok(credentials)
+}
 
+async fn write_filtered_snapshot(output_path: &AbsolutePathBuf, snapshot: String) -> Result<()> {
     if let Some(parent) = output_path.parent() {
         let parent_display = parent.display();
         fs::create_dir_all(&parent)
@@ -613,7 +603,7 @@ async fn write_shell_snapshot(
         .await
         .with_context(|| format!("Failed to write snapshot to {snapshot_path}"))?;
 
-    Ok(credentials)
+    Ok(())
 }
 
 async fn capture_snapshot(
@@ -647,17 +637,61 @@ async fn capture_snapshot(
     } else {
         SnapshotShellMode::NonLogin
     };
-    let raw_snapshot = run_script_with_timeout(
-        shell,
-        &script,
-        SNAPSHOT_TIMEOUT,
-        shell_mode,
-        cwd,
-        credential_broker,
-        sandbox,
-        removed_env_vars,
-    )
-    .await?;
+    let raw_snapshot = zeroize::Zeroizing::new(
+        run_script_with_timeout(
+            shell,
+            &script,
+            SNAPSHOT_TIMEOUT,
+            shell_mode,
+            cwd,
+            credential_broker,
+            sandbox,
+            removed_env_vars,
+        )
+        .await?,
+    );
+    let credential_broker = credential_broker.cloned();
+    let shell_environment_policy = shell_environment_policy.clone();
+    let removed_env_vars = removed_env_vars.to_vec();
+    let runtime = tokio::runtime::Handle::current();
+    run_snapshot_filter(SNAPSHOT_TIMEOUT, move || {
+        filter_captured_snapshot(
+            &raw_snapshot,
+            shell_type,
+            &shell_environment_policy,
+            credential_broker.as_ref(),
+            broker_config_revision,
+            &removed_env_vars,
+            &runtime,
+        )
+    })
+    .await
+}
+
+/// The blocking worker owns the zeroizing raw capture and a strong proxy
+/// reference. It cannot write a file, including after timeout or cancellation.
+async fn run_snapshot_filter<T: Send + 'static>(
+    scan_timeout: Duration,
+    filter: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    // Dropping this handle aborts queued work. Running scans retain their
+    // existing hard bounds; their late results are discarded without writing.
+    let task = tokio_util::task::AbortOnDropHandle::new(tokio::task::spawn_blocking(filter));
+    timeout(scan_timeout, task)
+        .await
+        .context("Snapshot credential scan timed out")?
+        .context("Snapshot credential scan failed")?
+}
+
+fn filter_captured_snapshot(
+    raw_snapshot: &str,
+    shell_type: ShellType,
+    shell_environment_policy: &ShellEnvironmentPolicy,
+    credential_broker: Option<&SnapshotCredentialBroker>,
+    broker_config_revision: u64,
+    removed_env_vars: &[String],
+    runtime: &tokio::runtime::Handle,
+) -> Result<(String, Option<SnapshotCredentials>)> {
     let mut capture = CapturedSnapshot::parse(shell_type, raw_snapshot.as_bytes())
         .ok_or_else(|| anyhow!("invalid shell snapshot capture"))?;
     // #310: no secret-named export, nor a provider credential name, is written
@@ -665,10 +699,18 @@ async fn capture_snapshot(
     // shell startup files define no longer reaches commands through the
     // snapshot (as on main). The captured environment, and so the broker's
     // credential and alias handling, is untouched.
-    let secret_exports = secret_export_patterns(removed_env_vars);
-    capture.retain_exports(|key| !secret_exports.iter().any(|pattern| pattern.matches(key)));
+    // #2314: nor is any export whose value carries a protected credential,
+    // including (D685) one the broker already holds whose source was unset.
+    let credential_filter = filter::retain_safe_exports(
+        &mut capture,
+        raw_snapshot.len(),
+        removed_env_vars,
+        credential_broker.map(|broker| &broker.network_proxy),
+    )?;
     let Some(credential_broker) = credential_broker else {
-        return Ok((capture.render_script(shell_environment_policy), None));
+        let snapshot = capture.render_script(shell_environment_policy);
+        credential_filter.ensure_clean(&snapshot)?;
+        return Ok((snapshot, None));
     };
 
     let original_env = std::str::from_utf8(capture.environment)?
@@ -684,7 +726,9 @@ async fn capture_snapshot(
     let policy = &credential_broker.shell_environment_policy;
     // Child visibility must not change the trusted destination of an inherited credential.
     let inherited_env = std::env::vars().collect();
-    let network_config = credential_broker.network_proxy.current_cfg().await?;
+    // This function runs on a blocking thread; retain the original ordering
+    // of the asynchronous config read relative to credential filtering.
+    let network_config = runtime.block_on(credential_broker.network_proxy.current_cfg())?;
     let inherited_env = network_config
         .credential_broker_context
         .with_fallbacks(&inherited_env);
@@ -916,6 +960,7 @@ async fn capture_snapshot(
     else {
         bail!("shell snapshot contains a brokered credential outside exported environment");
     };
+    credential_filter.ensure_clean(&snapshot)?;
     let mut startup_credential_keys = brokered_credential_value_env_keys(&discovery_env);
     startup_credential_keys.extend(unbrokered_credentials.keys().cloned());
     unset_credential_keys.extend(rejected_alias_keys.into_iter().filter(|key| {
@@ -1081,7 +1126,7 @@ async fn validate_snapshot(
 /// configured name that is not a plain identifier is skipped, so it cannot act
 /// as a wildcard.
 fn secret_export_patterns(removed_env_vars: &[String]) -> Vec<EnvironmentVariablePattern> {
-    SECRET_EXPORT_NAME_PATTERNS
+    codex_shell_command::shell_snapshot::SECRET_EXPORT_NAME_PATTERNS
         .iter()
         .copied()
         .chain(
@@ -1102,6 +1147,12 @@ fn is_plain_env_name(name: &str) -> bool {
         && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
+/// D544 (a): no sandboxed snapshot while the PF-27-S02 launch contract is armed (its login
+/// shell would start outside the contract); an unsandboxed snapshot is unaffected.
+fn sandboxed_snapshot_allowed(sandboxed: bool, launch_contract_armed: bool) -> bool {
+    !(sandboxed && launch_contract_armed)
+}
+
 /// #310: whether `name` is a provider credential variable the snapshot shell
 /// does not inherit.
 fn is_removed_env_var(name: &str, removed_env_vars: &[String]) -> bool {
@@ -1110,6 +1161,10 @@ fn is_removed_env_var(name: &str, removed_env_vars: &[String]) -> bool {
         .any(|removed| removed.eq_ignore_ascii_case(name))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Snapshot execution keeps shell, timeout, environment, and sandbox inputs explicit"
+)]
 async fn run_script_with_timeout(
     shell: &Shell,
     script: &str,
@@ -1219,8 +1274,8 @@ async fn run_script_with_timeout(
 
     if !output.status.success() {
         let status = output.status;
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Snapshot command exited with status {status}: {stderr}");
+        // Startup diagnostics may contain the very credentials being captured.
+        bail!("Snapshot command exited with status {status}");
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())

@@ -29,6 +29,7 @@ use std::time::Duration;
 use std::time::Instant;
 use unicode_width::UnicodeWidthStr;
 
+mod burst_enter;
 mod input;
 mod layout;
 mod render;
@@ -70,6 +71,7 @@ pub(crate) struct AsyncQuestions {
     pub(crate) has_queued_messages: bool,
     pub(crate) delivery_enabled: bool,
     pub(crate) submission: Option<QuestionSubmission>,
+    pending_burst_enter: Option<u64>,
     visible_options: std::cell::Cell<(usize, usize)>,
     keymap: RuntimeKeymap,
     // Ignore autorepeat from the number key that opened Other.
@@ -82,6 +84,9 @@ pub(crate) struct AsyncQuestions {
     /// #787: the bottom pane dropped the last input to this question (the
     /// generation it was shown with); its footer says so.
     early_input: Option<u64>,
+    /// #787: the bottom pane dropped the last key or paste sent here (the
+    /// notice above can outlast it while the question waits for navigation).
+    last_input_dropped: bool,
 }
 
 /// #787: a question on show and the generation it took.
@@ -119,6 +124,7 @@ impl AsyncQuestions {
             has_queued_messages: false,
             delivery_enabled: true,
             submission: None,
+            pending_burst_enter: None,
             visible_options: std::cell::Cell::new((0, 0)),
             keymap,
             other_selector: None,
@@ -126,6 +132,7 @@ impl AsyncQuestions {
             expand_epoch: 0,
             shown_question: std::cell::RefCell::new(None),
             early_input: None,
+            last_input_dropped: false,
         }
     }
 
@@ -159,7 +166,7 @@ impl AsyncQuestions {
     /// #787: whether the bottom pane dropped the last input to this
     /// question as it appeared.
     pub(crate) fn last_input_dropped(&self) -> bool {
-        self.early_input.is_some()
+        self.last_input_dropped
     }
 
     /// #787: input dropped as the question on show appeared; its footer
@@ -278,6 +285,7 @@ impl AsyncQuestions {
     }
 
     fn save_current_draft(&mut self) {
+        self.cancel_pending_burst_enter();
         self.composer.flush_pending_input();
         if self.focus_is_notes() {
             let draft = self.composer.snapshot_draft();
@@ -288,6 +296,7 @@ impl AsyncQuestions {
     }
 
     fn restore_current_draft(&mut self) {
+        self.cancel_pending_burst_enter();
         self.sync_composer_placeholder();
         let draft = self
             .current_answer()

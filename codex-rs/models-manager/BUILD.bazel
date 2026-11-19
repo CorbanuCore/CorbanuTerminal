@@ -6,7 +6,9 @@ codex_rust_crate(
         "//codex-rs/core:assets/agent/builtins/glm_flash_work_pattern.md",
         "//codex-rs/core:assets/agent/builtins/standard_base.md",
         "models.json",
+        "models-2026-11-17.json",
         "prompt.md",
+        "tests/fixtures/chatgpt-0.167.0.json",
     ],
     crate_name = "codex_models_manager",
 )

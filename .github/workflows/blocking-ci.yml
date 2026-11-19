@@ -28,6 +28,11 @@ jobs:
   cargo-deny:
     name: cargo-deny
     uses: ./.github/workflows/cargo-deny.yml
+    # Only its main-only report job uses write access; the checker is read-only.
+    permissions:
+      contents: read
+      actions: read
+      issues: write
     secrets: inherit
 
   codespell:
@@ -45,6 +50,10 @@ jobs:
     if: ${{ !startsWith(github.base_ref, 'sync/') }} # sync-ci-mode
     uses: ./.github/workflows/rust-ci.yml
     secrets: inherit
+
+  rust-ci-macos:
+    name: macOS changed crate tests
+    uses: ./.github/workflows/rust-ci-changed-crate-tests-macos.yml
 
   sdk:
     name: sdk
@@ -66,6 +75,7 @@ jobs:
       - codespell
       - repo-checks
       - rust-ci
+      - rust-ci-macos
       - sdk
     runs-on: ubuntu-24.04
     steps:

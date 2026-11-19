@@ -78,6 +78,7 @@ use crate::executor_process_transport::ExecutorProcessTransport;
 use crate::local_stdio_transport::LocalStdioTransport;
 use crate::program_resolver;
 use crate::protocol_mode::McpProtocolMode;
+use crate::utils::McpInheritedEnv;
 use crate::utils::create_env_for_mcp_server;
 use crate::utils::create_env_overlay_for_remote_mcp_server;
 use crate::utils::remote_mcp_env_var_names;
@@ -972,7 +973,8 @@ impl ExecutorStdioServerLauncher {
             .try_into()
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
         let program_name = program.to_string_lossy().into_owned();
-        let envs = create_env_overlay_for_remote_mcp_server(env, &env_vars);
+        let inheritance = McpInheritedEnv::current();
+        let envs = create_env_overlay_for_remote_mcp_server(env, &env_vars, inheritance);
         let remote_env_vars = remote_mcp_env_var_names(&env_vars);
         // The executor protocol carries argv/env as UTF-8 strings. Local stdio can
         // accept arbitrary OsString values because it calls the OS directly; remote
@@ -991,7 +993,7 @@ impl ExecutorStdioServerLauncher {
                 argv,
                 cwd,
                 shell_snapshot: None,
-                env_policy: Some(Self::remote_env_policy(&remote_env_vars, &env)),
+                env_policy: Some(Self::remote_env_policy(&remote_env_vars, &env, inheritance)),
                 env,
                 tty: false,
                 pipe_stdin: true,
@@ -1073,22 +1075,49 @@ impl ExecutorStdioServerLauncher {
     fn remote_env_policy(
         remote_env_vars: &[String],
         env: &HashMap<String, String>,
+        inheritance: McpInheritedEnv,
     ) -> ExecEnvPolicy {
-        let include_only = if remote_env_vars.is_empty() {
+        let armed = inheritance == McpInheritedEnv::Secretless;
+        let include_only = if remote_env_vars.is_empty() && !armed {
             Vec::new()
         } else {
             // `source = "remote"` means the value is read from the executor's
             // environment, not copied from Codex. Start from `All` only so the
             // named remote variable is available to the filter below; the
             // effective child env is still limited by `include_only`.
-            // The orchestrator may be Unix while the executor is Windows.
-            // Preserve Windows runtime initialization and temporary-directory
-            // inputs even when explicit remote vars activate this allowlist.
-            crate::utils::DEFAULT_ENV_VARS
-                .iter()
-                .chain(["SYSTEMROOT", "TEMP", "TMP", "SYSTEMDRIVE", "LOCALAPPDATA"].iter())
-                .map(|name| (*name).to_string())
+            // Core inheritance is evaluated on the executor's OS, which may
+            // differ from the orchestrator's. Keep its allowed defaults,
+            // including Windows runtime initialization and temporary-directory
+            // inputs, even when explicit remote vars activate this allowlist.
+            let defaults: Vec<&str> = match inheritance {
+                McpInheritedEnv::Configured => crate::utils::DEFAULT_ENV_VARS
+                    .iter()
+                    .chain(["SYSTEMROOT", "TEMP", "TMP", "SYSTEMDRIVE", "LOCALAPPDATA"].iter())
+                    .copied()
+                    .collect(),
+                McpInheritedEnv::Secretless => crate::utils::UNIX_DEFAULT_ENV_VARS
+                    .iter()
+                    .chain(codex_protocol::shell_environment::UNIX_CORE_ENV_VARS)
+                    .chain(codex_protocol::shell_environment::WINDOWS_CORE_ENV_VARS)
+                    .copied()
+                    .collect(),
+            };
+            defaults
+                .into_iter()
+                .map(str::to_string)
                 .chain(remote_env_vars.iter().cloned())
+                // The executor need not have armed PF-27-S02 itself. Apply the
+                // same inherited-name boundary as local MCP before sending it
+                // the policy; literal server `env` remains a separate overlay.
+                // include_only is a Unicode case-insensitive glob list. Keep
+                // names ASCII and literal: CORBANU_* or a Kelvin-sign K could
+                // otherwise match credential names that the allowlist rejects.
+                .filter(|name| {
+                    !armed
+                        || (name.is_ascii()
+                            && !name.contains(['*', '?'])
+                            && codex_protocol::secretless_launch::is_launch_env_name_allowed(name))
+                })
                 .collect()
         };
         ExecEnvPolicy {
@@ -1103,9 +1132,16 @@ impl ExecutorStdioServerLauncher {
             // on older executors. Keep the final overlay for names filtered out below.
             r#set: env.clone(),
             include_only,
+            // #2324: values are read on the executor, so it drops inherited
+            // URL passwords itself; an executor that cannot is refused.
+            drop_url_password_values: armed,
         }
     }
 }
+
+#[cfg(test)]
+#[path = "stdio_secretless_tests.rs"]
+mod secretless_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1143,9 +1179,101 @@ mod tests {
         );
     }
 
+    /// A live process stopped the way the launcher stops a discovery-owned Windows server that
+    /// isn't in a job: through `StdioProcessRef::terminate`, which is what `shutdown()` calls.
+    /// The launcher can't be made to skip the job, so the terminator is built here as it builds
+    /// one when containment is unavailable.
+    #[cfg(windows)]
+    async fn stop_an_uncontained_windows_server(reason: StdioTermination) -> io::Result<()> {
+        const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+        // `JobObject::terminate_process_handle` passes this to `TerminateProcess`.
+        const TERMINATED_EXIT_CODE: i32 = 1;
+
+        // `cmd.exe` reads commands from its stdin, which stays open until the end of the
+        // helper, so it blocks until it is terminated. It exits with 0 if stdin closes.
+        let mut child = tokio::process::Command::new("cmd.exe")
+            .args(["/d", "/q"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("missing test process stdin"))?;
+        let process_id = child
+            .id()
+            .ok_or_else(|| io::Error::other("missing test process id"))?;
+        let terminator = LocalProcessTerminator::Process(
+            codex_utils_pty::JobObject::open_process_handle(process_id)?,
+        );
+        let process = StdioServerProcessHandle::local(
+            "cmd.exe".to_string(),
+            Some(terminator),
+            /*stderr_reader*/ None,
+        );
+        let process_ref = StdioProcessRef {
+            process: Arc::downgrade(&process),
+            discovery_cleanup: Some(Arc::new(DiscoveryCleanup {
+                process: Arc::downgrade(&process),
+                result: OnceLock::new(),
+            })),
+        };
+        assert_eq!(child.try_wait()?, None, "the test server exited early");
+
+        let result = tokio::time::timeout(TEST_TIMEOUT, process_ref.terminate(reason))
+            .await
+            .map_err(|_| io::Error::other("stopping the uncontained server hung"))?;
+        let status = tokio::time::timeout(TEST_TIMEOUT, child.wait())
+            .await
+            .map_err(|_| io::Error::other("the uncontained server kept running"))??;
+        drop(stdin);
+        assert_eq!(
+            status.code(),
+            Some(TERMINATED_EXIT_CODE),
+            "the test server was not stopped by TerminateProcess"
+        );
+        result
+    }
+
+    // #2196 review: Windows coverage of the `Unsupported` branch of `after_uncontained_terminate`.
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn shutdown_of_an_uncontained_windows_server_stops_it_without_an_error() {
+        assert_eq!(
+            stop_an_uncontained_windows_server(StdioTermination::Shutdown)
+                .await
+                .map_err(|error| error.to_string()),
+            Ok(())
+        );
+    }
+
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn restart_of_an_uncontained_windows_server_stops_it_and_reports_the_missing_wait() {
+        let result = stop_an_uncontained_windows_server(StdioTermination::Restart).await;
+        assert_eq!(
+            result.as_ref().map_err(io::Error::kind),
+            Err(io::ErrorKind::Other),
+            "{result:?}"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot wait for an uncontained Windows MCP server to exit")
+        );
+    }
+
     #[test]
     fn remote_env_policy_uses_core_env_without_remote_source_vars() {
-        let policy = ExecutorStdioServerLauncher::remote_env_policy(&[], &HashMap::new());
+        let policy = ExecutorStdioServerLauncher::remote_env_policy(
+            &[],
+            &HashMap::new(),
+            McpInheritedEnv::Configured,
+        );
 
         assert_eq!(policy.inherit, ShellEnvironmentPolicyInherit::Core);
         assert!(policy.include_only.is_empty());
@@ -1156,6 +1284,7 @@ mod tests {
         let policy = ExecutorStdioServerLauncher::remote_env_policy(
             &["REMOTE_TOKEN".to_string()],
             &HashMap::new(),
+            McpInheritedEnv::Configured,
         );
 
         assert_eq!(policy.inherit, ShellEnvironmentPolicyInherit::All);
@@ -1176,6 +1305,7 @@ mod tests {
         let exec_policy = ExecutorStdioServerLauncher::remote_env_policy(
             &["REMOTE_TOKEN".to_string()],
             &HashMap::new(),
+            McpInheritedEnv::Configured,
         );
         let mut policy = ShellEnvironmentPolicy {
             inherit: exec_policy.inherit,
@@ -1251,6 +1381,7 @@ mod tests {
         policy.r#set = ExecutorStdioServerLauncher::remote_env_policy(
             &["REMOTE_TOKEN".to_string()],
             &overrides,
+            McpInheritedEnv::Configured,
         )
         .r#set;
         let mut child_env =

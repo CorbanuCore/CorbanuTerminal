@@ -1,11 +1,13 @@
 ---
 source: tui/src/onboarding/gcp_tests.rs
+assertion_line: 34
 expression: terminal.backend().to_string()
 ---
-  Sign in with ChatGPT to use Codex as part of your paid plan
+  Sign in with ChatGPT to use OpenAI-hosted models
   or connect an API key for usage-based billing
 
 > 1. Sign in with ChatGPT
+     Usage included with Plus, Pro, Business, and Enterprise plans
+
   2. Sign in with Device Code
-  3. Sign in another way
-  Press enter to continue
+  Use ↑/↓ to choose · Press enter to continue · 1 / 3

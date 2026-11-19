@@ -495,7 +495,12 @@ async fn prepare_managed_network(
             internal_error(format!("failed to prepare executor network proxy: {err}"))
         })?;
     if credential_masking {
-        if supports_credential_snapshot(params) {
+        if supports_credential_snapshot(params) && proxy.credential_broker_hardened() {
+            // D641 (a), #2392: main's engine (D353/D354) already gave this child placeholders
+            // and brokering is one-way (#436). Keep the broker markers so a failed snapshot
+            // falls back still marked; the capture alone runs on the restored, unmarked copy
+            // it always saw (`shell_snapshot::capture_snapshot`).
+        } else if supports_credential_snapshot(params) {
             // Requested snapshots trust startup profiles before masking their captured state.
             proxy.restore_and_disable_brokered_credentials(&mut prepared.env, &mut []);
         } else if cfg!(any(target_os = "linux", target_os = "macos"))
@@ -506,6 +511,11 @@ async fn prepare_managed_network(
             proxy
                 .handle_unmasked_credentials(&mut prepared.env, CREDENTIAL_MASKING_FAILURE_MODE)
                 .map_err(|err| invalid_params(err.to_string()))?;
+        } else if proxy.credential_broker_hardened() {
+            // D641 (a), #2365: main's engine (D353/D354) already gave this child placeholders,
+            // and brokering is one-way (#436), so upstream's fail-open restore below could
+            // not unmask anything. Skipping it keeps the broker markers that nested launches
+            // need to recognise the placeholders and avoids a false "unmasked" warning.
         } else {
             tracing::warn!(
                 "Credential masking is unavailable for this shell startup; preserving shell profiles and snapshots and running with unmasked credentials."

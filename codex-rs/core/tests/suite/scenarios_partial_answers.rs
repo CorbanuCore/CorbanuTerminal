@@ -191,6 +191,12 @@ async fn partial_answers_survive_forked_child_requests(
                     .expect("enable agent tools in Code Mode");
             }
             if preserve_fork_prefix {
+                // This snapshot includes the spawn receipt, including its nickname.
+                config
+                    .agent_roles
+                    .entry("default".into())
+                    .or_default()
+                    .nickname_candidates = Some(vec!["Worker".into()]);
                 config.update_plan_enabled = true;
                 config.multi_agent_v2.root_agent_usage_hint_text =
                     Some("You are /root. Coordinate the investigation.".into());

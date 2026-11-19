@@ -387,10 +387,19 @@ impl Session {
         let done = Arc::new(Notify::new());
 
         // #2033 / #1999 (D485): mail that has crossed a turn boundary only.
-        let (pending_items, _) = self
-            .input_queue
-            .get_pending_input_for_task_start(&self.active_turn)
-            .await;
+        // Match explicit turn admission (#445/#507): a refused task must leave ready mail
+        // queued, rather than detach it and race its resubmission against switch-off.
+        let pending_items = if Box::pin(crate::session::turn::turn_refusal(self, &turn_context))
+            .await
+            .is_none()
+        {
+            self.input_queue
+                .get_pending_input_for_task_start(&self.active_turn)
+                .await
+                .0
+        } else {
+            Vec::new()
+        };
         // Pending-work wakes deliberately start RegularTask with empty explicit input and move
         // mailbox items through InputQueue. Classify the complete admitted task here, after that
         // move, so a terminal-result turn cannot masquerade as fresh operator work.
@@ -598,9 +607,15 @@ impl Session {
             return;
         }
 
+        // D663: reserve before preparing auth/refusal state. Interrupt must be able to
+        // cancel this wake while discovery is suspended, without consuming its mail.
+        let Some((turn_state, previous_options)) = self.reserve_pending_work_turn().await else {
+            return;
+        };
         let turn_context = self.new_default_turn().await;
         // #1331 (D171): nor while its named account is removed or signed out.
         if let Some(err) = crate::session::turn::turn_refusal(self, &turn_context).await {
+            self.clear_reserved_idle_turn(&turn_state).await;
             let message = format!(
                 "Agent messages remain queued: {err}. After recovery, send another message or start a turn to retry."
             );
@@ -638,6 +653,7 @@ impl Session {
             }) {
             Ok(guard) => guard,
             Err(err) if matches!(err.details(), CodexErrorDetails::AgentLimitReached { .. }) => {
+                self.clear_reserved_idle_turn(&turn_state).await;
                 if let Some(control) = self.services.agent_control.local().cloned()
                     && self.input_queue.try_schedule_capacity_wait()
                 {
@@ -651,13 +667,10 @@ impl Session {
                 return;
             }
             Err(err) => {
+                self.clear_reserved_idle_turn(&turn_state).await;
                 warn!(%err, "failed to reserve execution capacity for pending mailbox work");
                 return;
             }
-        };
-
-        let Some((turn_state, previous_options)) = self.reserve_pending_work_turn().await else {
-            return;
         };
 
         self.services
@@ -852,8 +865,18 @@ impl Session {
         turn_context: Arc<TurnContext>,
         task_result: SessionTaskResult,
     ) {
+        let turn_refused = turn_context
+            .turn_refused
+            .load(std::sync::atomic::Ordering::Acquire);
+        let completed_without_error = turn_context.terminal_error.lock().await.is_none();
         let (last_agent_message, abort_reason, completed_naturally) = match task_result {
-            Ok(last_agent_message) => (last_agent_message, None, true),
+            // run_turn reports terminal errors before returning Ok. Only pre-turn refusals
+            // retain their existing rejection/follow-up handling (D659, #2443).
+            Ok(last_agent_message) => (
+                last_agent_message,
+                None,
+                completed_without_error || turn_refused,
+            ),
             Err(err) if matches!(err.details(), CodexErrorDetails::TurnAborted) => {
                 (None, Some(TurnAbortReason::Interrupted), false)
             }
@@ -928,7 +951,13 @@ impl Session {
         let mut follow_up_input = Vec::new();
         let mut recorded_input = Vec::new();
         for (pending_input_item, final_output_json_schema) in pending_input {
-            if completed_naturally && pending_input_seeds_follow_up(&pending_input_item) {
+            // D660: mail taken but not answered is recorded below for the next explicit
+            // turn. Re-submitting it would synthesize an automatic continuation.
+            if completed_naturally
+                && (pending_input_seeds_follow_up(&pending_input_item)
+                    || (turn_refused
+                        && matches!(pending_input_item, TurnInput::InterAgentCommunication(_))))
+            {
                 follow_up_input.push((pending_input_item, final_output_json_schema));
             } else {
                 recorded_input.push(pending_input_item);
@@ -1168,7 +1197,10 @@ impl Session {
             // The parent can request another review as soon as it receives this event.
             self.send_event(turn_context.as_ref(), event).await;
         }
-        if cleared_active_turn {
+        // Follow-up submission returns below without running the pending-work idle check.
+        // Keep its notification here; the no-follow-up path emits only after checking for
+        // pending work, so a completed turn never reports the same idle boundary twice.
+        if cleared_active_turn && !follow_up_input.is_empty() {
             self.emit_thread_idle_lifecycle_if_idle(idle_cause).await;
         }
         // Private reviewers already flushed the terminal event before delivering it.
@@ -1571,7 +1603,6 @@ impl Session {
                 .pending_tool_calls
                 .take_unrecorded_outputs(cancelled_at)
                 .into_iter()
-                .map(ResponseItem::from)
                 .collect();
             self.retain_unrecorded_tool_outputs(&mut outputs).await;
             if !outputs.is_empty() {
@@ -1704,6 +1735,7 @@ fn not_submitted_reason_text(reason: &NotSubmittedReason) -> String {
         NotSubmittedReason::ActiveTurnOutputSchemaMismatch => {
             "the running turn expects another output format".to_string()
         }
+        NotSubmittedReason::KillSwitch => "the security kill switch is on".to_string(),
     }
 }
 
@@ -1735,7 +1767,7 @@ fn follow_up_preview(input: &TurnInput) -> String {
 fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
     match input {
         TurnInput::UserInput { content, .. } => !content.is_empty(),
-        TurnInput::InterAgentCommunication(_) => true,
+        TurnInput::InterAgentCommunication(_) => false,
         TurnInput::ResponseItem(_) | TurnInput::FunctionCallOutput(_) => false,
     }
 }
@@ -1743,3 +1775,7 @@ fn pending_input_seeds_follow_up(input: &TurnInput) -> bool {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "idle_lifecycle_tests.rs"]
+mod idle_lifecycle_tests;

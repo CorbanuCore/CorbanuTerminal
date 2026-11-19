@@ -651,7 +651,8 @@ stream_max_retries = 0
         None
     );
 
-    insta::assert_snapshot!(app.chat_widget.composer_text_with_pending(), @"");
+    // Two tests share this helper; insta rejects an inline snapshot reached twice in one process.
+    assert_eq!(app.chat_widget.composer_text_with_pending(), "");
     assert!(
         std::iter::from_fn(|| app_event_rx.try_recv().ok())
             .all(|event| !matches!(event, AppEvent::CodexOp(AppCommand::UserTurn { .. })))
@@ -1381,7 +1382,7 @@ goals = true
             .await
             .expect("the goal continuation's reply should render")
             .expect("app-server event stream should remain open");
-        Box::pin(app.handle_app_server_event(&app_server, event)).await;
+        Box::pin(app.handle_app_server_event(&app_server, event.event)).await;
         drain_active_thread_events(&mut app);
     }
     assert_eq!(
@@ -1401,6 +1402,9 @@ goals = true
         let rendered_retry = forked_history
             .lines()
             .skip_while(|line| !line.contains(RETRY_PROMPT))
+            // This test's own `thread/read(includeTurns)` checks draw the app server's
+            // paginated-history deprecation notice; it is not part of the retry.
+            .filter(|line| !line.contains("Full-history hydration is deprecated"))
             .collect::<Vec<_>>()
             .join("\n");
         insta::assert_snapshot!("safety_retry_committed_steer_history", rendered_retry);

@@ -38,6 +38,7 @@ pub(super) async fn reconnect(
     target: AppServerTarget,
     config: Config,
     local_settings: crate::local_settings::LocalSettings,
+    permission_overrides: crate::resume_permissions::ResumePermissions,
     thread_id: Option<ThreadId>,
     remote_cwd: Option<PathBuf>,
     task_tools: ThreadToolTransport,
@@ -79,11 +80,12 @@ pub(super) async fn reconnect(
             let thread = if let Some(thread_id) = thread_id {
                 stage = "resuming the conversation";
                 match session
-                    .resume_thread(
+                    .resume_thread_with_permission_overrides(
                         &local_settings,
                         config.clone(),
                         thread_id,
                         ResumeModelSettings::PreserveExistingThread,
+                        permission_overrides,
                     )
                     .await
                 {
@@ -135,7 +137,7 @@ pub(super) async fn reconnect(
         }
     }
     tracing::warn!(stage, "automatic reconnect timed out");
-    color_eyre::eyre::bail!("Automatic reconnect timed out while {stage}.")
+    color_eyre::eyre::bail!("Automatic reconnect timed out while {stage}.");
 }
 
 impl App {
@@ -408,9 +410,11 @@ impl App {
             connection.is_managed_daemon = connection.is_local_daemon && managed_daemon;
         }
         self.model_catalog = Arc::new(
-            ModelCatalog::new(bootstrap.available_models)
+            ModelCatalog::new(bootstrap.available_models.clone())
                 .with_collaboration_modes(bootstrap.collaboration_modes),
         );
+        // As at startup: these came from `model/list`, so a later refresh may drop them.
+        self.model_catalog.mark_listed(&bootstrap.available_models);
         self.pending_app_server_requests.clear();
         // The displayed task was resumed above. Keep offscreen selections pending until those
         // tasks can be resumed from the server too; their old confirmations cannot arrive.

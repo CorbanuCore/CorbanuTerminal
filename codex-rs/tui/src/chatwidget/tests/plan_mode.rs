@@ -665,7 +665,14 @@ async fn plan_reasoning_scope_popup_mentions_built_in_plan_default_when_no_overr
     );
 
     let popup = render_bottom_popup(&chat, /*width*/ 100);
-    assert!(popup.contains("built-in Plan default"));
+    // The row may wrap inside the phrase.
+    assert!(
+        popup
+            .split_whitespace()
+            .collect::<String>()
+            .contains("built-inPlandefault"),
+        "{popup}"
+    );
 }
 
 #[tokio::test]
@@ -1403,7 +1410,7 @@ async fn mode_switch_surfaces_reasoning_change_notification_when_model_stays_sam
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        plan_messages.contains("Model changed to gpt-5.6-terra medium for Plan mode."),
+        plan_messages.contains("Model changed to GPT-5.6-Terra medium for Plan mode."),
         "expected reasoning-change notice in Plan mode, got: {plan_messages:?}"
     );
 }
@@ -1475,7 +1482,7 @@ async fn plan_slash_command_with_hidden_shell_paste_rejected_image_remains_liter
         .expect("current model")
         .input_modalities
         .retain(|modality| *modality != InputModality::Image);
-    Arc::make_mut(&mut chat.model_catalog).models = models;
+    chat.model_catalog.replace_models_for_test(models);
     let payload = paste_hidden_plan_shell_payload(&mut chat);
     chat.set_remote_image_urls(vec!["https://example.com/image.png".to_string()]);
 
@@ -1550,7 +1557,7 @@ async fn rejected_initial_image_does_not_submit_later_queued_prompt() {
         .expect("current model")
         .input_modalities
         .retain(|modality| *modality != InputModality::Image);
-    Arc::make_mut(&mut chat.model_catalog).models = models;
+    chat.model_catalog.replace_models_for_test(models);
     let mut initial_message = UserMessage::from("initial prompt");
     initial_message.remote_image_urls = vec!["https://example.com/image.png".to_string()];
     chat.initial_user_message = Some(initial_message);

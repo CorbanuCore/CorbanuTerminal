@@ -522,6 +522,10 @@ async fn rejected_initial_thread_start_reconnects_and_submits_prompt_once() -> R
             serve_reconnect_requests(tokio_tungstenite::accept_async(stream).await?, |request| {
                 let cwd = cwd.clone();
                 async move {
+                    // Corbanu's bootstrap also reads the auth status.
+                    if request.method == "getAuthStatus" {
+                        return Some(json!({"result": {}}));
+                    }
                     assert_eq!(request.method, "thread/start");
                     let params = request.params.as_ref().expect("thread/start params");
                     assert_eq!(params["model"], "gpt-retry");
@@ -609,6 +613,7 @@ async fn rejected_initial_thread_start_reconnects_and_submits_prompt_once() -> R
             AppServerTarget::Remote { endpoint },
             app.config.clone(),
             app.local_settings.clone(),
+            app.launch_approval_resume_permissions(),
             /*thread_id*/ None,
             /*remote_cwd*/ None,
             crate::dynamic_tools_mcp::ThreadToolTransport::Dynamic,

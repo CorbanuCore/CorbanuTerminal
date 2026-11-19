@@ -39,14 +39,16 @@ use tracing::instrument;
 use crate::config::Config;
 use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use codex_shell_command::bash::parse_shell_lc_plain_commands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
+use codex_shell_command::bash::shell_lc_script_read;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use shlex::try_join as shlex_try_join;
 
 mod executable_identity;
 mod inheritance;
 mod model_policy;
+#[path = "exec_policy_wrappers.rs"]
+mod wrappers;
 
 pub(crate) use inheritance::InheritedExecPolicy;
 pub(crate) use model_policy::AllowPrefixRules;
@@ -446,6 +448,7 @@ impl ExecPolicyManager {
 
     /// The approval an agent command needs under the session's live level
     /// (see [`Self::current_for`]), parsed for this host's shell rules.
+    #[cfg(test)]
     pub(crate) async fn create_exec_approval_requirement(
         &self,
         req: ExecApprovalRequest<'_>,
@@ -506,8 +509,6 @@ impl ExecPolicyManager {
             allow_prefix_rules,
             live_aggressive,
         );
-        // Avoid reusable approvals when this model does not honor prefix rules.
-        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor;
         let exec_policy_fallback = |cmd: &[String]| {
             render_decision_for_unmatched_command_for_platform(
                 cmd,
@@ -523,20 +524,92 @@ impl ExecPolicyManager {
         };
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            // D692: forbidden and prompt rules match the program name in
+            // any case where this platform finds programs that way. Sync: a
+            // command for a remote Windows executor folds too (stricter only).
+            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE
+                || command_platform == DangerousCommandPlatform::Windows,
         };
-        let mut evaluation = exec_policy.check_multiple_with_options(
-            commands.iter(),
-            &exec_policy_fallback,
-            &match_options,
-        );
+        // #2531: rules read a shell script among the commands given, which on
+        // main always come from the caller's split. Sync: a command line the
+        // split left whole (a top-level heredoc) keeps its own script to the
+        // heredoc pass below, as before.
+        let read_own_scripts = !(commands.len() == 1 && commands[0] == full_command);
+        // Avoid reusable approvals when this model does not honor prefix rules.
+        // A wrapper-only amendment cannot approve stricter inner commands,
+        // and an uncertain boundary must never become a remembered bypass.
+        let auto_amendment_allowed = allow_prefix_rules == AllowPrefixRules::Honor
+            && !commands.iter().any(|command| {
+                wrappers::has_wrappers(command, command_platform, read_own_scripts)
+            })
+            // Upstream keeps top-level heredocs as shell argv. The restrictive
+            // heredoc pass still sees wrappers inside that script, as on main.
+            && parse_shell_lc_single_command_prefix(full_command).is_none_or(|command| {
+                !wrappers::has_wrappers(&command, command_platform, /*read_own_scripts*/ true)
+            });
+        let check_commands = |policy: &Policy, fallback: &dyn Fn(&[String]) -> Decision| {
+            wrappers::check(
+                policy,
+                &commands,
+                read_own_scripts,
+                &fallback,
+                &match_options,
+                command_platform,
+            )
+        };
+        let wrappers::Checked {
+            mut evaluation,
+            folded: mut case_folded,
+            unread_script_prompts,
+        } = check_commands(exec_policy.as_ref(), &exec_policy_fallback);
+        // #2599: non-plain PowerShell flags and respelled executable names
+        // keep literal restrictions without an outer allow authorizing the script.
+        if command_platform == DangerousCommandPlatform::Windows
+            && matches!(
+                command_origin,
+                ExecPolicyCommandOrigin::PowerShell | ExecPolicyCommandOrigin::PowerShellLiteral
+            )
+            && codex_shell_command::powershell::extract_plain_powershell_command(command).is_none()
+        {
+            let mut literal = exec_policy.matches_for_command_with_options(
+                command,
+                /*heuristics_fallback*/ None,
+                &match_options,
+            );
+            literal.retain(|rule_match| rule_match.decision() > Decision::Allow);
+            let folded = exec_policy.case_folded_matches(command, &match_options);
+            literal.extend(folded.iter().cloned());
+            case_folded.extend(folded);
+            for rule_match in &literal {
+                evaluation.decision = evaluation.decision.max(rule_match.decision());
+            }
+            evaluation.matched_rules.extend(literal);
+        }
         // S3b: upstream no longer matches rules against a heredoc script's
         // command; main did. Keep its prompt and forbidden rules at every level.
         apply_heredoc_restrictive_matches(
             &mut evaluation,
+            &mut case_folded,
             exec_policy.as_ref(),
             full_command,
             &match_options,
+            command_platform,
         );
+        // #2543: the commands of a script rules cannot read as plain
+        // commands only add prompts and refusals. An amendment for the
+        // script's literal argv could not approve them.
+        // #2548: read whether or not an amendment could be offered (an
+        // `&&` here once skipped it for scripts with wrappers).
+        let unread_found = apply_unread_script_matches(
+            &mut evaluation,
+            &mut case_folded,
+            exec_policy.as_ref(),
+            full_command,
+            &match_options,
+            command_platform,
+        );
+        let auto_amendment_allowed =
+            auto_amendment_allowed && !unread_script_prompts && !unread_found;
         if self.strict_rules_for(live_aggressive) {
             // The original command, not the parsed one: parsing keeps only
             // the first command of a heredoc script. The whole command line,
@@ -571,19 +644,19 @@ impl ExecPolicyManager {
                 ),
             },
             Decision::Prompt | Decision::PromptUser => {
-                let prompt_is_rule = evaluation.matched_rules.iter().any(|rule_match| {
-                    is_policy_match(rule_match) && rule_match.decision() == evaluation.decision
-                });
+                // D692: a prompt only a differently cased rule asks for is
+                // rejected or approved as the fallback's prompt would be.
+                let prompt_is_rule = wrappers::has_exact_rule_match(
+                    &evaluation.matched_rules,
+                    &case_folded,
+                    evaluation.decision,
+                );
                 // #626: which remembered approvals Aggressive suspended, where
                 // the full policy would have run the command unasked.
                 let suspended_note = live_aggressive
                     .then(|| {
                         self.aggressive_suspended_note(|policy| {
-                            policy.check_multiple_with_options(
-                                commands.iter(),
-                                &exec_policy_fallback,
-                                &match_options,
-                            )
+                            check_commands(policy, &exec_policy_fallback).evaluation
                         })
                     })
                     .flatten();
@@ -633,18 +706,10 @@ impl ExecPolicyManager {
             Decision::Allow => ExecApprovalRequirement::Skip {
                 // Bypass sandbox only when every parsed command segment is
                 // explicitly allowed by execpolicy.
-                bypass_sandbox: commands.iter().all(|command| {
-                    exec_policy
-                        .matches_for_command_with_options(
-                            command,
-                            /*heuristics_fallback*/ None,
-                            &match_options,
-                        )
-                        .iter()
-                        .any(|rule_match| {
-                            is_policy_match(rule_match) && rule_match.decision() == Decision::Allow
-                        })
-                }),
+                bypass_sandbox: check_commands(exec_policy.as_ref(), &|_| Decision::Forbidden)
+                    .evaluation
+                    .decision
+                    == Decision::Allow,
                 proposed_execpolicy_amendment: if auto_amendment_allowed {
                     without_credentials(try_derive_execpolicy_amendment_for_allow_rules(
                         &evaluation.matched_rules,
@@ -725,6 +790,7 @@ impl ExecPolicyManager {
         }
         let match_options = MatchOptions {
             resolve_host_executables: true,
+            fold_program_case: false,
         };
         let existing_evaluation = current_policy.check_multiple_with_options(
             [&amendment.command],
@@ -1264,24 +1330,39 @@ fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatc
 /// `python3` applied. Upstream dropped that parse, which keeps such scripts in
 /// the sandbox (stricter for allow rules) but stopped those rules matching.
 /// This adds back only the prompt and forbidden rule matches; it never allows.
+/// The D692 case-folded ones it adds also go to `case_folded`, as main's
+/// heredoc parse put them there.
 fn apply_heredoc_restrictive_matches(
     evaluation: &mut Evaluation,
+    case_folded: &mut Vec<RuleMatch>,
     policy: &Policy,
     command: &[String],
     match_options: &MatchOptions,
+    command_platform: DangerousCommandPlatform,
 ) {
     let Some(heredoc_command) = parse_shell_lc_single_command_prefix(command) else {
         return;
     };
-    let found = policy.check_multiple_with_options(
-        std::iter::once(&heredoc_command),
+    // #2396: through wrappers too (`sudo python3 <<EOF`). With an Allow
+    // fallback, a heuristic above Allow can only come from the wrapper
+    // checks (an uncertain wrapper or a wrapped heredoc), so it is kept.
+    let (found, folded) = wrappers::check_with_wrappers_and_folded(
+        policy,
+        std::slice::from_ref(&heredoc_command),
         &|_: &[String]| Decision::Allow,
         match_options,
+        command_platform,
+    );
+    case_folded.extend(
+        folded
+            .into_iter()
+            .filter(|rule_match| rule_match.decision() > Decision::Allow)
+            .filter(|rule_match| !evaluation.matched_rules.contains(rule_match)),
     );
     let restrictive = found
         .matched_rules
         .into_iter()
-        .filter(|rule_match| is_policy_match(rule_match) && rule_match.decision() > Decision::Allow)
+        .filter(|rule_match| rule_match.decision() > Decision::Allow)
         .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
         .collect::<Vec<_>>();
     let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() else {
@@ -1292,6 +1373,42 @@ fn apply_heredoc_restrictive_matches(
     let mut matched_rules = restrictive;
     matched_rules.append(&mut evaluation.matched_rules);
     evaluation.matched_rules = matched_rules;
+}
+
+/// #2543: add [`wrappers::unread_script_matches`] to `evaluation` (and
+/// the D692 case-folded ones among them to `case_folded`); whether it found
+/// any, including those `evaluation` already had (an amendment could not
+/// approve those either).
+fn apply_unread_script_matches(
+    evaluation: &mut Evaluation,
+    case_folded: &mut Vec<RuleMatch>,
+    policy: &Policy,
+    command: &[String],
+    match_options: &MatchOptions,
+    command_platform: DangerousCommandPlatform,
+) -> bool {
+    let (found, folded) =
+        wrappers::unread_script_matches(policy, command, match_options, command_platform);
+    if found.is_empty() {
+        return false;
+    }
+    case_folded.extend(
+        folded
+            .into_iter()
+            .filter(|rule_match| !evaluation.matched_rules.contains(rule_match)),
+    );
+    let restrictive = found
+        .into_iter()
+        .filter(|rule_match| !evaluation.matched_rules.contains(rule_match))
+        .collect::<Vec<_>>();
+    if let Some(decision) = restrictive.iter().map(RuleMatch::decision).max() {
+        evaluation.decision = evaluation.decision.max(decision);
+        // These first, so a refusal names the rule that caused it.
+        let mut matched_rules = restrictive;
+        matched_rules.append(&mut evaluation.matched_rules);
+        evaluation.matched_rules = matched_rules;
+    }
+    true
 }
 
 /// Make `evaluation` Forbidden when [`strict_forbidden_matches`] finds any.
@@ -1375,26 +1492,46 @@ fn commands_for_exec_policy_for_platform(
     command: &[String],
     command_platform: DangerousCommandPlatform,
 ) -> ExecPolicyCommands {
-    if let Some(commands) = parse_shell_lc_plain_commands(command)
-        && !commands.is_empty()
+    // #2543: quoted words read as bash runs them (`'git' push`). A script
+    // that is not plain is read for prompt and forbidden rules only (see
+    // `wrappers::unread_script_matches`); so is (#2548) one whose commands
+    // run more than their argv (`eval`, a shell's here-document), and one
+    // outside the minimal lexical set (never plain).
+    if let Some(read) = shell_lc_script_read(command)
+        && read.plain
+        && !read.commands.is_empty()
+        && !wrappers::runs_more_than_argv(&read)
     {
         return ExecPolicyCommands {
-            commands,
+            commands: read
+                .commands
+                .iter()
+                .map(|command| command.words.iter().flatten().cloned().collect())
+                .collect(),
             command_origin: ExecPolicyCommandOrigin::Generic,
         };
     }
 
-    if command_platform == DangerousCommandPlatform::Windows
-        && let Some((_, script)) =
-            codex_shell_command::powershell::extract_powershell_command(command)
-        && let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_script_into_plain_commands(script)
-        && !commands.is_empty()
-    {
-        return ExecPolicyCommands {
-            command_origin: powershell_command_origin(script, &commands),
-            commands,
-        };
+    if command_platform == DangerousCommandPlatform::Windows {
+        // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
+        // `pwsh -c`, `powershell.exe -Command`. Sync: upstream reads the
+        // script in process, so main's #2546 trusted-parser lookup does not
+        // apply; (#2671) the executor's naming applies on any host.
+        let respelled = crate::security::tainted_action::policy_powershell_script(command);
+        if let Some((_, script)) = codex_shell_command::powershell::extract_powershell_command(
+            respelled.as_deref().unwrap_or(command),
+        ) && let Some(commands) =
+            codex_shell_command::powershell::parse_powershell_script_into_plain_commands(&script)
+            && !commands.is_empty()
+        {
+            // #2568: the script as PowerShell reads it (every argument after
+            // `-Command`, `-EncodedCommand` decoded); one rules cannot read
+            // asks (`wrappers`).
+            return ExecPolicyCommands {
+                command_origin: powershell_command_origin(&script, &commands),
+                commands,
+            };
+        }
     }
 
     ExecPolicyCommands {
@@ -1584,6 +1721,11 @@ fn derive_prompt_reason(command_args: &[String], evaluation: &Evaluation) -> Opt
         Some((_matched_prefix_len, None)) => {
             Some(format!("`{command}` requires {approval} by policy"))
         }
+        // #2519: no rule matched as written, but one could match what the
+        // command runs (a wrapper or xargs input); name the reason.
+        None if evaluation.decision == Decision::PromptUser => Some(format!(
+            "`{command}` requires human approval: a prompt-user or forbidden rule could match the command it runs"
+        )),
         None => None,
     }
 }

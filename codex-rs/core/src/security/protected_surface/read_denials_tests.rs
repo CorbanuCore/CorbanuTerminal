@@ -181,13 +181,13 @@ async fn pf_23_s01_file_tools_get_the_denials_after_taint() {
         .with_source_envelopes(/*enabled*/ true);
     session.services.replace_model_client(client);
     let environment = turn
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .clone();
     let auth = turn.config.codex_home.join("auth.json");
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        let profile = context.permissions;
         #[allow(deprecated)]
         let cwd = turn.cwd.clone();
         profile
@@ -362,7 +362,7 @@ fn issue_583_the_corbanu_home_takes_no_new_entries() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: abs(&project),
+                    path: abs(&project).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
@@ -683,7 +683,7 @@ fn worktrees_carve_out_policy(fx: &Fixture) -> (FileSystemSandboxPolicy, std::pa
         .file_system_sandbox_policy();
     policy.entries.push(FileSystemSandboxEntry::new(
         FileSystemPath::Path {
-            path: abs(&fx.codex_home.join("worktrees/w")),
+            path: abs(&fx.codex_home.join("worktrees/w")).into(),
         },
         FileSystemAccessMode::Write,
     ));
@@ -759,7 +759,9 @@ fn issue_603_a_grant_below_a_swapped_worktrees_is_refused() {
     assert!(!policy.can_write_path_with_cwd(&fx.codex_home.join("worktrees/x"), &cwd));
     let grant = fx.codex_home.join("worktrees/w");
     policy.entries.push(FileSystemSandboxEntry::new(
-        FileSystemPath::Path { path: abs(&grant) },
+        FileSystemPath::Path {
+            path: abs(&grant).into(),
+        },
         FileSystemAccessMode::Write,
     ));
     swap_worktrees_for_a_link(&fx, ".");
@@ -855,10 +857,9 @@ fn issue_603_a_worktrees_link_swapped_in_refuses_the_command_in_the_real_sandbox
         environment_id: None,
         network: None,
         sandbox_policy_cwd: &cwd_uri,
-        codex_linux_sandbox_exe: Some(&linux_sandbox_exe),
+        sandbox_exe: Some(&linux_sandbox_exe),
         use_legacy_landlock: false,
         windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel::Disabled,
-        windows_sandbox_private_desktop: false,
     });
     let output = match transformed {
         Err(codex_sandboxing::SandboxTransformError::WritableRootRefused(refused)) => {
@@ -913,7 +914,7 @@ fn issue_583_a_linked_home_outside_the_workspace_gets_no_carve_out() {
             ),
             FileSystemSandboxEntry::new(
                 FileSystemPath::Path {
-                    path: abs(&user_home),
+                    path: abs(&user_home).into(),
                 },
                 FileSystemAccessMode::Write,
             ),
@@ -935,7 +936,7 @@ fn issue_583_a_linked_home_outside_the_workspace_gets_no_carve_out() {
         .iter()
         .filter(|entry| {
             entry.access == FileSystemAccessMode::Write
-                && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path().ends_with("worktrees"))
+                && matches!(&entry.path, FileSystemPath::Path { path } if path.to_path_buf().ends_with("worktrees"))
         })
         .collect();
     assert_eq!(worktree_writes, Vec::<&FileSystemSandboxEntry>::new());
@@ -963,7 +964,9 @@ fn issue_619_a_home_below_a_tmp_spelled_root_is_protected() {
                     FileSystemAccessMode::Read,
                 ),
                 FileSystemSandboxEntry::new(
-                    FileSystemPath::Path { path: abs(root) },
+                    FileSystemPath::Path {
+                        path: abs(root).into(),
+                    },
                     FileSystemAccessMode::Write,
                 ),
             ]),
@@ -976,7 +979,7 @@ fn issue_619_a_home_below_a_tmp_spelled_root_is_protected() {
             .iter()
             .filter(|entry| {
                 entry.access == FileSystemAccessMode::Write
-                    && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path().ends_with("worktrees"))
+                    && matches!(&entry.path, FileSystemPath::Path { path } if path.to_abs_path().is_ok_and(|path| path.as_path().ends_with("worktrees")))
             })
             .cloned()
             .collect()
@@ -1037,7 +1040,12 @@ fn issue_652_a_folder_named_twice_adds_no_worktrees_carve_out() {
     let logical = dir.path().to_path_buf();
     let real = logical.canonicalize().unwrap();
     let entry = |path: &Path, access| {
-        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: abs(path).into(),
+            },
+            access,
+        )
     };
     let profile = PermissionProfile::from_runtime_permissions(
         &FileSystemSandboxPolicy::restricted(vec![
@@ -1070,7 +1078,7 @@ fn issue_652_a_folder_named_twice_adds_no_worktrees_carve_out() {
     assert!(!policy.can_write_effective_path_with_cwd(&home.join("worktrees/w"), &cwd));
     assert!(
         !policy.entries.iter().any(|entry| entry.access == FileSystemAccessMode::Write
-            && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path().ends_with("worktrees"))),
+            && matches!(&entry.path, FileSystemPath::Path { path } if path.to_abs_path().is_ok_and(|path| path.as_path().ends_with("worktrees")))),
         "{:?}",
         policy.entries
     );
@@ -1487,7 +1495,12 @@ fn pf_23_s02_rules_never_widen_and_keep_existing_denials() {
     let cwd = fx.user_home.join("project");
     let secret = fx.user_home.join("private");
     let entry = |path: &Path, access| {
-        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: abs(path).into(),
+            },
+            access,
+        )
     };
     let base = PermissionProfile::from_runtime_permissions(
         &FileSystemSandboxPolicy::restricted(vec![
@@ -1518,7 +1531,7 @@ fn pf_23_s02_rules_never_widen_and_keep_existing_denials() {
 async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
     let (session, turn) = crate::session::tests::make_session_and_context().await;
     let environment = turn
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .clone();
@@ -1526,8 +1539,8 @@ async fn pf_23_s02_protected_levels_apply_the_rules_from_the_start() {
     #[allow(deprecated)]
     let cwd = turn.cwd.clone();
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        PermissionProfile::try_from(context.permissions)
-            .unwrap()
+        context
+            .permissions
             .file_system_sandbox_policy()
             .can_read_path_with_cwd(auth.as_path(), cwd.as_path())
     };
@@ -1718,6 +1731,8 @@ async fn issue_239_read_denials_apply_under_protected_level_before_taint() {
     let control = session
         .services
         .agent_control
+        .local()
+        .expect("local agent control")
         .clone()
         .with_effective_security_policy(
             SecurityLevel::Moderate,
@@ -1732,13 +1747,13 @@ async fn issue_239_read_denials_apply_under_protected_level_before_taint() {
     session.services.replace_model_client(client);
 
     let environment = turn
-        .environments
+        .initial_environments
         .primary()
         .expect("a primary environment")
         .clone();
     let auth = turn.config.codex_home.join("auth.json");
     let readable = |context: codex_file_system::FileSystemSandboxContext| {
-        let profile = PermissionProfile::try_from(context.permissions).unwrap();
+        let profile = context.permissions;
         #[allow(deprecated)]
         let cwd = turn.cwd.clone();
         profile
@@ -1853,7 +1868,12 @@ fn issue_512_upload_reads_resolve_links_on_both_sides() {
     std::fs::write(&plain, "x").unwrap();
 
     let entry = |path: &Path, access| {
-        FileSystemSandboxEntry::new(FileSystemPath::Path { path: abs(path) }, access)
+        FileSystemSandboxEntry::new(
+            FileSystemPath::Path {
+                path: abs(path).into(),
+            },
+            access,
+        )
     };
     let policy = FileSystemSandboxPolicy::restricted(vec![
         FileSystemSandboxEntry::new(
@@ -1956,14 +1976,14 @@ async fn issue_506_file_tools_cannot_list_the_home_under_aggressive() {
             .with_source_envelopes(/*enabled*/ true);
         session.services.replace_model_client(client);
         let environment = turn
-            .environments
+            .initial_environments
             .primary()
             .expect("a primary environment")
             .clone();
         let context =
             turn.file_system_sandbox_context(/*additional_permissions*/ None, &environment);
         let protected = protect_file_tool_context(&session, &turn, &environment, context);
-        let profile = PermissionProfile::try_from(protected.permissions).unwrap();
+        let profile = protected.permissions;
         let unlistable = profile
             .file_system_sandbox_policy()
             .get_unlistable_directories();
@@ -2350,7 +2370,7 @@ fn issue_518_read_only_entries_never_reopen_a_denial_through_a_linked_home() {
         assert!(
             !policy.entries.iter().any(|entry| entry.access.can_read()
                 && matches!(&entry.path, FileSystemPath::Path { path }
-                    if real_key.starts_with(path.as_path()) && path.as_path() != Path::new("/"))),
+                    if real_key.starts_with(path.to_path_buf()) && path.to_path_buf() != Path::new("/"))),
             "{profile:?}: {:?}",
             policy.entries
         );
@@ -2410,7 +2430,7 @@ fn issue_518_a_dangling_link_to_a_denied_folder_stays_denied() {
     assert!(!readable_under(&policy, &cwd.join(".agents"), cwd));
     let new_key = fx.real_home.join(".ssh/id_new");
     assert!(!policy.entries.iter().any(|entry| entry.access.can_read()
-        && matches!(&entry.path, FileSystemPath::Path { path } if path.as_path() == new_key)));
+        && matches!(&entry.path, FileSystemPath::Path { path } if path.to_path_buf() == new_key)));
     std::fs::write(&new_key, "DUMMY").unwrap();
     assert!(!readable_under(&policy, &cwd.join(".agents"), cwd));
     assert!(!readable_under(&policy, &new_key, cwd));

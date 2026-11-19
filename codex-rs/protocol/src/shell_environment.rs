@@ -255,13 +255,13 @@ where
     env_map
 }
 
-#[cfg(not(target_os = "windows"))]
-const UNIX_CORE_ENV_VARS: &[&str] = &[
+// Remote launchers need both platforms' defaults regardless of the host OS.
+pub const UNIX_CORE_ENV_VARS: &[&str] = &[
     "PATH", "SHELL", "TMPDIR", "TEMP", "TMP", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME",
     "USER",
 ];
 
-#[cfg(target_os = "windows")]
+// Remote launchers need these names even when the orchestrator is not Windows.
 pub const WINDOWS_CORE_ENV_VARS: &[&str] = &[
     // Core path resolution
     "PATH",

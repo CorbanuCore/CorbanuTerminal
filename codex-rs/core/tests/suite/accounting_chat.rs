@@ -528,8 +528,8 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
                     .disable(codex_features::Feature::CodeModeOnly)
                     .unwrap();
             })
-            // Local executor only: `shell_command` runs commands on the Codex
-            // host, never in a remote environment (#708, #721).
+            // Local executor only, as when this ran through the host-only
+            // `shell_command` tool (#708, #721).
             .build(&server)
             .await?;
         submit(&test).await?;
@@ -537,7 +537,7 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
         let payload = if reason == "tool_calls" {
             data(
                 json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"safe-call",
-                "type":"function","function":{"name":"shell_command","arguments":"{\"command\":\"echo fixture\"}"}}]},
+                "type":"function","function":{"name":"exec_command","arguments":"{\"cmd\":\"echo fixture\"}"}}]},
                 "finish_reason":"tool_calls"}],"usage":usage()}),
             ) + "data: [DONE]\n\n"
         } else {
@@ -575,13 +575,13 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
 }
 
 #[tokio::test]
-async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()> {
+async fn accounting_chat_native_sampling_and_compaction_are_recorded() -> anyhow::Result<()> {
     skip_if_wine_exec!(
         Ok(()),
         "shell-command routing requires a host-native cwd under Wine-exec"
     );
     let server = MockServer::start().await;
-    let mut gate = Gate::start(GateRoutes::ChatAndCompact).await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|c| {
             c.features
@@ -594,13 +594,13 @@ async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()>
                 .disable(codex_features::Feature::RemoteCompactionV2)
                 .unwrap();
         })
-        // Local executor only: `shell_command` runs commands on the Codex
-        // host, never in a remote environment (#708, #721).
+        // Local executor only, as when this ran through the host-only
+        // `shell_command` tool (#708, #721).
         .build(&server)
         .await?;
     submit(&test).await?;
     gate.next().await?.chunks.send(data(json!({"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"safe-call",
-        "type":"function","function":{"name":"shell_command","arguments":"{\"command\":\"echo fixture\"}"}}]},
+        "type":"function","function":{"name":"exec_command","arguments":"{\"cmd\":\"echo fixture\"}"}}]},
         "finish_reason":"tool_calls"}],"usage":usage()})) + "data: [DONE]\n\n").await?;
     gate.next().await?.chunks.send(success(usage())).await?;
     let events = terminal(&test).await?;
@@ -616,10 +616,26 @@ async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()>
     assert_ne!(rows[0].request_id, rows[1].request_id);
     test.codex.submit(Op::Compact).await?;
     let compact = gate.next().await?;
-    assert!(compact.headers.starts_with("POST /v1/responses/compact "));
+    assert!(compact.headers.starts_with("POST /v1/chat/completions "));
+    compact.chunks.send(success(usage())).await?;
     terminal(&test).await?;
-    assert_eq!(attempts(&db).await?, rows);
-    assert_eq!(observations(&db).await?.len(), 2);
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 3);
+    assert_eq!(&records[..2], rows.as_slice());
+    let compaction = &records[2];
+    assert!(compaction.turn.starts_with("compact:"));
+    assert_ne!(compaction.turn, rows[0].turn);
+    assert!(
+        rows.iter()
+            .all(|row| row.request_id != compaction.request_id)
+    );
+    assert_eq!(compaction.thread_id, rows[0].thread_id);
+    assert_eq!(compaction.provider, rows[0].provider);
+    assert_eq!(compaction.dialect, Dialect::Inclusive);
+    wait_observations(&db, /*count*/ 3).await?;
+    assert_eq!(observations(&db).await?.len(), 3);
+    // Chat-route compaction uses billed inference just like the preceding samples.
+    assert_eq!(totals(&db, compaction).await?.measured[0].known, 300);
     gate.no_pending();
     stop(&test).await;
     Ok(())

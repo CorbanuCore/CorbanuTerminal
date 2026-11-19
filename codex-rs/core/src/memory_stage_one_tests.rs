@@ -77,7 +77,7 @@ async fn pf_23_s01_source_envelopes_open_moderate_only_for_labelled_input() {
         let result = client
             .extract(StageOneMemoryRequest {
                 prompt: &prompt,
-                model_info: &context.model_info(),
+                model_info: context.model_info(),
                 session_telemetry: &context.session_telemetry,
                 reasoning_effort: None,
                 reasoning_summary: ReasoningSummary::default(),
@@ -208,20 +208,24 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
 async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration() {
     let parent = owner(SecurityLevel::Moderate).await;
     let (mut child, _) = crate::session::tests::make_session_and_context().await;
-    child.services.agent_control = Arc::new(
-        parent
-            .services
-            .agent_control
-            .local()
-            .expect("local agent control")
-            .clone()
-            .with_effective_security_policy(
-                SecurityLevel::Permissive,
-                child.thread_id,
-                /*inherits_from_spawn_parent*/ false,
-            )
-            .unwrap(),
-    );
+    let control = parent
+        .services
+        .agent_control
+        .local()
+        .expect("local agent control")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            child.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .unwrap();
+    // Upstream sessions read policy through `services.security_policy`, which a session
+    // takes from its agent control when it is built; join the child to the parent's
+    // control plane the same way.
+    child.services.security_policy = control.effective_security_policy();
+    child.services.local_agent_runtime = control.runtime.clone();
+    child.services.agent_control = Arc::new(control);
     assert!(matches!(
         client(&Arc::new(child)).await,
         Err(StageOneMemoryError::Denied(
@@ -409,7 +413,7 @@ async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
         std::time::Duration::from_secs(5),
         client.extract(StageOneMemoryRequest {
             prompt: &prompt,
-            model_info: &context.model_info(),
+            model_info: context.model_info(),
             session_telemetry: &context.session_telemetry,
             reasoning_effort: None,
             reasoning_summary: ReasoningSummary::default(),
@@ -484,7 +488,7 @@ async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
         client
             .extract(StageOneMemoryRequest {
                 prompt: &prompt,
-                model_info: &context.model_info(),
+                model_info: context.model_info(),
                 session_telemetry: &context.session_telemetry,
                 reasoning_effort: None,
                 reasoning_summary: ReasoningSummary::default(),
@@ -577,7 +581,7 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
     let (mut session, context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
     )
     .await?;
@@ -622,7 +626,7 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
     client
         .extract(StageOneMemoryRequest {
             prompt: &prompt,
-            model_info: &context.model_info(),
+            model_info: context.model_info(),
             session_telemetry: &context.session_telemetry,
             reasoning_effort: None,
             reasoning_summary: ReasoningSummary::default(),
@@ -857,7 +861,7 @@ async fn pf_23_s01_prompt_must_be_the_labelled_message() {
     let result = client
         .extract(StageOneMemoryRequest {
             prompt: &prompt,
-            model_info: &context.model_info(),
+            model_info: context.model_info(),
             session_telemetry: &context.session_telemetry,
             reasoning_effort: None,
             reasoning_summary: ReasoningSummary::default(),
@@ -1063,7 +1067,7 @@ async fn memory_extraction_respects_and_records_the_provider_request_throttle() 
     let mut extract = async || match client
         .extract(StageOneMemoryRequest {
             prompt: &prompt,
-            model_info: &turn_context.model_info(),
+            model_info: turn_context.model_info(),
             session_telemetry: &turn_context.session_telemetry,
             reasoning_effort: None,
             reasoning_summary: ReasoningSummary::default(),

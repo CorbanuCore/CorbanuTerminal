@@ -36,6 +36,8 @@ pub(super) async fn run_startup_for_test(
         /*initial_prompt*/ None,
         Vec::new(),
         selection,
+        /*resume_fallback_notice*/ None,
+        /*startup_resume_model_override*/ None,
         codex_feedback::CodexFeedback::new(),
         /*is_first_run*/ false,
         /*should_prompt_windows_sandbox_nux_at_startup*/ false,
@@ -50,6 +52,8 @@ pub(super) async fn run_startup_for_test(
         crate::startup_draft::tests::quiet_startup_test_pump(),
         /*managed_worktree*/ None,
         /*daemon_cli_executable*/ None,
+        /*deferred_provider_setup*/ None,
+        /*startup_provider_resolution*/ None,
     )
     .await
 }
@@ -390,7 +394,8 @@ requires_openai_auth = false
         let mut server_config = config.clone();
         server_config.codex_home = server_home.path().to_path_buf().abs();
         server_config.sqlite = SqliteConfig::new_for_testing(server_home.path().abs());
-        server_config.model_catalog = Some(Default::default());
+        // Corbanu's server replaces a default model that its catalog does not list with the
+        // catalog's default, so the server keeps its bundled catalog rather than an empty one.
         let (mut server, requests, proxy) = start_recording_app_server_with_history(
             &server_config,
             HistoryCapabilities::Current,
@@ -649,12 +654,17 @@ async fn fresh_startup_reads_destination_and_cleared_model_uses_catalog() -> Res
         let (mut app, _, _) = make_test_app_with_channels().await;
         app.chat_widget.handle_thread_session_quiet(started.session);
         if !remote {
-            let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80)
-                .replace(&destination.path().display().to_string(), "<PROJECT>");
+            let project_path = destination.path().display().to_string();
+            // Normalize the complete path before comparing the snapshot; a long
+            // disposable test home must not truncate it before replacement.
+            let width =
+                u16::try_from(80 + unicode_width::UnicodeWidthStr::width(project_path.as_str()))?;
+            let rendered =
+                render_bottom_popup(&app.chat_widget, width).replace(&project_path, "<PROJECT>");
             insta::assert_snapshot!(rendered, @r"
-            › Ask Codex to do anything
+            › Ask Corbanu Terminal to do anything
 
-              GPT-6.1-Sol high · <PROJECT>
+              GPT-6 Sol high · <PROJECT> · Corbanu Terminal · TPS: -- tok/s
             ");
         }
         let expected_cwd = if override_cwd {
@@ -775,7 +785,9 @@ async fn fresh_startup_falls_back_only_for_unsupported_config_read() -> Result<(
             ),
             (&serde_json::Value::Null, &serde_json::Value::Null)
         );
-        tokio::time::timeout(Duration::from_secs(/*secs*/ 15), proxy).await???;
+        // The startup future is dropped at thread/start, but Corbanu's startup keeps the
+        // connection open after that, so the proxy is stopped as in the trust test above.
+        proxy.abort();
     }
     Ok(())
 }
@@ -841,7 +853,8 @@ async fn startup_reads_server_defaults_before_starting_thread() -> Result<()> {
         ),
         (&serde_json::Value::Null, &serde_json::Value::Null),
     );
-    tokio::time::timeout(Duration::from_secs(/*secs*/ 15), proxy).await???;
+    // As above: Corbanu's dropped startup keeps the connection open.
+    proxy.abort();
     Ok(())
 }
 

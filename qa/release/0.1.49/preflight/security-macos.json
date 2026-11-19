@@ -1,0 +1,14 @@
+{
+  "source_commit": "5fd571822bef255237f963c7bc18286a9110f58b",
+  "binary_sha256": "53f77726294ee6323aa565ae1400ce4cf53a0e15ab305be9bb10ca3bb812cb57",
+  "checks": {
+    "missing_labels_refuses_moderate": true,
+    "moderate_saved": true,
+    "moderate_active_after_restart": true,
+    "invalid_state_enforces_aggressive": true,
+    "invalid_state_repaired": true,
+    "repaired_level_active_after_restart": true,
+    "config_unchanged": true
+  },
+  "scope": "Picker persistence, restart and invalid-state recovery in a private macOS home; no agent command, provider-auth or sandbox-enforcement qualification"
+}

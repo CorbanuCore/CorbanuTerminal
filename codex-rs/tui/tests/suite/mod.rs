@@ -21,9 +21,9 @@ mod output_text_stream;
 #[cfg(unix)]
 mod provider_convergence;
 #[cfg(unix)]
-mod provider_management;
-#[cfg(unix)]
 mod provider_defaults;
+#[cfg(unix)]
+mod provider_management;
 #[cfg(unix)]
 mod reconnect;
 mod resize_reflow;
@@ -32,13 +32,13 @@ mod resume_provider_accounts;
 #[cfg(unix)]
 mod resume_recorded_account;
 #[cfg(unix)]
+mod screen_reader;
+#[cfg(unix)]
 mod security_profiles;
 #[cfg(unix)]
 mod side_refusal;
 #[cfg(unix)]
 mod slash_dispatch;
-#[cfg(unix)]
-mod screen_reader;
 mod status_indicator;
 mod vt100_history;
 mod vt100_live_commit;

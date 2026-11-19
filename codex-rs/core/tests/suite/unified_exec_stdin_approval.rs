@@ -218,6 +218,7 @@ async fn stdin_reviews_escalated_terminal_with_denied_reads_before_delivering_in
         file_system.entries.push(FileSystemSandboxEntry::new(
             FileSystemPath::GlobPattern {
                 pattern: "**/secret.env".into(),
+                scan: None,
             },
             FileSystemAccessMode::Deny,
         ));
@@ -513,7 +514,14 @@ async fn stdin_reviews_current_grants_with_sandbox_prompts_disabled(
             } else {
                 harness.create_dir_all(child).await?;
             }
-            let child = test.workspace_path_uri(child)?.to_abs_path()?;
+            // Grant the actual destination for the symlink case. A writable root
+            // that is itself an escaping symlink is correctly refused at launch.
+            let grant_path = if matches!(grant_change, GrantChange::SymlinkWriteExpires) {
+                "outside"
+            } else {
+                child
+            };
+            let child = test.workspace_path_uri(grant_path)?.to_abs_path()?;
             if matches!(grant_change, GrantChange::ReadOnlyChildExpires) {
                 let mut file_system = permission_profile.file_system_sandbox_policy();
                 file_system.entries.push(FileSystemSandboxEntry::new(
@@ -661,7 +669,9 @@ async fn stdin_reviews_current_grants_with_sandbox_prompts_disabled(
     assert_eq!(grant_scopes.next(), None);
     assert_eq!(
         approvals,
-        usize::from(matches!(reviewer, StdinReviewer::User))
+        usize::from(matches!(reviewer, StdinReviewer::User)),
+        "tool outputs: {:?}",
+        ["grant", "extra_grant", "open", "allowed"].map(|id| writes.function_call_output_text(id))
     );
     let output = writes
         .function_call_output_text("allowed")

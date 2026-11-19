@@ -137,6 +137,8 @@ jobs:
             # transitively through `//...`.
             -//third_party/v8:all
             -//codex-rs/v8-poc:v8-poc-unit-tests
+            # D316: voice stays outside the sync lanes pending a product decision.
+            -//third_party/voice/...
           )
 
           bazel_wrapper_args=(
@@ -315,6 +317,8 @@ jobs:
     timeout-minutes: 30
     runs-on: windows-2022
     name: Native Windows MSVC product build
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -323,6 +327,15 @@ jobs:
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+
+      - name: Configure Cargo checkout paths
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $cargoHome = Join-Path $env:RUNNER_TEMP 'c'
+          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
+          "CARGO_HOME=$cargoHome" >> $env:GITHUB_ENV
 
       - name: Build and smoke-test product binaries
         shell: pwsh
@@ -406,6 +419,8 @@ jobs:
             # transitively through `//...`.
             -//third_party/v8:all
             -//codex-rs/v8-poc:v8-poc-unit-tests
+            # D316: voice stays outside the sync lanes pending a product decision.
+            -//third_party/voice/...
           )
 
           bazel_test_args=(

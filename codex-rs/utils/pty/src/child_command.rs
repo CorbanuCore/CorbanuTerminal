@@ -84,6 +84,8 @@ pub struct Command {
     #[cfg(target_os = "linux")]
     parent_pid: Option<libc::pid_t>,
     #[cfg(unix)]
+    pub(crate) reset_signals: bool,
+    #[cfg(unix)]
     pub(crate) stdout_file: Option<std::os::fd::OwnedFd>,
     #[cfg(unix)]
     pub(crate) stderr_file: Option<std::os::fd::OwnedFd>,
@@ -116,6 +118,8 @@ impl Command {
             inherited_fds: Vec::new(),
             #[cfg(target_os = "linux")]
             parent_pid: None,
+            #[cfg(unix)]
+            reset_signals: false,
             #[cfg(unix)]
             stdout_file: None,
             #[cfg(unix)]
@@ -222,6 +226,16 @@ impl Command {
         self
     }
 
+    /// Start the child with default dispositions for
+    /// [`crate::process_group::CHILD_DEFAULT_SIGNALS`] and an empty signal mask,
+    /// so signals the parent ignores or blocks (for example SIGINT/SIGQUIT under
+    /// `nohup` or a background job) still reach the command.
+    #[cfg(unix)]
+    pub(crate) fn reset_signals(&mut self) -> &mut Self {
+        self.reset_signals = true;
+        self
+    }
+
     /// Keep the existing Linux pipe behavior when the spawning parent exits.
     #[cfg(target_os = "linux")]
     pub fn terminate_on_parent_death(&mut self) -> &mut Self {
@@ -295,17 +309,26 @@ impl Command {
             let new_session = matches!(self.process_mode, ProcessMode::NewSession);
             let explicit_fds = self.descriptor_policy == DescriptorPolicy::Explicit;
             let targets = self.inherited_fds;
+            let reset_signals = self.reset_signals;
             #[cfg(target_os = "linux")]
             let parent_pid = self.parent_pid;
             #[cfg(not(target_os = "linux"))]
             let parent_pid: Option<i32> = None;
-            if new_session || explicit_fds || !targets.is_empty() || parent_pid.is_some() {
+            if new_session
+                || explicit_fds
+                || reset_signals
+                || !targets.is_empty()
+                || parent_pid.is_some()
+            {
                 // SAFETY: The caller keeps the selected descriptors open. Session
                 // and parent-death setup use system calls; Linux and macOS cleanup
                 // avoid allocation after fork. Other Unix targets have an
                 // allocation-after-fork risk documented on close_inherited_fds_except.
                 unsafe {
                     self.inner.pre_exec(move || {
+                        if reset_signals {
+                            crate::process_group::reset_child_signals()?;
+                        }
                         if new_session {
                             crate::process_group::detach_from_tty()?;
                         }

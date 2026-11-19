@@ -93,6 +93,20 @@ async fn slash_commands_without_side_flag_are_rejected_for_side_threads() {
     assert!(op_rx.try_recv().is_err(), "expected no review op");
 }
 
+/// #1039: the refusal says Ctrl+C returns to the main thread, so the refused `/review` must not
+/// stay in the composer, where Ctrl+C would only clear it. Other drafts are left alone.
+#[tokio::test]
+async fn refused_review_in_side_conversation_does_not_stay_as_a_draft() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.set_side_conversation_active(/*active*/ true);
+    for (draft, expected) in [("/review", ""), ("keep this draft", "keep this draft")] {
+        chat.bottom_pane
+            .set_composer_text(draft.to_string(), Vec::new(), Vec::new());
+        chat.dispatch_command(SlashCommand::Review);
+        assert_eq!(chat.bottom_pane.composer_text(), expected);
+    }
+}
+
 #[tokio::test]
 async fn slash_side_is_rejected_for_side_threads() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;

@@ -1,5 +1,6 @@
 ---
-source: tui/src/bottom_pane/chat_composer.rs
+source: tui/src/bottom_pane/chat_composer/tests.rs
+assertion_line: 227
 expression: terminal.backend()
 ---
 "  Keyboard shortcuts                                                                                "
@@ -16,7 +17,7 @@ expression: terminal.backend()
 "                                                                                                    "
 "  /keymap customize                                                                                 "
 "                                                                                                    "
-"› Ask Codex to do anything                                                                          "
+"› Ask Corbanu Terminal to do anything                                                               "
 "                                                                                                    "
 "                                                                                                    "
 "                                                                                                    "

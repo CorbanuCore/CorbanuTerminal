@@ -55,7 +55,7 @@ async fn declined_command_history_never_claims_execution_or_success() {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.on_task_started();
         let mut item = begin_exec(&mut chat, "declined", command);
-        let AppServerThreadItem::CommandExecution { status, .. } = &mut item else {
+        let AppServerThreadItemPayload::CommandExecution { status, .. } = &mut item else {
             panic!("expected command execution");
         };
         *status = AppServerCommandExecutionStatus::Declined;
@@ -87,9 +87,15 @@ async fn declined_command_history_never_claims_execution_or_success() {
             lines_to_single_string(&display),
             format!("✗ Did not run {command}\n  └ Approval declined\n")
         );
-        assert_eq!(
-            lines_to_single_string(&transcript),
-            format!("$ {command}\n✗ Did not run (approval declined)\n")
+        // #2221 (carried by #2328): the transcript keeps the command's job
+        // record, as main's replayed transcript does; a declined command
+        // reports no process.
+        let transcript = lines_to_single_string(&transcript);
+        assert!(
+            transcript.starts_with(&format!(
+                "$ {command}\n✗ Did not run (approval declined)\n\njob: pid=not reported · call=declined · cwd="
+            )),
+            "{transcript}"
         );
     }
 }
@@ -100,7 +106,7 @@ async fn failed_command_without_exit_code_never_claims_execution_or_success() {
         let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.on_task_started();
         let mut item = begin_exec(&mut chat, "pending", command);
-        let AppServerThreadItem::CommandExecution {
+        let AppServerThreadItemPayload::CommandExecution {
             status,
             exit_code,
             duration_ms,
@@ -139,6 +145,7 @@ async fn interrupted_pending_approval_never_claims_execution_or_success() {
             proposed_network_policy_amendments: None,
             additional_permissions: None,
             available_decisions: None,
+            kind: Default::default(),
         },
     );
     handle_turn_interrupted(&mut chat, "turn-1");
@@ -175,9 +182,13 @@ fn assert_unconfirmed_command_history(
         lines_to_single_string(&display),
         format!("✗ Execution unconfirmed {command}\n  └ No exit status received\n")
     );
-    assert_eq!(
-        lines_to_single_string(&transcript),
-        format!("$ {command}\n✗ Execution unconfirmed (no exit status received)\n")
+    // #2221 (carried by #2328): a completed item keeps its job record, as for a declined
+    // command; it reports no process.
+    let transcript = lines_to_single_string(&transcript);
+    let head = format!("$ {command}\n✗ Execution unconfirmed (no exit status received)\n");
+    assert!(
+        transcript == head || transcript.starts_with(&format!("{head}\njob: pid=not reported · ")),
+        "{transcript}"
     );
 }
 

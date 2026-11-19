@@ -46,6 +46,13 @@ impl StatusTimer {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn reset_for_tests(&mut self, now: Instant) {
+        self.elapsed_running = Duration::ZERO;
+        self.last_resume_at = now;
+        self.is_paused = false;
+    }
+
     pub(crate) fn elapsed_at(&self, now: Instant) -> Duration {
         self.elapsed_running
             + if self.is_paused {

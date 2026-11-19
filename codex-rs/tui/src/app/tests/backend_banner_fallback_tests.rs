@@ -26,6 +26,18 @@ pub(super) fn fallback_response() -> GetAccountRateLimitsResponse {
 fn configure_fallback_model(app: &mut App) {
     set_chatgpt_auth(&mut app.chat_widget);
     set_fast_mode_test_catalog_for_models(&mut app.chat_widget, "gpt-5.5", "gpt-5.6-terra");
+    // Corbanu's test models offer only xhigh; these tests expect upstream's,
+    // which offer and default to medium.
+    let mut models = app.chat_widget.model_catalog().try_list_models().unwrap();
+    for model in &mut models {
+        for effort in &mut model.supported_reasoning_efforts {
+            effort.effort = ReasoningEffortConfig::Medium;
+        }
+        model.default_reasoning_effort = ReasoningEffortConfig::Medium;
+    }
+    app.chat_widget
+        .model_catalog()
+        .replace_models_for_test(models);
     app.model_catalog = app.chat_widget.model_catalog();
     app.chat_widget.set_model("gpt-5.5");
 }
@@ -432,13 +444,19 @@ async fn backend_banner_fallback_handles_settings_failure_and_queued_manual_sele
 async fn backend_banner_fallback_preserves_permissions_for_first_eligible_cyber_model() -> Result<()>
 {
     let mut app = make_test_app().await;
+    let mut permission_server = start_config_write_test_app_server(&app)
+        .await
+        .expect("permission test app server");
     assert!(
-        app.apply_permission_profile_selection(PermissionProfileSelection {
-            profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY.into(),
-            approval_policy: Some(AskForApproval::UnlessTrusted),
-            approvals_reviewer: Some(ApprovalsReviewer::User),
-            display_label: "Read Only".into(),
-        })
+        app.apply_permission_profile_selection(
+            &mut permission_server,
+            PermissionProfileSelection {
+                profile_id: codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY.into(),
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                approvals_reviewer: Some(ApprovalsReviewer::User),
+                display_label: "Read Only".into(),
+            },
+        )
         .await
     );
     let mut server = crate::start_embedded_app_server_for_picker(&app.config).await?;

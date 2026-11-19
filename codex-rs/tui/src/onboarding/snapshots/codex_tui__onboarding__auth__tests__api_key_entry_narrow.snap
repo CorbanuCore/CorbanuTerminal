@@ -1,13 +1,14 @@
 ---
 source: tui/src/onboarding/auth.rs
+assertion_line: 3146
 expression: terminal.backend().to_string()
 ---
-> Use your own OpenAI API key for
-usage-based billing
+> Use your OpenAI API key
 
-  Paste or type your API key below.
-
-
+Paste your OpenAI API key for
+usage-based billing. Corbanu stores it
+in the configured OpenAI credential
+store and never adds it to chat.
 ╭API key───────────────────────────────╮
 │Paste or type your API key            │
 ╰──────────────────────────────────────╯

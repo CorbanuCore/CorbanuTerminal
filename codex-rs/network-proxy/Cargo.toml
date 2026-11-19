@@ -71,6 +71,12 @@ tokio = { workspace = true, features = ["test-util"] }
 libc = { workspace = true }
 rama-unix = { version = "=0.3.0-alpha.4" }
 
+# sha2 0.10 gates its runtime-detected ARM SHA instructions behind "asm".
+# Musl uses the portable SHA path: its Zig cross toolchain cannot build sha2-asm.
+# Keep the portable fallback and leave other architectures' backends unchanged.
+[target.'cfg(all(target_arch = "aarch64", unix, not(target_env = "musl")))'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 rama-dns = { version = "=0.3.0-alpha.4" }
 security-framework = "3"

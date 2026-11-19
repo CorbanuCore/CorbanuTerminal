@@ -8,5 +8,6 @@
   and rejected updates show the server's reason.
 - Selecting a weaker sandbox explains that it applies from the next session,
   without attributing the restriction to an unspecified configuration source.
-- Detached reviews refresh the missing-sandbox notice for the security level
-  inherited from their conversation.
+- A conversation forked from a running one (`thread/fork`, which replaces
+  detached reviews) refreshes the missing-sandbox notice for the security
+  level it inherits.

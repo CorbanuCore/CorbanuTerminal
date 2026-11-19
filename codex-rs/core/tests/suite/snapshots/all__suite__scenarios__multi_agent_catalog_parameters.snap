@@ -16,15 +16,18 @@ Settings:
   text: {"verbosity":"low"}
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=2b84850bc279e5ed):
-        - namespace/functions; hash=fada4a476a3754dd
+00:additional_tools/developer (3; hash=6060231a5a2eac80):
+        - namespace/functions; hash=519613face70a46f
           - custom/exec
           - function/wait
           - function/request_user_input
           - function/request_user_input_async
+          - function/spawn_agent_plaintext
+          - function/send_message_plaintext
+          - function/followup_task_plaintext
         - namespace/clock: Tools for reading and waiting on time.; hash=f402e8c5e9b5e317
           - function/sleep
-        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=7e156cf57f85af87
+        - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=42a5bed3feb7d0a0
           - function/followup_task
           - function/interrupt_agent
           - function/list_agents
@@ -85,7 +88,7 @@ Settings:
 
     When calling `wait_agent`, prefer longer waits (minutes) to avoid busy polling.
 
-    There are 4 available concurrency slots, meaning that up to 4 agents can be active at once, including you.
+    There are 6 available concurrency slots, meaning that up to 6 agents can be active at once, including you.
 
     Full-history forks (`fork_turns` omitted or `"all"`) inherit the parent model and reasoning effort and d... so, set `fork_turns` to `"none"`.</multi_agent_role> [hash=d5928243dc643bcc]
 04:message/developer:
@@ -103,4 +106,4 @@ Settings:
 07:configuration_update:reasoning={"effort":"low"}
 -- request 2 (turn) --
 08:function_call/collaboration.list_agents:{"path_prefix":"/root"}
-09:function_call_output:{"agents":[{"agent_name":"/root","agent_status":"running"}]}
+09:function_call_output:{"agents":[{"agent_name":"/root","agent_nickname":null,"agent_role":null,"agent_status":"running","last_..._message":"Main thread","last_result_message":null}]} [hash=2c0a5b8682fec71c]

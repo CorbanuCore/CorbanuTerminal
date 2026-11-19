@@ -11,6 +11,7 @@ plus `git`, `gh`, `cargo`, `bazel` and `actionlint` where noted. Nothing here pu
 | `conflict_stats.py <worktree> <prefix>` | Conflict counts per area for a worktree mid-merge. Lines exclude the zdiff3 base section; hunk counts are zdiff3's (about 10% more than the default style the plan's tables used). |
 | `slices.py <conflicts.json>` | The authoritative path → slice classifier (plan §5). |
 | `ledger.py <worktree> <tag> <out.tsv>` | The ledger: one row per conflicted path, per clean-merging upstream change on a security path, per colliding upstream migration. |
+| `ledger_summary.py <main-ledger.tsv>` | Read-only totals by status, kind and slice across the main ledger and every sibling split for the tag (excluding previews). |
 | `footprint.py` | Rebuilds `security_paths.txt` (named paths, then the fork-patch footprint) and `security_footprint_prs.tsv` from merged security PRs (needs `gh`). |
 | `tier0.py prep/save/extra/apply/check` | Prepares and checks the Tier 0 resolutions (manifests, lockfiles, CI files) the skeleton commit needs. |
 | `lock_max.py <codex-rs> <tag>` | After cargo regenerates the merged `Cargo.lock` from `main`'s, raises crates to the tag's newer patch versions. |
@@ -28,8 +29,20 @@ note`. `kind` is `content`, `modify/delete` (deleted upstream, the skeleton keep
 `main` inside a directory upstream renamed; git placed it at the new path), `add/add`, `security-review` (merged
 cleanly, on a security path, reviewed diff-level in S3b), `ci-review` (an upstream change or deletion under
 `.github/` that merged cleanly; integrator, S4) or `migration` (renumbering proposed in `note`). `status` is
-`open` or `resolved`. Rows added after the skeleton: `follow-up` (a slice PR changed a path outside its conflicted rows), `re-apply` (a main merge kept the sync side of a path; the note gives the `git diff <old-main>..<new-main>` its owner re-applies) and `main-merge` (a main merge brought `main`'s change in through git; `open` while the path still has markers). Rows with area `main-merge-N` (whatever their kind; main merge #1's refreshed S3a `re-apply` rows keep their crate area and stay in the main ledger) live in `ledger-<tag>-main-merges.tsv` (main merges #1 to #2c) and `ledger-<tag>-main-merges-2.tsv` (main merge #3 onward; split out at main merge #3b), same columns, so every ledger stays under the 512,000-byte blob limit (main merge #2). Rows with slice `S3b security review` live in `ledger-<tag>-s3b.tsv`, same columns, split out for the same reason at S3a (sync-s3a4); new S3b rows go there. `resolution` is one of `ours`, `theirs`, `merged`, `ported`, `deleted`. Slice PRs update their
+`open` or `resolved`. Rows added after the skeleton: `follow-up` (a slice PR changed a path outside its conflicted rows), `re-apply` (a main merge kept the sync side of a path; the note gives the `git diff <old-main>..<new-main>` its owner re-applies) and `main-merge` (a main merge brought `main`'s change in through git; `open` while the path still has markers). Rows with area `main-merge-N` (whatever their kind; main merge #1's refreshed S3a `re-apply` rows keep their crate area and stay in the main ledger) live in `ledger-<tag>-main-merges.tsv` (main merges #1 to #2c) and `ledger-<tag>-main-merges-2.tsv` (main merges #3 to #11; split out at main merge #3b) and `ledger-<tag>-main-merges-3.tsv` (main merge #12 onward), same columns, so every ledger stays under the 512,000-byte blob limit (main merge #2). Rows with slice `S3b security review` live in `ledger-<tag>-s3b.tsv`, same columns, split out for the same reason at S3a (sync-s3a4); new S3b rows go there. `resolution` is one of `ours`, `theirs`, `merged`, `ported`, `deleted`. Slice PRs update their
 rows; the integrator owns the file.
+
+On 2026-11-15, the main ledger's resolved rows moved to `ledger-rust-v0.167.0-resolved.tsv`, preserving
+columns and relative row order. Open rows stay in the main ledger; existing slice and main-merge splits
+stay in their own files. Update a row in its current file, including when resolving an open row.
+For totals, always include the main file and **all** `ledger-<tag>-*.tsv` siblings, not the preview ledgers:
+
+```sh
+python3 scripts/upstream_sync/ledger_summary.py docs/management/upstreamSync/ledger-rust-v0.167.0.tsv
+```
+
+The summary validates the columns and statuses and counts every row (a path may have separate follow-up
+or main-merge rows). Its status, kind and slice totals are unchanged by moving rows between split files.
 
 ## Skeleton merge (S0 exit)
 

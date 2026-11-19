@@ -12,6 +12,7 @@ pub(crate) enum AllowPrefixRules {
 }
 
 impl ExecPolicyManager {
+    #[cfg(test)]
     pub(crate) fn current_for_environment(
         &self,
         environment_policy: Option<&RequirementsExecPolicy>,
@@ -24,8 +25,8 @@ impl ExecPolicyManager {
         )
     }
 
-    /// [`Self::current_for_environment`] on the policy an agent command is
-    /// checked against at the session's live level (Corbanu #443/#626, D52:
+    /// The environment policy an agent command is checked against at the
+    /// session's live level (Corbanu #443/#626, D52:
     /// see [`ExecPolicyManager::current_for`]).
     pub(crate) fn current_for_environment_at(
         &self,

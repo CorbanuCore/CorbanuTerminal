@@ -5,6 +5,19 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol_test_support::ContentItemTestExt;
 use pretty_assertions::assert_eq;
 
+/// Corbanu (S1c): World State stamps each rendered fragment with its section's producer ID
+/// (`context_fragment_sources`, used to deduplicate context for non-OpenAI providers), so the
+/// expected item carries the same ID.
+fn sourced<F: ContextualUserFragment + 'static>(
+    source_id: &'static str,
+    fragment: F,
+) -> ResponseItem {
+    ContextualUserFragment::into(codex_context_fragments::SourcedFragment::new(
+        source_id,
+        Box::new(fragment),
+    ))
+}
+
 #[test]
 fn managed_policy_updates_and_removal_are_emitted_once() {
     let mut history: Vec<ResponseItem> = Vec::new();
@@ -34,7 +47,10 @@ fn managed_policy_updates_and_removal_are_emitted_once() {
             updates,
             expected
                 .map(|instructions| {
-                    ContextualUserFragment::into(ManagedDeveloperInstructions { instructions })
+                    sourced(
+                        <ManagedDeveloperInstructionsState as WorldStateSection>::ID,
+                        ManagedDeveloperInstructions { instructions },
+                    )
                 })
                 .into_iter()
                 .collect::<Vec<_>>()
@@ -73,9 +89,12 @@ fn managed_policy_updates_and_removal_are_emitted_once() {
                 .into_iter()
                 .map(ContextualUserFragment::into_boxed_response_item)
                 .collect::<Vec<_>>(),
-            vec![ContextualUserFragment::into(ManagedDeveloperInstructions {
-                instructions: expected,
-            })]
+            vec![sourced(
+                <ManagedDeveloperInstructionsState as WorldStateSection>::ID,
+                ManagedDeveloperInstructions {
+                    instructions: expected,
+                },
+            )]
         );
     }
 }

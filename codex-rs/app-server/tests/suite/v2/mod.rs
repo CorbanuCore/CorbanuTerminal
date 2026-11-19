@@ -54,6 +54,7 @@ mod critical_path_analytics;
 mod curated_mcp_sync;
 mod current_time;
 mod cyber_access_program;
+mod d658_background_grant;
 mod daemon_update_recovery;
 mod daybreak_access;
 mod default_login_left_in_place;
@@ -73,6 +74,7 @@ mod external_agent_config;
 mod external_agent_import_sync;
 mod external_agent_memory_concurrency;
 mod feedback;
+mod fork_parent_settings;
 mod frozen_cloud_skills;
 mod fs;
 #[path = "gateway_oauth_tests.rs"]

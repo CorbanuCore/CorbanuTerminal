@@ -1,6 +1,5 @@
 use super::*;
 use crate::app_server_session::ResumeModelSettings;
-use crate::app_server_session::ResumePermissionSettings;
 use app_test_support::create_fake_rollout;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_utils_absolute_path::test_support::PathExt;
@@ -12,6 +11,13 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
     let codex_home = tempdir()?;
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = codex_state::SqliteConfig::new_for_testing(codex_home.path().abs());
+    // The saved chat is OpenAI's; main refuses to resume it under Corbanu's Z.AI test provider.
+    app.config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
+    app.config.model_provider =
+        codex_model_provider_info::ModelProviderInfo::create_openai_provider(
+            /*base_url*/ None,
+        );
+    app.config.model = Some("gpt-5.4".to_string());
     let source_thread_id = ThreadId::from_string(
         &create_fake_rollout(
             codex_home.path(),
@@ -26,10 +32,10 @@ async fn fork_current_session_preserves_conversation_ultra() -> Result<()> {
     let mut app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
     app_server
         .resume_thread(
+            &crate::local_settings::LocalSettings::from(&app.config),
             app.config.clone(),
             source_thread_id,
             ResumeModelSettings::RestoreFromThread,
-            ResumePermissionSettings::RestoreFromThread,
         )
         .await?;
     app.chat_widget.handle_thread_session(ThreadSessionState {

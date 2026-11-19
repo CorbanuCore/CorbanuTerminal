@@ -232,7 +232,7 @@ fn mode(pricing: PriceAuthority, basis_source: BasisSource) -> AccountingMode {
 async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "my-llm".into(),
     )
     .await?;
@@ -347,7 +347,7 @@ async fn admission_binds_the_basis_to_every_attempt() -> anyhow::Result<()> {
 async fn image_generation_rates_apply_only_to_openai_api_key_rates() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "openai".into(),
     )
     .await?;
@@ -535,7 +535,7 @@ async fn admission_records_the_named_account() -> anyhow::Result<()> {
     );
 
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "my-llm".into(),
     )
     .await?;
@@ -795,7 +795,7 @@ fn moonshot_route_is_priced_by_the_route() {
 async fn moonshot_route_admission_binds_published_rates() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "kimi".into(),
     )
     .await?;
@@ -936,7 +936,7 @@ async fn moonshot_route_admission_binds_published_rates() -> anyhow::Result<()> 
 async fn moonshot_route_prices_reports_that_leave_out_zero_counts() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
     let db = StateRuntime::init(
-        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        SqliteConfig::new_for_testing(AbsolutePathBuf::try_from(home.path())?),
         "kimi".into(),
     )
     .await?;

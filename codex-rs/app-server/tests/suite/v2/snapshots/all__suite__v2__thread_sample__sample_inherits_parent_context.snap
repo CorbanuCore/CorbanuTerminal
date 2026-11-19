@@ -16,18 +16,19 @@ Settings:
   stream: true
   tool_choice: "auto"
 -- request 1 (turn) --
-00:additional_tools/developer (3; hash=bf13940dee826ebd):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=c826e5b07fd2820f
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -45,10 +46,14 @@ Settings:
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - corbanu-terminal-help: Help users operate Corbanu Terminal's product-specific features and slash comma...ementation. (file: r0/corbanu-terminal-help/SKILL.md) [hash=a5ffdd9ca55f12d2]
+        - frontend-design: Create distinctive, production-grade browser frontend interfaces with high design qua...y interface work. (file: r0/frontend-design/SKILL.md) [hash=ad58e6de4c36f0e5]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
+        - postfiat-l1-development: Develop, review, debug, or document the PostFiat L1 Rust workspace with repos...ventions. (file: r0/postfiat-l1-development/SKILL.md) [hash=887e537ce017ae44]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)
         - skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo pat...g private repos). (file: r0/skill-installer/SKILL.md) [hash=d3eb4395bd8e52c5]
+        - tasknode-usage: Use Task Node as an agent-side second brain and work ledger. Use when the user asks Co...t asking the user. (file: r0/tasknode-usage/SKILL.md) [hash=cdd86285fc5eda03]
         </skills_instructions>
     [03] <permissions instructions>
         Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The san... permits reading files. Network access is restricted. [hash=be7da4425f89053c]
@@ -77,18 +82,19 @@ Settings:
 ## Window 2 (after request 2: input repeated)
 Settings: same as window 1
 -- request 3 (turn) --
-00:additional_tools/developer (3; hash=bf13940dee826ebd):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=c826e5b07fd2820f
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -106,10 +112,14 @@ Settings: same as window 1
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - corbanu-terminal-help: Help users operate Corbanu Terminal's product-specific features and slash comma...ementation. (file: r0/corbanu-terminal-help/SKILL.md) [hash=a5ffdd9ca55f12d2]
+        - frontend-design: Create distinctive, production-grade browser frontend interfaces with high design qua...y interface work. (file: r0/frontend-design/SKILL.md) [hash=ad58e6de4c36f0e5]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
+        - postfiat-l1-development: Develop, review, debug, or document the PostFiat L1 Rust workspace with repos...ventions. (file: r0/postfiat-l1-development/SKILL.md) [hash=887e537ce017ae44]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)
         - skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo pat...g private repos). (file: r0/skill-installer/SKILL.md) [hash=d3eb4395bd8e52c5]
+        - tasknode-usage: Use Task Node as an agent-side second brain and work ledger. Use when the user asks Co...t asking the user. (file: r0/tasknode-usage/SKILL.md) [hash=cdd86285fc5eda03]
         </skills_instructions>
     [03] <permissions instructions>
         Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The san... permits reading files. Network access is restricted. [hash=be7da4425f89053c]
@@ -137,18 +147,19 @@ Settings: same as window 1
 ## Window 3 (after request 3: input repeated)
 Settings: same as window 1
 -- request 4 (turn) --
-00:additional_tools/developer (3; hash=bf13940dee826ebd):
-        - namespace/functions; hash=028af59ad835936d
+00:additional_tools/developer (3; hash=1b61263f28f785fa):
+        - namespace/functions; hash=af90ca1a548a8d5a
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/request_permissions
           - function/view_image
+          - function/list_models
           - function/get_goal
           - function/create_goal
           - function/update_goal
           - function/parent_tool
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=c826e5b07fd2820f
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=d49cd801fdb7049b
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -166,10 +177,14 @@ Settings: same as window 1
         ### Skill roots
         - `r0` = `<SKILLS_ROOT>/.system`
         ### Available skills
+        - corbanu-terminal-help: Help users operate Corbanu Terminal's product-specific features and slash comma...ementation. (file: r0/corbanu-terminal-help/SKILL.md) [hash=a5ffdd9ca55f12d2]
+        - frontend-design: Create distinctive, production-grade browser frontend interfaces with high design qua...y interface work. (file: r0/frontend-design/SKILL.md) [hash=ad58e6de4c36f0e5]
         - imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as...ctly in HTML/CSS/canvas. (file: r0/imagegen/SKILL.md) [hash=dcbada3f7f876b5c]
         - openai-docs: Use for Codex models/pricing, scheduled tasks, skills, settings, setup, troubleshooting, ...merely mention Codex. (file: r0/openai-docs/SKILL.md) [hash=daf7d1f4fd2d2abe]
+        - postfiat-l1-development: Develop, review, debug, or document the PostFiat L1 Rust workspace with repos...ventions. (file: r0/postfiat-l1-development/SKILL.md) [hash=887e537ce017ae44]
         - skill-creator: Create or update a Codex skill with appropriately scoped instructions and any needed supporting resources. (file: r0/skill-creator/SKILL.md)
         - skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo pat...g private repos). (file: r0/skill-installer/SKILL.md) [hash=d3eb4395bd8e52c5]
+        - tasknode-usage: Use Task Node as an agent-side second brain and work ledger. Use when the user asks Co...t asking the user. (file: r0/tasknode-usage/SKILL.md) [hash=cdd86285fc5eda03]
         </skills_instructions>
     [03] <permissions instructions>
         Filesystem sandboxing defines which files can be read or written. `sandbox_mode` is `read-only`: The san... permits reading files. Network access is restricted. [hash=be7da4425f89053c]

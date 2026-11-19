@@ -2726,6 +2726,10 @@ async fn multiple_blocking_stop_hooks_persist_multiple_hook_prompt_fragments() -
 
 /// A blocked prompt keeps hook context but never reaches prompt telemetry, the rollout, or the model.
 #[tokio::test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[traced_test]
 async fn blocked_user_prompt_submit_persists_additional_context_for_next_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2832,6 +2836,10 @@ async fn blocked_user_prompt_submit_persists_additional_context_for_next_turn() 
 
 /// Queued input is logged exactly once after acceptance; a later blocked prompt cannot leak or strand it.
 #[tokio::test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "traced_test installs its in-memory global subscriber to capture spawned tasks"
+)]
 #[traced_test]
 async fn blocked_queued_prompt_does_not_strand_earlier_accepted_prompt() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -3033,7 +3041,10 @@ async fn permission_request_hook_allows_exec_command_without_user_approval() -> 
 
     let server = start_mock_server().await;
     let call_id = "permissionrequest-exec-command";
-    let marker = std::env::temp_dir().join("permissionrequest-exec-command-marker");
+    let marker_dir = TempDir::new()?;
+    let marker = marker_dir
+        .path()
+        .join("permissionrequest-exec-command-marker");
     let command = format!("rm -f {}", marker.display());
     let args = serde_json::json!({ "cmd": command });
     let responses = mount_sse_sequence(
@@ -3171,16 +3182,9 @@ async fn permission_request_hook_allow_bypasses_strict_auto_review() -> Result<(
                 .enable(Feature::RequestPermissionsTool)
                 .expect("test config should allow feature update");
         });
-<<<<<<< HEAD
     // Local executor only: `shell_command` and command hooks run on the Codex
     // host, never in a remote environment (#708, #721, #722).
     let test = builder.build(&server).await?;
-||||||| 413492cd6c
-    let test = builder.build_with_auto_env(&server).await?;
-=======
-    // Command hooks currently need a local executor even when the tool executor is remote.
-    let test = builder.build_with_remote_and_local_env(&server).await?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let marker = test
         .executor_environment()
@@ -3336,7 +3340,10 @@ async fn permission_request_hook_sees_raw_exec_command_input() -> Result<()> {
 
     let server = start_mock_server().await;
     let call_id = "permissionrequest-exec-command";
-    let marker = std::env::temp_dir().join("permissionrequest-exec-command-marker");
+    let marker_dir = TempDir::new()?;
+    let marker = marker_dir
+        .path()
+        .join("permissionrequest-exec-command-marker");
     let command = format!("rm -f {}", marker.display());
     let justification = "remove the temporary marker";
     let args = serde_json::json!({
@@ -6294,7 +6301,16 @@ async fn model_request_post_hook_orders_tool_dispatch(
             fs::write(home.join("hooks.json"), json!({"hooks": hooks}).to_string())
                 .expect("write hook configuration");
         })
-        .with_config(trust_discovered_hooks)
+        .with_config(move |config| {
+            trust_discovered_hooks(config);
+            if interrupt {
+                // D647: exercise cancellation of an available edit tool.
+                config
+                    .permissions
+                    .set_permission_profile(restrictive_workspace_write_profile())
+                    .expect("writable patch fixture");
+            }
+        })
         .build_with_streaming_server(&server)
         .await?;
     test.codex
@@ -6317,6 +6333,15 @@ async fn model_request_post_hook_orders_tool_dispatch(
         fs_wait::wait_for_path_exists(home.join("post-started"), Duration::from_secs(10)).await?;
     }
     if interrupt {
+        let requests = server.requests().await;
+        let request: Value = serde_json::from_slice(&requests[0])?;
+        assert!(
+            request["tools"]
+                .as_array()
+                .expect("request tools")
+                .iter()
+                .any(|tool| tool["name"] == "apply_patch")
+        );
         test.codex.submit(Op::Interrupt).await?;
         wait_for_event(&test.codex, |event| matches!(event,
             EventMsg::TokenCount(ev) if ev.info.as_ref().is_some_and(|info| info.total_token_usage.total_tokens == 42)

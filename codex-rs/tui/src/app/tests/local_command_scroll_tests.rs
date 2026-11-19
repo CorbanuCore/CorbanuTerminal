@@ -139,6 +139,7 @@ async fn settings_picker_save_failures_reveal_their_errors() -> Result<()> {
         AppEvent::PersistModelSelection {
             model: "gpt-5.5".into(),
             effort: Some(ReasoningEffortConfig::High),
+            provider: None,
         },
         AppEvent::ApplyAdvancedReasoning {
             model: "gpt-5.5".into(),

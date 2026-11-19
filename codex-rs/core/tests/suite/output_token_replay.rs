@@ -57,8 +57,15 @@ async fn output_token_replay_respects_provider_and_preserves_history(
     commentary["item"]["content"][0]["logprobs"] = json!([{
         "token": "I", "logprob": -0.25, "bytes": [73], "top_logprobs": [],
     }]);
+    // A null reasoning body is omitted on replay, as on main. Keep the null
+    // inbound fixture so this still covers normalization alongside ciphertext.
+    let mut expected_reasoning = reasoning["item"].clone();
+    expected_reasoning
+        .as_object_mut()
+        .expect("reasoning item")
+        .remove("content");
     let expected_items = [
-        reasoning["item"].clone(),
+        expected_reasoning,
         commentary["item"].clone(),
         call["item"].clone(),
         answer["item"].clone(),

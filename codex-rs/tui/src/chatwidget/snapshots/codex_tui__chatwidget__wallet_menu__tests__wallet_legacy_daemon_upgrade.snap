@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/wallet_menu.rs
+assertion_line: 2630
 expression: rendered
 ---
   Wallet
@@ -11,6 +12,7 @@ expression: rendered
   Restarting only the TUI does not stop the daemon. Do not delete the wallet directory, socket or
   ownership lock, and do not repeat a payment whose outcome is unknown.
 
+
 › 1. Retry
 
-  Press enter to confirm or esc to go back
+  enter select · esc back

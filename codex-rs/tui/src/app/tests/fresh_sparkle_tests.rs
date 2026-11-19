@@ -11,6 +11,9 @@ use pretty_assertions::assert_eq;
 fn started(model: &str) -> AppServerStartedThread {
     let mut session = test_thread_session(ThreadId::new(), test_path_buf("/tmp/project"));
     session.model = model.into();
+    // Main's provider-aware picker applies a pick only on a configured
+    // provider; the test app is configured for OpenAI.
+    session.model_provider_id = "openai".into();
     AppServerStartedThread {
         session,
         turns: Vec::new(),
@@ -53,6 +56,9 @@ async fn choose_model(
     preset.model = model.into();
     preset.display_name = model.into();
     preset.show_in_picker = true;
+    // Corbanu's bundled catalog lists a Z.AI model first; main's picker
+    // routes a pick to the preset's provider, so use the session's own.
+    preset.provider_id = Some(app.chat_widget.config_ref().model_provider_id.clone());
     preset.supported_reasoning_efforts.truncate(/*len*/ 1);
     preset.default_reasoning_effort = preset.supported_reasoning_efforts[0].effort.clone();
     app.chat_widget.open_model_popup_with_presets(vec![preset]);
@@ -458,7 +464,9 @@ async fn only_confirmed_picker_model_changes_can_arm_the_sparkle() -> Result<()>
                     AppEvent::AstraSelectedFromModelPicker {
                         thread_id: original_id,
                         model: "gpt-6-astra".into(),
-                        action: AstraModelPickerAction::UpdateModel,
+                        action: AstraModelPickerAction::UpdateModelSelection {
+                            provider: Some("openai".into()),
+                        },
                     },
                 )
                 .await?;
@@ -562,7 +570,7 @@ async fn astra_picker_confirms_the_model_at_application_after_an_automatic_updat
             let lines = rendered.lines().collect::<Vec<_>>();
             let prompt = lines
                 .iter()
-                .position(|line| line.contains("Ask Codex to do anything"))
+                .position(|line| line.contains("Ask Corbanu Terminal to do anything"))
                 .expect("empty composer shows its placeholder");
             let composer = lines[prompt.saturating_sub(1)..=prompt + 1].join("\n");
             snapshots.push(format!("{picker}:\n{composer}"));
@@ -697,7 +705,7 @@ async fn session_only_astra_picker_shows_stars_only_on_an_untouched_task() -> Re
         let lines = rendered.lines().collect::<Vec<_>>();
         let prompt = lines
             .iter()
-            .position(|line| line.contains("Ask Codex to do anything"))
+            .position(|line| line.contains("Ask Corbanu Terminal to do anything"))
             .expect("empty composer shows its placeholder");
         let composer = lines[prompt.saturating_sub(1)..=prompt + 1].join("\n");
         assert_eq!(

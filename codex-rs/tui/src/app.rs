@@ -250,6 +250,7 @@ mod managed_worktree_creation;
 mod misalignment_policy;
 mod model_defaults;
 mod new_session;
+mod question_burst;
 mod quick_dials;
 mod turn_tips;
 pub(crate) use new_session::has_launch_setting;
@@ -264,6 +265,7 @@ mod pets;
 mod platform_actions;
 mod plugin_mentions;
 mod provider_accounts;
+mod provider_cooldown;
 mod provider_management;
 mod provider_management_auth;
 mod provider_management_status;
@@ -638,10 +640,6 @@ pub(crate) struct App {
     launch_cwd: PathBuf,
     /// Resume anchor selected by `/cd`; ordinary resumes retain the immutable launch cwd.
     runtime_working_directory_override: Option<PathBuf>,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "retain the state runtime for the app lifetime")
-    )]
     pub(crate) state_db: Option<StateDbHandle>,
     cli_kv_overrides: Vec<(String, TomlValue)>,
     harness_overrides: ConfigOverrides,
@@ -1082,6 +1080,14 @@ impl App {
         app_server: &mut AppServerSession,
         event: TuiEvent,
     ) -> Result<AppRunControl> {
+        self.cancel_question_burst_if_unfocused();
+        if let TuiEvent::Key(key) = &event
+            && key.kind != KeyEventKind::Release
+            && !crate::bottom_pane::key_continues_paste(key.code, key.modifiers)
+        {
+            // Global shortcuts can consume a key before ChatWidget sees it.
+            self.chat_widget.cancel_question_burst_enter();
+        }
         self.transcript_view
             .sync_patch_approval(self.chat_widget.current_patch_approval());
         tui.link_hover.observe(&event);

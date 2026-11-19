@@ -123,7 +123,7 @@ impl ChatWidget {
                     let secret = vault.reveal(&label).map_err(|err| {
                         format!("Failed to read vault credential {label:?}: {err}")
                     })?;
-                    crate::clipboard_copy::copy_to_clipboard(&secret)
+                    crate::clipboard_copy::copy_plain_text_blocking(&secret)
                 }
             });
             let result = match task.await {

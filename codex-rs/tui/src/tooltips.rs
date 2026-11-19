@@ -437,23 +437,42 @@ mod tests {
     }
 
     #[test]
-    fn plans_use_platform_app_tip() {
+    fn plans_never_show_startup_tooltips_or_promotions() {
+        // D689: Corbanu disables startup tips on macOS, Windows and Linux.
+        // Keep this independent of app_tooltip(), including on headless Linux.
+        let keymap = TuiKeymap::default();
         for plan in [
             Some(PlanType::Free),
             Some(PlanType::Go),
             Some(PlanType::Plus),
             Some(PlanType::Pro),
+            Some(PlanType::ProLite),
+            Some(PlanType::ProMax),
+            Some(PlanType::Team),
+            Some(PlanType::SelfServeBusinessProLite),
+            Some(PlanType::SelfServeBusinessUsageBased),
+            Some(PlanType::Business),
+            Some(PlanType::Ent26),
+            Some(PlanType::EnterpriseCbpAutomation),
+            Some(PlanType::EnterpriseCbpUsageBased),
+            Some(PlanType::Enterprise),
+            Some(PlanType::Edu),
+            Some(PlanType::EduPlus),
+            Some(PlanType::EduPro),
+            Some(PlanType::Sci),
+            Some(PlanType::SciPlus),
+            Some(PlanType::Unknown),
             None,
         ] {
-            let mut seen = std::collections::BTreeSet::new();
+            assert_eq!(get_tooltip(plan, &keymap), None, "plan: {plan:?}");
             for seed in 0..32 {
                 let mut rng = StdRng::seed_from_u64(seed);
-                seen.insert(preferred_tooltip(&mut rng, plan));
+                assert_eq!(
+                    preferred_tooltip(&mut rng, plan),
+                    None,
+                    "plan: {plan:?}, seed: {seed}"
+                );
             }
-            assert_eq!(
-                seen,
-                std::collections::BTreeSet::from([None, app_tooltip().map(str::to_string)])
-            );
         }
     }
 

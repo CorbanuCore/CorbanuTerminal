@@ -346,3 +346,7 @@ fn aliases_for_model(model: &str) -> Vec<&'static str> {
 #[cfg(test)]
 #[path = "model_selection_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "model_selection_november_tests.rs"]
+mod november_tests;

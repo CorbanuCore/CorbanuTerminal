@@ -11,10 +11,26 @@ async fn model_picker_compact_hint_and_actions_follow_configured_bindings() {
     keymap.list.cancel = vec![key_hint::plain(KeyCode::F(2))];
     chat.bottom_pane.set_keymap_bindings(&keymap);
     chat.open_all_models_popup();
-    let popup = render_bottom_popup(&chat, /*width*/ 40);
-    assert_eq!(popup.lines().last().unwrap().trim(), "f3 select · f2 back");
+    // Corbanu's picker has provider tabs, so its hint keeps the tab keys.
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert_eq!(
+        popup.lines().last().unwrap().trim(),
+        "Left/Right providers · f3 select · f2 back"
+    );
     chat.handle_key_event(KeyEvent::from(KeyCode::F(3)));
     assert_matches!(rx.try_recv(), Ok(AppEvent::OpenReasoningPopup { .. }));
     chat.handle_key_event(KeyEvent::from(KeyCode::F(2)));
     assert!(chat.no_modal_or_popup_active());
+}
+
+#[tokio::test]
+async fn model_picker_hint_has_no_dangling_separator_without_list_bindings() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
+    let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+    keymap.list.accept = Vec::new();
+    keymap.list.cancel = Vec::new();
+    chat.bottom_pane.set_keymap_bindings(&keymap);
+    chat.open_all_models_popup();
+    let popup = render_bottom_popup(&chat, /*width*/ 80);
+    assert_eq!(popup.lines().last().unwrap().trim(), "Left/Right providers");
 }

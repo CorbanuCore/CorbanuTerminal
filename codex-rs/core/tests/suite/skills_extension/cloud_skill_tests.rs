@@ -735,6 +735,10 @@ async fn cloud_skill_can_read_referenced_resource_without_an_executor() -> Resul
     let chatgpt_base_url = responses_server.uri();
     let mut builder = test_codex()
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_model_info_override("gpt-5.5", |model| {
+            // This fixture asserts the optional usage instructions as well as the catalog.
+            model.include_skills_usage_instructions = true;
+        })
         .with_config(move |config| config.chatgpt_base_url = chatgpt_base_url)
         .with_exec_server_url("none")
         .with_extensions(Arc::new(extensions.build()))

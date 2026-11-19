@@ -1,6 +1,7 @@
 //! Corbanu `/cost` and accounting views (PF-60): app-level tests with a real accounting store.
 
 use super::*;
+use pretty_assertions::assert_eq;
 
 async fn accounting_fixture(
     app: &mut App,
@@ -18,7 +19,7 @@ async fn accounting_fixture_at(
     use codex_state::accounting::*;
     let owner = ThreadId::new();
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(path.abs()),
+        codex_state::SqliteConfig::new_for_testing(path.abs()),
         "synthetic".into(),
     )
     .await?;
@@ -348,10 +349,10 @@ async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Resul
     let before = accounting_load(&mut app, &mut rx, day).await;
     app.handle_accounting_inspector_event(before);
     app.state_db.take().unwrap().close().await;
-    app.chat_widget.clear_pending_token_activity_refreshes();
+    app.chat_widget.clear_accounting_inspector();
     app.state_db = Some(
         codex_state::StateRuntime::init(
-            codex_state::SqliteConfig::from_sqlite_home(path.path().abs()),
+            codex_state::SqliteConfig::new_for_testing(path.path().abs()),
             "synthetic".into(),
         )
         .await?,
@@ -367,7 +368,7 @@ async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Resul
     );
     app.state_db = Some(
         codex_state::StateRuntime::init(
-            codex_state::SqliteConfig::from_sqlite_home(fresh.path().abs()),
+            codex_state::SqliteConfig::new_for_testing(fresh.path().abs()),
             "synthetic".into(),
         )
         .await?,
@@ -396,7 +397,7 @@ async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()>
     app.handle_accounting_inspector_event(event);
     assert!(ops.try_recv().is_err());
     assert!(rx.try_recv().is_err());
-    app.chat_widget.clear_pending_token_activity_refreshes();
+    app.chat_widget.clear_accounting_inspector();
     set_chatgpt_auth(&mut app.chat_widget);
     app.chat_widget.handle_paste("/usage".into());
     app.chat_widget
@@ -409,6 +410,21 @@ async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()>
             crossterm::event::KeyCode::Enter,
             crossterm::event::KeyModifiers::NONE,
         ));
-    assert!(matches!(rx.recv().await, Some(AppEvent::OpenTokenActivity)));
+    // Upstream's analytics dashboard replaced main's token-activity card; the
+    // menu may send other events first, but never the accounting inspector's.
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, AppEvent::OpenAnalytics { view: None })),
+        "{events:?}"
+    );
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            AppEvent::OpenAccountingInspector { .. } | AppEvent::LoadAccountingInspector { .. }
+        )),
+        "{events:?}"
+    );
     Ok(())
 }

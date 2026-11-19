@@ -47,6 +47,33 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
 }
 
 #[test]
+fn model_lookup_and_compact_spawn_schema() {
+    use crate::tools::registry::ToolExecutor;
+    let spawn = create_spawn_agent_tool_v2(
+        SpawnAgentToolOptions {
+            available_models: crate::test_support::all_model_presets().clone(),
+            expose_spawn_agent_model_overrides: true,
+            ..Default::default()
+        },
+        /*description_override*/ None,
+    );
+    let lookup = super::super::list_models::Handler {
+        supports_cross_provider_overrides: true,
+        expose_service_tiers: true,
+    }
+    .spec();
+    let mut schemas = json!([spawn, lookup]);
+    let serialized = serde_json::to_string(&schemas).unwrap();
+    assert!(codex_utils_string::approx_token_count(&serialized) < 1_500);
+    // Sort only the snapshot: Bazel enables serde_json/preserve_order, unlike Cargo.
+    schemas.sort_all_objects();
+    insta::assert_snapshot!(
+        "model_lookup_and_compact_spawn",
+        serde_json::to_string_pretty(&schemas).unwrap()
+    );
+}
+
+#[test]
 fn scheduled_billing_renders_weekday_and_legacy_daily_contracts() {
     let scheduled = |peak_weekdays| ModelBilling::PlanSchedule {
         off_peak_relative_burn_millis: 1_000,
@@ -195,16 +222,29 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         model_provider: "claude-plan".to_string(),
         model: "claude-opus-5-plan".to_string(),
         reasoning_effort: Some(ReasoningEffort::High),
+        effort_follows_turn: false,
         service_tier: None,
     };
 
-    let description = spawn_agent_models_description(&[sol], Some(&inherited_runtime));
+    let description =
+        spawn_agent_models_description(std::slice::from_ref(&sol), Some(&inherited_runtime));
 
     assert!(
         description.contains(
             "Current inherited runtime: `claude-plan` / `claude-opus-5-plan`; effort high."
         )
     );
+    // #1532 (`thread_sample`): with effort updates the text names no specific effort.
+    let follows_turn = spawn_agent_models_description(
+        std::slice::from_ref(&sol),
+        Some(&SpawnAgentRuntime {
+            effort_follows_turn: true,
+            ..inherited_runtime
+        }),
+    );
+    assert!(follows_turn.contains(
+        "Current inherited runtime: `claude-plan` / `claude-opus-5-plan`; effort as in the current turn."
+    ));
     assert!(description.contains(
         "Default allocation policy: compare the task with this catalogue before every spawn."
     ));
@@ -660,7 +700,7 @@ fn list_agents_tool_includes_path_prefix_and_agent_fields() {
         properties
             .get("path_prefix")
             .and_then(|schema| schema.description.as_deref()),
-        Some("Task-path prefix filter without a trailing slash. Omit to list all live agents.")
+        Some("Task-path prefix filter without a trailing slash. Omit to list all visible agents.")
     );
     assert_eq!(
         output_schema.expect("list_agents output schema").to_value()["properties"]["agents"]["items"]

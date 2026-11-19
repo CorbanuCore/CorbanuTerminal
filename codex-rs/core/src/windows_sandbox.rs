@@ -93,6 +93,21 @@ pub fn local_binding_policy_for_sandbox(
     }
 }
 
+/// D616: the local binding policy for a launch on a remote executor. A remote Windows MXC
+/// executor needs `allow_local_binding = true` configured explicitly (main's default is
+/// off, and MXC cannot block loopback); other executors keep the local rule.
+pub fn remote_local_binding_policy_for_sandbox(
+    sandbox_type: SandboxType,
+    platform_os: Option<&str>,
+) -> codex_network_proxy::LocalBindingPolicy {
+    match local_binding_policy_for_sandbox(sandbox_type, platform_os) {
+        codex_network_proxy::LocalBindingPolicy::RequireTrue => {
+            codex_network_proxy::LocalBindingPolicy::ExplicitTrue
+        }
+        policy => policy,
+    }
+}
+
 pub fn managed_proxy_routing_for_windows_sandbox(
     sandbox_type: SandboxType,
 ) -> codex_network_proxy::ManagedProxyRouting {

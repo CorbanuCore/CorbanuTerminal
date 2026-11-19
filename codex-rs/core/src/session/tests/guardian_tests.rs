@@ -60,12 +60,7 @@ use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_once_chat_completions;
 use core_test_support::responses::mount_sse_once;
-<<<<<<< HEAD
 use core_test_support::responses::mount_sse_once_chat_completions;
-||||||| 413492cd6c
-=======
-use core_test_support::responses::mount_sse_sequence;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
@@ -184,10 +179,44 @@ async fn next_exec_approval(
     .expect("captured action should request user approval")
 }
 
+/// The default Ambient reviewer model is text-only: the node_repl image evidence reaches
+/// neither reviewer request, only its evidence entry does (#2295).
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
+    request_permissions_routes_to_guardian_with_model(
+        codex_model_provider_info::AMBIENT_DEFAULT_MODEL,
+        /*vision*/ false,
+    )
+    .await;
+}
+
+/// #2295: a vision-capable reviewer on the Chat Completions wire gets the node_repl image
+/// evidence as an `image_url` content part in both reviewer requests.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn request_permissions_sends_image_evidence_to_a_vision_chat_reviewer() {
+    request_permissions_routes_to_guardian_with_model(
+        "moonshotai/kimi-k2.7-code",
+        /*vision*/ true,
+    )
+    .await;
+}
+
+/// `image_url.url` of every `image_url` part in the Chat Completions user messages.
+fn chat_user_image_urls(body: &serde_json::Value) -> Vec<String> {
+    body["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|message| message["role"] == "user")
+        .filter_map(|message| message["content"].as_array())
+        .flatten()
+        .filter(|part| part["type"] == "image_url")
+        .filter_map(|part| part["image_url"]["url"].as_str().map(str::to_owned))
+        .collect()
+}
+
+async fn request_permissions_routes_to_guardian_with_model(model: &str, vision: bool) {
     let server = start_mock_server().await;
-<<<<<<< HEAD
     // The default Ambient provider uses the Chat Completions wire API.
     let guardian_assessment = serde_json::json!({
         "risk_level": "low",
@@ -196,69 +225,24 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
         "rationale": "The request grants narrowly scoped network access for this turn.",
     })
     .to_string();
-    let guardian_request_log = mount_sse_once_chat_completions(
-||||||| 413492cd6c
-    let guardian_request_log = mount_sse_once(
-=======
-    let guardian_request_log = mount_sse_sequence(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-        &server,
-<<<<<<< HEAD
-        chat_completions_sse("z-ai/glm-5.2", &guardian_assessment),
-||||||| 413492cd6c
-        sse(vec![
-            ev_response_created("resp-guardian"),
-            ev_assistant_message(
-                "msg-guardian",
-                &serde_json::json!({
-                    "risk_level": "low",
-                    "user_authorization": "high",
-                    "outcome": "allow",
-                    "rationale": "The request grants narrowly scoped network access for this turn.",
-                })
-                .to_string(),
-            ),
-            ev_completed("resp-guardian"),
-        ]),
-=======
-        vec![
-            sse(vec![
-            ev_response_created("resp-guardian"),
-            ev_assistant_message(
-                "msg-guardian",
-                &serde_json::json!({
-                    "risk_level": "low",
-                    "user_authorization": "high",
-                    "outcome": "allow",
-                    "rationale": "The request grants narrowly scoped network access for this turn.",
-                })
-                .to_string(),
-            ),
-            ev_completed("resp-guardian"),
-        ]);
-            2
-        ],
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
-    )
-    .await;
+    // Upstream reviews both permission requests below: one reply for each.
+    let guardian_request_log =
+        mount_sse_once_chat_completions(&server, chat_completions_sse(model, &guardian_assessment))
+            .await;
+    let second_guardian_request_log =
+        mount_sse_once_chat_completions(&server, chat_completions_sse(model, &guardian_assessment))
+            .await;
 
-<<<<<<< HEAD
     let (mut session, mut turn_context_raw, _codex_home) =
-        make_session_and_context_with_provider_auth().await;
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    turn_context_raw
-||||||| 413492cd6c
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    turn_context_raw
-=======
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
+        crate::session::tests::make_session_and_context_with_provider_auth_and_model(model).await;
+    // The parent's active model is the reviewer's model here (a provider with a mock
+    // `base_url` falls back to it).
+    assert_eq!(turn_context_raw.model_info().slug, model);
     update_turn_settings_for_test(&mut turn_context_raw, |settings| {
         Arc::make_mut(&mut settings.model_info).node_repl_auto_review_required = true;
     });
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .approval_policy
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
@@ -274,6 +258,16 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
         config.codex_home.to_path_buf(),
         session.services.auth_manager(),
         config.model_provider.clone(),
+    );
+    // The reviewer's model as the installed catalogue describes it.
+    assert_eq!(
+        models_manager
+            .get_model_info(model, &config.to_models_manager_config())
+            .await
+            .input_modalities
+            .contains(&codex_protocol::openai_models::InputModality::Image),
+        vision,
+        "catalogued image support of {model}"
     );
     session.services.models_manager = models_manager;
     crate::guardian::test_host::install(&session, &config);
@@ -361,37 +355,35 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
         Some(requested_permissions.into())
     );
 
-<<<<<<< HEAD
-    let guardian_request = guardian_request_log.single_request();
-    assert_eq!(guardian_request.path(), "/v1/chat/completions");
-||||||| 413492cd6c
-    let guardian_request = guardian_request_log.single_request();
-    assert_eq!(guardian_request.path(), "/v1/responses");
-=======
-    let guardian_requests = guardian_request_log.requests();
-    assert_eq!(guardian_requests.len(), 2);
-    let guardian_request = &guardian_requests[0];
-    assert_eq!(guardian_request.path(), "/v1/responses");
+    let guardian_requests = [
+        guardian_request_log.single_request(),
+        second_guardian_request_log.single_request(),
+    ];
     for request in &guardian_requests {
-        assert_eq!(request.message_input_image_urls("user"), [image_url]);
+        assert_eq!(request.path(), "/v1/chat/completions");
+        let body = request.body_json();
+        assert_eq!(body["model"], model);
+        if vision {
+            // The node_repl review evidence (an image) reaches the reviewer.
+            assert_eq!(chat_user_image_urls(&body), vec![image_url.to_string()]);
+        } else {
+            // A text-only reviewer gets the evidence entry without the image (#2295: the
+            // Chat Completions prompt carries no omitted-image note there).
+            assert_eq!(chat_user_image_urls(&body), Vec::<String>::new());
+            assert!(!request.body_contains_text(image_url));
+            assert!(
+                request.body_contains_text("[REPL response 1 tool=js cell=cell call=image]"),
+                "{}",
+                body["messages"]
+            );
+        }
     }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    let guardian_request = &guardian_requests[0];
     assert!(guardian_request.body_contains_text("request_permissions"));
     assert!(guardian_request.body_contains_text("need network"));
 }
 
 #[tokio::test]
-<<<<<<< HEAD
-async fn request_permissions_guardian_review_stops_when_cancelled() {
-    // Generous caps so a loaded CI runner is not mistaken for a hang (#1539).
-    // The guardian's model reply is held for 60 s, so a request that ignores
-    // the cancellation runs into STOP_CAP instead of returning.
-    const START_CAP: Duration = Duration::from_secs(30);
-    const STOP_CAP: Duration = Duration::from_secs(30);
-
-||||||| 413492cd6c
-async fn request_permissions_guardian_review_stops_when_cancelled() {
-=======
 async fn request_permissions_uses_issuing_step_policy_and_reviewer() {
     let server = start_mock_server().await;
     let guardian_requests = mount_sse_once(
@@ -484,7 +476,12 @@ enum ReviewCancellationSource {
 async fn request_permissions_guardian_review_stops_when_cancelled(
     source: ReviewCancellationSource,
 ) {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    // Generous caps so a loaded CI runner is not mistaken for a hang (#1539).
+    // The guardian's model reply is held for 60 s, so a request that ignores
+    // the cancellation runs into STOP_CAP instead of returning.
+    const START_CAP: Duration = Duration::from_secs(30);
+    const STOP_CAP: Duration = Duration::from_secs(30);
+
     let server = start_mock_server().await;
     // The default Ambient provider reviews over Chat Completions (#1544).
     let guardian_assessment = serde_json::json!({
@@ -501,24 +498,11 @@ async fn request_permissions_guardian_review_stops_when_cancelled(
     )
     .await;
 
-<<<<<<< HEAD
     let (mut session, mut turn_context_raw, _codex_home) =
         make_session_and_context_with_provider_auth().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
-    turn_context_raw
-||||||| 413492cd6c
-    let (mut session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    let turn_context_raw = Arc::get_mut(&mut turn_context).expect("single turn context ref");
-    turn_context_raw
-=======
-    let (mut session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    let active_turn = ActiveTurn::default();
-    *session.active_turn.lock().await = Some(active_turn);
-    let turn_context_raw = Arc::get_mut(&mut turn_context).expect("single turn context ref");
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .approval_policy
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
@@ -535,20 +519,8 @@ async fn request_permissions_guardian_review_stops_when_cancelled(
         session.services.auth_manager(),
         config.model_provider.clone(),
     );
-<<<<<<< HEAD
     session.services.models_manager = models_manager;
-||||||| 413492cd6c
-    Arc::get_mut(&mut session)
-        .expect("single session ref")
-        .services
-        .models_manager = models_manager;
-=======
-    Arc::get_mut(&mut session)
-        .expect("single session ref")
-        .services
-        .models_manager = models_manager;
     crate::guardian::test_host::install(&session, &config);
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     turn_context_raw.config = Arc::clone(&config);
     turn_context_raw.provider = create_model_provider(
         config.model_provider.clone(),
@@ -664,18 +636,10 @@ async fn guardian_allows_exec_command_additional_permissions_requests_past_polic
     )
     .await;
 
-<<<<<<< HEAD
     let (mut session, mut turn_context_raw, _codex_home) =
         make_session_and_context_with_provider_auth().await;
-    turn_context_raw
-||||||| 413492cd6c
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    turn_context_raw
-=======
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         .approval_policy
         .set(AskForApproval::OnRequest)
         .expect("test setup should allow updating approval policy");
@@ -716,14 +680,7 @@ async fn guardian_allows_exec_command_additional_permissions_requests_past_polic
     );
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context_raw);
-<<<<<<< HEAD
-    // `echo hi` can take seconds to start on a loaded Windows runner (#636).
-    let expiration_ms: u64 = if cfg!(windows) { 10_000 } else { 1_000 };
-||||||| 413492cd6c
-    let expiration_ms: u64 = if cfg!(windows) { 2_500 } else { 1_000 };
-=======
     let yield_time_ms: u64 = 10_000;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let handler = crate::tools::handlers::ExecCommandHandler::default();
     #[allow(deprecated)]
@@ -782,69 +739,23 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
     )
     .await;
 
-<<<<<<< HEAD
     let (mut session, mut turn_context_raw, _codex_home) =
         make_session_and_context_with_provider_auth().await;
-    let active_turn = crate::state::ActiveTurn::default();
-    let originating_turn_state = Arc::clone(&active_turn.turn_state);
-    *session.active_turn.lock().await = Some(active_turn);
-    session
-        .record_granted_request_permissions_for_turn(
-            &RequestPermissionsResponse {
-                permissions: RequestPermissionProfile {
-                    network: Some(NetworkPermissions {
-                        enabled: Some(true),
-                    }),
-                    ..Default::default()
-                },
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: true,
-||||||| 413492cd6c
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    let active_turn = crate::state::ActiveTurn::default();
-    let originating_turn_state = Arc::clone(&active_turn.turn_state);
-    *session.active_turn.lock().await = Some(active_turn);
-    session
-        .record_granted_request_permissions_for_turn(
-            &RequestPermissionsResponse {
-                permissions: RequestPermissionProfile {
-                    network: Some(NetworkPermissions {
-                        enabled: Some(true),
-                    }),
-                    ..Default::default()
-                },
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: true,
-=======
-    let (mut session, mut turn_context_raw) = make_session_and_context().await;
-    session.record_granted_request_permissions_for_turn(
+    assert!(session.record_granted_request_permissions_for_turn(
         &RequestPermissionsResponse {
             permissions: RequestPermissionProfile {
                 network: Some(NetworkPermissions {
                     enabled: Some(true),
                 }),
                 ..Default::default()
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
             },
-<<<<<<< HEAD
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            Some(&originating_turn_state),
-            session.services.authority_marker(),
-        )
-        .await;
-||||||| 413492cd6c
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            Some(&originating_turn_state),
-        )
-        .await;
-=======
             scope: PermissionGrantScope::Turn,
             strict_auto_review: true,
         },
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         &turn_context_raw,
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        session.services.authority_marker(),
+    ));
 
     Arc::make_mut(&mut turn_context_raw.config)
         .permissions
@@ -915,13 +826,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
                     "cmd": "echo hi",
                     "login": false,
                     "workdir": workdir,
-<<<<<<< HEAD
-                    "timeout_ms": if cfg!(windows) { 10_000_u64 } else { 1_000_u64 },
-||||||| 413492cd6c
-                    "timeout_ms": 1_000_u64,
-=======
                     "yield_time_ms": 10_000_u64,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                 })
                 .to_string(),
             },
@@ -936,8 +841,16 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_exec_command_policy_s
 
 #[test_case(AskForApproval::Never; "policy_precheck")]
 #[test_case(AskForApproval::OnRequest; "reviewer_routing")]
-#[tokio::test]
-async fn network_approval_uses_published_task_authority_within_same_turn(
+fn network_approval_uses_published_task_authority_within_same_turn(
+    admitted_policy: AskForApproval,
+) {
+    // #2294: needs more than the harness's 8 MiB stack in a debug build.
+    crate::session::tests::block_on_production_stack(move || {
+        network_approval_uses_published_task_authority_within_same_turn_body(admitted_policy)
+    });
+}
+
+async fn network_approval_uses_published_task_authority_within_same_turn_body(
     admitted_policy: AskForApproval,
 ) {
     let (session, turn, events) = make_session_and_context_with_auth_and_config_and_rx(
@@ -1103,6 +1016,13 @@ async fn sandbox_denied_retry_uses_the_action_policy_and_reviewer() {
     }
 
     impl Approvable<TurnEnvironment> for DeniedOnceRuntime {
+        fn additional_permissions<'a>(
+            &self,
+            _request: &'a TurnEnvironment,
+        ) -> Option<&'a codex_protocol::models::AdditionalPermissionProfile> {
+            None
+        }
+
         fn exec_approval_requirement(
             &self,
             _request: &TurnEnvironment,
@@ -1375,44 +1295,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
         .features
         .enable(Feature::RequestPermissionsTool)
         .expect("test setup should allow enabling request permissions tool");
-<<<<<<< HEAD
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    {
-        let mut active_turn = session.active_turn.lock().await;
-        let active_turn = active_turn.as_mut().expect("active turn");
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.record_granted_permissions(
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            PermissionProfile {
-                network: Some(NetworkPermissions {
-                    enabled: Some(true),
-                }),
-                ..Default::default()
-            },
-            /*granted_under*/ None,
-            session.services.authority_marker(),
-        );
-    }
-
-||||||| 413492cd6c
-    *session.active_turn.lock().await = Some(ActiveTurn::default());
-    {
-        let mut active_turn = session.active_turn.lock().await;
-        let active_turn = active_turn.as_mut().expect("active turn");
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.record_granted_permissions(
-            codex_exec_server::LOCAL_ENVIRONMENT_ID,
-            PermissionProfile {
-                network: Some(NetworkPermissions {
-                    enabled: Some(true),
-                }),
-                ..Default::default()
-            },
-        );
-    }
-
-=======
-    turn_context_raw.record_granted_permissions(
+    assert!(turn_context_raw.record_granted_permissions(
         codex_exec_server::LOCAL_ENVIRONMENT_ID,
         PermissionProfile {
             network: Some(NetworkPermissions {
@@ -1421,8 +1304,8 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
             ..Default::default()
         },
         /*strict_auto_review*/ false,
-    );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+        session.services.authority_marker(),
+    ));
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context_raw);
 
@@ -1446,13 +1329,7 @@ async fn exec_command_allows_sticky_turn_permissions_without_inline_request_perm
                 arguments: serde_json::json!({
                     "cmd": "echo hi",
                     "login": false,
-<<<<<<< HEAD
-                    "timeout_ms": if cfg!(windows) { 10_000_u64 } else { 1_000_u64 },
-||||||| 413492cd6c
-                    "timeout_ms": 1_000_u64,
-=======
                     "yield_time_ms": 10_000_u64,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     "workdir": workdir,
                 })
                 .to_string(),
@@ -1634,7 +1511,7 @@ async fn accounting_owner_of_a_guardian_fork_is_the_reviewed_conversation() -> a
     // reviewed conversation's, and so is its ledger.
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),
@@ -1756,7 +1633,7 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
     use crate::accounting::Uncollected;
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),
@@ -1869,10 +1746,13 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
         LiveThread::create(
             Arc::clone(&store),
             CreateThreadParams {
+                creator_user_id: None,
+                creator_account_id: None,
                 session_id: persisted.session_id(),
                 thread_id: persisted.thread_id,
                 extra_config: None,
                 forked_from_id: Some(parent),
+                attached_thread: false,
                 parent_thread_id: None,
                 source: SessionSource::Cli,
                 thread_source: None,
@@ -1885,6 +1765,7 @@ async fn accounting_owner_of_side_and_consolidation_sessions() -> anyhow::Result
                 subagent_history_start_ordinal: None,
                 history_base: None,
                 initial_window_id: Uuid::now_v7().to_string(),
+                runtime_workspace_roots: None,
                 metadata: ThreadPersistenceMetadata {
                     cwd: Some(config.cwd.to_path_buf()),
                     model_provider: config.model_provider_id.clone(),
@@ -1945,7 +1826,7 @@ async fn accounting_owner_of_ephemeral_sub_agents() -> anyhow::Result<()> {
     use crate::accounting::Uncollected;
     let home = tempfile::tempdir()?;
     let db = codex_state::StateRuntime::init(
-        codex_state::SqliteConfig::from_sqlite_home(
+        codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
         ),
         "openai".into(),

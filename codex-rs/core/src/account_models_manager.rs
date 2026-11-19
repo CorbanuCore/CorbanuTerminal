@@ -8,7 +8,11 @@
 //! session starts on, or switches to, another account. The process has one
 //! list: with several user sessions on different accounts (an app-server
 //! client with many threads) the last one to start or switch decides it.
+//! A thread originator with its own catalog (upstream's `for_originator`, e.g.
+//! `codex_work_cca`) gets its own handle that follows accounts the same way
+//! for that originator's sessions.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -21,6 +25,7 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider::named_sign_in_account;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::NamedProviderAccount;
+use codex_models_manager::ModelCatalogOriginator;
 use codex_models_manager::ModelsManagerConfig;
 use codex_models_manager::manager::ModelsManager;
 use codex_models_manager::manager::ModelsManagerFuture;
@@ -42,8 +47,14 @@ pub(crate) struct AccountModelsManager {
     default_auth: Arc<AuthManager>,
     codex_home: PathBuf,
     model_catalog: Option<ModelsResponse>,
+    /// The thread originator whose catalog this handle lists; `None` for the
+    /// default catalog.
+    originator: Option<ModelCatalogOriginator>,
+    /// The default handle's originator handles, one per originator.
+    originators: std::sync::Mutex<HashMap<ModelCatalogOriginator, SharedModelsManager>>,
     current: ArcSwap<Current>,
-    switching: std::sync::Mutex<()>,
+    // Serializes startup discovery-policy updates with account and originator changes.
+    api_key_model_discovery_enabled: std::sync::Mutex<bool>,
 }
 
 struct Current {
@@ -55,6 +66,7 @@ impl fmt::Debug for AccountModelsManager {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AccountModelsManager")
             .field("provider", &self.provider.name)
+            .field("originator", &self.originator)
             .field("account", &self.current.load().account)
             .finish_non_exhaustive()
     }
@@ -81,14 +93,17 @@ impl AccountModelsManager {
             &codex_home,
             &model_catalog,
             account,
+            /*originator*/ None,
         );
         Some(Self {
             provider,
             default_auth,
             codex_home,
             model_catalog,
+            originator: None,
+            originators: std::sync::Mutex::new(HashMap::new()),
             current: ArcSwap::from_pointee(current),
-            switching: std::sync::Mutex::new(()),
+            api_key_model_discovery_enabled: std::sync::Mutex::new(false),
         })
     }
 
@@ -114,6 +129,62 @@ impl AccountModelsManager {
 }
 
 impl ModelsManager for AccountModelsManager {
+    /// An originator with its own catalog gets one handle that follows the
+    /// account its own sessions use; it starts on this handle's account.
+    /// `None` (keep this handle) for other originators, for a provider whose
+    /// catalog has no originator partition, and on an originator's handle.
+    fn for_originator(&self, originator: &str) -> Option<SharedModelsManager> {
+        if self.originator.is_some() {
+            return None;
+        }
+        let originator = ModelCatalogOriginator::from_originator(originator)?;
+        let discovery_enabled = self
+            .api_key_model_discovery_enabled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut originators = self
+            .originators
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(handle) = originators.get(&originator) {
+            return Some(Arc::clone(handle));
+        }
+        let current = self.current.load();
+        let manager = current.manager.for_originator(originator.as_str())?;
+        let handle: SharedModelsManager = Arc::new(Self {
+            provider: self.provider.clone(),
+            default_auth: Arc::clone(&self.default_auth),
+            codex_home: self.codex_home.clone(),
+            model_catalog: self.model_catalog.clone(),
+            originator: Some(originator),
+            originators: std::sync::Mutex::new(HashMap::new()),
+            current: ArcSwap::from_pointee(Current {
+                account: current.account.clone(),
+                manager,
+            }),
+            api_key_model_discovery_enabled: std::sync::Mutex::new(*discovery_enabled),
+        });
+        originators.insert(originator, Arc::clone(&handle));
+        Some(handle)
+    }
+
+    fn set_api_key_model_discovery_enabled(&self, enabled: bool) {
+        let mut discovery_enabled = self
+            .api_key_model_discovery_enabled
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *discovery_enabled = enabled;
+        self.inner().set_api_key_model_discovery_enabled(enabled);
+        for originator in self
+            .originators
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .values()
+        {
+            originator.set_api_key_model_discovery_enabled(enabled);
+        }
+    }
+
     fn list_models(
         &self,
         refresh_strategy: RefreshStrategy,
@@ -262,20 +333,25 @@ impl ModelsManager for AccountModelsManager {
 
     fn follow_sign_in_account(&self, account: Option<&NamedChatgptAccount>) -> bool {
         // Sessions starting together rebuild (and refetch) once.
-        let _switching = self
-            .switching
+        let discovery_enabled = self
+            .api_key_model_discovery_enabled
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if self.current.load().account.as_ref() == account {
             return false;
         }
-        self.current.store(Arc::new(build(
+        let current = build(
             &self.provider,
             &self.default_auth,
             &self.codex_home,
             &self.model_catalog,
             account.cloned(),
-        )));
+            self.originator,
+        );
+        current
+            .manager
+            .set_api_key_model_discovery_enabled(*discovery_enabled);
+        self.current.store(Arc::new(current));
         true
     }
 }
@@ -283,13 +359,16 @@ impl ModelsManager for AccountModelsManager {
 /// `provider`'s model list with `account`'s sign-in. A named account's list
 /// is cached in its own file (`models-cache/<provider>/<name>/`), so another
 /// account's list is never shown for it and a switch shows its last list at
-/// once.
+/// once. With an `originator`, that originator's catalog of the list (its own
+/// requests and cache partition), or the default one when the provider has
+/// none.
 fn build(
     provider: &ModelProviderInfo,
     default_auth: &Arc<AuthManager>,
     codex_home: &std::path::Path,
     model_catalog: &Option<ModelsResponse>,
     account: Option<NamedChatgptAccount>,
+    originator: Option<ModelCatalogOriginator>,
 ) -> Current {
     let mut provider = provider.clone();
     provider.account = account.as_ref().map(|account| NamedProviderAccount {
@@ -303,6 +382,14 @@ fn build(
             Some(dir) => provider.models_manager(dir, model_catalog.clone()),
             None => provider.models_manager_without_cache(model_catalog.clone()),
         },
+    };
+    // A list that cannot be partitioned by originator keeps its default
+    // catalog, as upstream's `for_originator` returning `None` does.
+    let manager = match originator {
+        Some(originator) => manager
+            .for_originator(originator.as_str())
+            .unwrap_or(manager),
+        None => manager,
     };
     Current { account, manager }
 }

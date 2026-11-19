@@ -305,6 +305,10 @@ pub enum NotSubmittedReason {
     /// would run in Plan mode.
     PlanMode,
 
+    /// Corbanu (#507): the security kill switch is on. `start_turn_if_idle` starts
+    /// no turn; the input waits for a turn someone starts after it is turned off.
+    KillSwitch,
+
     /// `steer_turn` found no active turn.
     NoActiveTurn,
 

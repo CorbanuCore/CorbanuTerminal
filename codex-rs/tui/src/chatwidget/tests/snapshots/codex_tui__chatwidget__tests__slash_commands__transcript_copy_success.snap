@@ -1,7 +1,8 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
+assertion_line: 4529
 expression: "render_bottom_popup(&chat, 80)"
 ---
-› Ask Codex to do anything
+› Ask Corbanu Terminal to do anything
 
   Copied selection to clipboard

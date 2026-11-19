@@ -35,6 +35,7 @@ fn spawn_with_interval(
     model_catalog: &Arc<ModelCatalog>,
     refresh_interval: Duration,
 ) -> ModelsRefreshWorker {
+    let refresh_requested = model_catalog.refresh_requests();
     let model_catalog = Arc::downgrade(model_catalog);
     let shutdown = CancellationToken::new();
     let worker_shutdown = shutdown.clone();
@@ -54,6 +55,7 @@ fn spawn_with_interval(
 
             tokio::select! {
                 _ = worker_shutdown.cancelled() => break,
+                _ = refresh_requested.notified() => {},
                 _ = tokio::time::sleep(refresh_interval) => {}
             }
         }
