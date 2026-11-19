@@ -121,6 +121,10 @@ async fn extension_owned_apps_cannot_attest_connector_to_guardian(
             ),
             responses::ev_completed("review"),
         ])))
+        // D604/D605 (#2562): with background scoring off, every action gets a
+        // synchronous review, which here samples the parent's model; route it
+        // here rather than to the parent's mock.
+        .with_priority(/*p*/ 1)
         .mount(&server)
         .await;
 
@@ -179,11 +183,14 @@ async fn extension_owned_apps_cannot_attest_connector_to_guardian(
         })
         .map(|request| serde_json::from_slice::<Value>(&request.body))
         .collect::<serde_json::Result<Vec<_>>>()?;
-    let luna = guardian_requests
+    // D604 (#2562): background scoring is off on Corbanu, so no classifier
+    // (`gpt-5.6-luna`) request is sent; the synchronous review sees the call.
+    // Any classifier request that does appear is checked below as well.
+    let review = guardian_requests
         .iter()
-        .find(|request| request["model"] == "gpt-5.6-luna")
-        .expect("Guardian classifier request");
-    assert!(luna.to_string().contains("calendar_list_events"));
+        .find(|request| request["client_metadata"]["x-openai-subagent"] == "guardian")
+        .expect("Guardian review request");
+    assert!(review.to_string().contains("calendar_list_events"));
     for request in guardian_requests.iter().filter(|request| {
         request["model"] == "gpt-5.6-luna"
             || request["client_metadata"]["x-openai-subagent"] == "guardian"

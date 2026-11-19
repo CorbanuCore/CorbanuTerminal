@@ -572,12 +572,9 @@ async fn build_report(
     }
 
     progress.begin("desktop");
+    // D620: no OpenAI desktop-app update rows (they contacted oaistatic.com /
+    // chatgpt.com whenever that app was installed).
     if let Some(desktop) = desktop::collect().await {
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
-        if let Some(application) = desktop.application.as_ref() {
-            updates::append_desktop_update(&mut checks, config_result.as_ref().ok(), application)
-                .await;
-        }
         progress.finish("desktop", overall_status(&desktop.checks));
         checks.extend(desktop.checks);
     }
