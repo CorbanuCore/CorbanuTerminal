@@ -6,6 +6,7 @@
 //! nested alike, never offers an amendment, and is refused with approvals
 //! off.
 use super::*;
+use pretty_assertions::assert_eq;
 
 const STREAM_SHELLS: &[&str] = &[
     "pwsh.exe:x.exe",
