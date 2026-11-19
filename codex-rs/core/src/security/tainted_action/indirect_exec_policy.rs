@@ -24,10 +24,8 @@ use indirect_exec_policy_launchers as launchers;
 mod indirect_exec_policy_names;
 use indirect_exec_policy_names as names;
 
-#[cfg(any(windows, test))]
 #[path = "indirect_exec_policy_powershell.rs"]
 mod indirect_exec_policy_powershell;
-#[cfg(windows)]
 pub(crate) use indirect_exec_policy_powershell::policy_powershell_script;
 
 pub(crate) struct PolicyWrapperCommands {
@@ -314,6 +312,59 @@ pub(crate) fn policy_runs_powershell(program: &str) -> bool {
             names::launcher_name_for(program, names::PLATFORM).as_ref(),
             "pwsh" | "powershell"
         )
+}
+
+/// #2671 (sync): whether `program` may run PowerShell for a POSIX executor,
+/// which may be macOS whatever this host is: its names fold case (`PWSH`).
+pub(crate) fn policy_runs_powershell_on_posix(program: &str) -> bool {
+    policy_runs_powershell(program) || runs_powershell_as(program, names::NameCase::Insensitive)
+}
+
+fn runs_powershell_as(program: &str, case: names::NameCase) -> bool {
+    matches!(
+        names::launcher_name_for(program, case).as_ref(),
+        "pwsh" | "powershell"
+    )
+}
+
+/// #2671 (sync): whether `words`, run by a Windows executor, start with a
+/// launcher, a shell or PowerShell (as Windows names programs, see
+/// [`names`]) that exec policy does not read as one, so its words may run
+/// commands no rule has seen. On any host: PowerShell under a spelling that
+/// neither the script reader nor [`policy_powershell_script`] reads
+/// (`\\?\C:\PS\PWSH`). Off Windows, where wrappers, shells and PowerShell
+/// are found by this host's naming: any launcher chain Windows reads
+/// otherwise (`SUDO git`, `PWSH~1.EXE`), or a shell or PowerShell Windows
+/// names that this host does not (`C:\Git\bin\BASH.EXE`, `PWSH.EXE`).
+pub(crate) fn windows_names_unread(words: &[String]) -> bool {
+    let windows = names::NameCase::Windows;
+    let Some(program) = words.first() else {
+        return false;
+    };
+    if runs_powershell_as(program, windows)
+        && !codex_shell_command::powershell::is_powershell_program(program)
+        && policy_powershell_script(words).is_none()
+    {
+        return true;
+    }
+    if names::PLATFORM == windows {
+        return false;
+    }
+    let here = policy_wrapper_commands_for(words, names::PLATFORM);
+    let there = policy_wrapper_commands_for(words, windows);
+    let open_end =
+        |wrappers: &PolicyWrapperCommands| wrappers.open.as_ref().map(|open| open.known_end);
+    here.starts != there.starts
+        || here.uncertain != there.uncertain
+        || here.approval_only != there.approval_only
+        || open_end(&here) != open_end(&there)
+        || there.starts.iter().any(|&start| {
+            let program = &words[start];
+            (SHELLS.contains(&names::launcher_name_for(program, windows).as_ref())
+                || runs_powershell_as(program, windows))
+                && !policy_runs_shell(program)
+                && !policy_runs_powershell(program)
+        })
 }
 
 /// A launcher with no command of its own. Under xargs (D677) stdin may

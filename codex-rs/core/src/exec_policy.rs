@@ -1516,11 +1516,8 @@ fn commands_for_exec_policy_for_platform(
         // #2524 (D688): `PWSH -c`, `PowerShell.EXE -Command` read like
         // `pwsh -c`, `powershell.exe -Command`. Sync: upstream reads the
         // script in process, so main's #2546 trusted-parser lookup does not
-        // apply; the respelling is host-gated as on main.
-        #[cfg(windows)]
+        // apply; (#2671) the executor's naming applies on any host.
         let respelled = crate::security::tainted_action::policy_powershell_script(command);
-        #[cfg(not(windows))]
-        let respelled: Option<Vec<String>> = None;
         if let Some((_, script)) = codex_shell_command::powershell::extract_powershell_command(
             respelled.as_deref().unwrap_or(command),
         ) && let Some(commands) =

@@ -73,18 +73,29 @@ pub(super) fn has_wrappers(
         || shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read))
         // #2568: an amendment for a PowerShell command line whose script
         // rules cannot read cannot approve the commands inside.
-        || unread_powershell_line(command).is_some()
+        || unread_powershell_line(command, platform).is_some()
         // #2601: nor one for a PowerShell script not lowered off Windows.
         || runs_powershell_unlowered(command, platform)
+        // #2671: nor one for a launcher or shell no rule reads as one.
+        || windows_name_unread(command, platform)
 }
 
 /// #2601 (D553): `command` runs PowerShell for a platform whose PowerShell
-/// scripts are not lowered into commands (any but Windows).
+/// scripts are not lowered into commands (any but Windows; #2671: named as
+/// macOS names it too, on any host).
 fn runs_powershell_unlowered(command: &[String], platform: DangerousCommandPlatform) -> bool {
     platform != DangerousCommandPlatform::Windows
-        && command
-            .first()
-            .is_some_and(|program| crate::security::tainted_action::policy_runs_powershell(program))
+        && command.first().is_some_and(|program| {
+            crate::security::tainted_action::policy_runs_powershell_on_posix(program)
+        })
+}
+
+/// #2671 (sync): `command` for a Windows executor starts with a launcher, a
+/// shell or PowerShell that rules do not read as one (see
+/// `windows_names_unread`).
+fn windows_name_unread(command: &[String], platform: DangerousCommandPlatform) -> bool {
+    platform == DangerousCommandPlatform::Windows
+        && crate::security::tainted_action::windows_names_unread(command)
 }
 
 struct UnreadPowershellCommands {
@@ -93,12 +104,15 @@ struct UnreadPowershellCommands {
 }
 
 /// D553: retain restrictions on readable prefixes and ask for the unknown
-/// remainder. D688: recognize Windows executable spelling as on main.
-fn unread_powershell_line(command: &[String]) -> Option<UnreadPowershellCommands> {
-    #[cfg(windows)]
-    let respelled = crate::security::tainted_action::policy_powershell_script(command);
-    #[cfg(not(windows))]
-    let respelled: Option<Vec<String>> = None;
+/// remainder. D688: recognize Windows executable spelling as on main;
+/// (#2671) for a Windows executor on any host.
+fn unread_powershell_line(
+    command: &[String],
+    platform: DangerousCommandPlatform,
+) -> Option<UnreadPowershellCommands> {
+    let respelled = (cfg!(windows) || platform == DangerousCommandPlatform::Windows)
+        .then(|| crate::security::tainted_action::policy_powershell_script(command))
+        .flatten();
     unread_powershell_command_line(respelled.as_deref().unwrap_or(command)).map(|unread| {
         match unread {
             UnreadPowershell::File(file) => UnreadPowershellCommands {
@@ -355,11 +369,15 @@ pub(super) fn check(
             // arguments are checked as a command too.
             // #2601 (D553): off Windows no PowerShell script is lowered, so
             // any PowerShell command line runs commands rules cannot see.
-            if runs_powershell_unlowered(candidate, platform) {
+            // #2671: for a Windows executor, a launcher, shell or PowerShell
+            // spelled so rules do not read it as one: every rule counts.
+            if runs_powershell_unlowered(candidate, platform)
+                || windows_name_unread(candidate, platform)
+            {
                 raise(&mut heuristic, candidate, could_complete(&[]));
             }
             if platform == DangerousCommandPlatform::Windows
-                && let Some(unread) = unread_powershell_line(candidate)
+                && let Some(unread) = unread_powershell_line(candidate, platform)
             {
                 raise(&mut heuristic, candidate, could_complete(&[]));
                 if !unread.restrict_only {

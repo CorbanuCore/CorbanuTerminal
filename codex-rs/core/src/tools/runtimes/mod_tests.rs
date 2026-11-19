@@ -28,7 +28,6 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use core_test_support::PathBufExt;
 use pretty_assertions::assert_eq;
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -843,12 +842,6 @@ async fn snapshot_wrapper_replays_dummy_and_preserves_unbrokered_credentials() -
     proxy.apply_to_env(&mut env);
     let dummy = env["OPENAI_API_KEY"].clone();
     let dummy_alias = env["AUTH_HEADER"].clone();
-    let mut alias_only_env = env.clone();
-    alias_only_env.remove("OPENAI_API_KEY");
-    let mut empty_canonical_env = env.clone();
-    empty_canonical_env.insert("OPENAI_API_KEY".to_string(), String::new());
-    let mut absent_alias_env = env.clone();
-    absent_alias_env.remove("AUTH_HEADER");
     prepare_brokered_shell_snapshot_env(&mut env, Some(&snapshot), &shell);
     assert!(!env.contains_key("BASH_ENV"));
     assert_eq!(env.get("ENV"), Some(&startup.display().to_string()));
@@ -1251,65 +1244,8 @@ async fn snapshot_wrapper_replays_dummy_and_preserves_unbrokered_credentials() -
             format!("{dummy}\n{}", dir.path().display())
         );
 
-        let system_startup_dir = dir.path().join("system-startup");
-        std::fs::create_dir(&system_startup_dir)?;
-        let system_startup_zsh = system_startup_dir.join("zsh");
-        codex_utils_cargo_bin::write_executable(
-            &system_startup_zsh,
-            "#!/bin/sh\nexport OPENAI_API_KEY='sk-system-startup-secret'\nexport AUTH_HEADER='Bearer sk-system-startup-secret'\nexec /bin/zsh -ax \"$@\"\n",
-        )?;
-        let mut permissions = std::fs::metadata(&system_startup_zsh)?.permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&system_startup_zsh, permissions)?;
-        let (system_zsh, _) = shell_with_snapshot(
-            ShellType::Zsh,
-            system_startup_zsh.to_string_lossy().as_ref(),
-            snapshot.clone(),
-        );
-        for (mut startup_env, expected_canonical, expected_alias) in [
-            (alias_only_env, "unset", dummy_alias.as_str()),
-            (empty_canonical_env, "", dummy_alias.as_str()),
-            (absent_alias_env, dummy.as_str(), "unset"),
-        ] {
-            prepare_brokered_shell_snapshot_env(&mut startup_env, Some(&snapshot), &system_zsh);
-            let command = vec![
-                system_startup_zsh.display().to_string(),
-                "-c".to_string(),
-                format!(
-                    "set +x\nprintf '%s\\n%s\\n%s\\n%s\\n%s\\n' \"${{OPENAI_API_KEY-unset}}\" \"${{AUTH_HEADER-unset}}\" \"${{{SNAPSHOT_BROKERED_VALUE_ENV_PREFIX}AUTH_HEADER-unset}}\" \"${{{SNAPSHOT_BROKERED_VALUE_ENV_PREFIX}OPENAI_API_KEY-unset}}\" \"${{{SNAPSHOT_BROKERED_UNSET_ENV_PREFIX}OPENAI_API_KEY-unset}}\"\nenv -0"
-                ),
-            ];
-            let system_rewritten = maybe_wrap_shell_lc_with_snapshot(
-                &command,
-                &system_zsh,
-                Some(&snapshot),
-                &HashMap::new(),
-                &startup_env,
-                &RuntimePathPrepends::default(),
-            );
-            let output = Command::new(&system_rewritten[0])
-                .args(&system_rewritten[1..])
-                .env_clear()
-                .envs(&startup_env)
-                .output()?;
-            assert!(
-                output.status.success(),
-                "system startup command failed: {output:?}"
-            );
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let exported_env = stdout
-                .strip_prefix(&format!(
-                    "{expected_canonical}\n{expected_alias}\nunset\nunset\nunset\n"
-                ))
-                .unwrap_or_else(|| panic!("unexpected system startup output: {stdout}"));
-            assert!(!stdout.contains("sk-system-startup-secret"));
-            assert!(
-                !exported_env
-                    .split('\0')
-                    .any(|entry| entry.starts_with("__CODEX_SNAPSHOT_PROXY_OVERRIDE_"))
-            );
-            assert!(!String::from_utf8_lossy(&output.stderr).contains("sk-system-startup-secret"));
-        }
+        // D726: the global zsh startup rows moved to
+        // snapshot_wrapper_restores_brokered_keys_after_shell_startup.
 
         for (bash_env, posix_env, zdotdir) in [
             (
@@ -1351,6 +1287,177 @@ async fn snapshot_wrapper_replays_dummy_and_preserves_unbrokered_credentials() -
             format!("{dummy}\n{}", dir.path().display())
         );
     }
+    Ok(())
+}
+
+/// D726 (SMQ-1): brokered keys after shell startup, for bash, sh and zsh on
+/// each Unix host that has them (Linux hosts without zsh run bash and sh).
+/// Startup may set anything: a brokered name must still end as the dummy,
+/// empty or unset, and no startup secret may reach a brokered name, the
+/// wrapper argv, stderr or the wrapper's private copies. A name the broker
+/// does not hold (`AUTH_HEADER` here) is not restored after global startup:
+/// it ends as startup left it, as in an unbrokered run. Startup files the
+/// user controls are not read at all. No input holds a copy of the brokered
+/// key under another name: D727 removes such copies before commands run.
+#[tokio::test]
+async fn snapshot_wrapper_restores_brokered_keys_after_shell_startup() -> anyhow::Result<()> {
+    const REAL_KEY: &str =
+        "sk-proj-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+    const STARTUP_SECRET: &str = "sk-startup-file-secret";
+    let proxy = test_credential_broker_network_proxy().await?;
+    let dir = tempdir()?;
+    let snapshot = dir.path().join("snapshot.sh");
+    std::fs::write(
+        &snapshot,
+        "# Snapshot file\nexport OPENAI_API_KEY='stale'\n",
+    )?;
+    let snapshot = snapshot.abs();
+    let startup_exports = format!(
+        "export OPENAI_API_KEY='{STARTUP_SECRET}'\nexport AUTH_HEADER='Bearer {STARTUP_SECRET}'\n"
+    );
+    let startup_file = dir.path().join("startup.sh");
+    std::fs::write(&startup_file, &startup_exports)?;
+    std::fs::write(dir.path().join(".zshenv"), &startup_exports)?;
+
+    let mut present_env = HashMap::from([
+        ("OPENAI_API_KEY".to_string(), REAL_KEY.to_string()),
+        ("PATH".to_string(), "/usr/bin:/bin".to_string()),
+    ]);
+    proxy.apply_to_env(&mut present_env);
+    let dummy = present_env["OPENAI_API_KEY"].clone();
+    assert_ne!(dummy, REAL_KEY);
+    let brokered_names: Vec<&str> =
+        codex_network_proxy::brokered_credential_env_keys(&present_env).collect();
+    assert!(brokered_names.contains(&"OPENAI_API_KEY"));
+    let mut empty_env = present_env.clone();
+    empty_env.insert("OPENAI_API_KEY".to_string(), String::new());
+    let mut absent_env = present_env.clone();
+    absent_env.remove("OPENAI_API_KEY");
+    let key_states = [
+        (&present_env, Some(dummy.as_str())),
+        (&empty_env, Some("")),
+        (&absent_env, None),
+    ];
+
+    let mut shells_run = Vec::new();
+    for (shell_type, real_shell, global_flags) in [
+        (ShellType::Bash, "/bin/bash", ""),
+        (ShellType::Sh, "/bin/sh", ""),
+        // As upstream's zsh row: allexport and xtrace stay on through startup.
+        (ShellType::Zsh, "/bin/zsh", " -ax"),
+    ] {
+        if !std::path::Path::new(real_shell).exists() {
+            continue;
+        }
+        shells_run.push(real_shell);
+        // Stands in for global startup (/etc/zshenv and the like): it runs on
+        // every start of this shell, before Codex's script, and Codex cannot
+        // turn it off.
+        let global_startup = dir.path().join(format!("global-{shell_type:?}"));
+        codex_utils_cargo_bin::write_executable(
+            &global_startup,
+            &format!("#!/bin/sh\n{startup_exports}exec {real_shell}{global_flags} \"$@\"\n"),
+        )?;
+        let global_startup = global_startup.display().to_string();
+        for global in [true, false] {
+            let shell_path = if global {
+                global_startup.as_str()
+            } else {
+                real_shell
+            };
+            let (shell, snapshot) = shell_with_snapshot(shell_type, shell_path, snapshot.clone());
+            for (key_env, expected_key) in &key_states {
+                let case =
+                    format!("{shell_path} (global startup: {global}, key: {expected_key:?})");
+                let mut env = (*key_env).clone();
+                if !global {
+                    for name in ["BASH_ENV", "ENV"] {
+                        env.insert(name.to_string(), startup_file.display().to_string());
+                    }
+                    env.insert("ZDOTDIR".to_string(), dir.path().display().to_string());
+                }
+                prepare_brokered_shell_snapshot_env(&mut env, Some(&snapshot), &shell);
+                let command = vec![
+                    shell_path.to_string(),
+                    "-c".to_string(),
+                    "set +x\nprintf '%s\\n' \"${OPENAI_API_KEY-unset}\"\nenv -0".to_string(),
+                ];
+                let rewritten = maybe_wrap_shell_lc_with_snapshot(
+                    &command,
+                    &shell,
+                    Some(&snapshot),
+                    &HashMap::new(),
+                    &env,
+                    &RuntimePathPrepends::default(),
+                );
+                assert!(
+                    rewritten
+                        .iter()
+                        .all(|arg| !arg.contains(STARTUP_SECRET) && !arg.contains(REAL_KEY)),
+                    "{case}: secret in wrapper argv"
+                );
+                let output = Command::new(&rewritten[0])
+                    .args(&rewritten[1..])
+                    .current_dir(dir.path())
+                    .env_clear()
+                    .envs(&env)
+                    .output()?;
+                assert!(output.status.success(), "{case}: {output:?}");
+                let stdout = String::from_utf8(output.stdout)?;
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(!stderr.contains(STARTUP_SECRET), "{case}: secret in stderr");
+                assert!(
+                    !stdout.contains(REAL_KEY) && !stderr.contains(REAL_KEY),
+                    "{case}: real key reached the command"
+                );
+                let child_env = stdout
+                    .strip_prefix(&format!("{}\n", expected_key.unwrap_or("unset")))
+                    .unwrap_or_else(|| panic!("{case}: unexpected key: {stdout}"));
+                let child_env: HashMap<&str, &str> = child_env
+                    .split('\0')
+                    .filter_map(|entry| entry.split_once('='))
+                    .collect();
+                assert_eq!(
+                    child_env.get("OPENAI_API_KEY").copied(),
+                    *expected_key,
+                    "{case}"
+                );
+                for (name, value) in &child_env {
+                    assert!(
+                        !name.starts_with(SNAPSHOT_BROKERED_VALUE_ENV_PREFIX)
+                            && !name.starts_with(SNAPSHOT_BROKERED_UNSET_ENV_PREFIX)
+                            && !name.starts_with("__CODEX_SNAPSHOT_PROXY_OVERRIDE_"),
+                        "{case}: private copy {name} reached the command"
+                    );
+                    assert!(
+                        *name == "AUTH_HEADER" || !value.contains(STARTUP_SECRET),
+                        "{case}: startup secret in {name}"
+                    );
+                    assert!(
+                        !brokered_names.contains(name) || !value.contains(STARTUP_SECRET),
+                        "{case}: startup secret in brokered {name}"
+                    );
+                }
+                if global {
+                    let startup_header = format!("Bearer {STARTUP_SECRET}");
+                    assert_eq!(
+                        child_env.get("AUTH_HEADER").copied(),
+                        Some(startup_header.as_str()),
+                        "{case}: not brokered, so as startup left it"
+                    );
+                } else {
+                    assert!(
+                        !stdout.contains(STARTUP_SECRET),
+                        "{case}: a startup file was read"
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        shells_run.starts_with(&["/bin/bash", "/bin/sh"]),
+        "{shells_run:?}"
+    );
     Ok(())
 }
 
