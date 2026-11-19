@@ -15,6 +15,7 @@ mod write_scope;
 pub use write_scope::PowershellWriteScope;
 pub use write_scope::PowershellWriteScopeGuard;
 pub use write_scope::enter_powershell_write_scope;
+pub(crate) use write_scope::names_resolve;
 
 /// Prefixed command for powershell shell calls to request UTF-8 console output.
 pub const UTF8_OUTPUT_PREFIX: &str =
@@ -146,33 +147,60 @@ pub enum PowershellScriptRead {
 /// runs before approval, outside the sandbox.
 pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellScriptRead> {
     let (shell, invocation) = read_invocation(command)?;
+    let shell_options = ShellOptions {
+        no_profile: invocation.no_profile,
+        keeps_cwd: !invocation.working_directory,
+    };
     match invocation.run {
-        cli::Run::Command { script, .. } => Some(read_script_with_trusted_parser(shell, &script)),
-        cli::Run::Encoded(script) => Some(read_script_with_trusted_parser(shell, &script)),
+        cli::Run::Command { script, .. } => Some(read_script_in(shell, &script, shell_options)),
+        cli::Run::Encoded(script) => Some(read_script_in(shell, &script, shell_options)),
         cli::Run::File(words) => Some(PowershellScriptRead::File(words.to_vec())),
         cli::Run::Unreadable => Some(PowershellScriptRead::Unreadable),
         cli::Run::Interactive => Some(PowershellScriptRead::Unreadable),
     }
 }
 
+/// D729 (A): how the shell running a script starts.
+#[derive(Clone, Copy)]
+struct ShellOptions {
+    /// `-NoProfile`: no profile script runs before the script.
+    no_profile: bool,
+    /// No `-WorkingDirectory`: the script runs in the command's folder.
+    keeps_cwd: bool,
+}
+
 /// Parse `script`, written for the PowerShell named `shell`, with the
 /// trusted PowerShell of the same kind; `shell` itself is never started.
+/// The shell may run a profile script first (no `-NoProfile` known).
 pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
+    read_script_in(
+        shell,
+        script,
+        ShellOptions {
+            no_profile: false,
+            keeps_cwd: true,
+        },
+    )
+}
+
+fn read_script_in(shell: &str, script: &str, options: ShellOptions) -> PowershellScriptRead {
     let Some(parser) =
         trusted_powershell_parser(PowershellKind::of(shell)).and_then(|parser| parser.to_str())
     else {
         return PowershellScriptRead::Unreadable;
     };
-    match parse_with_powershell_ast(parser, script) {
+    match parse_with_powershell_ast(parser, script, options.no_profile) {
         PowershellParseOutcome::Commands(commands) => PowershellScriptRead::Commands(commands),
         // D729 (A): a script that writes is read in full only where its writes stay
         // where the current scope lets them (`write_scope`); otherwise in part.
         PowershellParseOutcome::Writes {
             commands,
             writes,
+            removes,
             protected,
         } => {
-            if write_scope::writes_allowed(&writes, &protected) {
+            // `-WorkingDirectory` runs it elsewhere than the scope's folder.
+            if options.keeps_cwd && write_scope::writes_allowed(&writes, &removes, &protected) {
                 PowershellScriptRead::Commands(commands)
             } else {
                 PowershellScriptRead::Partial(commands)

@@ -336,6 +336,9 @@ pub(crate) struct ExecApprovalRequest<'a> {
     /// script may write and still be read in full; `None` (a remote
     /// environment, or unknown) reads every script that writes in part.
     pub(crate) cwd: Option<AbsolutePathBuf>,
+    /// D729 (A): the command's environment, where its shell finds programs
+    /// and modules (`PATH`, `PATHEXT`, `PSModulePath`); `None`: Corbanu's.
+    pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 
 impl ExecPolicyManager {
@@ -450,18 +453,19 @@ impl ExecPolicyManager {
             sandbox_permissions,
             prefix_rule,
             cwd,
+            env,
         } = req;
         // D729 (A): where a PowerShell script read below may write. The guard
         // is not `Send`: nothing below awaits.
         #[cfg(windows)]
-        let _write_scope = cwd.as_ref().map(|cwd| {
-            codex_shell_command::powershell::enter_powershell_write_scope(powershell_write_scope(
-                &permission_profile,
-                cwd,
-            ))
-        });
+        let _write_scope =
+            cwd.as_ref().map(|cwd| {
+                codex_shell_command::powershell::enter_powershell_write_scope(
+                    powershell_write_scope(&permission_profile, cwd, env),
+                )
+            });
         #[cfg(not(windows))]
-        let _ = cwd;
+        let _ = (cwd, env);
         let exec_policy = self.current_for(live_aggressive);
         let ExecPolicyCommands {
             commands,
@@ -1351,6 +1355,7 @@ fn program_key(token: &str) -> Option<String> {
 fn powershell_write_scope(
     permission_profile: &PermissionProfile,
     cwd: &AbsolutePathBuf,
+    env: Option<&std::collections::HashMap<String, String>>,
 ) -> codex_shell_command::powershell::PowershellWriteScope {
     let policy = permission_profile.file_system_sandbox_policy();
     let policy = if policy.has_full_disk_write_access() {
@@ -1361,6 +1366,7 @@ fn powershell_write_scope(
     codex_shell_command::powershell::PowershellWriteScope::new(
         cwd,
         policy.get_writable_roots_with_cwd(cwd.as_path()),
+        env,
     )
 }
 

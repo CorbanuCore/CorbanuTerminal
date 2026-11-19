@@ -37,6 +37,11 @@ pub(crate) struct Invocation<'a> {
     /// `-Command` with no other parameter than `-NoLogo`, `-NoProfile`,
     /// `-NonInteractive`, `-STA` and `-MTA`.
     pub(crate) plain: bool,
+    /// D729 (A): `-NoProfile` was given, so no profile script runs first.
+    pub(crate) no_profile: bool,
+    /// D729 (A): `-WorkingDirectory` was given, so the script runs in
+    /// another folder than the command's.
+    pub(crate) working_directory: bool,
 }
 
 /// PowerShell's command-line parameters, as far as this reader tells them
@@ -49,12 +54,16 @@ enum Param {
     File,
     /// No value, no effect on what runs, and plain.
     PlainSwitch,
+    /// `-NoProfile`: a [`Param::PlainSwitch`] recorded in the invocation.
+    NoProfile,
     /// No value, no effect on what runs (`-NoProfileLoadTime`).
     Switch,
     /// Takes one value with no effect on which code runs
     /// (`-ExecutionPolicy`, `-WindowStyle`, `-InputFormat`,
-    /// `-OutputFormat`, `-WorkingDirectory`).
+    /// `-OutputFormat`).
     Value,
+    /// `-WorkingDirectory`: a [`Param::Value`] recorded in the invocation.
+    WorkingDirectory,
     /// Any other parameter PowerShell knows (`-NoExit`, `-Version`,
     /// `-ConfigurationName`, `-SettingsFile`, …): not supported here.
     Other,
@@ -69,7 +78,7 @@ const PWSH_PARAMS: &[(&str, &str, Param)] = &[
     ("?", "?", Param::Other),
     ("login", "l", Param::Other),
     ("noexit", "noe", Param::Other), // codespell:ignore
-    ("noprofile", "nop", Param::PlainSwitch),
+    ("noprofile", "nop", Param::NoProfile),
     ("nologo", "nol", Param::PlainSwitch),
     ("noninteractive", "noni", Param::PlainSwitch),
     ("socketservermode", "so", Param::Other),
@@ -100,8 +109,8 @@ const PWSH_PARAMS: &[(&str, &str, Param)] = &[
     ("settingsfile", "settings", Param::Other),
     ("sta", "sta", Param::PlainSwitch),
     ("mta", "mta", Param::PlainSwitch),
-    ("workingdirectory", "wo", Param::Value),
-    ("wd", "wd", Param::Value),
+    ("workingdirectory", "wo", Param::WorkingDirectory),
+    ("wd", "wd", Param::WorkingDirectory),
     (
         "removeworkingdirectorytrailingcharacter",
         "removeworkingdirectorytrailingcharacter",
@@ -120,7 +129,7 @@ const WINDOWS_POWERSHELL_PARAMS: &[(&str, &str, Param)] = &[
     ("?", "?", Param::Other),
     ("noexit", "noe", Param::Other), // codespell:ignore
     ("importsystemmodules", "imp", Param::Other),
-    ("noprofile", "nop", Param::PlainSwitch),
+    ("noprofile", "nop", Param::NoProfile),
     ("nologo", "nol", Param::PlainSwitch),
     ("noninteractive", "noni", Param::PlainSwitch),
     ("socketservermode", "so", Param::Other),
@@ -226,10 +235,14 @@ fn decode(value: &str) -> Option<String> {
 /// Read `command`, a PowerShell of `kind` (`command[0]`) and its arguments.
 pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
     let mut plain = true;
+    let mut no_profile = false;
+    let mut working_directory = false;
     let mut encoded = None;
     let unreadable = Invocation {
         run: Run::Unreadable,
         plain: false,
+        no_profile: false,
+        working_directory: false,
     };
     let mut i = 1;
     while i < command.len() {
@@ -252,6 +265,8 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
                 PowershellKind::Pwsh if encoded.is_none() => Invocation {
                     run: Run::File(&command[i..]),
                     plain: false,
+                    no_profile,
+                    working_directory,
                 },
                 _ => unreadable,
             };
@@ -260,7 +275,12 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
             // Only parameters with no effect on what runs may follow.
             match param(arg, kind) {
                 Some(Param::PlainSwitch | Param::Switch) => {}
+                Some(Param::NoProfile) => no_profile = true,
                 Some(Param::Value) if i + 1 < command.len() => i += 1,
+                Some(Param::WorkingDirectory) if i + 1 < command.len() => {
+                    working_directory = true;
+                    i += 1;
+                }
                 _ => return unreadable,
             }
             i += 1;
@@ -271,8 +291,10 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
         };
         match param {
             Param::PlainSwitch => {}
+            Param::NoProfile => no_profile = true,
             Param::Switch => plain = false,
-            Param::Value => {
+            Param::Value | Param::WorkingDirectory => {
+                working_directory |= param == Param::WorkingDirectory;
                 if i + 1 >= command.len() {
                     return unreadable;
                 }
@@ -303,6 +325,8 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
                 return Invocation {
                     run: Run::Command { start, script },
                     plain,
+                    no_profile,
+                    working_directory,
                 };
             }
             Param::EncodedCommand => {
@@ -317,6 +341,8 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
                     Some(file) if file != "-" => Invocation {
                         run: Run::File(&command[i + 1..]),
                         plain: false,
+                        no_profile,
+                        working_directory,
                     },
                     // No file, or the script comes from stdin.
                     _ => unreadable,
@@ -330,10 +356,14 @@ pub(crate) fn read(command: &[String], kind: PowershellKind) -> Invocation<'_> {
         Some(script) => Invocation {
             run: Run::Encoded(script),
             plain: false,
+            no_profile,
+            working_directory,
         },
         None => Invocation {
             run: Run::Interactive,
             plain,
+            no_profile,
+            working_directory,
         },
     }
 }

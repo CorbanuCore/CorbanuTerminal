@@ -198,6 +198,7 @@ async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
             cwd: Some(AbsolutePathBuf::from_absolute_path(workspace.path()).expect("absolute")),
+            env: None,
         })
         .await;
     assert_eq!(

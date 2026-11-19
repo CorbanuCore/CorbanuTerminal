@@ -21,20 +21,33 @@ fn protected() -> Vec<WinPath> {
     ]
 }
 
-fn allowed_in(cwd: &str, write: &str) -> bool {
+fn roots() -> Vec<Root> {
+    vec![
+        workspace_root(),
+        Root {
+            root: path(r"C:\Users\User"),
+            read_only: Vec::new(),
+            metadata_names: Vec::new(),
+        },
+    ]
+}
+
+fn decide(cwd: &str, writes: &[&str], removes: &[&str]) -> bool {
+    let words = |paths: &[&str]| paths.iter().map(ToString::to_string).collect::<Vec<_>>();
     allows(
-        &[write.to_string()],
-        &path(cwd),
-        &[
-            workspace_root(),
-            Root {
-                root: path(r"C:\Users\User"),
-                read_only: Vec::new(),
-                metadata_names: Vec::new(),
-            },
-        ],
-        &protected(),
+        &words(writes),
+        &words(removes),
+        &Places {
+            cwd: &path(cwd),
+            roots: &roots(),
+            protected: &protected(),
+            extensions: &executable_extensions(None),
+        },
     )
+}
+
+fn allowed_in(cwd: &str, write: &str) -> bool {
+    decide(cwd, &[write], &[])
 }
 
 #[test]
@@ -131,5 +144,71 @@ fn parts_are_normalised_and_folded() {
 
 #[test]
 fn no_write_is_allowed_outside_a_scope() {
-    assert!(!writes_allowed(&["out.txt".to_string()], &[]));
+    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[]));
+    assert!(!writes_allowed(&[], &["out.txt".to_string()], &[]));
+}
+
+#[test]
+fn files_windows_runs_from_a_folder_are_not_written() {
+    for write in [
+        "node.cmd",
+        "x.EXE",
+        r"bin\tool.bat",
+        "a.dll",
+        "s.vbs",
+        "x.com",
+    ] {
+        assert!(!allowed_in(r"C:\work", write), "{write}");
+    }
+    for write in ["notes.ps1", "x.txt", "x.exe.txt", "build.rs"] {
+        assert!(allowed_in(r"C:\work", write), "{write}");
+    }
+    // `PATHEXT` decides.
+    assert!(allows(
+        &["x.js".to_string()],
+        &[],
+        &Places {
+            cwd: &path(r"C:\work"),
+            roots: &roots(),
+            protected: &[],
+            extensions: &executable_extensions(Some(".COM;.EXE")),
+        },
+    ));
+}
+
+#[test]
+fn removing_a_folder_above_a_read_only_part_is_refused() {
+    assert!(decide(r"C:\work", &[], &[r"build"]));
+    for remove in [".", r"C:\work", r"C:\", r".git", r".git\hooks"] {
+        assert!(!decide(r"C:\work", &[], &[remove]), "{remove}");
+    }
+    // Moving `s` to `.` writes `.\s`, and removes `s`.
+    assert!(decide(r"C:\work", &[".", r".\s"], &["s"]));
+    // A copy into `.` named like a read-only part is refused.
+    assert!(!decide(r"C:\work", &[".", r".\.git"], &[]));
+}
+
+#[test]
+fn names_resolve_as_powershell_finds_them_on_path() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("tool.exe"), "").expect("write");
+    std::fs::write(dir.path().join("helper.ps1"), "").expect("write");
+    std::fs::write(dir.path().join("Get-Content.ps1"), "").expect("write");
+    let lookup = |path: Vec<std::path::PathBuf>| {
+        PathLookup::new(
+            Some(std::env::join_paths(path).expect("PATH").as_os_str()),
+            Some(".COM;.EXE;.BAT;.CMD"),
+        )
+    };
+    let local = lookup(vec![dir.path().to_path_buf()]);
+    assert_eq!(local.find("tool"), Found::Yes);
+    assert_eq!(local.find("tool.exe"), Found::Yes);
+    assert_eq!(local.find("helper"), Found::Yes);
+    assert_eq!(local.find("Get-Content"), Found::Yes);
+    assert_eq!(local.find("inmo"), Found::No);
+    assert_eq!(local.find(r"..\tool"), Found::Unknown);
+    // A relative folder is not looked in.
+    let relative = lookup(vec!["bin".into(), dir.path().to_path_buf()]);
+    assert_eq!(relative.find("tool"), Found::Yes);
+    assert_eq!(relative.find("inmo"), Found::Unknown);
 }

@@ -1,12 +1,19 @@
-//! D729 (A), #2661: where a PowerShell script read in full may write.
+//! D729 (A), #2661: where a PowerShell script read in full may write, and which
+//! names it may run.
 //!
 //! An allowlisted cmdlet that writes (`Set-Content`, `New-Item`, `Copy-Item`, …) keeps a
-//! script readable only when every path it writes, resolved as Windows resolves it, lies
-//! inside a writable root (outside its read-only parts) and neither inside nor above a
-//! folder PowerShell or Windows runs code from (module and profile folders, `PATH`). Paths
-//! are compared normalised and case-insensitively, after resolving the part that exists
-//! (links, junctions, 8.3 names). Outside a scope (see [`enter_powershell_write_scope`])
-//! no write keeps a script readable.
+//! script readable only when every path it writes or removes, resolved as Windows
+//! resolves it, lies inside a writable root (outside its read-only parts; a removed path
+//! not above them either), is not a file Windows runs from a folder (a `PATHEXT`
+//! extension, `.dll`), and is neither inside nor above a folder PowerShell or Windows runs
+//! code from (module and profile folders, `PATH`). Paths are compared normalised and
+//! case-insensitively, after resolving the part that exists (links, junctions, 8.3
+//! names). Outside a scope (see [`enter_powershell_write_scope`]) no write keeps a script
+//! readable.
+//!
+//! A program name must be a program on the command's `PATH` (else PowerShell may load a
+//! module's command or alias of that name, or `Get-<name>`), and a module cmdlet must not
+//! be shadowed by a program or script of its name there.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -19,20 +26,44 @@ thread_local! {
     static SCOPE: RefCell<Option<Rc<PowershellWriteScope>>> = const { RefCell::new(None) };
 }
 
-/// The directory a command runs in and the roots its writes may stay in.
+/// The directory a command runs in, the roots its writes may stay in, and the
+/// environment variables its shell finds programs and modules with.
 #[derive(Debug, Clone)]
 pub struct PowershellWriteScope {
     cwd: String,
     roots: Vec<WritableRoot>,
+    path: Option<std::ffi::OsString>,
+    module_path: Option<String>,
+    extensions: Option<String>,
 }
 
 impl PowershellWriteScope {
-    pub fn new(cwd: &AbsolutePathBuf, roots: Vec<WritableRoot>) -> Self {
+    /// `env` is the command's environment where known (`PATH`, `PATHEXT`,
+    /// `PSModulePath`, in any case); otherwise Corbanu's own.
+    pub fn new(
+        cwd: &AbsolutePathBuf,
+        roots: Vec<WritableRoot>,
+        env: Option<&std::collections::HashMap<String, String>>,
+    ) -> Self {
+        let var = |name: &str| match env {
+            Some(env) => env
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value.clone()),
+            None => std::env::var(name).ok(),
+        };
         Self {
             cwd: cwd.to_string_lossy().into_owned(),
             roots,
+            path: var("PATH").map(Into::into),
+            module_path: var("PSModulePath"),
+            extensions: var("PATHEXT"),
         }
     }
+}
+
+fn current_scope() -> Option<Rc<PowershellWriteScope>> {
+    SCOPE.with(|current| current.borrow().clone())
 }
 
 /// While the returned guard lives, PowerShell scripts read on this thread may write
@@ -58,34 +89,193 @@ impl Drop for PowershellWriteScopeGuard {
     }
 }
 
-/// Whether every path in `writes` stays where the current scope lets a script write.
-pub(crate) fn writes_allowed(writes: &[String], protected: &[String]) -> bool {
-    let Some(scope) = SCOPE.with(|current| current.borrow().clone()) else {
+/// Whether every path in `writes` and `removes` stays where the current
+/// scope lets a script write (`protected`: the parser's folders, to which
+/// the scope's `PATH` and `PSModulePath` folders are added).
+pub(crate) fn writes_allowed(writes: &[String], removes: &[String], protected: &[String]) -> bool {
+    let Some(scope) = current_scope() else {
         return false;
     };
     let Some(cwd) = WinPath::parse(&scope.cwd, None, Strictness::Lax).and_then(canonical) else {
         return false;
     };
     let roots: Vec<Root> = scope.roots.iter().filter_map(Root::from_writable).collect();
+    let scope_dirs = scope
+        .path
+        .iter()
+        .flat_map(std::env::split_paths)
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .chain(
+            scope
+                .module_path
+                .iter()
+                .flat_map(|value| value.split(';').map(str::to_string)),
+        )
+        .collect::<Vec<_>>();
     let protected: Vec<WinPath> = protected
         .iter()
-        .filter_map(|dir| WinPath::parse(dir.trim().trim_matches('"'), Some(&cwd), Strictness::Lax))
+        .chain(&scope_dirs)
+        .map(|dir| dir.trim().trim_matches('"'))
+        .filter(|dir| !dir.is_empty())
+        .filter_map(|dir| WinPath::parse(dir, Some(&cwd), Strictness::Lax))
         .filter_map(canonical)
         .collect();
-    allows(writes, &cwd, &roots, &protected)
+    let extensions = executable_extensions(scope.extensions.as_deref());
+    allows(
+        writes,
+        removes,
+        &Places {
+            cwd: &cwd,
+            roots: &roots,
+            protected: &protected,
+            extensions: &extensions,
+        },
+    )
 }
 
-fn allows(writes: &[String], cwd: &WinPath, roots: &[Root], protected: &[WinPath]) -> bool {
-    writes.iter().all(|write| {
-        let Some(target) = WinPath::parse(write, Some(cwd), Strictness::Write).and_then(canonical)
-        else {
-            return false;
-        };
-        roots.iter().any(|root| root.allows(&target))
-            && !protected
+/// Where a script's paths resolve and may go.
+struct Places<'a> {
+    cwd: &'a WinPath,
+    roots: &'a [Root],
+    protected: &'a [WinPath],
+    /// Extensions of files Windows runs from a folder, folded.
+    extensions: &'a [String],
+}
+
+fn allows(writes: &[String], removes: &[String], places: &Places<'_>) -> bool {
+    let resolve = |path: &String| {
+        WinPath::parse(path, Some(places.cwd), Strictness::Write).and_then(canonical)
+    };
+    let stays = |target: &WinPath| {
+        places.roots.iter().any(|root| root.allows(target))
+            && !places
+                .protected
                 .iter()
-                .any(|dir| target.is_within(dir) || dir.is_within(&target))
-    })
+                .any(|dir| target.is_within(dir) || dir.is_within(target))
+            && !target.parts.last().is_some_and(|name| {
+                places
+                    .extensions
+                    .iter()
+                    .any(|extension| name.ends_with(extension.as_str()))
+            })
+    };
+    writes
+        .iter()
+        .all(|write| resolve(write).is_some_and(|target| stays(&target)))
+        && removes.iter().all(|remove| {
+            // Removing (or moving away) a folder above a root's read-only
+            // part removes that part too.
+            resolve(remove).is_some_and(|target| {
+                stays(&target)
+                    && !places
+                        .roots
+                        .iter()
+                        .any(|root| root.holds_read_only(&target))
+            })
+        })
+}
+
+/// `PATHEXT` (or Windows' default) and `.dll`, folded: files Windows runs, or
+/// loads, from a folder by name (cmd.exe looks in the current one first).
+fn executable_extensions(pathext: Option<&str>) -> Vec<String> {
+    pathext
+        .unwrap_or(".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC")
+        .split(';')
+        .chain(std::iter::once(".dll"))
+        .map(str::trim)
+        .filter(|extension| extension.starts_with('.') && extension.len() > 1)
+        .map(fold)
+        .collect()
+}
+
+/// D729 (A): whether each of `programs` is a program (or script) on the
+/// command's `PATH`, and none of the module cmdlets `cmdlets` is shadowed by
+/// one there. Corbanu's own `PATH` outside a scope. Only absolute local
+/// folders are looked in; a relative or network folder leaves a cmdlet's
+/// shadow unknown (no).
+pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
+    if programs.is_empty() && cmdlets.is_empty() {
+        return true;
+    }
+    let scope = current_scope();
+    let (path, extensions) = match &scope {
+        Some(scope) => (scope.path.clone(), scope.extensions.clone()),
+        None => (std::env::var_os("PATH"), std::env::var("PATHEXT").ok()),
+    };
+    let lookup = PathLookup::new(path.as_deref(), extensions.as_deref());
+    programs.iter().all(|name| lookup.find(name) == Found::Yes)
+        && cmdlets.iter().all(|name| lookup.find(name) == Found::No)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Found {
+    Yes,
+    No,
+    /// A folder that was not looked in may hold it.
+    Unknown,
+}
+
+/// `PATH` as PowerShell searches it for a name: each folder in turn, the
+/// name with each `PATHEXT` extension or `.ps1` (or as given if it has an
+/// extension).
+struct PathLookup {
+    dirs: Vec<Option<std::path::PathBuf>>,
+    extensions: Vec<String>,
+}
+
+impl PathLookup {
+    fn new(path: Option<&std::ffi::OsStr>, pathext: Option<&str>) -> Self {
+        let dirs = path
+            .map(std::env::split_paths)
+            .into_iter()
+            .flatten()
+            .filter(|dir| !dir.as_os_str().is_empty())
+            .map(|dir| {
+                // Never a network folder (`\\server\share`, `//server`): looking
+                // there before approval would reach out to it.
+                let text = dir.to_string_lossy();
+                let local =
+                    dir.is_absolute() && !text.starts_with("\\\\") && !text.starts_with("//");
+                local.then_some(dir)
+            })
+            .collect();
+        let extensions = pathext
+            .unwrap_or(".COM;.EXE;.BAT;.CMD")
+            .split(';')
+            .chain(std::iter::once(".ps1"))
+            .map(str::trim)
+            .filter(|extension| extension.starts_with('.') && extension.len() > 1)
+            .map(str::to_string)
+            .collect();
+        Self { dirs, extensions }
+    }
+
+    fn find(&self, name: &str) -> Found {
+        if name.is_empty() || name.contains(['/', '\\', ':', '*', '?']) {
+            return Found::Unknown;
+        }
+        let has_extension = name
+            .rsplit_once('.')
+            .is_some_and(|(stem, _)| !stem.is_empty());
+        let mut unknown = false;
+        for dir in &self.dirs {
+            let Some(dir) = dir else {
+                unknown = true;
+                continue;
+            };
+            let found = if has_extension {
+                dir.join(name).is_file()
+            } else {
+                self.extensions
+                    .iter()
+                    .any(|extension| dir.join(format!("{name}{extension}")).is_file())
+            };
+            if found {
+                return Found::Yes;
+            }
+        }
+        if unknown { Found::Unknown } else { Found::No }
+    }
 }
 
 /// A writable root as compared here.
@@ -123,6 +313,12 @@ impl Root {
                 .parts
                 .get(self.root.parts.len())
                 .is_none_or(|first| !self.metadata_names.contains(first))
+    }
+
+    /// Whether `target` holds one of this root's read-only parts (the root
+    /// itself, a folder above it, or one above a read-only path).
+    fn holds_read_only(&self, target: &WinPath) -> bool {
+        self.root.is_within(target) || self.read_only.iter().any(|path| path.is_within(target))
     }
 }
 

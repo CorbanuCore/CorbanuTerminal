@@ -76,11 +76,12 @@ Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-cimi
     'get-wmiobject', 'get-eventlog', 'get-computerinfo', 'test-connection', 'get-job', 'wait-job',
     'receive-job', 'remove-job', 'stop-job'
 # Network (Windows PowerShell's Invoke-WebRequest also needs -UseBasicParsing).
-Add-D729 'invoke-webrequest', 'invoke-restmethod' -Writes 'outfile'
+Add-D729 'invoke-webrequest', 'invoke-restmethod' -Excluded 'SessionVariable', 'StatusCodeVariable', 'ResponseHeadersVariable' -Writes 'outfile'
 # File writes, checked by path.
 # An alternate data stream (`-Stream`) is not a path the Rust side can check.
 Add-D729 'set-content', 'add-content' -Excluded 'Stream' -Writes 'paths' -Dynamic @{ Encoding = 1; NoNewline = 0; AsByteStream = 0 }
-Add-D729 'clear-content', 'remove-item' -Excluded 'Stream' -Writes 'paths'
+Add-D729 'clear-content' -Excluded 'Stream' -Writes 'paths'
+Add-D729 'remove-item' -Excluded 'Stream' -Writes 'remove'
 Add-D729 'set-item', 'clear-item', 'set-itemproperty', 'new-itemproperty', 'remove-itemproperty',
     'rename-itemproperty', 'export-csv', 'export-clixml' -Writes 'paths'
 Add-D729 'out-file' -Writes 'file'
@@ -92,11 +93,11 @@ Add-D729 'rename-item' -Writes 'rename'
 Add-D729 'compress-archive' -Writes 'dest'
 Add-D729 'set-location', 'push-location', 'pop-location' -Writes 'location'
 
-# Writers whose input from the pipeline is content, not a path; any other writer asks after
-# the first command of a pipeline, where a path could come from its input.
+# Writers whose input from the pipeline binds only as content, never to a path or stream
+# (Set-Content can bind `-Stream` by property name); any other writer asks after the first
+# command of a pipeline, where a path could come from its input.
 $D729ContentWriters = @{
-    'set-content' = $true; 'add-content' = $true; 'out-file' = $true; 'tee-object' = $true
-    'export-csv' = $true; 'export-clixml' = $true
+    'out-file' = $true; 'tee-object' = $true; 'export-csv' = $true; 'export-clixml' = $true
 }
 # Common parameters that set variables or prompt.
 $D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm')
@@ -124,6 +125,20 @@ if ($documents) {
     $null = $D729Protected.Add([IO.Path]::Combine($documents, 'PowerShell'))
 }
 $null = $D729Protected.Add($PSHOME)
+
+# The profile scripts a console shell of this edition runs unless given -NoProfile; if
+# PowerShell does not say, assume one exists.
+$D729Profiles = @()
+if ($null -ne $PROFILE) {
+    $D729Profiles = @($PROFILE.AllUsersAllHosts, $PROFILE.AllUsersCurrentHost, $PROFILE.CurrentUserAllHosts, $PROFILE.CurrentUserCurrentHost)
+}
+function Test-D729Profile {
+    if ($D729Profiles.Count -eq 0) { return $true }
+    foreach ($path in $D729Profiles) {
+        if ([string]::IsNullOrEmpty($path) -or [System.IO.File]::Exists($path)) { return $true }
+    }
+    return $false
+}
 
 function Get-D729LiteralText($element) {
     if ($element -is [System.Management.Automation.Language.StringConstantExpressionAst]) { return $element.Value }
@@ -181,7 +196,7 @@ function Get-D729Bound($binding, [string]$name) {
 function Test-D729NotLiteral($value) { return [object]::ReferenceEquals($value, $D729NotLiteral) }
 
 # Why an allowlisted cmdlet is not read as plain ($null if it is); adds its writes.
-function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $writes, $state) {
+function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) {
     $entry = $D729Allow[$target]
     $info = $D729Info[$target]
     if ($null -eq $info) { return "not available in this edition: $target" }
@@ -244,12 +259,20 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $writes,
         return $null
     }
     if ($index -gt 0 -and -not $D729ContentWriters.ContainsKey($target)) { return "path from pipeline input: $target" }
-    return (Add-D729Writes $binding $target $entry.w $writes)
+    return (Add-D729Writes $binding $target $entry.w $state)
 }
 
-# The paths a writer writes (or removes), added to $writes; a cause if one is not literal.
-function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
+# The last part of a path (`a\b.txt` gives `b.txt`); $null where there is none.
+function Get-D729Leaf([string]$path) {
+    $leaf = $path.Split([char[]]'\/')[-1]
+    if ([string]::IsNullOrEmpty($leaf)) { return $null }
+    return $leaf
+}
+
+# The paths a writer writes and removes, added to $state; a cause if one is not literal.
+function Add-D729Writes($binding, [string]$target, [string]$kind, $state) {
     $paths = @()
+    $removes = @()
     foreach ($name in 'Path', 'LiteralPath', 'FilePath') {
         $value = Get-D729Bound $binding $name
         if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
@@ -258,6 +281,11 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
     switch ($kind) {
         'paths' { }
         'file' { }
+        'remove' {
+            $removes = $paths
+            $paths = @()
+            if ($removes.Count -eq 0) { return "writer path not given: $target" }
+        }
         'outfile' {
             $value = Get-D729Bound $binding 'OutFile'
             if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
@@ -278,23 +306,28 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
             if (Test-D729NotLiteral $name) { return "item name is not literal: $target" }
             if ($null -ne $name) { $paths = @($paths | ForEach-Object { $_ + '\' + $name }) }
         }
-        'copy' {
+        { $_ -in 'copy', 'move' } {
+            # The destination, and the item named like each source inside it (it may be a
+            # folder: `Copy-Item s\.git .` writes `.\.git`). A move also removes its sources.
+            $sources = $paths
+            if ($sources.Count -eq 0) { return "writer path not given: $target" }
             $destination = Get-D729Bound $binding 'Destination'
             if (Test-D729NotLiteral $destination) { return "writer path is not literal: $target" }
             if ($null -eq $destination) { $destination = '.' }
             $paths = @($destination)
-        }
-        'move' {
-            $destination = Get-D729Bound $binding 'Destination'
-            if (Test-D729NotLiteral $destination) { return "writer path is not literal: $target" }
-            if ($null -eq $destination) { $destination = '.' }
-            $paths += $destination
+            foreach ($source in $sources) {
+                $leaf = Get-D729Leaf $source
+                if ($null -eq $leaf) { return "source has no name: $target" }
+                $paths += $destination + '\' + $leaf
+            }
+            if ($kind -eq 'move') { $removes = $sources }
         }
         'rename' {
             $newName = Get-D729Bound $binding 'NewName'
             if ((Test-D729NotLiteral $newName) -or $null -eq $newName) { return "new name is not literal: $target" }
             if ($newName.IndexOfAny([char[]]'\/:') -ge 0) { return "new name holds a path: $target" }
-            $paths = @($paths) + @($paths | ForEach-Object { $_ + '\..\' + $newName })
+            $removes = $paths
+            $paths = @($paths | ForEach-Object { $_ + '\..\' + $newName })
         }
         'dest' {
             $destination = Get-D729Bound $binding 'DestinationPath'
@@ -303,13 +336,14 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
             $paths = @($destination)
         }
     }
-    if ($paths.Count -eq 0) { return "writer path not given: $target" }
-    foreach ($path in $paths) { $null = $writes.Add([string]$path) }
+    if ($paths.Count -eq 0 -and $removes.Count -eq 0) { return "writer path not given: $target" }
+    foreach ($path in $paths) { $null = $state.writes.Add([string]$path) }
+    foreach ($path in $removes) { $null = $state.removes.Add([string]$path) }
     return $null
 }
 
 # Why one command is not read as plain; $null if it is.
-function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
+function Get-D729CommandCause($commandAst, [int]$index, $state) {
     $name = $commandAst.GetCommandName()
     if ([string]::IsNullOrEmpty($name)) { return 'command name is not a literal word' }
     $lower = $name.ToLowerInvariant()
@@ -318,7 +352,7 @@ function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
         # Qualified by a system module (`Microsoft.PowerShell.Management\Get-Item`), or a path.
         $module, $rest = $lower.Split([char[]]'\/', 2)
         if ($D729SystemModules -contains $module -and $rest -notmatch '[\\/]' -and $D729Allow.ContainsKey($rest)) {
-            return (Get-D729CmdletCause $commandAst $rest $index $writes $state)
+            return (Get-D729CmdletCause $commandAst $rest $index $state)
         }
         if ($lower -match '\.(exe|com)$') { return (Get-D729NativeCause $commandAst) }
         return "script or module-qualified command: $name"
@@ -328,46 +362,45 @@ function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
     if ($D729Aliases.ContainsKey($lower)) { $target = $D729Aliases[$lower] }
     if ($D729Allow.ContainsKey($target)) {
         # PowerShell finds a module's command it has not loaded yet only after a program
-        # or script of that name on `PATH` (`Get-Content.ps1`).
+        # or script of that name on `PATH` (`Get-Content.ps1`): the Rust side checks the
+        # command's `PATH` for these.
         $info = $D729Info[$target]
-        if ($null -ne $info -and $info.ModuleName -and $info.ModuleName -ne 'Microsoft.PowerShell.Core' -and (Find-D729OnPath $target -Scripts)) {
-            return "program or script on PATH named like a cmdlet: $target"
+        if ($null -ne $info -and $info.ModuleName -and $info.ModuleName -ne 'Microsoft.PowerShell.Core') {
+            $null = $state.cmdlets.Add($target)
         }
-        return (Get-D729CmdletCause $commandAst $target $index $writes $state)
+        return (Get-D729CmdletCause $commandAst $target $index $state)
     }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }
     if ($lower -match '\.[^.]*$' -and $lower -notmatch '\.(exe|com|cmd|bat)$') { return "script file: $name" }
-    # A Verb-Noun name PowerShell does not find as a program on `PATH` is a module's
-    # command (`ForEach-Object`, `Get-ScheduledTask`, or a module a command wrote).
-    # Other names are programs: the shell's `PATH` may hold more than this process's
-    # (Corbanu's own tools), so a program not found here still runs as argv.
-    if ($lower -match '^[a-z]+-[a-z]' -and -not (Find-D729OnPath $lower)) { return "command not on the allowlist: $lower" }
+    # A name PowerShell does not find as a program on `PATH` may be a module's command or
+    # alias, or `Get-<name>`, loaded on use: the Rust side requires each to be a program on
+    # the command's `PATH`.
+    $null = $state.programs.Add($lower)
     return (Get-D729NativeCause $commandAst)
 }
 
-# Whether `PATH` holds a program (or with -Scripts also a script) named $name.
-function Find-D729OnPath([string]$name, [switch]$Scripts) {
-    $types = [System.Management.Automation.CommandTypes]::Application
-    if ($Scripts) { $types = $types -bor [System.Management.Automation.CommandTypes]::ExternalScript }
-    $found = Get-Command -Name ([System.Management.Automation.WildcardPattern]::Escape($name)) -CommandType $types -ErrorAction SilentlyContinue
-    return $null -ne $found
-}
-
-# For a script read as literal commands: $null and its writes, or why it is read in part.
+# For a script read as literal commands: what the Rust side must check (paths it writes
+# and removes, program names, module cmdlets), or why it is read in part.
 function Get-D729Review($ast) {
-    $writes = [System.Collections.ArrayList]::new()
-    $state = @{ location = $false }
+    $state = @{
+        location = $false
+        writes = [System.Collections.ArrayList]::new()
+        removes = [System.Collections.ArrayList]::new()
+        programs = [System.Collections.ArrayList]::new()
+        cmdlets = [System.Collections.ArrayList]::new()
+    }
     foreach ($pipeline in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] }, $true)) {
         $index = 0
         foreach ($element in $pipeline.PipelineElements) {
             if ($element -is [System.Management.Automation.Language.CommandAst]) {
-                $cause = Get-D729CommandCause $element $index $writes $state
+                $cause = Get-D729CommandCause $element $index $state
                 if ($null -ne $cause) { return @{ cause = $cause } }
             }
             $index++
         }
     }
     # A relative path written after the location changed is not where it reads.
-    if ($state.location -and $writes.Count -gt 0) { return @{ cause = 'writes after a location change' } }
-    return @{ cause = $null; writes = $writes }
+    if ($state.location -and ($state.writes.Count + $state.removes.Count) -gt 0) { return @{ cause = 'writes after a location change' } }
+    $state.cause = $null
+    return $state
 }

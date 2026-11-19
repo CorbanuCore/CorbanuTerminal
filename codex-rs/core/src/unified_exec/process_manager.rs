@@ -1388,6 +1388,7 @@ impl UnifiedExecProcessManager {
                     } else {
                         cwd.to_abs_path().ok()
                     },
+                    env: Some(&env),
                 },
                 live_aggressive,
             )

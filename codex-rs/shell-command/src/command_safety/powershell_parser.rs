@@ -46,25 +46,34 @@ $stdin = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8, $f
 /// outside the sandbox; callers pass a trusted PowerShell
 /// ([`crate::powershell::trusted_powershell_parser`]), never a command's own
 /// `argv[0]`.
-pub(crate) fn parse_with_powershell_ast(executable: &str, script: &str) -> PowershellParseOutcome {
+///
+/// D729 (A): `no_profile` says the shell runs with `-NoProfile`; otherwise a
+/// script is read in full only where no profile script exists.
+pub(crate) fn parse_with_powershell_ast(
+    executable: &str,
+    script: &str,
+    no_profile: bool,
+) -> PowershellParseOutcome {
     static PARSER_PROCESSES: LazyLock<Mutex<HashMap<String, PowershellParserProcess>>> =
         LazyLock::new(|| Mutex::new(HashMap::new()));
 
     let mut parser_processes = PARSER_PROCESSES
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    parse_with_cached_process(&mut parser_processes, executable, script)
+    parse_with_cached_process(&mut parser_processes, executable, script, no_profile)
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PowershellParseOutcome {
     Commands(Vec<Vec<String>>),
-    /// D729 (A): commands that write `writes` (literal paths, as written), with the
-    /// folders PowerShell and Windows run code from (`protected`). Read in full only
-    /// where every write stays inside the writable roots and outside `protected`.
+    /// D729 (A): commands that write `writes` and remove `removes` (literal
+    /// paths, as written), with the folders PowerShell and Windows run code
+    /// from (`protected`). Read in full only where every path stays inside
+    /// the writable roots and outside `protected` (see `write_scope`).
     Writes {
         commands: Vec<Vec<String>>,
         writes: Vec<String>,
+        removes: Vec<String>,
         protected: Vec<String>,
     },
     Partial(Vec<Vec<String>>),
@@ -79,6 +88,7 @@ fn parse_with_cached_process(
     parser_processes: &mut HashMap<String, PowershellParserProcess>,
     executable: &str,
     script: &str,
+    no_profile: bool,
 ) -> PowershellParseOutcome {
     // `powershell.exe` and `pwsh.exe` do not accept the same language surface, so each
     // executable keeps its own parser process and request stream.
@@ -96,7 +106,7 @@ fn parse_with_cached_process(
         let Some(parser_process) = parser_processes.get_mut(&parser_key) else {
             return PowershellParseOutcome::Unavailable;
         };
-        let parse_result = parser_process.parse(script);
+        let parse_result = parser_process.parse_request(script, no_profile);
         match parse_result {
             Ok(outcome) => return outcome,
             Err(_) if attempt == 0 => {
@@ -187,10 +197,20 @@ impl PowershellParserProcess {
         })
     }
 
+    #[cfg(test)]
     fn parse(&mut self, script: &str) -> std::io::Result<PowershellParseOutcome> {
+        self.parse_request(script, /*no_profile*/ true)
+    }
+
+    fn parse_request(
+        &mut self,
+        script: &str,
+        no_profile: bool,
+    ) -> std::io::Result<PowershellParseOutcome> {
         let request = PowershellParserRequest {
             id: self.next_request_id,
             payload: encode_powershell_base64(script),
+            no_profile,
         };
         self.next_request_id = self.next_request_id.wrapping_add(1);
         let mut request_json = serialize_request(&request)?;
@@ -270,6 +290,8 @@ fn deserialize_response(response_line: &str) -> std::io::Result<PowershellParser
 struct PowershellParserRequest {
     id: u64,
     payload: String,
+    #[serde(rename = "noProfile")]
+    no_profile: bool,
 }
 
 #[derive(Deserialize)]
@@ -281,7 +303,13 @@ struct PowershellParserResponse {
     #[serde(default)]
     writes: Option<Vec<String>>,
     #[serde(default)]
+    removes: Option<Vec<String>>,
+    #[serde(default)]
     protected: Option<Vec<String>>,
+    #[serde(default)]
+    programs: Option<Vec<String>>,
+    #[serde(default)]
+    cmdlets: Option<Vec<String>>,
     /// Why the script is read in part (diagnostics only).
     #[serde(default, rename = "cause")]
     _cause: Option<String>,
@@ -299,13 +327,25 @@ impl PowershellParserResponse {
                 }) else {
                     return PowershellParseOutcome::Unsupported;
                 };
-                match self.writes {
-                    Some(writes) if !writes.is_empty() => PowershellParseOutcome::Writes {
+                // D729 (A): each program found on the command's `PATH`, no
+                // module cmdlet shadowed there; else read in part.
+                if !crate::powershell::names_resolve(
+                    &self.programs.unwrap_or_default(),
+                    &self.cmdlets.unwrap_or_default(),
+                ) {
+                    return PowershellParseOutcome::Partial(commands);
+                }
+                let writes = self.writes.unwrap_or_default();
+                let removes = self.removes.unwrap_or_default();
+                if writes.is_empty() && removes.is_empty() {
+                    PowershellParseOutcome::Commands(commands)
+                } else {
+                    PowershellParseOutcome::Writes {
                         commands,
                         writes,
+                        removes,
                         protected: self.protected.unwrap_or_default(),
-                    },
-                    _ => PowershellParseOutcome::Commands(commands),
+                    }
                 }
             }
             "partial" => self
@@ -368,6 +408,7 @@ mod tests {
         let PowershellParseOutcome::Writes {
             commands,
             writes,
+            removes,
             protected,
         } = parser
             .parse("New-Item -Path build -Name notes.txt -Value x; Rename-Item a.txt b.txt")
@@ -380,10 +421,10 @@ mod tests {
             writes,
             vec![
                 "build\\notes.txt".to_string(),
-                "a.txt".to_string(),
                 "a.txt\\..\\b.txt".to_string(),
             ]
         );
+        assert_eq!(removes, vec!["a.txt".to_string()]);
         assert!(!protected.is_empty());
 
         // D729 (A): not on the allowlist, so read in part.

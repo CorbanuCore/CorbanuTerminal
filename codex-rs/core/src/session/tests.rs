@@ -13992,6 +13992,7 @@ async fn rejects_escalated_permissions_when_policy_not_on_request() {
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
             cwd: None,
+            env: None,
         })
         .await;
     assert!(matches!(

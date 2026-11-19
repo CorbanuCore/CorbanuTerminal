@@ -11,9 +11,11 @@ $ProgressPreference = 'SilentlyContinue'
 #   { "id": <same>, "status": "partial", "commands": [["git", "push"]] }
 # or:
 #   { "id": <same>, "status": "parse_failed" | "parse_errors" | "unsupported" }
-# An "ok" reading whose commands write files also lists, as "writes", the literal paths
-# they write and, as "protected", the folders PowerShell and Windows run code from; a
-# "partial" reading may name its "cause".
+# A request may say "noProfile": true (the shell runs with -NoProfile). An "ok" reading
+# also lists what the Rust side checks (D729 A): "writes" and "removes" (literal paths),
+# "protected" (folders PowerShell and Windows run code from), "programs" (names that must
+# be programs on the command's PATH) and "cmdlets" (module cmdlets no program on it may
+# shadow); a "partial" reading may name its "cause".
 #
 # "unsupported" is intentional: it means the script parsed successfully, but the AST
 # included constructs that we conservatively refuse to lower into argv-like command words.
@@ -30,7 +32,7 @@ $stdout = [System.IO.StreamWriter]::new([Console]::OpenStandardOutput(), $utf8)
 $stdout.AutoFlush = $true
 
 function Invoke-ParseRequest {
-    param($RequestId, $Source)
+    param($RequestId, $Source, $NoProfile)
 
     $tokens = $null
     $errors = $null
@@ -111,18 +113,27 @@ function Invoke-ParseRequest {
         return Get-PartialCommands $RequestId $ast
     }
 
-    # D729 (A): only allowlisted cmdlets and native programs (powershell_allowlist.ps1).
+    # D729 (A): only allowlisted cmdlets and native programs (powershell_allowlist.ps1),
+    # in a shell no profile script ran in first (it can change aliases, functions, the
+    # location and the environment the tables assume).
     $review = Get-D729Review $ast
+    if ($null -eq $review.cause -and -not $NoProfile -and (Test-D729Profile)) {
+        $review = @{ cause = 'a profile script may run first' }
+    }
     if ($null -ne $review.cause) {
         $partial = Get-PartialCommands $RequestId $ast
         $partial.cause = $review.cause
         return $partial
     }
 
+    # What the Rust side checks: written and removed paths (against the writable roots
+    # and the protected folders), program names (each found on the command's `PATH`), and
+    # module cmdlets (none shadowed by a program or script on it).
     $response = @{ id = $RequestId; status = 'ok'; commands = $commands }
-    # Writes the Rust side checks against the writable roots and the protected folders.
-    if ($review.writes.Count -gt 0) {
-        $response.writes = [string[]]@($review.writes)
+    foreach ($key in 'writes', 'removes', 'programs', 'cmdlets') {
+        if ($review[$key].Count -gt 0) { $response[$key] = [string[]]@($review[$key]) }
+    }
+    if (($review.writes.Count + $review.removes.Count) -gt 0) {
         $response.protected = [string[]]@($D729Protected)
     }
     return $response
@@ -329,5 +340,5 @@ while (($requestLine = $stdin.ReadLine()) -ne $null) {
         continue
     }
 
-    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source)
+    Write-Response (Invoke-ParseRequest -RequestId $requestId -Source $source -NoProfile ($request.noProfile -eq $true))
 }

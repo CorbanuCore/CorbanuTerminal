@@ -150,6 +150,7 @@ async fn cmd_scripts_are_refused_under_aggressive_with_approvals_off() {
                         sandbox_permissions: SandboxPermissions::UseDefault,
                         prefix_rule: Some(command.clone()),
                         cwd: None,
+                        env: None,
                     },
                     /*live_aggressive*/ true,
                 )

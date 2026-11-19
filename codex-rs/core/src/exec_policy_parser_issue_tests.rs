@@ -83,6 +83,7 @@ async fn aggressive_never(command: &[String], rules: &str) -> ExecApprovalRequir
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: Some(command.to_vec()),
                 cwd: None,
+                env: None,
             },
             /*live_aggressive*/ true,
         )

@@ -36,6 +36,7 @@ async fn decide_in(
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: Some(command.clone()),
             cwd: Some(AbsolutePathBuf::from_absolute_path(cwd).expect("absolute cwd")),
+            env: None,
         })
         .await
 }
@@ -127,6 +128,20 @@ fn unread_scripts() -> Vec<String> {
         "Get-ChildItem | Copy-Item -Destination out".into(),
         // An archive's entries can name paths outside its destination.
         "Expand-Archive -Path a.zip -DestinationPath out".into(),
+        // #2709 review r1: names PowerShell would load from a module (exported
+        // aliases, `Get-<name>`), variable-setting web parameters, trees copied
+        // over `.git`, removing a folder above it, files cmd.exe runs from the
+        // current folder, and a stream bound from pipeline input.
+        "inmo EvilMod -Scope CurrentUser -Force; Get-CimInstance Win32_OperatingSystem".into(),
+        "content README.md".into(),
+        "Invoke-RestMethod -Uri https://example.com -StatusCodeVariable ErrorActionPreference".into(),
+        "Invoke-WebRequest -UseBasicParsing -Uri https://example.com -SessionVariable s".into(),
+        r"New-Item -ItemType Directory -Force -Path s\.git\hooks | Out-Null; Copy-Item -Path s\.git -Destination . -Recurse -Force".into(),
+        r"Move-Item -Path s\.git -Destination .".into(),
+        "Remove-Item -Recurse -Force .".into(),
+        "Set-Content -Path node.cmd -Value '@git push'; pnpm --version".into(),
+        r"Copy-Item C:\Windows\System32\cmd.exe x.exe; .\x.exe /c git push".into(),
+        r#"ConvertFrom-Json '{"Stream":"x"}' | Set-Content -Path a.txt"#.into(),
     ]
 }
 
@@ -203,7 +218,7 @@ async fn allowlisted_forms_stay_precise() {
             "Set-Content -Encoding utf8 out.txt x",
             "New-Item -ItemType Directory -Force -Path build",
             "New-Item -ItemType f -Path build -Name notes.txt -Value x",
-            "Get-Content a.txt | Set-Content -Path b.txt",
+            "Get-Content a.txt | Out-File -FilePath b.txt",
             "Copy-Item -Path a.txt -Destination b.txt",
             "Rename-Item -Path a.txt -NewName b.txt",
             "Get-ChildItem -ErrorAction SilentlyContinue",
@@ -319,4 +334,36 @@ async fn writes_outside_the_workspace_or_above_protected_folders_ask() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn a_working_directory_parameter_makes_writes_ask() {
+    let (_parent, workspace) = workspace();
+    if !shells().contains(&"pwsh.exe") {
+        return;
+    }
+    let command = vec![
+        "pwsh.exe".to_string(),
+        "-NoProfile".to_string(),
+        "-WorkingDirectory".to_string(),
+        documents(),
+        "-Command".to_string(),
+        "Set-Content -Path out.txt -Value x".to_string(),
+    ];
+    let result = ExecPolicyManager::new(policy_from_src(Some(GIT_PUSH_FORBIDDEN)))
+        .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+            command: &command,
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+            cwd: Some(AbsolutePathBuf::from_absolute_path(&workspace).expect("absolute cwd")),
+            env: None,
+        })
+        .await;
+    assert!(
+        matches!(result, ExecApprovalRequirement::NeedsApproval { .. }),
+        "{result:?}"
+    );
 }
