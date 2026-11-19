@@ -176,6 +176,7 @@ fn shape(result: &ExecApprovalRequirement) -> (&'static str, bool) {
             proposed_execpolicy_amendment,
             ..
         } => ("ask", proposed_execpolicy_amendment.is_some()),
+        ExecApprovalRequirement::NeedsHumanApproval { .. } => ("ask", false),
         ExecApprovalRequirement::Forbidden { .. } => ("refuse", false),
     }
 }
