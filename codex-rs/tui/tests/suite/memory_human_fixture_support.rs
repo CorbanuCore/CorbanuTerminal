@@ -50,8 +50,16 @@ impl Artifacts {
 pub(super) async fn fake_provider(label: &'static str, case: Case, delay: Duration) -> MockServer {
     let server = MockServer::start().await;
     Mock::given(wiremock::matchers::method("POST")).respond_with(move |request: &wiremock::Request| {
-        let memory = String::from_utf8_lossy(&request.body).contains(CANARY);
-        let text = if memory { r#"{"raw_memory":"synthetic result","rollout_summary":"synthetic summary","rollout_slug":"fixture"}"#.to_owned() } else { format!("{label} foreground complete") };
+        let body = String::from_utf8_lossy(&request.body);
+        let memory = body.contains(CANARY);
+        // Answer in the requested version's schema: only v1 asks for `raw_memory`.
+        let text = if !memory {
+            format!("{label} foreground complete")
+        } else if body.contains("raw_memory") {
+            r#"{"raw_memory":"synthetic result","rollout_summary":"synthetic summary","rollout_slug":"fixture"}"#.to_owned()
+        } else {
+            r#"{"rollout_summary":"synthetic summary","rollout_slug":"fixture"}"#.to_owned()
+        };
         let response = ResponseTemplate::new(200).insert_header("content-type", "text/event-stream").set_body_string(responses::sse(vec![responses::ev_response_created("fixture"), responses::ev_assistant_message("fixture-message", &text), responses::ev_completed("fixture")]));
         if memory && case != Case::Startup { response.set_delay(delay) } else { response }
     }).mount(&server).await;

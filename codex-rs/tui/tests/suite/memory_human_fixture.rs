@@ -11,6 +11,7 @@ use anyhow::Result;
 use anyhow::ensure;
 use codex_history::RolloutItem;
 use codex_history::RolloutLine;
+use codex_protocol::MemoryVersion;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
@@ -385,6 +386,9 @@ animations = false
     metadata.first_user_message = Some(CANARY.into());
     db.upsert_thread(&metadata).await?;
     db.set_thread_memory_mode(source, "enabled").await?;
+    // A fresh profile starts on upstream's v2 memory pipeline, whose stage-one
+    // outputs live in the separate `memories_v2` store.
+    let memories = db.memories_for_version(MemoryVersion::V2).await?;
     let tmux = TmuxServer::start("memory-human")?;
     let spec = |name| {
         SessionSpec::new(
@@ -423,8 +427,7 @@ animations = false
     loop {
         let routes = routing(&a, &b).await;
         let canaries = routes.iter().filter(|r| r["kind"] == "memory").count();
-        let outputs = db
-            .memories()
+        let outputs = memories
             .list_stage1_outputs_for_global(/*n*/ 100)
             .await?
             .iter()
