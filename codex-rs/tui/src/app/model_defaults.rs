@@ -17,6 +17,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use color_eyre::eyre::Result;
 
 impl App {
+    #[cfg(test)]
     pub(super) async fn apply_default_model_selection(
         &mut self,
         app_server: &mut AppServerSession,
