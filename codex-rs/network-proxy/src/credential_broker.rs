@@ -74,6 +74,11 @@ pub(crate) struct IsolatedBrokerOptions {
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
 pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
 
+/// D732: shortest held key looked for in other variables of a command's
+/// environment (D685 matches 8+ bytes anywhere in a value). Shorter values
+/// (placeholders) would match ordinary words in `PATH`.
+const CHILD_ENV_COPY_MIN_KEY_BYTES: usize = 8;
+
 #[derive(Clone)]
 pub(crate) struct CredentialBroker {
     state: Arc<RwLock<CredentialBrokerState>>,
@@ -157,6 +162,9 @@ struct CredentialBrokerState {
     credentials: Vec<CredentialRecord>,
     scoped_openai: Option<ScopedCredentialRecord>,
     isolated_openai: Option<IsolatedCredentialRecord>,
+    /// D732: a command environment could not be checked for copies of held
+    /// keys. From then on no request is given a key (fail closed).
+    env_copy_check_failed: bool,
 }
 
 struct CredentialRecord {
@@ -326,11 +334,12 @@ impl CredentialBroker {
         // With secretless launch the child environment no longer carries the
         // provider tokens; read them (and host context) from Core's own
         // environment, letting any value already in the child win.
-        let source_env = self
+        let mut source_env = self
             .process_env_source
             .as_ref()
-            .map(|source| process_credential_env(env, source));
-        let source_env = source_env.as_ref().unwrap_or(env).clone();
+            .map(|source| process_credential_env(env, source))
+            .unwrap_or_else(|| env.clone());
+        let mut virtualized = Vec::new();
         for provider in providers::credential_providers() {
             if (state.scoped_openai.is_some() || state.isolated_openai.is_some())
                 && std::ptr::eq(provider, providers::openai_provider())
@@ -340,7 +349,7 @@ impl CredentialBroker {
             for source in provider.sources() {
                 if let Some(host_binding) = (source.host_binding)(&source_env) {
                     for env_var in source.env_vars {
-                        virtualize_env_var(
+                        virtualized.extend(virtualize_env_var(
                             &source_env,
                             env,
                             &mut state,
@@ -348,24 +357,115 @@ impl CredentialBroker {
                             env_var,
                             provider,
                             host_binding.clone(),
-                        );
+                        ));
                     }
                 }
             }
         }
         if let Some(scoped) = state.scoped_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                scoped.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    scoped.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
         if let Some(isolated) = state.isolated_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                isolated.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    isolated.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
+        self.take_child_env_copies(&mut state, env, &virtualized);
+        drop(virtualized);
+        for value in source_env.values_mut() {
+            zeroize::Zeroize::zeroize(value);
+        }
         update_brokered_credentials_marker(&state, env);
+    }
+
+    /// D732: removes from a command's environment every variable whose value
+    /// contains a key this broker holds, so a copy under another name (a
+    /// header such as `Bearer <key>`, a second variable) is not inherited
+    /// along with the dummy. Keys are the values virtualized for this
+    /// environment, raw values held in this process, and, with isolation,
+    /// every key the broker process holds (D685's known-credential check, one
+    /// fingerprint request). Keys shorter than [`CHILD_ENV_COPY_MIN_KEY_BYTES`]
+    /// are not looked for. Removed values are zeroized; only names are logged.
+    ///
+    /// Fails closed: when the broker's keys cannot be checked, matches found
+    /// locally are still removed and no request is given a key afterwards.
+    fn take_child_env_copies(
+        &self,
+        state: &mut CredentialBrokerState,
+        env: &mut HashMap<String, String>,
+        virtualized: &[&str],
+    ) {
+        let keys: Vec<&str> = virtualized
+            .iter()
+            .copied()
+            .chain(
+                state
+                    .credentials
+                    .iter()
+                    .filter_map(|credential| match &credential.secret {
+                        RecordSecret::Raw(value) => Some(value.as_str()),
+                        _ => None,
+                    }),
+            )
+            .filter(|key| key.len() >= CHILD_ENV_COPY_MIN_KEY_BYTES)
+            .collect();
+        let entries: Vec<(&String, &String)> =
+            env.iter().filter(|(_, value)| !value.is_empty()).collect();
+        let mut found: Vec<bool> = entries
+            .iter()
+            .map(|(_, value)| keys.iter().any(|key| value.contains(key)))
+            .collect();
+        let mut checked = true;
+        #[cfg(any(unix, windows))]
+        if let Isolation::Process(mode) = &self.isolation
+            && state
+                .credentials
+                .iter()
+                .any(|credential| matches!(credential.secret, RecordSecret::Brokered { .. }))
+        {
+            let texts: Vec<&str> = entries.iter().map(|(_, value)| value.as_str()).collect();
+            match mode.live_client().map(|client| {
+                client.model_credential_occurrences(&texts, CHILD_ENV_COPY_MIN_KEY_BYTES)
+            }) {
+                Some(Ok(held)) if held.len() == found.len() => {
+                    for (found, held) in found.iter_mut().zip(held) {
+                        *found |= held;
+                    }
+                }
+                _ => checked = false,
+            }
+        }
+        let copies: Vec<String> = entries
+            .iter()
+            .zip(found)
+            .filter(|(_, found)| *found)
+            .map(|((name, _), _)| (*name).clone())
+            .collect();
+        for name in &copies {
+            drop(env.remove(name).map(Zeroizing::new));
+        }
+        if !copies.is_empty() {
+            tracing::info!(
+                "copies of keys held by the network proxy credential broker removed from a command environment: {}",
+                copies.join(", ")
+            );
+        }
+        if !checked {
+            tracing::warn!(
+                "network proxy credential broker could not check a command environment for key copies; no request is given a key"
+            );
+            state.env_copy_check_failed = true;
+        }
     }
 
     pub(crate) fn install_scoped_openai_route(
@@ -469,9 +569,13 @@ impl CredentialBroker {
             return Ok(CredentialRouting::Direct(None));
         }
 
+        let env_copy_check_failed = state.env_copy_check_failed;
         if let Some(scoped) = state.scoped_openai.as_mut() {
             let carries_reference = scoped.matches_reference(headers);
             if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
+                if env_copy_check_failed {
+                    return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
+                }
                 return scoped
                     .inject(
                         scheme,
@@ -500,6 +604,10 @@ impl CredentialBroker {
         let Some(credential) = select_credential(headers, &matching_credentials) else {
             return Ok(CredentialRouting::Direct(None));
         };
+        // D732: a command may hold an unchecked copy of a key; use none.
+        if env_copy_check_failed {
+            return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
+        }
         if self.response_gate {
             credential
                 .provider
@@ -620,18 +728,17 @@ fn process_credential_env(
     values
 }
 
-fn virtualize_env_var(
-    source_env: &HashMap<String, String>,
+/// Replaces `env_var` with a dummy and returns the value now held for it.
+fn virtualize_env_var<'a>(
+    source_env: &'a HashMap<String, String>,
     env: &mut HashMap<String, String>,
     state: &mut CredentialBrokerState,
     isolation: &Isolation,
     env_var: &str,
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
-) {
-    let Some(real_value) = brokerable_credential_value(source_env, state, env_var, provider) else {
-        return;
-    };
+) -> Option<&'a str> {
+    let real_value = brokerable_credential_value(source_env, state, env_var, provider)?;
 
     let dummy_value = match isolation {
         Isolation::InProcess => state.register(env_var, provider, host_binding, real_value),
@@ -648,7 +755,12 @@ fn virtualize_env_var(
             real_value,
         ),
     };
-    env.insert(env_var.to_string(), dummy_value);
+    // The replaced value (the key itself) is zeroized.
+    drop(
+        env.insert(env_var.to_string(), dummy_value)
+            .map(Zeroizing::new),
+    );
+    Some(real_value)
 }
 
 fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
