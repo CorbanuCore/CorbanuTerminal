@@ -9,7 +9,7 @@ fn argv(words: &[&str]) -> Vec<String> {
 }
 
 fn unread_cmd_forms() -> Vec<Vec<String>> {
-    let mut forms = vec![
+    vec![
         argv(&["cmd", "/c", "git push"]),
         argv(&["cmd", "/C", "git", "push"]),
         argv(&["cmd.exe", "/d", "/c", "git push"]),
@@ -38,16 +38,7 @@ fn unread_cmd_forms() -> Vec<Vec<String>> {
         // Inside a shell script, and behind a launcher.
         argv(&["bash", "-c", "cmd /c 'git push'"]),
         argv(&["env", "cmd", "/c", "git push"]),
-    ];
-    if cfg!(windows) {
-        // A path that may be a batch file: in the command's folder, or a
-        // file a script creates first.
-        forms.extend([
-            argv(&[r".\build", "&git push"]),
-            argv(&[r"C:\p\x", "&git push"]),
-        ]);
-    }
-    forms
+    ]
 }
 
 async fn decide(
@@ -255,6 +246,10 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
         "cmd /k git push",
         r"C:\Windows\System32\cmd.exe /c git push",
         r".\tool.cmd '&git push'",
+        // PowerShell may find a path without an extension as a batch file in
+        // the command's folder, or one a script creates first.
+        r".\build '&git push'",
+        r"C:\p\x '&git push'",
         // A script that changes `PATH` or `PATHEXT` first changes which file
         // a bare name runs (`gradlew` as `C:\repo\gradlew.bat`).
         r"Set-Item env:PATH C:\repo; gradlew '&git push'",
@@ -306,15 +301,10 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
         ))),
         None
     ));
-    // Rooted at the current drive (Bazel's and MSYS's `/usr/bin`): read on
-    // the system drive, where these folders hold no batch file.
-    for path in [
-        "/bin:/usr/bin:/usr/local/bin",
-        "/usr/bin;/bin",
-        r"\zz-d729-missing",
-    ] {
+    // Rooted at the command's drive (`/usr/bin`, `\tools`): unknown.
+    for path in ["/bin:/usr/bin:/usr/local/bin", r"\tools"] {
         assert!(
-            !wrappers::windows_batch_file_in("printf", Some(path.into()), None),
+            wrappers::windows_batch_file_in("printf", Some(path.into()), None),
             "{path}"
         );
     }
@@ -325,4 +315,27 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
     assert!(!found("tool.exe", &[]));
     assert!(found(r".\zz-exe", &[dir.path()]));
     assert!(found(r"C:\p\x", &[]));
+}
+
+#[tokio::test]
+async fn words_of_other_shells_are_not_looked_up_as_batch_files() {
+    // bash runs its own programs (not through cmd.exe), and a command line
+    // run as given finds no batch file by a bare name or a path without an
+    // extension: neither asks for cmd.exe's special characters.
+    let rules = r#"prefix_rule(pattern=["secret-tool"], decision="forbidden")"#;
+    for command in [
+        argv(&["bash", "-lc", "printf '%s' x | cat"]),
+        argv(&["bash", "-lc", "git log --format='%H' | head -n 1"]),
+        argv(&["git", "log", "--format=%H"]),
+        argv(&[r".\build", "&x"]),
+    ] {
+        let result = decide(
+            rules,
+            &command,
+            AskForApproval::OnRequest,
+            PermissionProfile::workspace_write(),
+        )
+        .await;
+        assert_eq!(shape(&result).0, "skip", "{command:?}: {result:?}");
+    }
 }
