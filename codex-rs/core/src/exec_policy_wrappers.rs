@@ -674,7 +674,18 @@ pub(super) fn windows_batch_file_in(
         return false;
     };
     let extensions = extensions.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
-    for dir in std::env::split_paths(&path) {
+    // An empty entry (`a;;b`, a trailing `;`) names no folder; one rooted at
+    // the current drive (`\tools`, `/usr/bin`, as Bazel and MSYS write it)
+    // is read on the system drive.
+    let system_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+    for dir in std::env::split_paths(&path).filter(|dir| !dir.as_os_str().is_empty()) {
+        let text = dir.to_string_lossy();
+        let dir = match text.as_bytes() {
+            [b'/' | b'\\', second, ..] if *second != b'/' && *second != b'\\' => {
+                std::path::PathBuf::from(format!("{system_drive}{text}"))
+            }
+            _ => dir.clone(),
+        };
         if !dir.is_absolute() || dir.to_string_lossy().starts_with(['\\', '/']) {
             return true;
         }
