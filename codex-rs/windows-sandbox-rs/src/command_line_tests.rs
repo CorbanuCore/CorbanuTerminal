@@ -438,6 +438,15 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
         "start\\..\\x.exe",
         "cmd.exe+x",
         " cmd.exe",
+        // cmd may end a command name at any whitespace (#2718 review r2).
+        "C:\\Windows\\System32\\cmd.exe\u{0B}",
+        "cmd\u{0C}",
+        "cmd.exe\u{A0}",
+        "cmd\u{FF}x",
+        // Windows drops `.` and resolves `..` components.
+        "C:\\Windows\\System32\\cmd.exe\\.",
+        "C:\\Windows\\System32\\cmd.exe\\x\\..",
+        "cmd.exe\\",
     ] {
         for arg in [
             "a\"b", "%PATH%", "!x!", "a^b", "a&b", "a|b", "a<b", "a>b", "(x", "x)", "a\nb", "a\rb",
@@ -535,6 +544,11 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
         ["cmd", "/c", "Shout", "a&b"],
         ["cmd", "/c", "yarn", "%X%"],
         ["cmd", "/c", "C:npm", "a&b"],
+        // The command name cmd may cut from the token (#2718 review r2).
+        ["cmd", "/c", "npm\u{0B}", "a&b"],
+        ["cmd", "/c", "npm/x", "a&b"],
+        ["cmd", "/c", "npm+x", "a&b"],
+        ["cmd", "/c", "npm[x", "a&b"],
         ["cmd", "/c", "local", "a|b"],
         ["cmd", "/c", "sub/rel", "!x!"],
     ] {

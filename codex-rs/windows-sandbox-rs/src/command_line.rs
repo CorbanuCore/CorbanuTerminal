@@ -164,6 +164,23 @@ fn check_batch_arguments(argv: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Whether cmd may end a command name at `c`: whitespace (for cmd that
+/// includes VT, FF and 0xFF), control characters, and `/ + [ ] , ; =`.
+fn ends_command_name(c: char) -> bool {
+    c.is_whitespace()
+        || c.is_control()
+        || c == '\u{FF}'
+        || matches!(c, '/' | '+' | '[' | ']' | ',' | ';' | '=')
+}
+
+/// The command name cmd may read from the start of `text`.
+fn command_name(text: &str) -> &str {
+    text.trim_start_matches(ends_command_name)
+        .split(ends_command_name)
+        .next()
+        .unwrap_or_default()
+}
+
 /// A program token that makes cmd parse the following arguments as a command
 /// line again (#2718): a nested `cmd`, or the `start`, `if` or `for` builtin,
 /// which run a command taken from them (`if 1==1 cmd /c x a&b`). `call` is
@@ -171,37 +188,39 @@ fn check_batch_arguments(argv: &[String]) -> Result<()> {
 ///
 /// cmd reads a builtin from the start of the token, up to the first of
 /// several characters (`start/b`, `if/i`, `start\..\x`); the first non-empty
-/// part counts (`@start`). The nested cmd is
-/// the file the last `\` component names; each `/`-separated piece of it
-/// counts (`cmd.exe/c`, `c:/windows/system32/cmd.exe`), read as
-/// [`program_file_name`] reads it and cut at the characters cmd ends a
-/// command name at. A directory named `cmd` (Git's `Git\cmd\git.exe`) doesn't
-/// count.
+/// part counts (`@start`). The nested cmd is the file the last `\` component
+/// names; each `/`-separated piece of it counts (`cmd.exe/c`,
+/// `c:/windows/system32/cmd.exe`), read as [`program_file_name`] reads it and
+/// cut where cmd may end a command name (`cmd.exe<VT>`). A directory named
+/// `cmd` (Git's `Git\cmd\git.exe`) doesn't count, unless the path has an
+/// empty, `.` or `..` component, which can make Windows read another
+/// component as the file name (`cmd.exe\.`): then every component counts.
 fn is_reparsing_program(program: &str) -> bool {
     let lower = program.to_ascii_lowercase();
     let builtin = lower
-        .split(|c: char| {
-            c.is_whitespace()
-                || matches!(
-                    c,
-                    '\\' | '/' | ':' | '.' | '+' | '[' | ']' | ',' | ';' | '=' | '(' | ')' | '@'
-                )
-        })
+        .split(|c: char| ends_command_name(c) || matches!(c, '\\' | ':' | '.' | '(' | ')' | '@'))
         .find(|part| !part.is_empty())
         .unwrap_or_default();
     if matches!(builtin, "start" | "if" | "for") {
         return true;
     }
-    let last = lower.rsplit('\\').next().unwrap_or_default();
-    last.split('/').any(|piece| {
-        let name = program_file_name(piece);
-        let name = name
-            .split(['+', '[', ']', ',', ';', '='])
-            .next()
-            .unwrap_or_default()
-            .trim_start()
-            .trim_end_matches(['.', ' ']);
-        matches!(name, "cmd" | "cmd.exe")
+    let components: Vec<&str> = lower.split('\\').collect();
+    let odd_path = components
+        .iter()
+        .any(|component| component.trim_matches(['.', ' ']).is_empty());
+    let names = if odd_path {
+        &components[..]
+    } else {
+        &components[components.len() - 1..]
+    };
+    names.iter().any(|component| {
+        component.split('/').any(|piece| {
+            let name = program_file_name(piece);
+            matches!(
+                command_name(&name).trim_end_matches(['.', ' ']),
+                "cmd" | "cmd.exe"
+            )
+        })
     })
 }
 
@@ -212,9 +231,17 @@ fn is_reparsing_program(program: &str) -> bool {
 /// one an earlier executable would shadow, and these extensions are tried
 /// whatever PATHEXT says. A drive-relative program (`C:npm`) is resolved by
 /// the child against its own directory on that drive and always counts.
-/// Anything but a missing file counts too, so a failure only refuses more. A
-/// file created after the launch isn't seen.
+/// Anything but a missing file counts too, so a failure only refuses more
+/// (a PATH entry on a drive that isn't ready refuses every bare name). A
+/// file created after the launch isn't seen. Both the whole token and the
+/// command name cmd may cut from it (`npm<VT>`, `npm/x`) are looked up.
 fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
+    let name = command_name(program);
+    resolves_through_pathext(program, env, cwd)
+        || (!name.is_empty() && name != program && resolves_through_pathext(name, env, cwd))
+}
+
+fn resolves_through_pathext(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
     let bytes = program.as_bytes();
     if bytes.len() >= 2
         && bytes[0].is_ascii_alphabetic()
