@@ -43,6 +43,8 @@ struct Run {
     warnings: Vec<String>,
     /// Approval requests raised (each approved).
     approvals: usize,
+    /// The script-reading prompt was expected (#2548).
+    reading_gate: bool,
 }
 
 /// What an agent command runs.
@@ -218,6 +220,7 @@ async fn run(
         output: last.function_call_output_text("call-0").unwrap_or_default(),
         warnings,
         approvals,
+        reading_gate,
     })
 }
 
@@ -257,15 +260,16 @@ async fn assert_listing_denied(
     // As agents usually spell it.
     let variable = run(level, confirm, unified, Command::ListHomeVariable).await?;
     // #2548: the script-reading prompt was raised (and approved) exactly
-    // once under Aggressive, and never more than once (a session confirming
-    // Aggressive later asks once too).
+    // once where the reader asks under Aggressive (since D713 it reads
+    // `"$CODEX_HOME"`, so it does not), and never more than once (a session
+    // confirming Aggressive later asks once too).
     assert!(
         variable.approvals <= 1,
         "{context}: {} approvals asked for `\"$CODEX_HOME\"`",
         variable.approvals
     );
     assert!(
-        level != SecurityLevel::Aggressive || variable.approvals == 1,
+        !variable.reading_gate || variable.approvals == 1,
         "{context}: no approval asked for `\"$CODEX_HOME\"`"
     );
     assert!(
