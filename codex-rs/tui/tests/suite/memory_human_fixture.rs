@@ -15,6 +15,8 @@ use codex_protocol::MemoryVersion;
 use codex_protocol::ThreadId;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::SessionMeta;
+use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
 use serde_json::Value;
 use serde_json::json;
@@ -377,7 +379,27 @@ animations = false
             .into(),
         ),
     };
-    fs::write(&rollout, format!("{}\n", serde_json::to_string(&line)?))?;
+    // Memory extraction reads only rollouts that start with session metadata,
+    // as every recorded session does.
+    let header = RolloutLine {
+        timestamp: timestamp.to_rfc3339(),
+        ordinal: None,
+        item: RolloutItem::SessionMeta(Box::new(SessionMetaLine {
+            meta: SessionMeta {
+                id: source,
+                ..Default::default()
+            },
+            git: None,
+        })),
+    };
+    fs::write(
+        &rollout,
+        format!(
+            "{}\n{}\n",
+            serde_json::to_string(&header)?,
+            serde_json::to_string(&line)?
+        ),
+    )?;
     let mut metadata =
         codex_state::ThreadMetadataBuilder::new(source, rollout, timestamp, SessionSource::Cli);
     metadata.cwd = repo.clone();
