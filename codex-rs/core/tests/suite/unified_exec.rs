@@ -1367,7 +1367,8 @@ async fn unified_exec_short_lived_network_denial_emits_failed_end_event() -> Res
 /// sandbox ("managed networking requires the elevated Windows sandbox
 /// backend"). D355 (main's rule, kept on sync): the Windows firewall rules
 /// belong to the elevated sandbox's users, so such a command runs on the
-/// elevated backend instead, as one of those users, never unsandboxed (#2729).
+/// elevated backend instead, as its firewall-restricted offline user, never
+/// unsandboxed (#2729).
 #[cfg(windows)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_runs_unelevated_managed_network_on_the_elevated_windows_sandbox() -> Result<()>
@@ -1398,10 +1399,18 @@ async fn unified_exec_runs_unelevated_managed_network_on_the_elevated_windows_sa
         .function_call_output(call_id);
     let output =
         extract_output_text(&output_item).expect("tool call should include model-visible text");
+    // `whoami` prints `HOST\user`; with managed networking the command must run
+    // as the firewall-restricted offline sandbox user.
+    let ran_as_offline_user = output.lines().any(|line| {
+        line.trim()
+            .to_ascii_lowercase()
+            .ends_with("\\codexsandboxoffline")
+    });
     assert!(
-        output.to_ascii_lowercase().contains("codexsandbox")
+        ran_as_offline_user
+            && output.contains("Process exited with code 0")
             && !output.contains("managed networking requires the elevated Windows sandbox backend"),
-        "expected the command to run as an elevated sandbox user: {output}"
+        "expected the command to run as the offline sandbox user: {output}"
     );
 
     Ok(())

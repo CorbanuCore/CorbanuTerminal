@@ -1199,6 +1199,11 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
     let state_path = codex_home
         .path()
         .join(".sandbox-secrets/deny_read_acl_rules.json");
+    assert!(
+        state_path.is_file(),
+        "the first launch should record its deny-read bookkeeping at {}",
+        state_path.display()
+    );
     std::fs::write(&state_path, b"malformed bookkeeping")?;
     let permission_profile = harness
         .test()
