@@ -147,11 +147,9 @@ const POWERSHELL_CODE_COMMANDS: &[&str] = &[
 
 /// #2601 (D553): a PowerShell command that may change what a later command
 /// name runs, or run code rules cannot read: one of
-/// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too, in any ASCII case),
-/// or any command given a literal path on the alias or function drive
-/// (`Set-Item alias:f git`, `Set-Location function:`). .NET may fold some
-/// non-ASCII letters to ASCII (`ı`, `ſ`, the Kelvin sign), so a non-ASCII
-/// program name, or a non-ASCII word that could name a drive, counts too.
+/// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too), or any command given
+/// a literal path on the alias or function drive (`Set-Item alias:f git`,
+/// `Set-Location function:`), compared as [`powershell_fold`] does.
 /// Windows only: elsewhere no PowerShell script is read, so a PowerShell
 /// command line asks wherever a prompt or forbidden rule exists.
 ///
@@ -163,15 +161,31 @@ fn powershell_runs_code<'a>(program: &str, mut args: impl Iterator<Item = &'a st
         return false;
     }
     let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
-    !name.is_ascii()
-        || POWERSHELL_CODE_COMMANDS.contains(&name.to_ascii_lowercase().as_str())
+    POWERSHELL_CODE_COMMANDS.contains(&powershell_fold(name).as_str())
         || args.any(|arg| {
-            let arg = arg.to_ascii_lowercase();
-            (!arg.is_ascii() && arg.contains(':'))
-                || ["alias:", "function:"]
-                    .iter()
-                    .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
+            let arg = powershell_fold(arg);
+            ["alias:", "function:"]
+                .iter()
+                .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
         })
+}
+
+/// `word` as PowerShell may compare it without case: lowercase, with the
+/// non-ASCII letters .NET folds to ASCII letters (`ı`, `İ`, `ſ`, the Kelvin
+/// sign) folded to them, and zero-width characters, which culture-aware
+/// comparisons ignore, dropped. Folding more only adds asks.
+fn powershell_fold(word: &str) -> String {
+    let mut folded = String::with_capacity(word.len());
+    for c in word.chars() {
+        match c {
+            '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}' => {}
+            '\u{131}' | '\u{130}' => folded.push('i'),
+            '\u{17f}' => folded.push('s'),
+            '\u{212a}' => folded.push('k'),
+            c => folded.extend(c.to_lowercase()),
+        }
+    }
+    folded
 }
 
 /// `NAME=value` for a variable that runs code ([`runs_code_from_variable`]).
