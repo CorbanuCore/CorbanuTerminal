@@ -1954,7 +1954,8 @@ async fn expect_unbrokered_provider_refused(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_provider_writes_are_refused_while_flags_name_unbrokered_sources() -> Result<()> {
+async fn config_provider_write_reports_source_displacement() -> Result<()> {
+    // Built-in credential variables: config writes refuse any other (D612).
     let codex_home = TempDir::new()?;
     write_config(&codex_home, "")?;
     let mut app_server = TestAppServer::builder()
@@ -1962,7 +1963,7 @@ async fn config_provider_writes_are_refused_while_flags_name_unbrokered_sources(
         .without_auto_env()
         .with_args(&[
             "-c",
-            "features.network_proxy.credentials.enforced.env=['VENDOR_PASSWORD']",
+            "features.network_proxy.credentials.enforced.env=['GH_ENTERPRISE_TOKEN']",
             "-c",
             "features.network_proxy.credentials.enforced.patterns=['^pin_[a-z]{8}$']",
             "-c",
@@ -1971,42 +1972,86 @@ async fn config_provider_writes_are_refused_while_flags_name_unbrokered_sources(
         .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
         .await?;
 
-    // The session flags' provider stays in the effective config, so every
-    // provider write is refused (D612), whatever the user layer gets.
-    let provider = json!({
-        "env": ["VENDOR_PASSWORD"],
+    let mut provider = json!({
+        "env": ["GH_ENTERPRISE_TOKEN"],
         "patterns": ["^pin_[a-z]{8}$"],
         "url_prefixes": ["https://user.example"],
         "auth": ["bearer"],
     });
-    for (suffix, value) in [
-        ("", provider),
-        (".url_prefixes", json!(["https://updated.example"])),
-        (".env", json!(["OTHER_PASSWORD"])),
+    for (suffix, value, overridden) in [
+        ("", provider.clone(), true),
+        (".url_prefixes", json!(["https://updated.example"]), true),
+        (".env", json!(["GITHUB_ENTERPRISE_TOKEN"]), false),
     ] {
         let write_id = app_server
             .send_config_value_write_request(ConfigValueWriteParams {
                 file_path: None,
                 key_path: format!("features.network_proxy.credentials.user_provider{suffix}"),
-                value,
+                value: value.clone(),
                 merge_strategy: MergeStrategy::Upsert,
                 expected_version: None,
             })
             .await?;
-        expect_unbrokered_provider_refused(&mut app_server, write_id, &codex_home, "").await?;
+        let write: ConfigWriteResponse =
+            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(write_id)).await??;
+        let expected = overridden.then_some((ConfigLayerSource::SessionFlags, json!(null)));
+        assert_eq!(
+            (
+                write.status,
+                write
+                    .overridden_metadata
+                    .map(|meta| { (meta.overriding_layer.name, meta.effective_value) })
+            ),
+            (
+                if overridden {
+                    WriteStatus::OkOverridden
+                } else {
+                    WriteStatus::Ok
+                },
+                expected,
+            ),
+        );
+
+        if let Some(field) = suffix.strip_prefix('.') {
+            provider[field] = value;
+        }
+        let saved: toml::Value = toml::from_str(&std::fs::read_to_string(
+            codex_home.path().join("config.toml"),
+        )?)?;
+        assert_eq!(
+            serde_json::to_value(
+                &saved["features"]["network_proxy"]["credentials"]["user_provider"]
+            )?,
+            provider,
+        );
+        let read_id = app_server
+            .send_config_read_request(ConfigReadParams {
+                include_layers: false,
+                cwd: None,
+            })
+            .await?;
+        let read: ConfigReadResponse =
+            timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(read_id)).await??;
+        assert_eq!(
+            read.config.additional["features"]["network_proxy"]["credentials"].get("user_provider"),
+            (!overridden).then_some(&provider),
+        );
     }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn config_provider_field_removal_is_refused_for_unbrokered_sources() -> Result<()> {
+async fn config_provider_field_removal_uses_higher_same_id_definition() -> Result<()> {
+    // Built-in credential variables: config writes refuse any other (D612).
     let codex_home = TempDir::new()?;
-    let initial = r#"[features.network_proxy.credentials.vendor]
-env = ["VENDOR_PASSWORD"]
+    write_config(
+        &codex_home,
+        r#"[features.network_proxy.credentials.vendor]
+env = ["GH_ENTERPRISE_TOKEN"]
 patterns = ["^pin_[a-z]{8}$"]
 url_prefixes = ["https://fixed.example"]
-"#;
-    write_config(&codex_home, initial)?;
+"#,
+    )?;
     let mut app_server = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .with_args(&[
@@ -2024,9 +2069,32 @@ url_prefixes = ["https://fixed.example"]
             expected_version: None,
         })
         .await?;
-    // The higher same-ID definition completes the provider, but its source
-    // isn't one Corbanu brokers (D612).
-    expect_unbrokered_provider_refused(&mut app_server, id, &codex_home, initial).await?;
+    let write: ConfigWriteResponse =
+        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
+    assert_eq!(write.status, WriteStatus::OkOverridden);
+
+    let saved: toml::Value = toml::from_str(&std::fs::read_to_string(
+        codex_home.path().join("config.toml"),
+    )?)?;
+    assert_eq!(
+        serde_json::to_value(&saved["features"]["network_proxy"]["credentials"]["vendor"])?,
+        json!({ "env": ["GH_ENTERPRISE_TOKEN"], "patterns": ["^pin_[a-z]{8}$"] }),
+    );
+    let id = app_server
+        .send_config_read_request(ConfigReadParams {
+            include_layers: false,
+            cwd: None,
+        })
+        .await?;
+    let read: ConfigReadResponse =
+        timeout(DEFAULT_READ_TIMEOUT, app_server.read_response(id)).await??;
+    assert_eq!(
+        read.config.additional["features"]["network_proxy"]["credentials"]["vendor"],
+        json!({
+            "env": ["GH_ENTERPRISE_TOKEN"], "patterns": ["^pin_[a-z]{8}$"],
+            "url_prefixes": ["https://fixed.example"], "auth": [],
+        }),
+    );
     Ok(())
 }
 
@@ -2087,6 +2155,15 @@ url_prefixes = ["https://api.vendor.example"]
                 .and_then(|data| data.get("config_write_error_code")),
             Some(&json!("configValidationError"))
         );
+        // The remapping validator refuses these, not the later D612 check.
+        assert!(
+            !error
+                .error
+                .message
+                .contains("unsupported network proxy credential provider"),
+            "{}",
+            error.error.message
+        );
         assert_eq!(
             std::fs::read_to_string(codex_home.path().join("config.toml"))?,
             initial
@@ -2122,6 +2199,14 @@ url_prefixes = ["https://api.vendor.example"]
             .as_ref()
             .and_then(|data| data.get("config_write_error_code")),
         Some(&json!("configValidationError"))
+    );
+    assert!(
+        !error
+            .error
+            .message
+            .contains("unsupported network proxy credential provider"),
+        "{}",
+        error.error.message
     );
     assert_eq!(
         std::fs::read_to_string(codex_home.path().join("config.toml"))?,

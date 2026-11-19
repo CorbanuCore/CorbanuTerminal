@@ -501,14 +501,14 @@ impl ConfigManager {
             })?;
         let effective = updated_layers.effective_config();
         validate_config(&effective)
-            .and_then(|()| {
+            .and_then(|effective_toml| {
                 credential_provider_edits.validate_remapping(
                     &user_layer.config,
                     &user_config,
                     &updated_layers,
-                )
+                )?;
+                reject_unbrokered_credential_providers(&effective_toml)
             })
-            .and_then(|()| reject_unbrokered_credential_providers(&effective))
             .map_err(|err| {
                 ConfigManagerError::write(
                     ConfigWriteErrorCode::ConfigValidationError,
@@ -902,14 +902,14 @@ fn toml_value_to_value(value: &TomlValue) -> anyhow::Result<toml_edit::Value> {
     }
 }
 
-fn validate_config(value: &TomlValue) -> anyhow::Result<()> {
+fn validate_config(value: &TomlValue) -> anyhow::Result<ConfigToml> {
     let config = ConfigToml::try_from(value.clone())?;
     if config.approval_policy == Some(AskForApproval::UnlessTrusted) {
         anyhow::bail!(
             "approval_policy = \"untrusted\" is no longer supported; remove this setting"
         );
     }
-    Ok(())
+    Ok(config)
 }
 
 /// Runs config load's check for credential providers Corbanu can't broker (D612,
@@ -917,9 +917,8 @@ fn validate_config(value: &TomlValue) -> anyhow::Result<()> {
 /// same error instead of being saved and failing the next load. Unlike load, it
 /// refuses them whether or not the providers are in use yet: a later feature
 /// toggle or permission profile switch would make the saved config fail.
-fn reject_unbrokered_credential_providers(effective: &TomlValue) -> anyhow::Result<()> {
-    let config = ConfigToml::try_from(effective.clone())?;
-    if let Some(FeatureToml::Config(network_proxy)) = config
+fn reject_unbrokered_credential_providers(effective: &ConfigToml) -> anyhow::Result<()> {
+    if let Some(FeatureToml::Config(network_proxy)) = effective
         .features
         .as_ref()
         .and_then(|features| features.network_proxy.as_ref())
