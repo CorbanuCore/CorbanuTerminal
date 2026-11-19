@@ -330,7 +330,8 @@ impl Policy {
     /// with it so far. Rules `known` already matches are left to
     /// [`Self::matches_for_command_with_options`]. With no `known` words
     /// every rule counts. An absolute program also counts its basename's
-    /// rules, whatever the host executable paths (stricter than matching).
+    /// strict rules, whatever the host executable paths (stricter than matching).
+    /// Host-derived allow rules still require the exact D696 spelling.
     pub fn strictest_rule_matching_more_args(
         &self,
         known: &[String],
@@ -344,10 +345,12 @@ impl Policy {
                 .map(|rule| rule_decision(rule.as_ref()))
                 .max();
         };
-        let basename = options
+        let host_program = options
             .resolve_host_executables
             .then(|| AbsolutePathBuf::try_from(first.clone()).ok())
-            .flatten()
+            .flatten();
+        let basename = host_program
+            .as_ref()
             .and_then(|program| executable_path_lookup_key(program.as_path()));
         let rest = &known[1..];
         // D692: forbidden and prompt rules for the name in another case.
@@ -358,10 +361,29 @@ impl Policy {
             .filter_map(|program| self.rules_by_program.get_vec(program))
             .flatten()
             .filter(|rule| rule_decision(rule.as_ref()) > Decision::Allow);
-        std::iter::once(first)
-            .chain(basename.as_ref())
-            .filter_map(|program| self.rules_by_program.get_vec(program))
+        let host_candidates = basename
+            .as_ref()
+            .into_iter()
+            .filter_map(|name| self.rules_by_program.get_vec(name))
             .flatten()
+            .filter(|rule| {
+                // D696 also applies before all command arguments are known.
+                rule_decision(rule.as_ref()) != Decision::Allow
+                    || host_program.as_ref().zip(basename.as_ref()).is_some_and(
+                        |(program, name)| {
+                            let listed = self
+                                .host_executables_by_name
+                                .get(name)
+                                .map(|paths| &paths[..]);
+                            allow_spelled_exactly(program.as_path(), listed, name)
+                        },
+                    )
+            });
+        self.rules_by_program
+            .get_vec(first)
+            .into_iter()
+            .flatten()
+            .chain(host_candidates)
             .chain(folded)
             .filter(|rule| {
                 rule.as_any()
