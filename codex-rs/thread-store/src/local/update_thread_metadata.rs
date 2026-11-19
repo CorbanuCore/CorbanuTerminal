@@ -2582,6 +2582,11 @@ mod tests {
     /// best-effort metadata update used to wait out SQLite's 5 s busy timeout
     /// and was then dropped. Now it waits at most `QUICK_BUSY_TIMEOUT` (not at
     /// all once the DB is known to be busy) and is applied later.
+    ///
+    /// The deferral is observed as an event while the write lock is still held,
+    /// and its latency is compared with a direct write on the same short-wait
+    /// pool. A loaded runner stretches every SQLite busy wait, so an absolute
+    /// wall-clock bound would race the runner instead of the behaviour.
     #[tokio::test]
     async fn a_busy_state_db_puts_metadata_updates_off_and_applies_them_later() {
         let home = TempDir::new().expect("temp dir");
@@ -2595,13 +2600,19 @@ mod tests {
         )
         .await
         .expect("state db should initialize");
-        let store = LocalThreadStore::new(config.clone(), Some(runtime.clone()));
+        let store =
+            std::sync::Arc::new(LocalThreadStore::new(config.clone(), Some(runtime.clone())));
         let update = |patch: ThreadMetadataPatch| {
-            store.update_thread_metadata(UpdateThreadMetadataParams {
-                thread_id,
-                patch,
-                include_archived: true,
-            })
+            let store = std::sync::Arc::clone(&store);
+            async move {
+                store
+                    .update_thread_metadata(UpdateThreadMetadataParams {
+                        thread_id,
+                        patch,
+                        include_archived: true,
+                    })
+                    .await
+            }
         };
         update(ThreadMetadataPatch {
             preview: Some("first".to_string()),
@@ -2609,6 +2620,19 @@ mod tests {
         })
         .await
         .expect("first update");
+        assert!(
+            !store.has_deferred_metadata(thread_id),
+            "the first update was unexpectedly put off"
+        );
+        assert!(
+            !runtime.state_db_contended(),
+            "the first update left the state DB marked busy"
+        );
+        let metadata = runtime
+            .get_thread(thread_id)
+            .await
+            .expect("read")
+            .expect("row");
 
         let holder = runtime
             .sqlite()
@@ -2620,20 +2644,78 @@ mod tests {
             .execute(&mut *lock)
             .await
             .expect("hold the write lock");
+
+        // A direct write on the short-wait pool measures how long this runner
+        // makes one quick busy-retry schedule take under the same lock. The
+        // update below must be put off on that schedule, not the main pool's
+        // full 5 s timeout per attempt.
+        assert!(
+            !std::ptr::eq(runtime.quick(), runtime.as_ref()),
+            "the state DB's short-wait pool is unavailable"
+        );
+        let control_started = std::time::Instant::now();
+        let control_error = runtime
+            .quick()
+            .upsert_thread(&metadata)
+            .await
+            .expect_err("the short-wait control write must meet the held lock");
+        let quick_control = control_started.elapsed();
+        assert!(
+            codex_state::is_state_db_busy(&control_error),
+            "the short-wait control write did not meet the held lock: {control_error:#}"
+        );
+        assert!(
+            !runtime.state_db_contended(),
+            "the short-wait control write marked the state DB busy, so the update below could skip the DB"
+        );
+
         let started = std::time::Instant::now();
-        update(ThreadMetadataPatch {
+        let mut update_task = tokio::spawn(update(ThreadMetadataPatch {
             preview: Some("second".to_string()),
             ..Default::default()
+        }));
+        let mut saw_put_off = false;
+        let mut update_result = None;
+        tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            tokio::select! {
+                _ = async {
+                    while !store.has_deferred_metadata(thread_id) {
+                        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                    }
+                } => saw_put_off = true,
+                result = &mut update_task => update_result = Some(result),
+            }
         })
         .await
-        .expect("an update put off is not an error");
+        .expect("the busy update did not finish");
+        let put_off_after = started.elapsed();
         assert!(
-            // Well under SQLite's 5 s busy timeout, with room for a loaded runner.
-            started.elapsed() < codex_state::QUICK_BUSY_TIMEOUT + std::time::Duration::from_secs(3),
-            "waited {:?}",
-            started.elapsed()
+            saw_put_off || store.has_deferred_metadata(thread_id),
+            "the busy state DB did not put the metadata update off"
         );
-        assert!(runtime.state_db_contended());
+        assert!(
+            put_off_after <= quick_control * 2 + codex_state::QUICK_BUSY_TIMEOUT,
+            "the update waited {put_off_after:?} to be put off; a short-wait write took {quick_control:?}"
+        );
+        let updated = match update_result {
+            Some(result) => result,
+            None => update_task.await,
+        }
+        .expect("update task")
+        .expect("an update put off is not an error")
+        .expect("local store returns the thread");
+        assert!(
+            runtime.state_db_contended(),
+            "the update did not record state DB contention"
+        );
+        assert_eq!(updated.thread_id, thread_id);
+        let metadata = runtime
+            .get_thread(thread_id)
+            .await
+            .expect("read")
+            .expect("row");
+        assert_eq!(metadata.preview.as_deref(), Some("first"));
+
         // Known busy: no wait at all. Trying the DB would cost at least
         // QUICK_BUSY_TIMEOUT on every attempt, so the fastest of three must
         // beat it; one attempt took 481ms on a loaded Windows nightly runner.
