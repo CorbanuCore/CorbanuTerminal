@@ -19,6 +19,7 @@ use wiremock::matchers::path;
 #[test_case("exec_command")]
 #[test_case("apply_patch")]
 #[test_case("request_permissions")]
+#[ignore = "D604 (#2562): background scoring is off on Corbanu, so the first computer's score this test waits for is never recorded; restore with the scoring gate (#2729)"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Result<()> {
     skip_if_no_network!(Ok(()));

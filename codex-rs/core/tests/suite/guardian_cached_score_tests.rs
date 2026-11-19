@@ -53,6 +53,7 @@ use wiremock::matchers::body_partial_json;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+#[ignore = "D604 (#2562): background scoring is off on Corbanu, so no score is published or reused; restore with the scoring gate (#2729)"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delayed_score_only_covers_the_tool_call_it_classified() -> Result<()> {
     skip_if_no_network!(Ok(()));
