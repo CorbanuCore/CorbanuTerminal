@@ -99,6 +99,20 @@ foreach ($name in @($D729Allow.Keys)) {
     if ($null -ne $info) { $D729Info[$name] = $info }
 }
 
+# Names an agent shell defines before its script runs, since D731 imports the system
+# modules with `-Global` (`rcim`, `gin`, `Compress-Archive`), or that PowerShell's core
+# defines (`Invoke-Expression`). Each beats a program of that name on `PATH`, so none is
+# read as a program: the imported commands of this process (the same modules), and a
+# fixed list of the aliases and functions that import adds in 5.1 and 7.7.
+$D729ModuleNames = @{}
+foreach ($command in (Get-Command -CommandType Alias, Cmdlet, Function -ListImported -ErrorAction SilentlyContinue)) {
+    $D729ModuleNames[$command.Name.ToLowerInvariant()] = $true
+}
+foreach ($name in ('gcai,gcb,gcim,gcls,gcms,gin,gtz,icim,ncim,ncms,ncso,rcie,rcim,rcms,scb,scim,stz,' +
+        'compress-archive,expand-archive').Split(',')) {
+    $D729ModuleNames[$name] = $true
+}
+
 # The profile scripts a console shell of this edition runs unless given -NoProfile; if
 # PowerShell does not say, assume one exists.
 $D729Profiles = @()
@@ -281,6 +295,7 @@ function Get-D729CommandCause($commandAst, [int]$index, $state) {
     }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }
     if ($lower -match '\.[^.]*$' -and $lower -notmatch '\.(exe|com|cmd|bat)$') { return "script file: $name" }
+    if ($D729ModuleNames.ContainsKey($lower)) { return "command not on the allowlist: $lower" }
     # A Verb-Noun name this process does not find as a program on `PATH` is a module's
     # command (`ForEach-Object`, `Set-Alias`, `Get-ScheduledTask`, or one a command wrote).
     if ($lower -match '^[a-z]+-[a-z]' -and -not (Find-D729Program $lower)) { return "command not on the allowlist: $lower" }

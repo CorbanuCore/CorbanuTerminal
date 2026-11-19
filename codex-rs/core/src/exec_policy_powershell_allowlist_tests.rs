@@ -21,7 +21,14 @@ fn command_env() -> std::collections::HashMap<String, String> {
     static BIN: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
     let bin = BIN.get_or_init(|| {
         let bin = tempfile::tempdir().expect("bin");
-        for program in ["git.exe", "pnpm.cmd"] {
+        // `rcim`, `gin`: names D731's module import defines (#2709 review r7).
+        for program in [
+            "git.exe",
+            "pnpm.cmd",
+            "rcim.exe",
+            "gin.exe",
+            "Invoke-Expression.exe",
+        ] {
             std::fs::write(bin.path().join(program), "").expect("program");
         }
         bin
@@ -209,6 +216,11 @@ fn unread_scripts() -> Vec<String> {
         // Fail-closed after r6: any `::` and any leading `\\` or `//` asks.
         r"Get-Content -LiteralPath '\\?\C:\does not\exist.txt' -Raw".into(),
         "Write-Output 'a::b'".into(),
+        // #2709 review r7: aliases and commands the agent shell's module import
+        // (D731) or PowerShell's core defines beat a program of that name on `PATH`.
+        r#"rcim -Query "SELECT * FROM Win32_ShadowCopy""#.into(),
+        "gin".into(),
+        "Invoke-Expression 'git status'".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
