@@ -206,7 +206,8 @@ fn is_reparsing_program(program: &str) -> bool {
 /// Whether cmd could resolve the plain program token `program` through
 /// PATHEXT to a batch file: a `<program>.bat` or `<program>.cmd` (either
 /// case, or as PATHEXT spells it) in the working directory or a directory on
-/// any spelling of the child's PATH (for a bare name), or next to the given
+/// any spelling of the child's PATH (for a bare name; each entry with and
+/// without its surrounding spaces, #2783), or next to the given
 /// path. Any match counts, even one an earlier executable would shadow, and
 /// these extensions are tried whatever PATHEXT says. A drive-relative
 /// program (`C:npm`) is resolved by the child against its own directory on
@@ -228,38 +229,54 @@ fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Pa
     {
         return true;
     }
+    // cmd strips the quotes around a PATH (or PATHEXT) entry but not the
+    // spaces: `C:\bin ` searches a folder named `bin ` (checked natively on
+    // Windows 11, #2783). Each entry is looked up trimmed and, when that
+    // differs, untrimmed. As above, any failure but a missing file counts,
+    // except an invalid name in the untrimmed spelling (not `strict`).
     let values = |key: &'static str| {
         env.iter()
             .filter(move |(name, _)| name.eq_ignore_ascii_case(key))
             .flat_map(|(_, value)| value.split(';'))
-            .map(|entry| entry.trim().trim_matches('"'))
-            .filter(|entry| !entry.is_empty())
+            .flat_map(|entry| {
+                let trimmed = entry.trim().trim_matches('"');
+                let untrimmed = entry.trim_matches('"');
+                [(trimmed, true), (untrimmed, false)].into_iter().filter(
+                    move |(spelling, strict)| {
+                        !spelling.is_empty() && (*strict || *spelling != trimmed)
+                    },
+                )
+            })
     };
-    let bases: Vec<PathBuf> = if program.contains(['\\', '/', ':']) {
-        vec![cwd.join(program)]
+    let bases: Vec<(PathBuf, bool)> = if program.contains(['\\', '/', ':']) {
+        vec![(cwd.join(program), true)]
     } else {
-        std::iter::once(cwd.to_path_buf())
-            .chain(values("PATH").map(|dir| cwd.join(dir)))
-            .map(|dir| dir.join(program))
+        std::iter::once((cwd.to_path_buf(), true))
+            .chain(values("PATH").map(|(dir, strict)| (cwd.join(dir), strict)))
+            .map(|(dir, strict)| (dir.join(program), strict))
             .collect()
     };
     let extensions: Vec<&str> = [".bat", ".cmd", ".BAT", ".CMD"]
         .into_iter()
-        .chain(values("PATHEXT").filter(|ext| {
-            let ext = ext.to_ascii_lowercase();
+        .chain(values("PATHEXT").map(|(ext, _)| ext).filter(|ext| {
+            let ext = ext.trim().to_ascii_lowercase();
             ext == ".bat" || ext == ".cmd"
         }))
         .collect();
-    bases.iter().any(|base| {
+    bases.iter().any(|(base, strict)| {
         extensions.iter().any(|ext| {
             let mut candidate = OsString::from(base.as_os_str());
             candidate.push(ext);
             match std::fs::metadata(&candidate) {
                 Ok(metadata) => !metadata.is_dir(),
-                Err(err) => !matches!(
-                    err.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
-                ),
+                // An untrimmed spelling no file can have (` C:\bin` joined to
+                // the working directory) holds nothing cmd could run.
+                Err(err) => {
+                    !matches!(
+                        err.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                    ) && (*strict || err.kind() != std::io::ErrorKind::InvalidFilename)
+                }
             }
         })
     })
