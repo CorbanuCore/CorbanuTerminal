@@ -1732,6 +1732,7 @@ async fn permissions_selection_requests_confirmation_when_current_is_selected() 
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     #[cfg(target_os = "windows")]
     {
+        chat.windows_sandbox_local_server = true;
         chat.set_windows_sandbox_mode(Some(WindowsSandboxSetupMode::Unelevated));
     }
     chat.config
