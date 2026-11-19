@@ -118,17 +118,17 @@ async fn provider_edits_preserve_another_writers_sibling_update() -> Result<()> 
     let initial: TomlValue = toml::from_str(
         r#"
 [features.network_proxy.credentials.a]
-env = ['A_AUTH']
+env = ['GH_TOKEN']
 patterns = ['^alpha_[a-z]{8}$']
 url_prefixes = ['https://a.example']
 auth = ['bearer']
 [features.network_proxy.credentials.b]
-env = ['B_AUTH']
+env = ['GITHUB_TOKEN']
 patterns = ['^bravo_[a-z]{8}$']
 url_prefixes = ['https://b.example']
 auth = ['bearer']
 [features.network_proxy.credentials.c]
-env = ['C_AUTH']
+env = ['OPENAI_API_KEY']
 patterns = ['^charlie_[a-z]{8}$']
 url_prefixes = ['https://c.example']
 auth = ['bearer']
@@ -136,10 +136,10 @@ auth = ['bearer']
     )?;
     for updates in [
         vec![("a.auth", serde_json::json!(["token"]))],
-        vec![("a.env", serde_json::json!(["C_AUTH"]))],
+        vec![("a.env", serde_json::json!(["OPENAI_API_KEY"]))],
         vec![
-            ("a.env", serde_json::json!(["C_AUTH"])),
-            ("c.env", serde_json::json!(["A_AUTH"])),
+            ("a.env", serde_json::json!(["OPENAI_API_KEY"])),
+            ("c.env", serde_json::json!(["GH_TOKEN"])),
         ],
     ] {
         let tmp = tempdir()?;
@@ -828,6 +828,147 @@ async fn write_value_rejects_legacy_profile_selector() -> Result<()> {
         "{error}"
     );
     assert_eq!(std::fs::read_to_string(&path)?, "model = \"gpt-main\"\n");
+    Ok(())
+}
+
+#[tokio::test]
+async fn writes_reject_unbrokered_credential_providers_before_persisting() -> Result<()> {
+    // D612 (#2629): config load refuses a provider naming a variable Corbanu's
+    // credential engine doesn't broker, so a write that would save one is
+    // refused with the same error and the file is left as it was.
+    let initial = "[features.network_proxy]\nenabled = true\n\n\
+        [features.network_proxy.credentials.builtin]\nenv = ['GH_TOKEN']\n";
+    let vendor = serde_json::json!({
+        "env": ["VENDOR_TOKEN"],
+        "patterns": ["^vendor_[a-z]{8}$"],
+        "url_prefixes": ["https://api.vendor.example"],
+    });
+    let edit = |key_path: &str, value: JsonValue, merge_strategy| ApiConfigEdit {
+        key_path: key_path.to_string(),
+        value,
+        merge_strategy,
+    };
+    for edits in [
+        vec![edit(
+            "features.network_proxy.credentials.vendor",
+            vendor.clone(),
+            MergeStrategy::Upsert,
+        )],
+        vec![edit(
+            "features.network_proxy.credentials",
+            serde_json::json!({ "vendor": vendor }),
+            MergeStrategy::Replace,
+        )],
+        vec![edit(
+            "features.network_proxy",
+            serde_json::json!({ "credentials": { "vendor": vendor } }),
+            MergeStrategy::Upsert,
+        )],
+        vec![edit(
+            "features.network_proxy.credentials.builtin.env",
+            serde_json::json!(["GH_TOKEN", "VENDOR_TOKEN"]),
+            MergeStrategy::Upsert,
+        )],
+        // Disabling the feature in the same batch doesn't help: a later
+        // toggle or permission profile would make the saved config fail.
+        vec![
+            edit(
+                "features.network_proxy.enabled",
+                serde_json::json!(false),
+                MergeStrategy::Replace,
+            ),
+            edit(
+                "features.network_proxy.credentials.vendor.env",
+                serde_json::json!(["VENDOR_TOKEN"]),
+                MergeStrategy::Upsert,
+            ),
+        ],
+    ] {
+        let tmp = tempdir()?;
+        let path = tmp.path().join(CONFIG_TOML_FILE);
+        std::fs::write(&path, initial)?;
+        let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
+        let error = if let [single] = edits.as_slice() {
+            service
+                .write_value(ConfigValueWriteParams {
+                    file_path: None,
+                    key_path: single.key_path.clone(),
+                    value: single.value.clone(),
+                    merge_strategy: single.merge_strategy.clone(),
+                    expected_version: None,
+                })
+                .await
+        } else {
+            service
+                .batch_write(ConfigBatchWriteParams {
+                    edits: edits.clone(),
+                    file_path: None,
+                    expected_version: None,
+                    reload_user_config: false,
+                })
+                .await
+        }
+        .expect_err("an unbrokered provider must not be saved");
+        assert_eq!(
+            error.write_error_code(),
+            Some(ConfigWriteErrorCode::ConfigValidationError),
+            "{edits:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("unsupported network proxy credential provider `")
+                && message.contains(
+                    "(VENDOR_TOKEN): Corbanu's credential engine does not broker these \
+                     environment variables."
+                )
+                && message.contains("shell_environment_policy.exclude"),
+            "{edits:?}: {message}"
+        );
+        assert_eq!(std::fs::read_to_string(&path)?, initial, "{edits:?}");
+    }
+
+    // A provider naming only built-in credential variables loads, so it can
+    // be written; and removing an unbrokered provider is allowed.
+    let tmp = tempdir()?;
+    let path = tmp.path().join(CONFIG_TOML_FILE);
+    std::fs::write(
+        &path,
+        format!("{initial}\n[features.network_proxy.credentials.vendor]\nenv = ['VENDOR_TOKEN']\n"),
+    )?;
+    let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
+    service
+        .write_value(ConfigValueWriteParams {
+            file_path: None,
+            key_path: "features.network_proxy.credentials.vendor".to_string(),
+            value: JsonValue::Null,
+            merge_strategy: MergeStrategy::Replace,
+            expected_version: None,
+        })
+        .await?;
+    service
+        .write_value(ConfigValueWriteParams {
+            file_path: None,
+            key_path: "features.network_proxy.credentials.github".to_string(),
+            value: serde_json::json!({
+                "env": ["GITHUB_TOKEN"],
+                "patterns": ["^ghp_[A-Za-z0-9]{36}$"],
+                "url_prefixes": ["https://api.github.com"],
+            }),
+            merge_strategy: MergeStrategy::Upsert,
+            expected_version: None,
+        })
+        .await?;
+    let saved: TomlValue = toml::from_str(&std::fs::read_to_string(&path)?)?;
+    let providers = &saved["features"]["network_proxy"]["credentials"];
+    assert_eq!(providers.get("vendor"), None);
+    assert_eq!(
+        providers["github"]["env"],
+        TomlValue::Array(vec![TomlValue::String("GITHUB_TOKEN".to_string())])
+    );
+    assert_eq!(
+        providers["builtin"]["env"],
+        TomlValue::Array(vec![TomlValue::String("GH_TOKEN".to_string())])
+    );
     Ok(())
 }
 
@@ -1533,18 +1674,24 @@ url_prefix_from_env = "VENDOR_ENDPOINT"
                 expected_version: None,
             })
             .await;
-        if managed_provider == Some("z_new") {
-            result?;
-        } else {
-            assert_eq!(
-                result.unwrap_err().write_error_code(),
-                Some(ConfigWriteErrorCode::ConfigValidationError)
-            );
-            assert_eq!(
-                std::fs::read_to_string(tmp.path().join(CONFIG_TOML_FILE))?,
-                initial
-            );
-        }
+        // A complete managed `z_new` passes remapping validation, but its
+        // source isn't one Corbanu brokers, so the write is refused (D612).
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.write_error_code(),
+            Some(ConfigWriteErrorCode::ConfigValidationError)
+        );
+        assert_eq!(
+            error
+                .to_string()
+                .contains("unsupported network proxy credential provider"),
+            managed_provider == Some("z_new"),
+            "{managed_provider:?}: {error}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join(CONFIG_TOML_FILE))?,
+            initial
+        );
     }
     Ok(())
 }
@@ -2551,7 +2698,7 @@ async fn structured_feature_toggle_ignores_unrelated_managed_settings() -> Resul
 
     let configured_provider = "[features.network_proxy]\nenabled = true\n\n\
          [features.network_proxy.credentials.vendor]\n\
-         env = ['VENDOR_TOKEN']\n\
+         env = ['GITHUB_TOKEN']\n\
          patterns = ['token_[a-z]{24}']\n\
          url_prefixes = ['https://api.vendor.example']\n";
     std::fs::write(&user_path, configured_provider)?;
