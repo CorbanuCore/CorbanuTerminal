@@ -1,7 +1,7 @@
 use crate::command_safety::is_safe_command::is_safe_git_command;
 use crate::powershell::PowershellScriptRead;
 use crate::powershell::extract_plain_powershell_command;
-use crate::powershell::read_script_with_trusted_parser;
+use crate::powershell::read_powershell_command_script;
 use std::path::Path;
 
 /// On Windows, we conservatively allow only clearly read-only PowerShell invocations
@@ -39,16 +39,11 @@ fn try_parse_powershell_command_sequence(command: &[String]) -> Option<Vec<Vec<S
     let mut normalized = Vec::with_capacity(command.len());
     normalized.push(name);
     normalized.extend_from_slice(args);
-    let (_, script) = extract_plain_powershell_command(&normalized)?;
-    parse_powershell_script(executable, &script)
-}
-
-/// Tokenizes an inline PowerShell script and delegates to the command splitter.
-///
-/// #2546 (D553): a trusted PowerShell of the same kind parses the script;
-/// `executable` itself is never started.
-fn parse_powershell_script(executable: &str, script: &str) -> Option<Vec<Vec<String>>> {
-    match read_script_with_trusted_parser(executable, script) {
+    extract_plain_powershell_command(&normalized)?;
+    // #2546 (D553): a trusted PowerShell of the same kind parses the script;
+    // `executable` itself is never started. D729 (A): as the command line
+    // runs it (`-NoProfile`).
+    match read_powershell_command_script(&normalized)? {
         PowershellScriptRead::Commands(commands) => Some(commands),
         PowershellScriptRead::NotPlain
         | PowershellScriptRead::Partial(_)

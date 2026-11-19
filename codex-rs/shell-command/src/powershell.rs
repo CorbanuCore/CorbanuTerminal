@@ -171,18 +171,6 @@ struct ShellOptions {
 
 /// Parse `script`, written for the PowerShell named `shell`, with the
 /// trusted PowerShell of the same kind; `shell` itself is never started.
-/// The shell may run a profile script first (no `-NoProfile` known).
-pub(crate) fn read_script_with_trusted_parser(shell: &str, script: &str) -> PowershellScriptRead {
-    read_script_in(
-        shell,
-        script,
-        ShellOptions {
-            no_profile: false,
-            keeps_cwd: true,
-        },
-    )
-}
-
 fn read_script_in(shell: &str, script: &str, options: ShellOptions) -> PowershellScriptRead {
     let Some(parser) =
         trusted_powershell_parser(PowershellKind::of(shell)).and_then(|parser| parser.to_str())

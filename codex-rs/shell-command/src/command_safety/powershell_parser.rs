@@ -197,7 +197,7 @@ impl PowershellParserProcess {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, windows))]
     fn parse(&mut self, script: &str) -> std::io::Result<PowershellParseOutcome> {
         self.parse_request(script, /*no_profile*/ true)
     }
