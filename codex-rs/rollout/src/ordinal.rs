@@ -13,6 +13,7 @@ use codex_protocol::protocol::ThreadHistoryMode;
 
 use crate::reverse_jsonl_scanner::ReverseJsonlScanner;
 use crate::reverse_jsonl_scanner::ScanOutcome;
+use crate::reverse_jsonl_scanner::parse_jsonl_record;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RolloutOrdinalState {
@@ -111,7 +112,7 @@ fn read_history_metadata(
         if line.trim().is_empty() {
             continue;
         }
-        let record: RolloutLine = serde_json::from_str(line.as_str()).map_err(|error| {
+        let record: RolloutLine = parse_jsonl_record(line.as_bytes()).map_err(|error| {
             io::Error::other(format!(
                 "failed to parse first rollout record at {}: {error}",
                 path.display()

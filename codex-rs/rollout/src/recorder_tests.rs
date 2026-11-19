@@ -10,6 +10,8 @@ use codex_protocol::protocol::AgentMessageEvent;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::HistoryPosition;
+use codex_protocol::protocol::RateLimitSnapshot;
+use codex_protocol::protocol::RateLimitWindow;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SandboxPolicy;
@@ -17,6 +19,7 @@ use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadHistoryMode;
+use codex_protocol::protocol::TokenCountEvent;
 use codex_protocol::protocol::TurnContextItem;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_utils_absolute_path::test_support::PathExt;
@@ -63,6 +66,32 @@ fn agent_message_item(message: &str) -> RolloutItem {
         phase: None,
         memory_citation: None,
     }))
+}
+
+fn rate_limited_token_count_item() -> RolloutItem {
+    RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {
+        info: None,
+        rate_limits: Some(rate_limit_snapshot()),
+        account_usage: None,
+    }))
+}
+
+fn rate_limit_snapshot() -> RateLimitSnapshot {
+    RateLimitSnapshot {
+        limit_id: None,
+        limit_name: None,
+        primary: Some(RateLimitWindow {
+            used_percent: 12.5,
+            window_minutes: Some(300),
+            resets_at: Some(1_763_500_000),
+        }),
+        secondary: None,
+        credits: None,
+        individual_limit: None,
+        spend_control_reached: None,
+        plan_type: None,
+        rate_limit_reached_type: None,
+    }
 }
 
 fn write_paginated_rollout(
@@ -956,6 +985,51 @@ async fn append_rollout_item_to_path_assigns_next_paginated_ordinal() -> std::io
 
     let lines = read_rollout_lines(&rollout_path)?;
     assert_eq!(lines.last().and_then(|line| line.ordinal), Some(5));
+    Ok(())
+}
+
+#[tokio::test]
+async fn written_line_with_decimal_rate_limit_reads_back() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let rollout_path = home.path().join("rollout.jsonl");
+    write_paginated_rollout(&rollout_path, ThreadId::new(), &[4])?;
+
+    append_rollout_item_to_path(&rollout_path, &rate_limited_token_count_item()).await?;
+
+    let mut scanner = crate::ReverseJsonlScanner::new(File::open(&rollout_path)?)?;
+    let line = match scanner.scan_next::<RolloutLine>()? {
+        Some(crate::ScanOutcome::Parsed(line)) => line,
+        Some(crate::ScanOutcome::Rejected(error)) => {
+            panic!("written line should read back: {error}")
+        }
+        None => panic!("rollout should not be empty"),
+    };
+    let RolloutItem::EventMsg(EventMsg::TokenCount(event)) = line.item else {
+        panic!("expected a token count record");
+    };
+    assert_eq!(line.ordinal, Some(5));
+    assert_eq!(event.rate_limits, Some(rate_limit_snapshot()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn append_after_decimal_rate_limit_line_assigns_next_ordinal() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let rollout_path = home.path().join("rollout.jsonl");
+    write_paginated_rollout(&rollout_path, ThreadId::new(), &[4])?;
+    append_rollout_item_to_path(&rollout_path, &rate_limited_token_count_item()).await?;
+
+    append_rollout_item_to_path(&rollout_path, &agent_message_item("after rate limits")).await?;
+
+    let ordinals = fs::read_to_string(&rollout_path)?
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .map(|value| value["ordinal"].as_u64())
+                .map_err(std::io::Error::other)
+        })
+        .collect::<std::io::Result<Vec<_>>>()?;
+    assert_eq!(ordinals, vec![Some(0), Some(4), Some(5), Some(6)]);
     Ok(())
 }
 

@@ -15,10 +15,15 @@ use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::HistoryPosition;
 use codex_protocol::protocol::ItemCompletedEvent;
+use codex_protocol::protocol::RateLimitSnapshot;
+use codex_protocol::protocol::RateLimitWindow;
 use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::RolloutLine;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::ThreadHistoryMode;
+use codex_protocol::protocol::TokenCountEvent;
+use codex_protocol::protocol::TokenUsage;
+use codex_protocol::protocol::TokenUsageInfo;
 use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnContextItem;
 use codex_protocol::protocol::TurnStartedEvent;
@@ -391,6 +396,52 @@ async fn replays_nested_archived_lineage_from_frozen_prefix() {
     );
 }
 
+#[tokio::test]
+async fn keeps_token_counts_with_decimal_rate_limits() {
+    let home = TempDir::new().expect("temp dir");
+    let uuid = Uuid::from_u128(/*v*/ 2655);
+    let thread_id = codex_protocol::ThreadId::from_string(&uuid.to_string()).expect("thread id");
+    write_paginated_rollout(
+        home.path(),
+        "2025-01-03T13-00-00",
+        uuid,
+        [
+            turn_started("turn-1"),
+            user_message("hello"),
+            completed_user_message("turn-1", "hello"),
+            turn_context(home.path(), "turn-1"),
+            token_count(/*total_tokens*/ 1_000, /*used_percent*/ None),
+            token_count(
+                /*total_tokens*/ 90_000,
+                /*used_percent*/ Some(12.0),
+            ),
+            turn_complete("turn-1"),
+        ],
+    );
+    let store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+
+    let context = store
+        .load_latest_model_context(LoadThreadHistoryParams {
+            thread_id,
+            include_archived: false,
+        })
+        .await
+        .expect("load model context");
+
+    let token_totals: Vec<i64> = context
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            RolloutItem::EventMsg(EventMsg::TokenCount(event)) => event
+                .info
+                .as_ref()
+                .map(|info| info.total_token_usage.total_tokens),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(token_totals, vec![1_000, 90_000]);
+}
+
 fn write_paginated_rollout<const N: usize>(
     home: &Path,
     timestamp: &str,
@@ -623,4 +674,35 @@ fn compacted(message: &str, replacement_history: Option<Vec<ResponseItem>>) -> R
         previous_window_id: None,
         window_id: None,
     })
+}
+
+fn token_count(total_tokens: i64, used_percent: Option<f64>) -> RolloutItem {
+    let usage = TokenUsage {
+        input_tokens: total_tokens,
+        total_tokens,
+        ..Default::default()
+    };
+    RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {
+        info: Some(TokenUsageInfo {
+            total_token_usage: usage.clone(),
+            last_token_usage: usage,
+            model_context_window: Some(128_000),
+        }),
+        rate_limits: used_percent.map(|used_percent| RateLimitSnapshot {
+            limit_id: None,
+            limit_name: None,
+            primary: Some(RateLimitWindow {
+                used_percent,
+                window_minutes: Some(300),
+                resets_at: Some(1_763_500_000),
+            }),
+            secondary: None,
+            credits: None,
+            individual_limit: None,
+            spend_control_reached: None,
+            plan_type: None,
+            rate_limit_reached_type: None,
+        }),
+        account_usage: None,
+    }))
 }
