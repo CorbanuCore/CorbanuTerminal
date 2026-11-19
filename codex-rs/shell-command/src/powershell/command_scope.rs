@@ -196,7 +196,7 @@ pub(crate) fn profile_may_exist(shell: &str, kind: PowershellKind) -> bool {
         .is_absolute()
         .then(|| shell_path.parent().map(Path::to_path_buf))
         .flatten();
-    let (homes, user_folder) = match kind {
+    let (homes, user_folders) = match kind {
         PowershellKind::WindowsPowershell => {
             // Windows PowerShell's `$PSHOME` is fixed; a path given also counts.
             let Some(root) = std::env::var_os("SystemRoot") else {
@@ -209,7 +209,9 @@ pub(crate) fn profile_may_exist(shell: &str, kind: PowershellKind) -> bool {
                     .join("v1.0"),
             ];
             homes.extend(given_home);
-            (homes, "WindowsPowerShell")
+            // A `powershell` that is PowerShell 7 reads its user's profile
+            // there: both are looked in.
+            (homes, &["WindowsPowerShell", "PowerShell"][..])
         }
         PowershellKind::Pwsh => {
             let home = match given_home {
@@ -227,12 +229,19 @@ pub(crate) fn profile_may_exist(shell: &str, kind: PowershellKind) -> bool {
                     }
                 }
             };
-            (vec![home], "PowerShell")
+            // A folder that is not PowerShell's install folder (a launcher
+            // shim such as a dotnet tool's) leaves `$PSHOME` unknown.
+            if !home.join("System.Management.Automation.dll").is_file() {
+                return true;
+            }
+            (vec![home], &["PowerShell"][..])
         }
     };
-    let folders = homes
-        .into_iter()
-        .chain(std::iter::once(documents.join(user_folder)));
+    let folders = homes.into_iter().chain(
+        user_folders
+            .iter()
+            .map(|user_folder| documents.join(user_folder)),
+    );
     folders
         .flat_map(|folder| {
             ["profile.ps1", "Microsoft.PowerShell_profile.ps1"].map(|name| folder.join(name))

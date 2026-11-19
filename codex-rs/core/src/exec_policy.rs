@@ -334,9 +334,10 @@ pub(crate) struct ExecApprovalRequest<'a> {
     /// D729 (A): the command's environment, where its shell finds programs
     /// (`PATH`, `PATHEXT`); `None`: Corbanu's. As on main, `cwd` `None` with
     /// `env` given is a remote environment, and both `None` is no command to
-    /// check (heuristics, tests). Sync: the approval is decided before the
-    /// command's environment is built, so a local command gives `None` and a
-    /// remote one an empty environment (only its being remote matters).
+    /// check (heuristics, tests). Sync: unified exec gives a local command
+    /// the environment its shell environment policy builds, and a remote one
+    /// (or one whose folder this host cannot read) an empty one: only its
+    /// being remote matters.
     pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 

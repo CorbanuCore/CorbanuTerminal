@@ -126,6 +126,8 @@ fn other_commands_and_parameters_read_in_part() {
             r"C:\tools\run.bat",
             "'git' status",
             "Get-Content. x",
+            // A name PowerShell may fold onto an ASCII alias.
+            "\u{131}ex 'git push'",
         ] {
             assert!(cause(kind, script).is_some(), "{kind:?} {script}");
         }
@@ -190,6 +192,7 @@ fn a_local_command_looks_names_and_profiles_up() {
     }
     std::fs::write(bin.join("tool.exe"), "").expect("write");
     std::fs::write(home.join("pwsh.exe"), "").expect("write");
+    std::fs::write(home.join("System.Management.Automation.dll"), "").expect("write");
     let env = std::collections::HashMap::from([
         (
             "PATH".to_string(),
@@ -233,6 +236,10 @@ fn a_local_command_looks_names_and_profiles_up() {
         assert_eq!(review_pwsh(true, "tool -x"), None);
         std::fs::remove_file(&profile).expect("remove");
     }
+    // Not PowerShell's install folder (a launcher shim): its profile is unknown.
+    std::fs::remove_file(home.join("System.Management.Automation.dll")).expect("remove");
+    assert!(review_pwsh(false, "tool -x").is_some());
+    assert_eq!(review_pwsh(true, "tool -x"), None);
     // Documents unknown: a profile may exist.
     let _scope =
         enter_powershell_command_scope(PowershellCommandScope::new(Some(&cwd), Some(&env)));

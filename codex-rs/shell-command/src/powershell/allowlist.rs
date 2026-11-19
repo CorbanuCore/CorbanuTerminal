@@ -212,6 +212,11 @@ fn command_cause(
     if !name.bare {
         return Some(format!("command name is not a bare word: {}", name.text));
     }
+    // PowerShell may fold a non-ASCII name onto an ASCII alias or cmdlet
+    // (`ıex`), which these tables would not find.
+    if !name.text.is_ascii() {
+        return Some(format!("command name is not ASCII: {}", name.text));
+    }
     let lower = name.text.to_lowercase();
     if lower.ends_with(['.', ' ']) {
         return Some(format!(
