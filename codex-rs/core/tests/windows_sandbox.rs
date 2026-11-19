@@ -1193,7 +1193,12 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
 
     // Re-enter real setup after corrupting this test's bookkeeping, then exercise
     // recovery through the same agent tool path rather than relying on a cached launch.
-    let state_path = codex_home.path().join(".sandbox/deny_read_acl_state.json");
+    // Corbanu keeps this bookkeeping where the sandbox's users cannot write it
+    // (#304, `deny_read_state.rs`); upstream's `.sandbox/deny_read_acl_state.json`
+    // is not read (#2729).
+    let state_path = codex_home
+        .path()
+        .join(".sandbox-secrets/deny_read_acl_rules.json");
     std::fs::write(&state_path, b"malformed bookkeeping")?;
     let permission_profile = harness
         .test()
