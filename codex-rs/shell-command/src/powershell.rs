@@ -11,22 +11,35 @@ use crate::shell_detect::detect_shell_type;
 
 mod cli;
 
+macro_rules! utf8_output_prefix {
+    () => {
+        "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n"
+    };
+}
+
+macro_rules! module_hardening_prefix {
+    () => {
+        "$global:PSModuleAutoLoadingPreference = 'None'; & { foreach ($m in 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Archive', 'CimCmdlets') { Import-Module -Name \"$PSHOME\\Modules\\$m\\$m.psd1\" -Global -ErrorAction SilentlyContinue } }\n"
+    };
+}
+
 /// Prefixed command for powershell shell calls to request UTF-8 console output.
-pub const UTF8_OUTPUT_PREFIX: &str =
-    "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n";
+pub const UTF8_OUTPUT_PREFIX: &str = utf8_output_prefix!();
 
 /// D729 (A), D731 (#2661): module autoloading off, and the system modules
 /// PowerShell's own commands come from loaded from its install folder
-/// (`$PSHOME\Modules`), so a module a command wrote into a user module
-/// folder cannot replace a cmdlet the agent's script calls. Other modules
-/// load only when a script imports them (which asks under strict rules).
-pub const MODULE_HARDENING_PREFIX: &str = "$global:PSModuleAutoLoadingPreference = 'None'; & { foreach ($m in 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Archive', 'CimCmdlets') { $p = [System.IO.Path]::Combine($PSHOME, 'Modules', $m, $m + '.psd1'); if ([System.IO.File]::Exists($p)) { Import-Module -Name $p -Global -ErrorAction SilentlyContinue } } }\n";
+/// (`$PSHOME\Modules`, by full path), so a module a command wrote into a user
+/// module folder cannot replace a cmdlet the agent's script calls. Other
+/// modules load only when a script imports them (which asks under strict
+/// rules). Not covered: a profile script, which runs before this when the
+/// shell is started without `-NoProfile` (D729 (A) reads such a script in
+/// part where a profile exists); PowerShell processes, jobs and runspaces
+/// the script starts; command lines other than `-Command`. No .NET calls,
+/// so it also runs in Constrained Language Mode.
+pub const MODULE_HARDENING_PREFIX: &str = module_hardening_prefix!();
 
 /// What [`prefix_powershell_script_with_utf8`] puts before an agent script.
-pub const AGENT_SCRIPT_PREFIX: &str = concat!(
-    "$global:PSModuleAutoLoadingPreference = 'None'; & { foreach ($m in 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Archive', 'CimCmdlets') { $p = [System.IO.Path]::Combine($PSHOME, 'Modules', $m, $m + '.psd1'); if ([System.IO.File]::Exists($p)) { Import-Module -Name $p -Global -ErrorAction SilentlyContinue } } }\n",
-    "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n",
-);
+pub const AGENT_SCRIPT_PREFIX: &str = concat!(module_hardening_prefix!(), utf8_output_prefix!());
 
 /// `command` with [`AGENT_SCRIPT_PREFIX`] (module hardening, then
 /// [`UTF8_OUTPUT_PREFIX`]) before its `-Command` script, which becomes one
