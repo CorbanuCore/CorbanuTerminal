@@ -43,12 +43,14 @@ Batch are not priced: those attempts show "no price", never the Standard rate.
 | gpt-5.3-codex |  1.75 |  0.175 |            - | 14.00 | no  |
 | gpt-5.2       |  1.75 |  0.175 |            - | 14.00 | no  |
 
-GPT-5.6 Sol's rates are a promotion OpenAI offers "at least through November
-21, 2026". The model page calls them a 20% input and 33% output reduction
-(GPT-5.5 is 5.00 / 30.00) but states no Sol price after the promotion, so the
-catalogue states no Sol API price after 2026-11-21T23:59:59.999Z until the page
-is read again (the earliest reading of "through November 21"). Re-read
-2026-10-14 (#368): unchanged. GPT-6.1 Sol was added from the same page and
+GPT-5.6 Sol's rates are a promotion OpenAI says "is available until November
+30, 2026" (the model page and the pricing page, re-read 2026-11-19, #368; on
+2026-10-14 and 2026-10-28 they said "at least through November 21, 2026").
+The model page calls them a 20% input and 33% output reduction (GPT-5.5 is
+5.00 / 30.00) but states no Sol price after the promotion, so the catalogue
+states no Sol API price after 2026-11-29T23:59:59.999Z until the page is read
+again (the earliest reading of "until November 30", taken as UTC days). GPT-6.1
+Sol was added from the same page and
 developers.openai.com/api/docs/models/gpt-6.1-sol, read 2026-10-14; it is
 manual selection only, like GPT-6 Astra and Luna.
 `python3 scripts/check_price_calendars.py` warns 30 days before a stated price

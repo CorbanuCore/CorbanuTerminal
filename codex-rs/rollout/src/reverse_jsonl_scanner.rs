@@ -7,6 +7,18 @@ use serde::de::DeserializeOwned;
 
 const READ_CHUNK_SIZE: usize = 64 * 1024;
 
+/// Deserializes one JSONL record by way of [`serde_json::Value`].
+///
+/// The workspace enables serde_json's `arbitrary_precision` feature. With it, a decimal number
+/// inside a flattened or tagged type such as `RolloutLine` cannot be deserialized straight from
+/// JSON text, so rollout records are read through `Value` first.
+pub fn parse_jsonl_record<T>(record: &[u8]) -> serde_json::Result<T>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(serde_json::from_slice(record)?)
+}
+
 #[derive(Debug)]
 pub enum ScanOutcome<T> {
     /// The record was valid JSON and deserialized as the requested type.
@@ -100,7 +112,7 @@ where
         let outcome = if self.record_reversed.iter().all(u8::is_ascii_whitespace) {
             None
         } else {
-            Some(match serde_json::from_slice::<T>(&self.record_reversed) {
+            Some(match parse_jsonl_record::<T>(&self.record_reversed) {
                 Ok(value) => ScanOutcome::Parsed(value),
                 Err(error) => ScanOutcome::Rejected(error),
             })

@@ -81,6 +81,7 @@ pub use recorder::RolloutRecorderParams;
 pub use recorder::append_rollout_item_to_path;
 pub use reverse_jsonl_scanner::ReverseJsonlScanner;
 pub use reverse_jsonl_scanner::ScanOutcome;
+pub use reverse_jsonl_scanner::parse_jsonl_record;
 pub use rollout_reference_index::RolloutReferenceIndex;
 pub use search::first_rollout_content_match_snippet;
 pub use search::search_rollout_matches;
