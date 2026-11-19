@@ -279,6 +279,10 @@ const ARGV_ONLY_BUILTINS: &[&str] = &[
     "kill", "disown", "bg", "fg", "umask",
 ];
 
+/// How a command's role reads a word known only at run time that is always
+/// a number (`$?`, `$#`, `$$`, `$!`): a number, which `IFS` may still split.
+pub(super) const RUN_TIME_NUMBER: &str = "$?";
+
 /// Builtins whose arguments are numbers, which zsh and ksh evaluate as
 /// arithmetic (`shift 'a[$(…)]'` runs the substitution): read only where
 /// every argument is an option or a number.
@@ -417,9 +421,13 @@ fn builtin_runs_only_argv(name: &str, args: &[Option<String>]) -> bool {
             // `%2$d` picks its argument by number: then any may be numeric.
             let positional = format.contains('$') && slots.contains(&true);
             // D713 review: a word known only at run time may become no word
-            // or several (zsh drops an empty `$x`), shifting the arguments
+            // or several (zsh drops an empty `$x`; with `sh_word_split` an
+            // `IFS` of digits splits even `$?`), shifting the arguments
             // after it into other slots.
-            let shifts = slots.contains(&true) && args[1..].iter().any(Option::is_none);
+            let shifts = slots.contains(&true)
+                && args[1..]
+                    .iter()
+                    .any(|arg| arg.as_deref().is_none_or(|arg| arg == RUN_TIME_NUMBER));
             !format.starts_with('-')
                 && !shifts
                 && args[1..].iter().enumerate().all(|(index, arg)| {
