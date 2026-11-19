@@ -187,6 +187,11 @@ NAMED = [
     ".github/actions/windows-code-sign/",
     ".github/actions/setup-akv-pkcs11-codesigning/",
     ".github/scripts/macos-signing/",
+    # Main's D318 block added these after main merge #2c (#2127 Rama DNS fork; cargo-deny policy scripts).
+    "third_party/rama-dns/",
+    ".github/scripts/cargo_deny.py",
+    ".github/scripts/test_cargo_deny.py",
+    ".github/scripts/fixtures/cargo-deny-*.jsonl",
 ]
 
 SEC_BRANCH = re.compile(
