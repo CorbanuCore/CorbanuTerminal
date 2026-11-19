@@ -523,6 +523,7 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
         let server = MockServer::start().await;
         let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
         let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+            .with_pre_build_hook(support::allow_fixture_command)
             .with_config(|c| {
                 c.features
                     .disable(codex_features::Feature::CodeModeOnly)
@@ -583,6 +584,7 @@ async fn accounting_chat_native_sampling_and_compaction_are_recorded() -> anyhow
     let server = MockServer::start().await;
     let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+        .with_pre_build_hook(support::allow_fixture_command)
         .with_config(|c| {
             c.features
                 .disable(codex_features::Feature::CodeModeOnly)

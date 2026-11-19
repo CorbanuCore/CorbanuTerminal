@@ -41,6 +41,19 @@ pub fn enabled(endpoint: &str) -> AccountingMode {
         approved_endpoint: endpoint.into(),
     }
 }
+/// #2729: upstream removed the known-safe command list (#39630), so on a
+/// Windows host without its sandbox the fixtures' `echo fixture` waits for an
+/// approval nobody gives. A rule allows exactly that command, as the list did.
+pub fn allow_fixture_command(home: &std::path::Path) {
+    let rules = home.join("rules");
+    std::fs::create_dir_all(&rules).expect("create rules directory");
+    std::fs::write(
+        rules.join("default.rules"),
+        r#"prefix_rule(pattern=["echo", "fixture"], decision="allow")"#,
+    )
+    .expect("write the fixture command rule");
+}
+
 pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
     test_codex()
         .with_auth(CodexAuth::from_api_key("synthetic-chat-accounting"))
