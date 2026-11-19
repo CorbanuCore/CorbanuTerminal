@@ -30,7 +30,9 @@ class StandardTableTests(unittest.TestCase):
 
     def test_dash_is_no_price_and_three_columns_have_no_cache_writes(self):
         self.assertEqual(self.rows["gpt-5.5"], prices("5", "0.5", None, "30"))
-        self.assertEqual(self.rows["gpt-5.4-mini"], prices("0.75", "0.075", None, "4.5"))
+        self.assertEqual(
+            self.rows["gpt-5.4-mini"], prices("0.75", "0.075", None, "4.5")
+        )
         self.assertEqual(self.rows["gpt-5.2-pro"], prices("21", None, None, "168"))
 
 
