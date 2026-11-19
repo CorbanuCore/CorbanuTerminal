@@ -9,6 +9,7 @@
 //! exists.
 use super::parser_issue_tests::FORBID;
 use super::parser_issue_tests::PROMPT;
+use super::parser_issue_tests::acceptable;
 use super::parser_issue_tests::argv;
 use super::parser_issue_tests::assert_scripts_ask;
 use super::*;
@@ -206,13 +207,7 @@ async fn unquoted_expansions_ask_where_zsh_runs_them() {
                     })
                     .await;
                 assert!(
-                    matches!(
-                        result,
-                        ExecApprovalRequirement::NeedsApproval {
-                            proposed_execpolicy_amendment: None,
-                            ..
-                        }
-                    ),
+                    acceptable(rules, &result, /*approvals_off*/ false),
                     "{command:?} {rules}: {result:?}"
                 );
             }
