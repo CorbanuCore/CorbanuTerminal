@@ -10,6 +10,7 @@ use codex_core::config::load_config_toml_with_layer_stack;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
+use regex_lite::Regex;
 use serde_json::json;
 use tempfile::TempDir;
 use wiremock::Mock;
@@ -62,6 +63,11 @@ fn mcp_list_reports_invalid_keybinding_reason() -> Result<()> {
             .stderr
             .clone();
         let output = String::from_utf8(output)?;
+        // Main's #845 names the failing file and position; the temp
+        // directory varies, and so does the column between the two cases.
+        let file = Regex::new(r"(?m)^(\s*0: ).*[\\/]config\.toml:\d+:\d+:")?;
+        assert!(file.is_match(&output), "{output}");
+        let output = file.replace_all(&output, "${1}<CODEX_HOME>/config.toml:<POS>:");
         insta::allow_duplicates! {
             insta::assert_snapshot!(output);
         }

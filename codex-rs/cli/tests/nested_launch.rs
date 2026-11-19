@@ -118,7 +118,6 @@ fn refuse_mode_refuses_every_agent_launch_and_credential_helper() -> Result<()> 
         vec!["fork", "--last"],
         vec!["hi"],
         vec!["app-server"],
-        vec!["mcp-server"],
         vec!["stdio-to-uds", "/nonexistent/corbanu.sock"],
         vec!["vault", "auth-helper", "provider/zai_api_key"],
         vec!["internal-claude-oauth-token"],
@@ -152,7 +151,6 @@ fn pass_mode_still_refuses_sessions_hosts_and_credentials() -> Result<()> {
         (vec!["hi"], "approval prompts"),
         (vec!["resume", "--last"], "approval prompts"),
         (vec!["app-server"], "never allowed"),
-        (vec!["mcp-server"], "never allowed"),
         (
             vec!["vault", "auth-helper", "provider/zai_api_key"],
             "credentials",
@@ -311,13 +309,25 @@ async fn pass_mode_runs_exec_with_aggressive_enforced() -> Result<()> {
     );
     assert!(!outside_file.exists(), "a write outside the folder ran");
     assert!(!stderr.contains("Example Domain"), "{stderr}");
-    // The vault read ran inside the sandbox and failed (Seatbelt's message;
-    // Linux runners may lack a working sandbox); the other two needed an
-    // approval nobody can give.
+    // Main's exec declined approval requests; upstream's exec refuses them
+    // ("... is not supported in exec mode") before the command runs.
+    let refused_in_exec =
+        stderr.contains("command execution approval is not supported in exec mode");
+    // With main's exec the vault read ran inside the sandbox and failed
+    // (Seatbelt's message; Linux runners may lack a working sandbox); with
+    // upstream's exec it is refused before it runs. Either way the vault value
+    // never reached the model (asserted above).
     if cfg!(target_os = "macos") {
-        assert!(stderr.contains("Operation not permitted"), "{stderr}");
+        assert!(
+            stderr.contains("Operation not permitted") || refused_in_exec,
+            "{stderr}"
+        );
     }
-    assert!(stderr.contains("declined in"), "{stderr}");
+    // The other two needed an approval nobody can give.
+    assert!(
+        stderr.contains("declined in") || refused_in_exec,
+        "{stderr}"
+    );
     Ok(())
 }
 

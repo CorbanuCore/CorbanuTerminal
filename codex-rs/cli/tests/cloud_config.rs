@@ -492,7 +492,7 @@ async fn startup_config_loads_managed_policy_or_reports_cloud_failure() -> Resul
         )
         .await;
         let sqlite_home = TempDir::new()?;
-        let history_path = sqlite_home.path().join("state_5.sqlite");
+        let history_path = sqlite_home.path().join("pfterminal_state_5.sqlite");
         std::fs::write(&history_path, b"history must not be repaired")?;
         let output = fixture
             .command(&["app-server", "--print-startup-config"])?
@@ -520,7 +520,10 @@ async fn startup_config_loads_managed_policy_or_reports_cloud_failure() -> Resul
             std::fs::read(&history_path)?,
             b"history must not be repaired"
         );
-        assert_eq!(std::fs::read_dir(sqlite_home.path())?.count(), 1);
+        let entries = std::fs::read_dir(sqlite_home.path())?
+            .map(|entry| Ok(entry?.file_name()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        assert_eq!(entries.len(), 1, "{entries:?}");
         fixture.server.verify().await;
     }
     Ok(())
