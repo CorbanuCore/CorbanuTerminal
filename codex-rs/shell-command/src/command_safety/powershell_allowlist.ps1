@@ -238,6 +238,10 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     $binding = $null
     try { $binding = [System.Management.Automation.Language.StaticParameterBinder]::BindCommand($command, $true) } catch { }
     if ($null -eq $binding -or $binding.BindingExceptions.Count -gt 0) { return "unbindable parameters: $target" }
+    # Also after binding: a value given by position binds to an excluded parameter too.
+    foreach ($bound in $binding.BoundParameters.Keys) {
+        if ($D729Banned -contains $bound -or $entry.x -contains $bound) { return "excluded parameter -${bound}: $target" }
+    }
     foreach ($action in 'ErrorAction', 'WarningAction', 'InformationAction', 'ProgressAction') {
         $value = Get-D729Bound $binding $action
         if ($null -ne $value -and ((Test-D729NotLiteral $value) -or $D729ActionValues -notcontains $value.ToLowerInvariant())) {
