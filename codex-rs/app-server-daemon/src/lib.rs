@@ -511,9 +511,7 @@ impl Daemon {
         let mut managed = self.clone();
         managed.managed_codex_bin = self.current_managed_codex_bin()?;
         if !settings.auto_update_enabled {
-            backend::pid_update_loop_backend(self.backend_paths(&settings))
-                .stop()
-                .await?;
+            self.stop_updater(&settings).await?;
         }
 
         managed.ensure_managed_codex_bin()?;
@@ -887,9 +885,7 @@ impl Daemon {
         managed.ensure_managed_codex_bin()?;
         settings.save(&self.settings_file).await?;
 
-        backend::pid_update_loop_backend(self.backend_paths(&settings))
-            .stop()
-            .await?;
+        self.stop_updater(&settings).await?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::FileTypeExt;
@@ -1009,7 +1005,7 @@ impl Daemon {
     async fn ensure_managed_updater(&self, settings: &DaemonSettings) -> Result<bool> {
         let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
         if !settings.auto_update_enabled || !update_loop::self_update_enabled() {
-            updater.stop().await?;
+            self.stop_updater(settings).await?;
             return Ok(false);
         }
         if !self.is_stable_standalone_release()? {
@@ -1098,9 +1094,34 @@ impl Daemon {
             return Ok(());
         }
         let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
-        if updater.is_starting_or_running().await? {
-            updater.stop().await?;
+        match updater.is_starting_or_running().await {
+            Ok(true) => self.stop_updater(settings).await,
+            Ok(false) => Ok(()),
+            Err(err) => self.tolerate_unreadable_updater_record(err),
         }
+    }
+
+    /// Stops the updater named by its PID record, if any.
+    async fn stop_updater(&self, settings: &DaemonSettings) -> Result<()> {
+        let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
+        match updater.stop().await {
+            Ok(()) => Ok(()),
+            Err(err) => self.tolerate_unreadable_updater_record(err),
+        }
+    }
+
+    /// An updater PID record that does not parse as JSON names no process to
+    /// verify or stop, so it is reported and left in place rather than
+    /// blocking the lifecycle command (#2728, D736). Any other failure, such as
+    /// an updater process that cannot be verified or a record that is not
+    /// UTF-8 text, is returned.
+    fn tolerate_unreadable_updater_record(&self, err: anyhow::Error) -> Result<()> {
+        if err.downcast_ref::<serde_json::Error>().is_none() {
+            return Err(err);
+        }
+        self.diagnostic(format_args!(
+            "warning: ignoring unreadable daemon updater record: {err:#}"
+        ));
         Ok(())
     }
 

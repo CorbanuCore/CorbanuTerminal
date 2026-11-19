@@ -110,13 +110,10 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
     assert_eq!(daemon.codex.canonicalize()?, cli_before);
     assert_eq!(standalone.join("current").canonicalize()?, cli_selection);
     assert!(state.join(initial_pid_file).exists());
-    let legacy_updater = match initial {
-        InitialDaemon::Missing => {
-            assert!(!state.join("app-server-updater.pid").exists());
-            None
-        }
-        InitialDaemon::Legacy => Some(daemon.pid("app-server-updater.pid")?),
-    };
+    // D564 (#2197, D736): neither a fresh nor a legacy launch starts the self-updater.
+    for updater in ["app-server-updater.pid", "daemon-updater.pid"] {
+        assert!(!state.join(updater).exists(), "unexpected {updater}");
+    }
     if action == "start" {
         let initial_current = initial_root.join("current");
         let current = dedicated.join("current");
@@ -163,11 +160,9 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
         assert_eq!(output["status"], "updated");
         assert_ne!(daemon.pid("daemon.pid")?, original_pid);
         wait_for_exit(original_pid)?;
-        if let Some(pid) = legacy_updater {
-            wait_for_exit(pid)?;
-        }
         assert!(!state.join("app-server.pid").exists());
         assert!(!state.join("app-server-updater.pid").exists());
+        assert!(!state.join("daemon-updater.pid").exists());
         assert_eq!(
             output["managedCodexPath"],
             current
