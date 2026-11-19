@@ -170,10 +170,15 @@ fn app_server_keeps_sqlite_logs_in_overridden_sqlite_home() -> Result<()> {
         .assert()
         .success();
 
-    assert!(sqlite_home.path().join("state_5.sqlite").is_file());
-    assert!(std::fs::metadata(sqlite_home.path().join("logs_2.sqlite"))?.len() > 0);
-    assert!(!home.path().join("logs_2.sqlite").exists());
-    assert!(!home.path().join("log/logs_2.sqlite").exists());
+    assert!(
+        sqlite_home
+            .path()
+            .join("pfterminal_state_5.sqlite")
+            .is_file()
+    );
+    assert!(std::fs::metadata(sqlite_home.path().join("pfterminal_logs_2.sqlite"))?.len() > 0);
+    assert!(!home.path().join("pfterminal_logs_2.sqlite").exists());
+    assert!(!home.path().join("log/pfterminal_logs_2.sqlite").exists());
     Ok(())
 }
 
@@ -182,8 +187,8 @@ fn app_server_keeps_sqlite_logs_in_overridden_sqlite_home() -> Result<()> {
 fn app_server_preserves_the_existing_sqlite_logs_symlink() -> Result<()> {
     let home = TempDir::new()?;
     let external_logs = TempDir::new()?;
-    let target = external_logs.path().join("logs_2.sqlite");
-    let link = home.path().join("logs_2.sqlite");
+    let target = external_logs.path().join("pfterminal_logs_2.sqlite");
+    let link = home.path().join("pfterminal_logs_2.sqlite");
     std::os::unix::fs::symlink(&target, &link)?;
     std::fs::write(
         home.path().join("config.toml"),
@@ -203,8 +208,8 @@ fn app_server_preserves_the_existing_sqlite_logs_symlink() -> Result<()> {
 
     assert_eq!(std::fs::read_link(&link)?, target);
     assert!(std::fs::metadata(&target)?.len() > 0);
-    assert!(home.path().join("state_5.sqlite").is_file());
-    assert!(!home.path().join("log/logs_2.sqlite").exists());
+    assert!(home.path().join("pfterminal_state_5.sqlite").is_file());
+    assert!(!home.path().join("log/pfterminal_logs_2.sqlite").exists());
     Ok(())
 }
 
@@ -326,7 +331,7 @@ async fn print_startup_config_is_independent_of_a_locked_history_database() -> R
         .kill_on_drop(true);
     let baseline = timeout(Duration::from_secs(10), command.output()).await??;
     assert!(baseline.status.success());
-    let path = sqlite.path().join("state_5.sqlite");
+    let path = sqlite.path().join("pfterminal_state_5.sqlite");
     let sqlite_config = codex_state::SqliteConfig::new_for_testing(
         codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(sqlite.path())?,
     );

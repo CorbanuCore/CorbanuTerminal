@@ -369,8 +369,10 @@ fn doctor_reports_only_safe_config_error_metadata() -> Result<()> {
                 "model_provider = \"doctor-test-credential\"",
             ),
         ),
+        // Main's #845 locates typed errors in the file that fails, so this
+        // case reports file/line/column where upstream reported "invalid data".
         (
-            "doctor_config_invalid_data",
+            "doctor_config_invalid_value",
             user_config_file.clone(),
             original.replace(
                 "wire_api = \"responses\"",
