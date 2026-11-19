@@ -1092,14 +1092,24 @@ impl Daemon {
 
     /// D564 (#2197): while self-update is disabled, every mutating lifecycle
     /// command first stops an updater an earlier build left running; nothing
-    /// starts one again (`ensure_managed_updater`).
+    /// starts one again (`ensure_managed_updater`). A record that does not
+    /// parse names no process to verify or stop, so it is reported and left in
+    /// place rather than blocking the command (#2728, D736). Any other failure,
+    /// such as an unverifiable process, still stops the command.
     async fn stop_managed_updater(&self, settings: &DaemonSettings) -> Result<()> {
         if update_loop::self_update_enabled() {
             return Ok(());
         }
         let updater = backend::pid_update_loop_backend(self.backend_paths(settings));
-        if updater.is_starting_or_running().await? {
-            updater.stop().await?;
+        match updater.is_starting_or_running().await {
+            Ok(true) => updater.stop().await?,
+            Ok(false) => {}
+            Err(err) if err.downcast_ref::<serde_json::Error>().is_some() => {
+                self.diagnostic(format_args!(
+                    "warning: ignoring unreadable daemon updater record: {err:#}"
+                ));
+            }
+            Err(err) => return Err(err),
         }
         Ok(())
     }
