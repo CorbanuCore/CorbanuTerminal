@@ -3370,7 +3370,9 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
             peak: rates(300, 1_200, 6),
             peak_windows: vec![window(1, 4), window(6, 10)],
             peak_weekdays: Some(WeekdaySet::weekdays_only()),
-            // State Council 2026 schedule: the remaining weekday holidays.
+            // State Council 2026 schedule: the remaining weekday holidays; 2027
+            // from 国办发明电〔2026〕10号 (weekday holidays only, as weekends are
+            // already off-peak).
             off_peak_dates_utc: [
                 "2026-09-25",
                 "2026-10-01",
@@ -3378,6 +3380,24 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
                 "2026-10-05",
                 "2026-10-06",
                 "2026-10-07",
+                "2027-01-01",
+                "2027-02-05",
+                "2027-02-08",
+                "2027-02-09",
+                "2027-02-10",
+                "2027-02-11",
+                "2027-02-12",
+                "2027-04-05",
+                "2027-05-03",
+                "2027-05-04",
+                "2027-05-05",
+                "2027-06-09",
+                "2027-09-15",
+                "2027-10-01",
+                "2027-10-04",
+                "2027-10-05",
+                "2027-10-06",
+                "2027-10-07",
             ]
             .map(String::from)
             .to_vec(),
