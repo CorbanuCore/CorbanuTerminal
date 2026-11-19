@@ -146,7 +146,7 @@ async fn prepare_from_package(
         );
     }
     let source = source.context(
-        "this CLI has no complete local package; install a packaged Codex CLI or use the standalone installer",
+        "this CLI has no complete local package; install a packaged Corbanu Terminal release using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install",
     )?;
     anyhow::ensure!(
         !root.canonicalize()?.starts_with(source.canonicalize()?),
@@ -532,7 +532,7 @@ fn validate_package(root: &Path, entrypoint: &str) -> Result<()> {
     for name in names {
         if !root.join(name).is_file() {
             return Err(anyhow!(
-                "local Codex package is missing {name}; reinstall the CLI or use the standalone installer"
+                "local Corbanu Terminal package is missing {name}; reinstall Corbanu Terminal using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install"
             ));
         }
         #[cfg(unix)]
@@ -540,7 +540,7 @@ fn validate_package(root: &Path, entrypoint: &str) -> Result<()> {
             use std::os::unix::fs::PermissionsExt;
             if std::fs::metadata(root.join(name))?.permissions().mode() & 0o111 == 0 {
                 return Err(anyhow!(
-                    "local Codex package file {name} is not executable; reinstall the CLI or use the standalone installer"
+                    "local Corbanu Terminal package file {name} is not executable; reinstall Corbanu Terminal using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install"
                 ));
             }
         }
