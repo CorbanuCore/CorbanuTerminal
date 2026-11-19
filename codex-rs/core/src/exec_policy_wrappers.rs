@@ -642,7 +642,13 @@ fn may_be_batch_file(program: &str, name: &str) -> bool {
 /// local `PATH` folders, never in a folder the command names, and only the
 /// first match counts, as PowerShell takes it; a relative or network `PATH`
 /// folder before a match leaves it unknown (yes). A bare name found nowhere
-/// does not run unless a command first writes it into a `PATH` folder.
+/// does not run unless a command first writes it into a `PATH` folder or
+/// changes `PATH` (a PowerShell command on the `env:` drive asks under
+/// strict rules, see `powershell_runs_code`). This is Corbanu's `PATH`: a
+/// user's `shell_environment_policy` can give the shell another one. A name
+/// named `.exe` or `.com` is not looked up: PowerShell may still find
+/// `x.exe.cmd` when `x.exe` is missing, which a command creating it could
+/// as well hold its commands in.
 fn windows_batch_file(program: &str) -> bool {
     windows_batch_file_in(
         program,
