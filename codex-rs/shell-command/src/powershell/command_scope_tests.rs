@@ -4,7 +4,9 @@ use pretty_assertions::assert_eq;
 #[test]
 fn a_remote_command_finds_no_names_and_no_scope_looks_none_up() {
     assert!(names_resolve(&["zz-d729-missing".to_string()], &[]));
-    let _scope = enter_powershell_command_scope(PowershellCommandScope::new(/*cwd*/ None, /*env*/ None));
+    let _scope = enter_powershell_command_scope(PowershellCommandScope::new(
+        /*cwd*/ None, /*env*/ None,
+    ));
     assert!(!names_resolve(&["git".to_string()], &[]));
     assert!(names_resolve(&[], &[]));
 }
