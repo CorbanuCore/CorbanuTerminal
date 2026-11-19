@@ -1234,6 +1234,7 @@ impl TurnContext {
                 windows_sandbox_level,
                 environment,
             );
+        crate::security::windows_unsandboxed::keep_configured_selection(&mut context, environment);
         context
     }
 
