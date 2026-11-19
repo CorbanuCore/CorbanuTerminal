@@ -84,7 +84,7 @@ async fn spawn_elevated(
         })
 }
 
-async fn try_spawn_elevated(
+pub(in crate::unified_exec::tests) async fn try_spawn_elevated(
     root: &Path,
     codex_home: &Path,
     argv: Vec<String>,

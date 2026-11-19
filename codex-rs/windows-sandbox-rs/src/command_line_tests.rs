@@ -2,19 +2,25 @@ use super::quote_crt_arg;
 use super::sandbox_command_line;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
+use std::path::Path;
+
+/// A working directory without any batch file in it.
+fn no_cwd() -> &'static Path {
+    Path::new("corbanu-sec-2718-missing-dir")
+}
 
 fn argv(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_string()).collect()
 }
 
 fn line(items: &[&str]) -> String {
-    sandbox_command_line(&argv(items), &HashMap::new()).expect("serialize")
+    sandbox_command_line(&argv(items), &HashMap::new(), no_cwd()).expect("serialize")
 }
 
 fn refused(items: &[&str], env: &HashMap<String, String>) -> String {
     format!(
         "{:#}",
-        sandbox_command_line(&argv(items), env).expect_err("must be refused")
+        sandbox_command_line(&argv(items), env, no_cwd()).expect_err("must be refused")
     )
 }
 
@@ -309,7 +315,8 @@ fn what_cannot_be_serialized_faithfully_is_refused() {
     assert!(refused(&["cmd", "/c", "dump.exe", "%PATH%"], &caret_var).contains("^PATH"));
     // Without a `%` that variable can't be reached.
     assert_eq!(
-        sandbox_command_line(&argv(&["cmd", "/c", "dump.exe", "x"]), &caret_var).expect("ok"),
+        sandbox_command_line(&argv(&["cmd", "/c", "dump.exe", "x"]), &caret_var, no_cwd())
+            .expect("ok"),
         "cmd /d /v:off /s /c \"dump.exe x\""
     );
 }
@@ -403,5 +410,189 @@ fn batch_files_refuse_what_cmd_would_act_on() {
     assert_eq!(
         line(&["C:\\scripts\\x.bat", "plain", "two words", ""]),
         "C:\\scripts\\x.bat plain \"two words\" \"\""
+    );
+}
+
+#[test]
+fn nested_cmd_and_start_are_refused_with_metacharacters() {
+    let none = HashMap::new();
+    // The #2718 reproducers.
+    assert!(refused(&["cmd", "/c", "cmd", "/c", "x", "a&b"], &none).contains("re-parse"));
+    assert!(refused(&["cmd", "/c", "start", "x.bat", "a&b"], &none).contains("re-parse"));
+    for program in [
+        "cmd",
+        "CMD",
+        "cmd.exe",
+        "Cmd.Exe.",
+        "C:\\Windows\\System32\\cmd.exe",
+        "c:/windows/system32/CMD.EXE",
+        "C:\\Windows\\System32\\cmd.exe::$DATA",
+        "C:\\Program Files\\x\\cmd.exe",
+        "cmd.exe/c",
+        "cmd/c",
+        "start",
+        "START",
+        "Start.",
+        "start/b",
+        "start+x",
+        "start\\..\\x.exe",
+        "cmd.exe+x",
+        " cmd.exe",
+        "cmd.exe ",
+        "C:cmd",
+        // Not a plain path: cmd may cut a command name from it at any
+        // whitespace or other character (#2718 review r2).
+        "C:\\Windows\\System32\\cmd.exe\u{0B}",
+        "cmd\u{0C}",
+        "cmd.exe\u{A0}",
+        "cmd\u{FF}x",
+        "npm\tx",
+        "x=y",
+        "@x",
+        "C:\\Program Files (x86)\\x\\tool.exe",
+        "C:\\Users\\Jos\u{e9}\\tool.exe",
+        // A `.`, `..` or empty component can make Windows read another one
+        // as the file name.
+        "C:\\Windows\\System32\\cmd.exe\\.",
+        "C:\\Windows\\System32\\cmd.exe\\x\\..",
+        "cmd.exe\\",
+        ".\\tool.exe",
+        "C:\\a\\\\cmd.exe",
+        "",
+    ] {
+        for arg in [
+            "a\"b", "%PATH%", "!x!", "a^b", "a&b", "a|b", "a<b", "a>b", "(x", "x)", "a\nb", "a\rb",
+        ] {
+            assert!(
+                refused(&["cmd", "/c", program, "/c", "dump.exe", arg], &none).contains("re-parse"),
+                "{program:?} {arg:?}"
+            );
+        }
+    }
+    // Without anything cmd acts on, they still run.
+    assert_eq!(
+        line(&["cmd", "/c", "cmd", "/c", "dump.exe", "two words"]),
+        "cmd /d /v:off /s /c \"cmd /c dump.exe ^\"two words^\"\""
+    );
+    assert_eq!(
+        line(&["cmd", "/c", "start", "/b", "dump.exe", "x"]),
+        "cmd /d /v:off /s /c \"start /b dump.exe x\""
+    );
+    // `if` and `for` run a command taken from their arguments (#2718 review).
+    for items in [
+        &["cmd", "/c", "if", "1==1", "cmd", "/c", "dump.exe", "a&b"][..],
+        &["cmd", "/c", "IF", "/i", "a==a", "npm", "a|b"],
+        &["cmd", "/c", "if", "exist", "f", "x.bat", "a&b"],
+        &["cmd", "/c", "if/i", "a==a", "dump.exe", "%X%"],
+        &[
+            "cmd", "/c", "if", "not", "defined", "X", "start", "x", "a&b",
+        ],
+        &["cmd", "/c", "for", "/f", "%i", "in", "(x)", "do", "y"],
+        &["cmd", "/c", "@start", "x", "a&b"],
+    ] {
+        assert!(refused(items, &none).contains("re-parse"), "{items:?}");
+    }
+    assert_eq!(
+        line(&["cmd", "/c", "if", "1==1", "dump.exe", "x"]),
+        "cmd /d /v:off /s /c \"if 1==1 dump.exe x\""
+    );
+    // Other names containing the same letters are programs, and so is a
+    // program in a directory named `cmd` or `start`.
+    for program in [
+        "cmdline.exe",
+        "restart.exe",
+        "startup",
+        "iffy.exe",
+        "format.exe",
+        "foo.cmd.exe",
+        "C:\\cmds\\x.exe",
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "C:\\Start Menu\\start\\x.exe",
+        "\\\\server\\share\\x-y_z.exe",
+        "\\tools\\x.exe",
+    ] {
+        let items = ["cmd", "/c", program, "a&b"];
+        assert_eq!(
+            crt_split(&cmd_unescape(cmd_tail(&line(&items)))),
+            argv(&items[2..]),
+            "{program:?}"
+        );
+    }
+    // A typed command line keeps its cmd meaning.
+    assert_eq!(
+        line(&["cmd", "/c", "cmd /c x a&b"]),
+        "cmd /d /v:off /s /c \"cmd /c x a&b\""
+    );
+}
+
+#[test]
+fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let cwd = root.path().join("work");
+    let bin = root.path().join("bin dir");
+    let quoted = root.path().join("quoted");
+    for dir in [&cwd, &bin, &quoted, &cwd.join("sub")] {
+        std::fs::create_dir_all(dir).expect("mkdir");
+    }
+    for file in [
+        bin.join("Shout.CMD"),
+        bin.join("npm.cmd"),
+        bin.join("git.exe"),
+        quoted.join("yarn.bat"),
+        cwd.join("local.cmd"),
+        // `sub\rel.bat` in `sub` on Windows; a file of that name elsewhere.
+        cwd.join("sub\\rel.bat"),
+    ] {
+        std::fs::write(file, "@echo off\r\n").expect("write");
+    }
+    // Two spellings of PATH: the child gets one of them, so both count.
+    let env = HashMap::from([
+        ("PATH".to_string(), "relative-missing".to_string()),
+        (
+            "Path".to_string(),
+            format!("{};;\"{}\"", bin.display(), quoted.display()),
+        ),
+    ]);
+    let run = |items: &[&str]| sandbox_command_line(&argv(items), &env, &cwd);
+    for items in [
+        ["cmd", "/c", "npm", "a&b"],
+        ["cmd", "/c", "Shout", "a&b"],
+        ["cmd", "/c", "yarn", "%X%"],
+        ["cmd", "/c", "C:npm", "a&b"],
+        ["cmd", "/c", "local", "a|b"],
+        ["cmd", "/c", "sub\\rel", "!x!"],
+    ] {
+        let error = format!("{:#}", run(&items).expect_err("must be refused"));
+        assert!(
+            error.contains("resolves to a batch file"),
+            "{items:?}: {error}"
+        );
+    }
+    // Whatever cmd might cut from a token that isn't a plain path (`npm+x`,
+    // `npm<VT>`) is refused before any lookup.
+    for program in ["npm\u{0B}", "npm/x", "npm+x", "npm[x"] {
+        let error = format!(
+            "{:#}",
+            run(&["cmd", "/c", program, "a&b"]).expect_err("must be refused")
+        );
+        assert!(error.contains("plain path"), "{program:?}: {error}");
+    }
+    // An absolute path (plain on Windows; elsewhere its `/` refuses it).
+    let rel = cwd.join("sub\\rel").display().to_string();
+    let error = format!(
+        "{:#}",
+        run(&["cmd", "/c", &rel, "(x)"]).expect_err("refused")
+    );
+    if cfg!(windows) {
+        assert!(error.contains("batch file"), "{error}");
+    }
+    // Plain arguments, and programs with no batch file, still run.
+    assert_eq!(
+        run(&["cmd", "/c", "npm", "install", "two words"]).expect("ok"),
+        "cmd /d /v:off /s /c \"npm install ^\"two words^\"\""
+    );
+    assert_eq!(
+        run(&["cmd", "/c", "git", "commit", "-m", "a&b"]).expect("ok"),
+        "cmd /d /v:off /s /c \"git commit -m a^&b\""
     );
 }

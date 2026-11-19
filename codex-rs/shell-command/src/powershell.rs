@@ -9,13 +9,40 @@ use crate::shell_detect::detect_shell_type;
 
 mod cli;
 
-/// Prefixed command for powershell shell calls to request UTF-8 console output.
-pub const UTF8_OUTPUT_PREFIX: &str =
-    "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n";
+macro_rules! utf8_output_prefix {
+    () => {
+        "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n"
+    };
+}
 
-/// `command` with [`UTF8_OUTPUT_PREFIX`] before its `-Command` script, which
-/// becomes one argument (PowerShell joins a script's arguments with spaces
-/// anyway). Any other command is returned as it is.
+macro_rules! module_hardening_prefix {
+    () => {
+        "$global:PSModuleAutoLoadingPreference = 'None'; & { foreach ($m in 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Security', 'Microsoft.PowerShell.Archive', 'CimCmdlets') { Import-Module -Name \"$PSHOME\\Modules\\$m\\$m.psd1\" -Global -ErrorAction SilentlyContinue } }\n"
+    };
+}
+
+/// Prefixed command for powershell shell calls to request UTF-8 console output.
+pub const UTF8_OUTPUT_PREFIX: &str = utf8_output_prefix!();
+
+/// D729 (A), D731 (#2661): module autoloading off, and the system modules
+/// PowerShell's own commands come from loaded from its install folder
+/// (`$PSHOME\Modules`, by full path), so a module a command wrote into a user
+/// module folder cannot replace a cmdlet the agent's script calls. Other
+/// modules load only when a script imports them (which asks under strict
+/// rules). Not covered: a profile script, which runs before this when the
+/// shell is started without `-NoProfile` (D729 (A) reads such a script in
+/// part where a profile exists); PowerShell processes, jobs and runspaces
+/// the script starts; command lines other than `-Command`. No .NET calls,
+/// so it also runs in Constrained Language Mode.
+pub const MODULE_HARDENING_PREFIX: &str = module_hardening_prefix!();
+
+/// What [`prefix_powershell_script_with_utf8`] puts before an agent script.
+pub const AGENT_SCRIPT_PREFIX: &str = concat!(module_hardening_prefix!(), utf8_output_prefix!());
+
+/// `command` with [`AGENT_SCRIPT_PREFIX`] (module hardening, then
+/// [`UTF8_OUTPUT_PREFIX`]) before its `-Command` script, which becomes one
+/// argument (PowerShell joins a script's arguments with spaces anyway). Any
+/// other command is returned as it is.
 pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
     let Some((
         _,
@@ -28,10 +55,10 @@ pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
         return command.to_vec();
     };
 
-    let script = if script.trim_start().starts_with(UTF8_OUTPUT_PREFIX) {
+    let script = if script.trim_start().starts_with(AGENT_SCRIPT_PREFIX) {
         script.into_owned()
     } else {
-        format!("{UTF8_OUTPUT_PREFIX}{script}")
+        format!("{AGENT_SCRIPT_PREFIX}{script}")
     };
 
     let mut prefixed = command[..start].to_vec();
@@ -249,7 +276,14 @@ fn is_powershellish_executable_available(powershell_or_pwsh_exe: &std::path::Pat
 }
 
 #[cfg(test)]
+#[cfg(windows)]
+#[path = "powershell/module_hardening_tests.rs"]
+mod module_hardening_tests;
+
+#[cfg(test)]
 mod tests {
+    use super::AGENT_SCRIPT_PREFIX;
+    use super::MODULE_HARDENING_PREFIX;
     use super::UTF8_OUTPUT_PREFIX;
     use super::extract_powershell_command;
     #[cfg(windows)]
@@ -330,8 +364,16 @@ mod tests {
             vec![
                 "powershell".to_string(),
                 "-Command".to_string(),
-                format!("{UTF8_OUTPUT_PREFIX}Write-Host hi"),
+                format!("{AGENT_SCRIPT_PREFIX}Write-Host hi"),
             ]
+        );
+    }
+
+    #[test]
+    fn agent_prefix_is_module_hardening_then_utf8_output() {
+        assert_eq!(
+            AGENT_SCRIPT_PREFIX,
+            format!("{MODULE_HARDENING_PREFIX}{UTF8_OUTPUT_PREFIX}")
         );
     }
 
@@ -340,7 +382,7 @@ mod tests {
         let cmd = vec![
             "powershell".to_string(),
             "-Command".to_string(),
-            format!("{UTF8_OUTPUT_PREFIX}Write-Host hi"),
+            format!("{AGENT_SCRIPT_PREFIX}Write-Host hi"),
         ];
 
         assert_eq!(prefix_powershell_script_with_utf8(&cmd), cmd);
@@ -382,7 +424,7 @@ mod tests {
                 "pwsh",
                 "-NoProfile",
                 "-Command",
-                &format!("{UTF8_OUTPUT_PREFIX}git status ; git push"),
+                &format!("{AGENT_SCRIPT_PREFIX}git status ; git push"),
             ])
         );
         for line in [
