@@ -39,6 +39,22 @@ fn assert_no_updater(daemon: &TestDaemon) {
     }
 }
 
+/// Bootstraps the daemon and checks that it reports self-update as off with
+/// the documented D564 message.
+fn bootstrap(daemon: &TestDaemon) -> Result<Value> {
+    let output = daemon
+        .command()
+        .args(["app-server", "daemon", "bootstrap"])
+        .output()?;
+    let stderr = String::from_utf8(output.stderr)?;
+    ensure!(output.status.success(), "daemon bootstrap failed: {stderr}");
+    let message = SELF_UPDATE_DISABLED
+        .strip_prefix("Error: ")
+        .context("message prefix")?;
+    assert!(stderr.contains(message), "bootstrap stderr: {stderr}");
+    Ok(serde_json::from_slice(&output.stdout)?)
+}
+
 #[test]
 fn managed_daemon_restarts_from_deleted_working_directory() -> Result<()> {
     let daemon = TestDaemon::new()?;
@@ -97,10 +113,10 @@ fn bootstrap_in_deep_codex_home_keeps_self_update_off() -> Result<()> {
         state.join("settings.json"),
         br#"{"shutdownGraceSeconds":0}"#,
     )?;
-    let result = daemon.lifecycle("bootstrap")?;
+    let result = bootstrap(&daemon)?;
     assert_eq!(result["autoUpdateEnabled"], false);
     assert_eq!(result["status"], "bootstrapped");
-    // The deep home still holds a working app-server socket.
+    // The server runs, and `version` reaches it through its socket in the deep home.
     signal(daemon.pid("app-server.pid")?, /*signal*/ 0)?;
     assert_eq!(daemon.lifecycle("version")?["status"], "running");
     assert_no_updater(&daemon);
@@ -120,7 +136,7 @@ fn bootstrap_never_binds_the_updater_socket() -> Result<()> {
     )?;
     let socket = state.join("app-server-updater.sock");
     std::fs::write(&socket, b"not a socket")?;
-    let result = daemon.lifecycle("bootstrap")?;
+    let result = bootstrap(&daemon)?;
     assert_eq!(result["status"], "bootstrapped");
     assert_eq!(result["autoUpdateEnabled"], false);
     assert_eq!(std::fs::read(socket)?, b"not a socket");
@@ -376,7 +392,17 @@ fn managed_start_succeeds_when_updater_record_is_invalid() -> Result<()> {
     let server_pid = daemon.pid("app-server.pid")?;
     assert_eq!(daemon.lifecycle("start")?["status"], "alreadyRunning");
     assert_eq!(daemon.pid("app-server.pid")?, server_pid);
-    // The unreadable record names no process to stop, and no updater replaced it.
+    // The unreadable record names no process to stop: restart (also with the
+    // updater preference off), bootstrap and stop report it and carry on.
+    assert_eq!(daemon.lifecycle("restart")?["status"], "restarted");
+    std::fs::write(
+        state_dir.join("settings.json"),
+        br#"{"updater":{"autoUpdateEnabled":false}}"#,
+    )?;
+    assert_eq!(daemon.lifecycle("restart")?["status"], "restarted");
+    assert_eq!(bootstrap(&daemon)?["status"], "bootstrapped");
+    assert_eq!(daemon.lifecycle("stop")?["status"], "stopped");
+    // No updater replaced the record.
     assert_eq!(
         std::fs::read(state_dir.join("app-server-updater.pid"))?,
         b"not a PID record"
@@ -411,6 +437,10 @@ fn wall_clock_shift_keeps_server_managed() -> Result<()> {
     Ok(())
 }
 
+// Upstream's `managed_start_keeps_updater_on_marker_mismatch_but_stops_it_for_pin`
+// is removed (D736): it only checked how the latest-version marker and a pin keep
+// or stop a running updater, and under D564 no updater ever runs.
+
 /// A saved `autoUpdateEnabled` preference is kept in settings but never
 /// starts an updater (D564).
 #[test]
@@ -427,7 +457,7 @@ fn restart_and_bootstrap_keep_self_update_off_despite_saved_preference() -> Resu
         )?;
         assert_eq!(daemon.lifecycle("restart")?["status"], "restarted");
         assert_no_updater(&daemon);
-        assert_eq!(daemon.lifecycle("bootstrap")?["autoUpdateEnabled"], false);
+        assert_eq!(bootstrap(&daemon)?["autoUpdateEnabled"], false);
         assert_no_updater(&daemon);
         let saved: Value = serde_json::from_slice(&std::fs::read(&settings)?)?;
         assert_eq!(saved["updater"]["autoUpdateEnabled"], enabled);
