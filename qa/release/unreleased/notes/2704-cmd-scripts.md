@@ -1,0 +1,3 @@
+## Security
+
+Commands run through cmd.exe (`cmd /c …`, `cmd /k …`, `cmd.exe /d /c …`, or cmd.exe reading its input) now ask for approval whenever a prompt or forbidden command rule exists, also inside PowerShell scripts, because rules cannot read the script cmd.exe runs: previously `cmd /c "git push"` ran unasked under a rule forbidding `git push`. The same applies to a batch file (`.cmd`, `.bat`, also a name such as `pnpm` found as one on `PATH`) given an argument with a character cmd.exe reads as more than text (`& | < > ^ % ! " ( )` or a line break). With approvals off (including Aggressive with approvals set to never) these commands are refused, and the prompt never offers an always-allow rule (#2704, D553).
