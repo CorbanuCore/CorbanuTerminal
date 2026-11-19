@@ -10,8 +10,8 @@
 //! `enable`, `mapfile`), asks whenever a prompt or forbidden rule exists.
 use super::*;
 
-const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
-const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
+pub(super) const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+pub(super) const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
 /// #2597: an exact allow rule for the command as the dropped argv would
 /// read it must not approve what really runs.
 const ALLOW_AND_FORBID: &str = r#"
@@ -20,7 +20,7 @@ prefix_rule(pattern=[["bash", "sh", "zsh"]], decision="allow")
 prefix_rule(pattern=["git", "push"], decision="forbidden")
 "#;
 
-fn argv(words: &[&str]) -> Vec<String> {
+pub(super) fn argv(words: &[&str]) -> Vec<String> {
     words.iter().map(ToString::to_string).collect()
 }
 
@@ -114,7 +114,7 @@ async fn failures_for(commands: Vec<Vec<String>>, rule_sets: &[&str]) -> Vec<Str
     failures
 }
 
-async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
+pub(super) async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
     let commands = scripts
         .iter()
         .flat_map(|script| spellings(script))

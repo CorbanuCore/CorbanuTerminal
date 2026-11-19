@@ -10,7 +10,7 @@ const SEED: u64 = 0x2548_b00c_5eed_0001;
 const CASES: usize = 300;
 const MAX_LAYERS: u64 = 4;
 /// How many constructs [`wrap`] chooses from.
-const CONSTRUCTS: u64 = 93;
+const CONSTRUCTS: u64 = 108;
 
 /// xorshift64*: deterministic, no dependency.
 struct Rng(u64);
@@ -218,6 +218,25 @@ fn wrap(rng: &mut Rng, inner: &str, delimiter: &str) -> String {
         // Review round 8: an escaped blank before `#`.
         91 => format!("echo \\ #; {inner}"),
         92 => format!("echo x\\\t#; {inner}"),
+        // D713: forms read precisely now, and attempts to hide a command
+        // or run code through them.
+        93 => format!("[[ -n $HOME ]] && {inner}"),
+        94 => format!("[ -f x ] || {inner}"),
+        95 => format!("echo \"$({inner}\n)\""),
+        96 if !inner.contains(['`', '\\', '\'', '"']) => format!("echo \"`{inner}`\""),
+        97 => format!("x=$HOME {inner}"),
+        98 => format!("echo ${{x:-$({inner}\n)}}"),
+        99 => format!("echo $((1 + $?)); {inner}"),
+        100 => format!("if [[ $x == y ]]; then {inner}\nfi"),
+        101 => format!("x={arithmetic}; [[ 1 -eq $x ]]"),
+        102 => format!("x={arithmetic}; echo $((x))"),
+        103 => format!("x='-v'; [ $x {arithmetic} ]"),
+        104 if inner.starts_with(|ch: char| ch.is_ascii_alphabetic()) => {
+            format!("true\n\\{inner}")
+        }
+        105 => format!("[[ -n x || sh -c {} ]]", single_quoted(inner)),
+        106 => format!("cmd=sh; $cmd -c {}", single_quoted(inner)),
+        107 => format!("for f in $(echo a); do {inner}\ndone"),
         81 => format!(
             "cat <<'{delimiter}' && echo $(case x in x) cat <<'{delimiter}'\n{delimiter}\n{inner}\nesac)\n{delimiter}"
         ),
@@ -306,15 +325,28 @@ async fn script_corpus_ask_rate() {
     };
     let corpus = std::fs::read_to_string(path).expect("corpus");
     let rules = r#"prefix_rule(pattern=["zz-unrelated"], decision="forbidden")"#;
+    // `CORBANU_SCRIPT_CORPUS_VERBOSE=1` lists the scripts that ask;
+    // `CORBANU_SCRIPT_CORPUS_SHELL` runs them with another shell than bash.
+    let verbose = std::env::var_os("CORBANU_SCRIPT_CORPUS_VERBOSE").is_some();
+    let shell = std::env::var("CORBANU_SCRIPT_CORPUS_SHELL").unwrap_or_else(|_| "bash".to_string());
     let (mut total, mut asks) = (0, 0);
     for script in corpus.split('\0').filter(|script| !script.is_empty()) {
         total += 1;
-        if !matches!(
-            check(script, rules, /*mode*/ 0).await,
-            ExecApprovalRequirement::Skip { .. }
-        ) {
+        let result = exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+            policy_src: Some(rules.to_string()),
+            command: vec![shell.clone(), "-lc".into(), script.into()],
+            approval_policy: AskForApproval::OnRequest,
+            permission_profile: PermissionProfile::Disabled,
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            prefix_rule: None,
+        })
+        .await;
+        if !matches!(result, ExecApprovalRequirement::Skip { .. }) {
             asks += 1;
+            if verbose {
+                eprintln!("ASK {script:?}");
+            }
         }
     }
-    eprintln!("CORPUS {asks} of {total} scripts ask");
+    eprintln!("CORPUS {asks} of {total} scripts ask ({shell})");
 }
