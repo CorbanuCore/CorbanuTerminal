@@ -1,0 +1,1 @@
+{"packages": ["codex-core"], "platforms": ["linux", "macos", "windows"], "test": true}
