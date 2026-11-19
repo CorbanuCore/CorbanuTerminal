@@ -9697,15 +9697,14 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     local_settings.transcript_mode = crate::transcript_mode::TranscriptMode::Terminal;
     local_settings.tui.alternate_screen = codex_config::types::AltScreenMode::Never;
     local_settings.tui.terminal_resize_reflow_max_rows = Some(2);
-    let started = app_server
-        .resume_thread_with_permission_overrides(
-            &local_settings,
-            config.clone(),
-            source_thread_id,
-            crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
-            crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
-        )
-        .await?;
+    let started = boxed_future!(app_server.resume_thread_with_permission_overrides(
+        &local_settings,
+        config.clone(),
+        source_thread_id,
+        crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+        crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
+    ))
+    .await?;
     assert!(app_server.has_older_history(source_thread_id));
     let selected_turn = started.turns[3].clone();
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -9876,13 +9875,13 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             /*limit*/ 1,
         )
         .await?;
-    app.handle_older_history_page(
+    boxed_future!(app.handle_older_history_page(
         &mut tui,
         &mut app_server,
         source_thread_id,
         &cursor,
         Ok(page),
-    )
+    ))
     .await?;
     let control = boxed_future!(app.handle_event(&mut tui, &mut app_server, selection)).await?;
 
@@ -10015,8 +10014,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         vec!["turn-0"]
     );
     tui.set_owned_screen(/*owned*/ true)?;
-    app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)
-        .await?;
+    boxed_future!(app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)).await?;
     assert_eq!(
         app.transcript_view.history,
         crate::pager_overlay::TranscriptHistoryState::LoadingOlder
