@@ -1,0 +1,1 @@
+{"packages": ["codex-app-server"], "platforms": ["linux", "macos", "windows"], "test": true}
