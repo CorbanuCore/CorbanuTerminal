@@ -28,7 +28,10 @@ from pathlib import Path
 
 PRICING_URL = "https://developers.openai.com/api/docs/pricing"
 CATALOGUE = Path(__file__).resolve().parents[1] / "codex-rs/models-manager/models.json"
-ROW = re.compile(r'\[1,\[\[0,"([^"]+)"\]((?:,\[0,(?:"[^"]*"|[0-9.]+)\])+)\]\]')
+# A table row: a model name, then price cells that are a number or "-". The
+# page also embeds option lists of the same shape (["surface", "lang", ...],
+# ["standard", "batch", ...]); their string cells keep them from matching.
+ROW = re.compile(r'\[1,\[\[0,"([^"]+)"\]((?:,\[0,(?:"-"|[0-9.]+)\])+)\]\]')
 CELL = re.compile(r'\[0,("[^"]*"|[0-9.]+)\]')
 
 

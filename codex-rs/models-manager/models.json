@@ -2863,7 +2863,7 @@
             "cached_input_milli_usd_per_million_tokens": 800,
             "cache_write_milli_usd_per_million_tokens": 10000
           },
-          "api_key_valid_through_utc": "2026-11-21T23:59:59.999Z"
+          "api_key_valid_through_utc": "2026-11-29T23:59:59.999Z"
         }
       },
       "display_name": "GPT-5.6-Sol",
