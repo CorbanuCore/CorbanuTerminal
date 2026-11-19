@@ -294,15 +294,6 @@ async fn run_command_under_sandbox(
         || config.features.use_legacy_landlock(),
         |state| state.use_legacy_landlock,
     );
-    // The parent can select MXC through a CLI override absent from the child's
-    // disk config. Preserve that backend rather than weakening enforcement.
-    // An explicit MXC launch fails closed if the native implementation is unavailable.
-    let windows_sandbox_type = if sandbox_state.as_ref().is_some_and(|state| state.use_mxc) {
-        codex_sandboxing::SandboxType::WindowsMxc
-    } else {
-        config.effective_local_windows_sandbox_type()
-    };
-
     match permission_profile.enforcement() {
         SandboxEnforcement::Managed => {}
         SandboxEnforcement::Disabled | SandboxEnforcement::External => {
@@ -322,6 +313,19 @@ async fn run_command_under_sandbox(
             handle_exit_status(child.wait().await?);
         }
     }
+
+    let windows_sandbox_type = match sandbox_type {
+        SandboxType::Windows => select_windows_sandbox_type(
+            sandbox_state.as_ref().map(|state| state.use_mxc),
+            config.effective_local_windows_sandbox_type(),
+            &permission_profile,
+            codex_core::external_agent_contract_armed(),
+        )?,
+        // Only the proxy's routing reads this on the other platforms.
+        #[cfg(target_os = "macos")]
+        SandboxType::Seatbelt => non_windows_sandbox_type(sandbox_state.as_ref(), &config),
+        SandboxType::Landlock => non_windows_sandbox_type(sandbox_state.as_ref(), &config),
+    };
 
     // Legacy Windows sandbox sessions emulate inherited stdio and exit the process.
     if let SandboxType::Windows = sandbox_type {
@@ -444,11 +448,6 @@ async fn run_command_under_sandbox(
                 .codex_linux_sandbox_exe
                 .expect("codex-linux-sandbox executable not found");
             let network_sandbox_policy = runtime_permission_profile.network_sandbox_policy();
-<<<<<<< HEAD
-            let mut args = create_linux_sandbox_command_args_for_permission_profile(
-||||||| 413492cd6c
-            let args = create_linux_sandbox_command_args_for_permission_profile(
-=======
             let (env, managed_network) = if let Some(network) = network.as_ref() {
                 let prepared =
                     network.prepare_for_optional_environment(env, /*environment_id*/ None)?;
@@ -456,8 +455,7 @@ async fn run_command_under_sandbox(
             } else {
                 (env, None)
             };
-            let args = create_linux_sandbox_command_args_for_permission_profile(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            let mut args = create_linux_sandbox_command_args_for_permission_profile(
                 command,
                 cwd.as_path(),
                 &runtime_permission_profile,
@@ -556,6 +554,53 @@ async fn run_command_under_sandbox(
     handle_exit_status(status);
 }
 
+/// D541 (a): which Windows backend `sandbox windows` uses. With
+/// `--sandbox-state-json` the state's `use_mxc` decides in both directions:
+/// `true` selects MXC (the parent can pick it through an override absent from
+/// this config), and `false` never does. When the state says `false` but this
+/// config would select MXC (`windows.sandbox = "mxc"`, `prefer_mxc` or
+/// `require_mxc`), the launch is refused rather than run under another backend
+/// than the parent checked. Whenever MXC is selected, Corbanu's MXC refusal runs
+/// as well (defence in depth for the parent's own check, #2160): MXC gets none of
+/// the protected-file read blocks.
+fn select_windows_sandbox_type(
+    state_use_mxc: Option<bool>,
+    configured: codex_sandboxing::SandboxType,
+    permission_profile: &PermissionProfile,
+    contract_armed: bool,
+) -> anyhow::Result<codex_sandboxing::SandboxType> {
+    use codex_sandboxing::SandboxType::WindowsMxc;
+
+    let selected = match state_use_mxc {
+        Some(true) => WindowsMxc,
+        Some(false) if configured == WindowsMxc => anyhow::bail!(
+            "--sandbox-state-json sets use_mxc = false, but this configuration selects the \
+             Windows MXC sandbox (`windows.sandbox = \"mxc\"`, `prefer_mxc` or `require_mxc`); \
+             refusing to launch under a different sandbox than the sandbox state names"
+        ),
+        Some(false) | None => configured,
+    };
+    codex_core::exec::refuse_mxc_without_corbanu_protections(
+        selected,
+        permission_profile,
+        contract_armed,
+        &[],
+    )?;
+    Ok(selected)
+}
+
+/// Upstream's selection, used off Windows for the proxy's routing only.
+fn non_windows_sandbox_type(
+    sandbox_state: Option<&codex_mcp::SandboxState>,
+    config: &Config,
+) -> codex_sandboxing::SandboxType {
+    if sandbox_state.is_some_and(|state| state.use_mxc) {
+        codex_sandboxing::SandboxType::WindowsMxc
+    } else {
+        config.effective_local_windows_sandbox_type()
+    }
+}
+
 #[cfg(target_os = "windows")]
 async fn run_command_under_windows_session(
     config: &Config,
@@ -569,10 +614,8 @@ async fn run_command_under_windows_session(
     use codex_protocol::config_types::WindowsSandboxLevel;
     use codex_windows_sandbox::WindowsSandboxProxySettingsMode;
     use codex_windows_sandbox::WindowsSandboxSessionRequest;
-    use codex_windows_sandbox::resolve_windows_deny_read_paths;
     use codex_windows_sandbox::spawn_windows_sandbox_session_for_level;
 
-<<<<<<< HEAD
     let windows_sandbox_level = WindowsSandboxLevel::from_config(config);
     // Every non-elevated level runs on the legacy restricted-token backend here.
     let backend_level = match windows_sandbox_level {
@@ -586,21 +629,6 @@ async fn run_command_under_windows_session(
     {
         eprintln!("warning: {warning}");
     }
-||||||| 413492cd6c
-=======
-    // Setup reconciles persistent deny ACLs against this list. An empty list
-    // would discard the profile's denies, including on subsequent launches.
-    let (mut file_system, _) = permission_profile.to_runtime_permissions();
-    file_system.remove_skip_missing_path_entries();
-    let file_system = file_system.materialize_project_roots_with_workspace_roots(&workspace_roots);
-    let deny_read_paths = match resolve_windows_deny_read_paths(&file_system, &cwd) {
-        Ok(paths) => paths,
-        Err(err) => {
-            eprintln!("windows sandbox failed: {err}");
-            std::process::exit(1);
-        }
-    };
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     let empty_paths: &[AbsolutePathBuf] = &[];
     // #304: the elevated backend's deny-read sync removes the entries of
@@ -609,6 +637,9 @@ async fn run_command_under_windows_session(
     let deny_read = if backend_level == WindowsSandboxLevel::Elevated {
         let (mut file_system, _) = permission_profile.to_runtime_permissions();
         file_system.remove_skip_missing_path_entries();
+        // Upstream: `:workspace_roots` entries resolve against this session's roots.
+        let file_system =
+            file_system.materialize_project_roots_with_workspace_roots(&workspace_roots);
         match codex_windows_sandbox::resolve_windows_deny_read_targets(&file_system, &cwd) {
             Ok(deny_read) => deny_read,
             Err(err) => {
@@ -626,29 +657,17 @@ async fn run_command_under_windows_session(
         command,
         cwd: cwd.as_path(),
         env_map: env,
-<<<<<<< HEAD
         windows_sandbox_level,
-        proxy_settings_mode: WindowsSandboxProxySettingsMode::Reconcile,
-||||||| 413492cd6c
-        windows_sandbox_level: WindowsSandboxLevel::from_config(config),
-        proxy_settings_mode: WindowsSandboxProxySettingsMode::Reconcile,
-=======
-        windows_sandbox_level: WindowsSandboxLevel::from_config(config),
+        // Upstream #38061: a debug session keeps the persisted offline proxy
+        // settings instead of rewriting them from its own environment.
         proxy_settings_mode: WindowsSandboxProxySettingsMode::Preserve,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         proxy_enforced: false,
         network_proxy_restricting_sid: None,
         timeout_ms: None,
         read_roots_override: None,
         read_roots_include_platform_defaults: false,
         write_roots_override: None,
-<<<<<<< HEAD
         deny_read_override: &deny_read,
-||||||| 413492cd6c
-        deny_read_paths_override: empty_paths,
-=======
-        deny_read_paths_override: &deny_read_paths,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         deny_write_paths_override: empty_paths,
         tty: false,
         stdin_open: true,
@@ -1341,6 +1360,151 @@ enabled = true
 
         assert_eq!(config.cwd.as_path(), cwd.path());
 
+        Ok(())
+    }
+
+    fn deny_read_profile(denied: &std::path::Path) -> PermissionProfile {
+        use codex_protocol::permissions::FileSystemAccessMode;
+        use codex_protocol::permissions::FileSystemPath;
+        use codex_protocol::permissions::FileSystemSandboxEntry;
+        use codex_protocol::permissions::FileSystemSandboxPolicy;
+        use codex_protocol::permissions::FileSystemSpecialPath;
+
+        PermissionProfile::from_runtime_permissions(
+            &FileSystemSandboxPolicy::restricted(vec![
+                FileSystemSandboxEntry {
+                    path: FileSystemPath::Special {
+                        value: FileSystemSpecialPath::Root,
+                    },
+                    access: FileSystemAccessMode::Read,
+                    missing_path_behavior: None,
+                },
+                FileSystemSandboxEntry {
+                    path: AbsolutePathBuf::from_absolute_path(denied)
+                        .expect("absolute path")
+                        .into(),
+                    access: FileSystemAccessMode::Deny,
+                    missing_path_behavior: None,
+                },
+            ]),
+            NetworkSandboxPolicy::Restricted,
+        )
+    }
+
+    /// D541 (a): with sandbox state, `use_mxc` decides in both directions;
+    /// without it the configuration does. Every MXC selection also passes
+    /// Corbanu's MXC refusal.
+    #[test]
+    fn d541_windows_backend_selection_follows_sandbox_state() {
+        use codex_sandboxing::SandboxType::WindowsMxc;
+        use codex_sandboxing::SandboxType::WindowsRestrictedToken;
+
+        let denied = TempDir::new().expect("tempdir");
+        let plain = PermissionProfile::read_only();
+        let denying = deny_read_profile(denied.path());
+        let select = |state, configured, profile: &PermissionProfile, armed| {
+            select_windows_sandbox_type(state, configured, profile, armed)
+        };
+
+        // `use_mxc = true` selects MXC even when this config would not.
+        for configured in [WindowsRestrictedToken, WindowsMxc] {
+            assert_eq!(
+                select(Some(true), configured, &plain, false).expect("MXC"),
+                WindowsMxc
+            );
+        }
+        // `use_mxc = false` never selects MXC; it refuses an MXC config.
+        assert_eq!(
+            select(Some(false), WindowsRestrictedToken, &plain, false).expect("restricted"),
+            WindowsRestrictedToken
+        );
+        let err = select(Some(false), WindowsMxc, &plain, false)
+            .expect_err("a false state must not run under a configured MXC sandbox");
+        assert!(err.to_string().contains("use_mxc = false"), "{err}");
+        // No sandbox state: the configuration decides.
+        assert_eq!(
+            select(None, WindowsRestrictedToken, &denying, true).expect("restricted"),
+            WindowsRestrictedToken
+        );
+        assert_eq!(
+            select(None, WindowsMxc, &plain, false).expect("MXC"),
+            WindowsMxc
+        );
+
+        // MXC (from the state or the config) is refused while a Corbanu
+        // protection it can't apply is active: an armed launch contract or a
+        // profile that denies reads.
+        for state in [Some(true), None] {
+            for (profile, armed) in [(&plain, true), (&denying, false)] {
+                let err = select(state, WindowsMxc, profile, armed)
+                    .expect_err("MXC without Corbanu's protections is refused");
+                assert!(err.to_string().contains("prefer_mxc"), "{err}");
+            }
+        }
+    }
+
+    /// D541 (a), with a real configuration: a child whose own config selects
+    /// MXC (`windows.sandbox = "mxc"`) refuses sandbox state that says
+    /// `use_mxc = false` instead of launching under MXC.
+    #[tokio::test]
+    async fn d541_false_sandbox_state_refuses_configured_mxc() -> anyhow::Result<()> {
+        use codex_sandboxing::SandboxType::WindowsMxc;
+
+        let codex_home = TempDir::new()?;
+        let cwd = TempDir::new()?;
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            "[windows]\nsandbox = \"mxc\"\n",
+        )?;
+        let state = codex_mcp::SandboxState {
+            permission_profile: PermissionProfile::read_only(),
+            codex_linux_sandbox_exe: None,
+            sandbox_cwd: codex_utils_path_uri::PathUri::from_abs_path(
+                &AbsolutePathBuf::from_absolute_path(cwd.path())?,
+            ),
+            use_legacy_landlock: false,
+            use_mxc: false,
+        };
+        let config = load_debug_sandbox_config_with_codex_home(
+            Vec::new(),
+            /*codex_linux_sandbox_exe*/ None,
+            DebugSandboxConfigOptions {
+                sandbox_state: crate::SandboxStateArgs {
+                    sandbox_state_json: Some(serde_json::to_string(&state)?),
+                    ..Default::default()
+                },
+                permissions_profile: None,
+                cwd: Some(cwd.path().to_path_buf()),
+                managed_requirements_mode: ManagedRequirementsMode::Ignore,
+                loader_overrides: LoaderOverrides::default(),
+            },
+            Some(codex_home.path().to_path_buf()),
+            CloudConfigBundleLoader::default(),
+            /*strict_config*/ false,
+        )
+        .await?;
+        let configured = config.effective_local_windows_sandbox_type();
+        assert_eq!(configured, WindowsMxc);
+
+        let err = select_windows_sandbox_type(
+            Some(state.use_mxc),
+            configured,
+            &state.permission_profile,
+            /*contract_armed*/ false,
+        )
+        .expect_err("a false state must not launch under the configured MXC sandbox");
+        assert!(err.to_string().contains("use_mxc = false"), "{err}");
+
+        // The same child with `use_mxc = true` selects MXC.
+        assert_eq!(
+            select_windows_sandbox_type(
+                Some(true),
+                configured,
+                &state.permission_profile,
+                /*contract_armed*/ false,
+            )?,
+            WindowsMxc
+        );
         Ok(())
     }
 }

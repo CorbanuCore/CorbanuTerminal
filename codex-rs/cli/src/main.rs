@@ -44,10 +44,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use supports_color::Stream;
 
-<<<<<<< HEAD
 mod account_cmd;
-||||||| 413492cd6c
-=======
 #[cfg(all(
     target_os = "linux",
     target_env = "musl",
@@ -56,17 +53,12 @@ mod account_cmd;
 #[global_allocator]
 static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod app_cmd;
-<<<<<<< HEAD
 mod claude_oauth;
-||||||| 413492cd6c
-=======
 mod config_override_args;
 mod daemon_install;
 mod daemon_telemetry;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod desktop_app;
 mod doctor;
@@ -78,16 +70,12 @@ mod exec_args_tests;
 mod exec_server_args_tests;
 mod marketplace_cmd;
 mod mcp_cmd;
-mod model_cmd;
-<<<<<<< HEAD
-mod nested_security;
-mod pfterminal_home;
-||||||| 413492cd6c
-=======
 mod mcp_login;
 mod migrate_nfs_db;
 mod migrate_rollouts;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+mod model_cmd;
+mod nested_security;
+mod pfterminal_home;
 mod plugin_cmd;
 mod queue_cmd;
 mod remote_control_cmd;
@@ -164,19 +152,13 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-<<<<<<< HEAD
-    /// Run Corbanu Terminal non-interactively.
-||||||| 413492cd6c
-    /// Run Codex non-interactively.
-=======
     /// Open the agent command center to browse and switch sessions.
     Agents(AgentsCommand),
 
     /// Internal: forward a local TCP socket through an HTTP/3 CONNECT proxy.
     #[clap(hide = true)]
     TcpTunnel(codex_tcp_tunnel::Args),
-    /// Run Codex non-interactively.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+    /// Run Corbanu Terminal non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
@@ -244,16 +226,6 @@ enum Subcommand {
     /// Manage Corbanu Terminal plugins.
     Plugin(PluginCli),
 
-<<<<<<< HEAD
-    /// Start Corbanu Terminal as an MCP server (stdio).
-    McpServer(McpServerCommand),
-
-||||||| 413492cd6c
-    /// Start Codex as an MCP server (stdio).
-    McpServer(McpServerCommand),
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     /// [experimental] Run the app server or related tooling.
     AppServer(AppServerCommand),
 
@@ -273,16 +245,8 @@ enum Subcommand {
     /// Diagnose local Corbanu Terminal installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
-<<<<<<< HEAD
     /// Run commands within a Corbanu Terminal-provided sandbox.
-    Sandbox(HostSandboxArgs),
-||||||| 413492cd6c
-    /// Run commands within a Codex-provided sandbox.
-    Sandbox(HostSandboxArgs),
-=======
-    /// Run commands within a Codex-provided sandbox.
     Sandbox(SandboxCommand),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 
     /// Debugging tools.
     Debug(DebugCommand),
@@ -418,24 +382,6 @@ struct ReviewCommand {
 }
 
 #[derive(Debug, Parser)]
-<<<<<<< HEAD
-struct McpServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
-    #[arg(long = "strict-config", default_value_t = false)]
-    strict_config: bool,
-}
-
-#[derive(Debug, Parser)]
-||||||| 413492cd6c
-struct McpServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
-    #[arg(long = "strict-config", default_value_t = false)]
-    strict_config: bool,
-}
-
-#[derive(Debug, Parser)]
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 struct DebugTraceReduceCommand {
     /// Trace bundle directory containing manifest.json and trace.jsonl.
     #[arg(value_name = "TRACE_BUNDLE")]
@@ -824,83 +770,7 @@ struct AppServerCommand {
     analytics_default_enabled: bool,
 
     #[command(flatten)]
-<<<<<<< HEAD
-    auth: codex_app_server::AppServerWebsocketAuthArgs,
-}
-
-#[derive(Debug, Parser)]
-struct ExecServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
-    #[arg(long = "strict-config", default_value_t = false)]
-    strict_config: bool,
-
-    /// Transport endpoint URL. Supported values: `ws://IP:PORT` (default), `stdio`, `stdio://`.
-    #[arg(long = "listen", value_name = "URL", conflicts_with = "remote")]
-    listen: Option<String>,
-
-    /// Register this exec-server as a remote environment using the given base URL.
-    #[arg(long = "remote", value_name = "URL", requires = "environment_id")]
-    remote: Option<String>,
-
-    /// Environment id to attach to when registering remotely.
-    #[arg(long = "environment-id", value_name = "ID")]
-    environment_id: Option<String>,
-
-    /// Human-readable environment name.
-    #[arg(long = "name", value_name = "NAME")]
-    name: Option<String>,
-
-    /// Use Agent Identity auth from CODEX_ACCESS_TOKEN for remote registration.
-    #[arg(long = "use-agent-identity-auth", requires = "remote")]
-    use_agent_identity_auth: bool,
-
-    /// Exit when the parent-owned standard-input pipe closes.
-    #[arg(
-        long = "exit-on-stdin-close",
-        env = codex_exec_server::CODEX_EXEC_SERVER_EXIT_ON_STDIN_CLOSE_ENV_VAR,
-        requires_if("true", "remote")
-    )]
-    exit_on_stdin_close: bool,
-||||||| 413492cd6c
-    auth: codex_app_server::AppServerWebsocketAuthArgs,
-}
-
-#[derive(Debug, Parser)]
-struct ExecServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
-    #[arg(long = "strict-config", default_value_t = false)]
-    strict_config: bool,
-
-    /// Transport endpoint URL. Supported values: `ws://IP:PORT` (default), `stdio`, `stdio://`.
-    #[arg(long = "listen", value_name = "URL", conflicts_with = "remote")]
-    listen: Option<String>,
-
-    /// Register this exec-server as a remote environment using the given base URL.
-    #[arg(long = "remote", value_name = "URL", requires = "environment_id")]
-    remote: Option<String>,
-
-    /// Environment id to attach to when registering remotely.
-    #[arg(long = "environment-id", value_name = "ID")]
-    environment_id: Option<String>,
-
-    /// Human-readable environment name.
-    #[arg(long = "name", value_name = "NAME")]
-    name: Option<String>,
-
-    /// Use Agent Identity auth from CODEX_ACCESS_TOKEN for remote registration.
-    #[arg(long = "use-agent-identity-auth", requires = "remote")]
-    use_agent_identity_auth: bool,
-
-    /// Exit when the parent-owned standard-input pipe closes.
-    #[arg(
-        long = "exit-on-stdin-close",
-        env = codex_exec_server::CODEX_EXEC_SERVER_EXIT_ON_STDIN_CLOSE_ENV_VAR,
-        requires_if("true", "remote")
-    )]
-    exit_on_stdin_close: bool,
-=======
     auth: codex_websocket_auth::WebsocketAuthArgs,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1043,7 +913,6 @@ fn handle_app_exit(
             eprintln!("ERROR: {message}");
             true
         }
-<<<<<<< HEAD
         ExitReason::Restart => {
             // No newline: the restarted process erases this line (#444).
             print!("{}", codex_tui::RESTART_BANNER);
@@ -1052,12 +921,7 @@ fn handle_app_exit(
             println!();
             anyhow::bail!("could not restart Corbanu Terminal ({err}); start it again yourself");
         }
-        ExitReason::UserRequested => false,
-||||||| 413492cd6c
-        ExitReason::UserRequested => false,
-=======
         ExitReason::UserRequested | ExitReason::TurnInterrupted => false,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     };
 
     let update_action = exit_info.update_action;
@@ -1099,15 +963,7 @@ fn run_update_action(
     }
     println!();
     let cmd_str = action.command_str();
-<<<<<<< HEAD
     println!("Updating Corbanu Terminal via `{cmd_str}`...");
-
-||||||| 413492cd6c
-    println!("Updating Codex via `{cmd_str}`...");
-
-=======
-    println!("Updating Codex via `{cmd_str}`...");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let status = {
         #[cfg(windows)]
         {
@@ -1334,7 +1190,7 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
-<<<<<<< HEAD
+    codex_build_info::initialize!();
     codex_tui::take_restart_marker();
     // #855: a vault folder or lock this process may not open is recorded in
     // the #616 home-access log, like an unreadable home.
@@ -1344,10 +1200,6 @@ fn main() -> anyhow::Result<()> {
     // Held until the run ends, when its folder is removed.
     let _nested_moderate_home = nested_moderate_home();
     pfterminal_home::exit_if_home_unreadable();
-||||||| 413492cd6c
-=======
-    codex_build_info::initialize!();
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
         // Finish polling the large subcommand dispatcher before polling interactive TUI events.
@@ -1358,18 +1210,12 @@ fn main() -> anyhow::Result<()> {
     })
 }
 
-<<<<<<< HEAD
 fn record_vault_storage_failure(operation: &str, path: &std::path::Path, error: &std::io::Error) {
     let _ =
         codex_core::home_access::record_home_access_failure(operation, path, &error.to_string());
 }
 
-async fn cli_main(
-||||||| 413492cd6c
-async fn cli_main(
-=======
 async fn dispatch_cli(
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     arg0_paths: Arg0DispatchPaths,
     remote_control_disabled: bool,
 ) -> anyhow::Result<Option<impl Future<Output = anyhow::Result<()>>>> {
@@ -1379,15 +1225,7 @@ async fn dispatch_cli(
         remote,
         mut interactive,
         subcommand,
-<<<<<<< HEAD
     } = parse_multitool_cli();
-
-||||||| 413492cd6c
-    } = MultitoolCli::parse();
-
-=======
-    } = config_override_args::try_parse_from(std::env::args_os())
-        .unwrap_or_else(|error| error.exit());
     // Retain the launch target through TUI exit, even if a launcher changes selection.
     let daemon_cli_executable = arg0_paths
         .codex_self_exe
@@ -1397,7 +1235,6 @@ async fn dispatch_cli(
         .clone()
         .and_then(|path| AbsolutePathBuf::from_absolute_path(path).ok());
     reject_unsupported_worktree_for_subcommand(interactive.shared.worktree, &subcommand)?;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     // Fold --enable/--disable into config overrides so they flow to all subcommands.
     let toggle_overrides = feature_toggles.to_overrides()?;
     root_config_overrides.raw_overrides.extend(toggle_overrides);
@@ -2505,18 +2342,19 @@ fn parse_multitool_cli() -> MultitoolCli {
                 "corbanu [OPTIONS] [PROMPT]\n       corbanu [OPTIONS] <COMMAND> [ARGS]",
             );
     }
-    let matches = command.try_get_matches().unwrap_or_else(|err| {
-        let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-        if let Some(message) = secret_argument_error(&err, &args) {
-            #[allow(clippy::print_stderr)]
-            {
-                eprintln!("{message}");
+    config_override_args::try_parse_with_command(command, std::env::args_os()).unwrap_or_else(
+        |err| {
+            let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+            if let Some(message) = secret_argument_error(&err, &args) {
+                #[allow(clippy::print_stderr)]
+                {
+                    eprintln!("{message}");
+                }
+                std::process::exit(2);
             }
-            std::process::exit(2);
-        }
-        err.exit()
-    });
-    MultitoolCli::from_arg_matches(&matches).unwrap_or_else(|err| err.exit())
+            err.exit()
+        },
+    )
 }
 
 /// D175: `corbanu login` and `corbanu account` read keys and tokens from
@@ -2590,427 +2428,11 @@ fn profile_v2_for_subcommand<'a>(
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-<<<<<<< HEAD
-            "--profile only applies to runtime commands, `corbanu tasknode`, `corbanu mcp`, and `corbanu model`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu tasknode`, `corbanu mcp`, `corbanu model`, `corbanu sandbox`, and `corbanu debug prompt-input`."
-||||||| 413492cd6c
-            "--profile only applies to runtime commands and `codex mcp`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex sandbox`, and `codex debug prompt-input`."
-=======
-            "--profile only applies to runtime commands, `codex mcp`, and `codex migrate-nfs-db`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex queue`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex migrate-nfs-db`, `codex sandbox`, and `codex debug prompt-input`."
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+            "--profile only applies to runtime commands, `corbanu tasknode`, `corbanu mcp`, `corbanu model`, and `corbanu migrate-nfs-db`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu queue`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu tasknode`, `corbanu mcp`, `corbanu model`, `corbanu migrate-nfs-db`, `corbanu sandbox`, and `corbanu debug prompt-input`."
         ),
     }
 }
 
-<<<<<<< HEAD
-async fn run_exec_server_command(
-    cmd: ExecServerCommand,
-    arg0_paths: &Arg0DispatchPaths,
-    root_config_overrides: &CliConfigOverrides,
-    strict_config: bool,
-) -> anyhow::Result<()> {
-    let codex_self_exe = arg0_paths
-        .codex_self_exe
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Corbanu Terminal executable path is not configured"))?;
-    let runtime_paths = codex_exec_server::ExecServerRuntimePaths::new(
-        codex_self_exe,
-        arg0_paths.codex_linux_sandbox_exe.clone(),
-    )?;
-    if let Some(base_url) = cmd.remote {
-        let environment_id = cmd
-            .environment_id
-            .ok_or_else(|| anyhow::anyhow!("--environment-id is required when --remote is set"))?;
-        let config = load_exec_server_config(root_config_overrides, strict_config).await?;
-        let (_otel, telemetry) = exec_server_telemetry::init(Some(&config));
-        let auth_provider =
-            load_exec_server_remote_auth_provider(&config, &base_url, cmd.use_agent_identity_auth)
-                .await?;
-        let mut remote_config = codex_exec_server::RemoteEnvironmentConfig::new(
-            base_url,
-            environment_id,
-            auth_provider,
-            config.http_client_factory(),
-        )?;
-        if let Some(name) = cmd.name {
-            remote_config.name = name;
-        }
-        let remote_config = remote_config.with_telemetry(telemetry);
-        let parent_lifetime = if cmd.exit_on_stdin_close {
-            exec_server_telemetry::ParentLifetime::StdinPipe
-        } else {
-            exec_server_telemetry::ParentLifetime::Independent
-        };
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
-        exec_server_telemetry::run_until_shutdown(
-            async move {
-                codex_exec_server::run_remote_environment_until_shutdown(
-                    remote_config,
-                    runtime_paths,
-                    async move {
-                        let _ = shutdown_receiver.await;
-                    },
-                )
-                .await
-            },
-            parent_lifetime,
-            exec_server_telemetry::ShutdownBehavior::Graceful(shutdown_sender),
-        )
-        .await?;
-        Ok(())
-    } else {
-        let config_result = load_exec_server_config(root_config_overrides, strict_config).await;
-        let config = if strict_config {
-            Some(config_result?)
-        } else {
-            config_result.ok()
-        };
-        let (_otel, telemetry) = exec_server_telemetry::init(config.as_ref());
-        let http_client_factory = config
-            .as_ref()
-            .map(codex_core::config::Config::http_client_factory)
-            .unwrap_or_else(|| {
-                codex_http_client::HttpClientFactory::new(
-                    codex_http_client::OutboundProxyPolicy::ReqwestDefault,
-                )
-            });
-        let listen_url = cmd
-            .listen
-            .unwrap_or_else(|| codex_exec_server::DEFAULT_LISTEN_URL.to_string());
-        exec_server_telemetry::run_until_shutdown(
-            async move {
-                codex_exec_server::run_main_with_telemetry(
-                    &listen_url,
-                    runtime_paths,
-                    telemetry,
-                    http_client_factory,
-                )
-                .await
-            },
-            exec_server_telemetry::ParentLifetime::Independent,
-            exec_server_telemetry::ShutdownBehavior::Immediate,
-        )
-        .await
-        .map_err(anyhow::Error::from_boxed)
-    }
-}
-
-async fn load_exec_server_remote_auth_provider(
-    config: &codex_core::config::Config,
-    base_url: &str,
-    use_agent_identity_auth: bool,
-) -> anyhow::Result<codex_api::SharedAuthProvider> {
-    if use_agent_identity_auth {
-        let agent_identity_jwt = read_codex_access_token_from_env().ok_or_else(|| {
-            anyhow::anyhow!("CODEX_ACCESS_TOKEN is required when --use-agent-identity-auth is set")
-        })?;
-        let auth_route_config = config.auth_route_config();
-        let auth = CodexAuth::from_agent_identity_jwt(
-            &agent_identity_jwt,
-            Some(&config.chatgpt_base_url),
-            &auth_route_config,
-        )
-        .await?;
-        return Ok(codex_model_provider::auth_provider_from_auth(&auth));
-    }
-
-    let auth = load_exec_server_remote_auth(
-        config,
-        "remote exec-server registration requires ChatGPT authentication or API key authentication; run `corbanu login` or set CODEX_API_KEY",
-    )
-    .await?;
-
-    if !is_supported_exec_server_remote_auth(&auth) {
-        anyhow::bail!(
-            "remote exec-server registration requires ChatGPT authentication or API key authentication; Agent Identity auth requires --use-agent-identity-auth"
-        );
-    }
-
-    if auth.is_api_key_auth() {
-        validate_api_key_remote_host(base_url)?;
-    }
-
-    Ok(codex_model_provider::auth_provider_from_auth(&auth))
-}
-
-fn is_supported_exec_server_remote_auth(auth: &CodexAuth) -> bool {
-    auth.is_chatgpt_auth() || auth.is_api_key_auth()
-}
-
-fn validate_api_key_remote_host(base_url: &str) -> anyhow::Result<()> {
-    let url = url::Url::parse(base_url)
-        .map_err(|err| anyhow::anyhow!("invalid remote exec-server registration URL: {err}"))?;
-    let host = url.host().ok_or_else(|| {
-        anyhow::anyhow!("remote exec-server registration URL must include a host")
-    })?;
-
-    let is_loopback = match &host {
-        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost"),
-        url::Host::Ipv4(ip) => ip.is_loopback(),
-        url::Host::Ipv6(ip) => ip.is_loopback(),
-    };
-    let is_openai_host = match &host {
-        url::Host::Domain(host) => ["openai.com", "openai.org"].into_iter().any(|domain| {
-            host.eq_ignore_ascii_case(domain)
-                || host.to_ascii_lowercase().ends_with(&format!(".{domain}"))
-        }),
-        _ => false,
-    };
-    let is_allowed = match url.scheme() {
-        "https" => is_loopback || is_openai_host,
-        "http" => is_loopback,
-        _ => false,
-    };
-
-    if !is_allowed {
-        anyhow::bail!(
-            "remote exec-server API-key authentication is restricted to HTTPS openai.com and openai.org hosts and subdomains or loopback hosts"
-        );
-    }
-
-    Ok(())
-}
-
-async fn load_exec_server_config(
-    root_config_overrides: &CliConfigOverrides,
-    strict_config: bool,
-) -> anyhow::Result<codex_core::config::Config> {
-    let cli_kv_overrides = root_config_overrides
-        .parse_overrides()
-        .map_err(anyhow::Error::msg)?;
-    Ok(ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .strict_config(strict_config)
-        .build()
-        .await?)
-}
-
-async fn load_exec_server_remote_auth(
-    config: &codex_core::config::Config,
-    missing_auth_error: &'static str,
-) -> anyhow::Result<codex_login::CodexAuth> {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ true).await;
-
-    let auth = match auth_manager.auth().await {
-        Some(auth) => auth,
-        None => {
-            auth_manager.reload().await;
-            auth_manager
-                .auth()
-                .await
-                .ok_or_else(|| anyhow::anyhow!(missing_auth_error))?
-        }
-    };
-
-    Ok(auth)
-}
-
-||||||| 413492cd6c
-async fn run_exec_server_command(
-    cmd: ExecServerCommand,
-    arg0_paths: &Arg0DispatchPaths,
-    root_config_overrides: &CliConfigOverrides,
-    strict_config: bool,
-) -> anyhow::Result<()> {
-    let codex_self_exe = arg0_paths
-        .codex_self_exe
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Codex executable path is not configured"))?;
-    let runtime_paths = codex_exec_server::ExecServerRuntimePaths::new(
-        codex_self_exe,
-        arg0_paths.codex_linux_sandbox_exe.clone(),
-    )?;
-    if let Some(base_url) = cmd.remote {
-        let environment_id = cmd
-            .environment_id
-            .ok_or_else(|| anyhow::anyhow!("--environment-id is required when --remote is set"))?;
-        let config = load_exec_server_config(root_config_overrides, strict_config).await?;
-        let (_otel, telemetry) = exec_server_telemetry::init(Some(&config));
-        let auth_provider =
-            load_exec_server_remote_auth_provider(&config, &base_url, cmd.use_agent_identity_auth)
-                .await?;
-        let mut remote_config = codex_exec_server::RemoteEnvironmentConfig::new(
-            base_url,
-            environment_id,
-            auth_provider,
-            config.http_client_factory(),
-        )?;
-        if let Some(name) = cmd.name {
-            remote_config.name = name;
-        }
-        let remote_config = remote_config.with_telemetry(telemetry);
-        let parent_lifetime = if cmd.exit_on_stdin_close {
-            exec_server_telemetry::ParentLifetime::StdinPipe
-        } else {
-            exec_server_telemetry::ParentLifetime::Independent
-        };
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::oneshot::channel();
-        exec_server_telemetry::run_until_shutdown(
-            async move {
-                codex_exec_server::run_remote_environment_until_shutdown(
-                    remote_config,
-                    runtime_paths,
-                    async move {
-                        let _ = shutdown_receiver.await;
-                    },
-                )
-                .await
-            },
-            parent_lifetime,
-            exec_server_telemetry::ShutdownBehavior::Graceful(shutdown_sender),
-        )
-        .await?;
-        Ok(())
-    } else {
-        let config_result = load_exec_server_config(root_config_overrides, strict_config).await;
-        let config = if strict_config {
-            Some(config_result?)
-        } else {
-            config_result.ok()
-        };
-        let (_otel, telemetry) = exec_server_telemetry::init(config.as_ref());
-        let http_client_factory = config
-            .as_ref()
-            .map(codex_core::config::Config::http_client_factory)
-            .unwrap_or_else(|| {
-                codex_http_client::HttpClientFactory::new(
-                    codex_http_client::OutboundProxyPolicy::ReqwestDefault,
-                )
-            });
-        let listen_url = cmd
-            .listen
-            .unwrap_or_else(|| codex_exec_server::DEFAULT_LISTEN_URL.to_string());
-        exec_server_telemetry::run_until_shutdown(
-            async move {
-                codex_exec_server::run_main_with_telemetry(
-                    &listen_url,
-                    runtime_paths,
-                    telemetry,
-                    http_client_factory,
-                )
-                .await
-            },
-            exec_server_telemetry::ParentLifetime::Independent,
-            exec_server_telemetry::ShutdownBehavior::Immediate,
-        )
-        .await
-        .map_err(anyhow::Error::from_boxed)
-    }
-}
-
-async fn load_exec_server_remote_auth_provider(
-    config: &codex_core::config::Config,
-    base_url: &str,
-    use_agent_identity_auth: bool,
-) -> anyhow::Result<codex_api::SharedAuthProvider> {
-    if use_agent_identity_auth {
-        let agent_identity_jwt = read_codex_access_token_from_env().ok_or_else(|| {
-            anyhow::anyhow!("CODEX_ACCESS_TOKEN is required when --use-agent-identity-auth is set")
-        })?;
-        let auth_route_config = config.auth_route_config();
-        let auth = CodexAuth::from_agent_identity_jwt(
-            &agent_identity_jwt,
-            Some(&config.chatgpt_base_url),
-            &auth_route_config,
-        )
-        .await?;
-        return Ok(codex_model_provider::auth_provider_from_auth(&auth));
-    }
-
-    let auth = load_exec_server_remote_auth(
-        config,
-        "remote exec-server registration requires ChatGPT authentication or API key authentication; run `codex login` or set CODEX_API_KEY",
-    )
-    .await?;
-
-    if !is_supported_exec_server_remote_auth(&auth) {
-        anyhow::bail!(
-            "remote exec-server registration requires ChatGPT authentication or API key authentication; Agent Identity auth requires --use-agent-identity-auth"
-        );
-    }
-
-    if auth.is_api_key_auth() {
-        validate_api_key_remote_host(base_url)?;
-    }
-
-    Ok(codex_model_provider::auth_provider_from_auth(&auth))
-}
-
-fn is_supported_exec_server_remote_auth(auth: &CodexAuth) -> bool {
-    auth.is_chatgpt_auth() || auth.is_api_key_auth()
-}
-
-fn validate_api_key_remote_host(base_url: &str) -> anyhow::Result<()> {
-    let url = url::Url::parse(base_url)
-        .map_err(|err| anyhow::anyhow!("invalid remote exec-server registration URL: {err}"))?;
-    let host = url.host().ok_or_else(|| {
-        anyhow::anyhow!("remote exec-server registration URL must include a host")
-    })?;
-
-    let is_loopback = match &host {
-        url::Host::Domain(host) => host.eq_ignore_ascii_case("localhost"),
-        url::Host::Ipv4(ip) => ip.is_loopback(),
-        url::Host::Ipv6(ip) => ip.is_loopback(),
-    };
-    let is_openai_host = match &host {
-        url::Host::Domain(host) => ["openai.com", "openai.org"].into_iter().any(|domain| {
-            host.eq_ignore_ascii_case(domain)
-                || host.to_ascii_lowercase().ends_with(&format!(".{domain}"))
-        }),
-        _ => false,
-    };
-    let is_allowed = match url.scheme() {
-        "https" => is_loopback || is_openai_host,
-        "http" => is_loopback,
-        _ => false,
-    };
-
-    if !is_allowed {
-        anyhow::bail!(
-            "remote exec-server API-key authentication is restricted to HTTPS openai.com and openai.org hosts and subdomains or loopback hosts"
-        );
-    }
-
-    Ok(())
-}
-
-async fn load_exec_server_config(
-    root_config_overrides: &CliConfigOverrides,
-    strict_config: bool,
-) -> anyhow::Result<codex_core::config::Config> {
-    let cli_kv_overrides = root_config_overrides
-        .parse_overrides()
-        .map_err(anyhow::Error::msg)?;
-    Ok(ConfigBuilder::default()
-        .cli_overrides(cli_kv_overrides)
-        .strict_config(strict_config)
-        .build()
-        .await?)
-}
-
-async fn load_exec_server_remote_auth(
-    config: &codex_core::config::Config,
-    missing_auth_error: &'static str,
-) -> anyhow::Result<codex_login::CodexAuth> {
-    let auth_manager =
-        AuthManager::shared_from_config(config, /*enable_codex_api_key_env*/ true).await;
-
-    let auth = match auth_manager.auth().await {
-        Some(auth) => auth,
-        None => {
-            auth_manager.reload().await;
-            auth_manager
-                .auth()
-                .await
-                .ok_or_else(|| anyhow::anyhow!(missing_auth_error))?
-        }
-    };
-
-    Ok(auth)
-}
-
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 async fn enable_feature_in_config(feature: &str) -> anyhow::Result<()> {
     FeatureToggles::validate_feature(feature)?;
     let codex_home = find_codex_home()?;
@@ -4056,14 +3478,8 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
         no_alt_screen,
         no_daemon,
         prompt,
-<<<<<<< HEAD
         account,
-        config_overrides,
-||||||| 413492cd6c
-        config_overrides,
-=======
         mut config_overrides,
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         ..
     } = subcommand_cli;
     let subcommand_auto_review = shared.auto_review;
@@ -4081,15 +3497,11 @@ fn merge_interactive_cli_flags(interactive: &mut TuiCli, subcommand_cli: TuiCli)
     if web_search {
         interactive.web_search = true;
     }
-<<<<<<< HEAD
     if account.is_some() {
         interactive.account = account;
     }
-||||||| 413492cd6c
-=======
     interactive.no_alt_screen |= no_alt_screen;
     interactive.no_daemon |= no_daemon;
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     if strict_config {
         interactive.strict_config = true;
     }
@@ -4122,7 +3534,6 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-<<<<<<< HEAD
     fn completion_scripts_register_corbanu_for_every_shell() {
         for shell in [
             Shell::Bash,
@@ -4151,8 +3562,9 @@ mod tests {
                 );
             }
         }
-||||||| 413492cd6c
-=======
+    }
+
+    #[test]
     fn interactive_tui_future_stays_bounded() {
         let future = run_interactive_tui(
             TuiCli::parse_from(["codex"]),
@@ -4209,7 +3621,6 @@ mod tests {
                 "Could not find an absolute update command `{command}` on PATH. Please update manually: https://developers.openai.com/codex/cli/"
             )
         );
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[tokio::test]
@@ -5085,7 +4496,6 @@ enabled = true
     }
 
     #[test]
-<<<<<<< HEAD
     fn error_report_format_preserves_context_chain() {
         use anyhow::Context;
 
@@ -5097,8 +4507,9 @@ enabled = true
             format_error_report(error),
             "failed to delete session: missing session"
         );
-||||||| 413492cd6c
-=======
+    }
+
+    #[test]
     fn sandbox_uninstall_respects_command_separator() {
         let cli = MultitoolCli::try_parse_from(["codex", "sandbox", "uninstall"]).expect("parse");
         assert!(matches!(
@@ -5128,7 +4539,6 @@ enabled = true
             assert!(command.subcommand.is_none());
             assert_eq!(command.host.command, vec!["uninstall", "--help"]);
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
@@ -5355,51 +4765,14 @@ enabled = true
             lines,
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
-<<<<<<< HEAD
-                "To continue this session, run corbanu resume 123e4567-e89b-12d3-a456-426614174000"
-                    .to_string(),
-||||||| 413492cd6c
-                "To continue this session, run codex resume 123e4567-e89b-12d3-a456-426614174000"
-                    .to_string(),
-=======
                 "To continue this session, run:".to_string(),
-                "  codex resume 123e4567-e89b-12d3-a456-426614174000".to_string(),
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                "  corbanu resume 123e4567-e89b-12d3-a456-426614174000".to_string(),
             ]
         );
     }
 
     #[test]
     fn format_exit_messages_includes_resume_hint_without_color() {
-<<<<<<< HEAD
-        let exit_info = sample_exit_info(
-            Some("123e4567-e89b-12d3-a456-426614174000"),
-            /*thread_name*/ None,
-        );
-        let lines = format_exit_messages(exit_info, /*color_enabled*/ false);
-        assert_eq!(
-            lines,
-            vec![
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run corbanu resume 123e4567-e89b-12d3-a456-426614174000"
-                    .to_string(),
-            ]
-        );
-||||||| 413492cd6c
-        let exit_info = sample_exit_info(
-            Some("123e4567-e89b-12d3-a456-426614174000"),
-            /*thread_name*/ None,
-        );
-        let lines = format_exit_messages(exit_info, /*color_enabled*/ false);
-        assert_eq!(
-            lines,
-            vec![
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run codex resume 123e4567-e89b-12d3-a456-426614174000"
-                    .to_string(),
-            ]
-        );
-=======
         insta::allow_duplicates! {
             for thread_name in [None, Some("")] {
                 let exit_info =
@@ -5408,11 +4781,10 @@ enabled = true
                 insta::assert_snapshot!(lines.join("\n"), @"
                 Token usage: total=2 input=0 output=2
                 To continue this session, run:
-                  codex resume 123e4567-e89b-12d3-a456-426614174000
+                  corbanu resume 123e4567-e89b-12d3-a456-426614174000
                 ");
             }
         }
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     #[test]
@@ -5427,7 +4799,7 @@ enabled = true
             vec![
                 "Token usage: total=2 input=0 output=2",
                 "To continue this session, run:",
-                "  \u{1b}[36mcodex resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
+                "  \u{1b}[36mcorbanu resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
             ]
         );
     }
@@ -5442,8 +4814,8 @@ enabled = true
         insta::assert_snapshot!(lines.join("\n"), @"
         Token usage: total=2 input=0 output=2
         To continue this session, run:
-          codex resume 123e4567-e89b-12d3-a456-426614174000
-        Or run codex resume and select my-thread.
+          corbanu resume 123e4567-e89b-12d3-a456-426614174000
+        Or run corbanu resume and select my-thread.
         ");
     }
 
@@ -5457,18 +4829,10 @@ enabled = true
         assert_eq!(
             lines,
             vec![
-<<<<<<< HEAD
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run corbanu resume, then select my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
-||||||| 413492cd6c
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run codex resume, then select my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
-=======
                 "Token usage: total=2 input=0 output=2",
                 "To continue this session, run:",
-                "  \u{1b}[36mcodex resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
-                "Or run \u{1b}[36mcodex resume\u{1b}[39m and select \u{1b}[36mmy-thread\u{1b}[39m.",
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+                "  \u{1b}[36mcorbanu resume 123e4567-e89b-12d3-a456-426614174000\u{1b}[39m",
+                "Or run \u{1b}[36mcorbanu resume\u{1b}[39m and select \u{1b}[36mmy-thread\u{1b}[39m.",
             ]
         );
     }

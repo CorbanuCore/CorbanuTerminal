@@ -12,9 +12,9 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use app_test_support::MockResponsesConfig;
+use app_test_support::create_command_execution_sse_response;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
-use app_test_support::create_shell_command_sse_response;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use tempfile::TempDir;
@@ -245,13 +245,13 @@ async fn pass_mode_runs_exec_with_aggressive_enforced() -> Result<()> {
 
     let outside_file = outside.join("written.txt");
     let server = create_mock_responses_server_sequence_unchecked(vec![
-        create_shell_command_sse_response(
+        create_command_execution_sse_response(
             vec!["cat".to_string(), canary_path.display().to_string()],
             /*workdir*/ None,
             Some(10_000),
             "vault",
         )?,
-        create_shell_command_sse_response(
+        create_command_execution_sse_response(
             vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -261,7 +261,7 @@ async fn pass_mode_runs_exec_with_aggressive_enforced() -> Result<()> {
             Some(10_000),
             "outside",
         )?,
-        create_shell_command_sse_response(
+        create_command_execution_sse_response(
             vec![
                 "curl".to_string(),
                 "-sS".to_string(),

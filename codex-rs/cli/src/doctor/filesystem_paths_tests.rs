@@ -45,6 +45,7 @@ fn deduplicates_literal_paths_without_expanding_globs_or_special_paths() {
             FileSystemSandboxEntry {
                 path: FileSystemPath::GlobPattern {
                     pattern: format!("{}/**/*.env", temp.path().display()),
+                    scan: None,
                 },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,
@@ -180,6 +181,7 @@ extends = "base"
         overall_status: check.status,
         codex_version: "test".to_string(),
         checks: vec![check],
+        corbanu_terminal_version: "0.0.0".to_string(),
     };
     insta::assert_snapshot!(
         "doctor_read_restricted_filesystem_paths",

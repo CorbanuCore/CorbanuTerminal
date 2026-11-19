@@ -491,8 +491,9 @@ pub async fn build_exec_request(
 /// the profile's own deny-read entries), so an MXC launch is refused whenever
 /// one of them would apply: a launch contract is armed, the profile denies
 /// some reads, or one of `folders` (command/exec's working folders, where
-/// D446 applies) is on a network.
-pub(crate) fn refuse_mxc_without_corbanu_protections(
+/// D446 applies) is on a network. Public for `sandbox windows`
+/// (`cli/src/debug_sandbox.rs`), which applies the same refusal.
+pub fn refuse_mxc_without_corbanu_protections(
     sandbox: SandboxType,
     permission_profile: &PermissionProfile,
     contract_armed: bool,

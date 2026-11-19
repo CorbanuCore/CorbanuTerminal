@@ -312,7 +312,7 @@ async fn a_session_refuses_its_chatgpt_account_once_another_process_removes_it()
     // Turn 1 runs a command that waits until the account is removed; the
     // request that would carry its output must never arrive.
     let server = app_test_support::create_mock_responses_server_sequence_unchecked(vec![
-        app_test_support::create_shell_command_sse_response(
+        app_test_support::create_command_execution_sse_response(
             vec![
                 "sh".to_string(),
                 "-c".to_string(),
