@@ -176,9 +176,14 @@ fn powershell_script_unreadable(command: &[String]) -> bool {
     )
 }
 
+/// #2601 (D553): elsewhere no PowerShell script is read, so any PowerShell
+/// command line (`pwsh -Command …`, a script from stdin or a file) may run
+/// commands rules cannot see.
 #[cfg(not(windows))]
-fn powershell_script_unreadable(_command: &[String]) -> bool {
-    false
+fn powershell_script_unreadable(command: &[String]) -> bool {
+    command
+        .first()
+        .is_some_and(|program| crate::security::tainted_action::policy_runs_powershell(program))
 }
 
 pub(crate) fn check_with_wrappers(

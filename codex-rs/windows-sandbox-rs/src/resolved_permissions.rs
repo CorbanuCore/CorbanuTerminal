@@ -245,10 +245,12 @@ fn windows_temp_env_roots(env_map: &HashMap<String, String>) -> Vec<PathBuf> {
     ["TEMP", "TMP"]
         .into_iter()
         .filter_map(|key| {
+            // D725: inheritance is already resolved in the command map.
+            // Never restore a server temp root that the command omitted.
             env_map
-                .get(key)
-                .map(|value| PathBuf::from(value.as_str()))
-                .or_else(|| std::env::var_os(key).map(PathBuf::from))
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(key))
+                .map(|(_, value)| PathBuf::from(value))
         })
         .filter(|path| path.is_absolute())
         .collect()

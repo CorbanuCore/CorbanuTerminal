@@ -36,6 +36,20 @@ pub(super) enum Role {
 /// The role of `program_and_args`, run after the launcher words `before`
 /// (`env A=1`, `sudo`) with input `stdin`.
 pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &CommandStdin) -> Role {
+    let role = argv_or_code_role(before, program_and_args, stdin);
+    // #2601: only where nothing else reads or asks: a script text read
+    // precisely (`eval git push alias:`) keeps its refusals.
+    if role == Role::Argv
+        && let Some((program, args)) = program_and_args.split_first()
+        && powershell_runs_code(program, args.iter().map(String::as_str))
+    {
+        return Role::Unread;
+    }
+    role
+}
+
+/// [`role`] before the PowerShell check.
+fn argv_or_code_role(before: &[String], program_and_args: &[String], stdin: &CommandStdin) -> Role {
     if before.iter().any(|word| assigns_code_variable(word)) {
         return Role::Unread;
     }
@@ -76,7 +90,9 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
 /// its program is one that runs more than its argv, those words may make it
 /// run anything.
 pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> bool {
-    if runs_shell(program) {
+    if runs_shell(program)
+        || powershell_runs_code(program, args.iter().flatten().map(String::as_str))
+    {
         return true;
     }
     match builtin_lookup_name(program).as_str() {
@@ -100,6 +116,76 @@ fn builtin_lookup_name(program: &str) -> String {
 /// #2585: a POSIX shell, fish, csh, or PowerShell.
 pub(super) fn runs_shell(program: &str) -> bool {
     policy_runs_shell(program) || policy_runs_powershell(program)
+}
+
+/// #2601 (D553): PowerShell commands (and their aliases) that rebind a
+/// command name or run code that is not their argv: text, a module or
+/// snap-in, a compiled type, a script file in a job.
+const POWERSHELL_CODE_COMMANDS: &[&str] = &[
+    "invoke-expression",
+    "iex",
+    "set-alias",
+    "sal",
+    "new-alias",
+    "nal",
+    "import-alias",
+    "ipal",
+    "new-psdrive",
+    "ndr",
+    "mount",
+    "import-module",
+    "ipmo",
+    "add-type",
+    "invoke-command",
+    "icm",
+    "start-job",
+    "sajb",
+    "start-threadjob",
+    "add-pssnapin",
+    "asnp",
+];
+
+/// #2601 (D553): a PowerShell command that may change what a later command
+/// name runs, or run code rules cannot read: one of
+/// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too), or any command given
+/// a literal path on the alias or function drive (`Set-Item alias:f git`,
+/// `Set-Location function:`), compared as [`powershell_fold`] does.
+/// Windows only: elsewhere no PowerShell script is read, so a PowerShell
+/// command line asks wherever a prompt or forbidden rule exists.
+///
+/// Not complete: PowerShell can also run code or bind a drive path from
+/// literal words in other ways (member invocation through `ForEach-Object`,
+/// pipeline-bound `-Path`); #2661 tracks reading it default-deny.
+fn powershell_runs_code<'a>(program: &str, mut args: impl Iterator<Item = &'a str>) -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    POWERSHELL_CODE_COMMANDS.contains(&powershell_fold(name).as_str())
+        || args.any(|arg| {
+            let arg = powershell_fold(arg);
+            ["alias:", "function:"]
+                .iter()
+                .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
+        })
+}
+
+/// `word` as PowerShell may compare it without case: lowercase, with the
+/// non-ASCII letters .NET folds to ASCII letters (`ı`, `İ`, `ſ`, the Kelvin
+/// sign) folded to them, and zero-width characters, which culture-aware
+/// comparisons ignore, dropped. Folding more only adds asks.
+fn powershell_fold(word: &str) -> String {
+    let mut folded = String::with_capacity(word.len());
+    for c in word.chars() {
+        match c {
+            '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}' => {}
+            '\u{131}' | '\u{130}' => folded.push('i'),
+            '\u{17f}' => folded.push('s'),
+            '\u{212a}' => folded.push('k'),
+            c => folded.extend(c.to_lowercase()),
+        }
+    }
+    folded
 }
 
 /// `NAME=value` for a variable that runs code ([`runs_code_from_variable`]).
