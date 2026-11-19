@@ -5,6 +5,7 @@ use super::ExecPolicyCommands;
 use super::commands_for_exec_policy;
 use crate::security::tainted_action::policy_runs_shell;
 use crate::security::tainted_action::policy_shell_script;
+use crate::security::tainted_action::policy_windows_program_name;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -420,13 +421,17 @@ pub(crate) fn check(
                 unread_script_prompts |= matches[reading_from..]
                     .iter()
                     .any(|rule_match| rule_match.decision() > Decision::Allow);
-            } else if reads_script
-                && (runs_unread_script(parsed_as) || runs_unread_cmd_script(parsed_as))
-                && any_strict_rule()
-            {
+            } else if reads_script && runs_unread_script(parsed_as) && any_strict_rule() {
                 // #2543: a script the parser does not read
-                // (`bash -c 'git push' x`, `bash -ec …`, `fish -c …`), or
-                // (#2704) one cmd.exe reads (`cmd /c "git push"`).
+                // (`bash -c 'git push' x`, `bash -ec …`, `fish -c …`).
+                matches.push(RuleMatch::HeuristicsRuleMatch {
+                    command: inner.to_vec(),
+                    decision: Decision::Prompt,
+                });
+                unread_script_prompts = true;
+            } else if reads_script && any_strict_rule() && runs_unread_cmd_script(parsed_as) {
+                // #2704: a script cmd.exe reads (`cmd /c "git push"`). Strict
+                // rules first: finding a batch file looks at `PATH`.
                 matches.push(RuleMatch::HeuristicsRuleMatch {
                     command: inner.to_vec(),
                     decision: Decision::Prompt,
@@ -599,29 +604,20 @@ fn runs_unread_script(command: &[String]) -> bool {
 
 /// #2704 (D553): whether `command` runs a script cmd.exe reads, which rules
 /// cannot see: cmd.exe itself, whatever its arguments (`/c`, `/k`, `/d/c`,
-/// or a script from its input), or a batch file (`.cmd`, `.bat`, also a
-/// bare name found as one on `PATH`) given an argument cmd.exe would read as
-/// more than a word when it re-reads the batch file's command line
+/// or a script from its input), or a program that may be a batch file
+/// (see [`may_be_batch_file`]) given an argument cmd.exe would read as more
+/// than a word when it re-reads the batch file's command line
 /// (`pnpm.cmd '&git push'`). Approximate on the side of yes.
 fn runs_unread_cmd_script(command: &[String]) -> bool {
     let Some((program, args)) = command.split_first() else {
         return false;
     };
-    let name = windows_program_name(program);
-    if name == "cmd" || name == "cmd.exe" {
+    // As Windows finds it (`C:\Windows\System32\CMD.EXE.`, `C:cmd`).
+    let name = policy_windows_program_name(program);
+    if name == "cmd" {
         return true;
     }
-    if !args.iter().any(|arg| cmd_rereads(arg)) {
-        return false;
-    }
-    name.ends_with(".cmd") || name.ends_with(".bat") || resolves_to_batch_file(program)
-}
-
-/// `program`'s file name as Windows finds it: lowercase, without trailing
-/// dots and spaces (`C:\Windows\System32\CMD.EXE.` is `cmd.exe`).
-fn windows_program_name(program: &str) -> String {
-    let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
-    name.trim_end_matches(['.', ' ']).to_ascii_lowercase()
+    args.iter().any(|arg| cmd_rereads(arg)) && may_be_batch_file(program, &name)
 }
 
 /// Whether cmd.exe may read `arg` as more than one plain word: a command
@@ -631,22 +627,49 @@ fn cmd_rereads(arg: &str) -> bool {
     arg.contains(['&', '|', '<', '>', '^', '%', '!', '"', '(', ')', '\r', '\n'])
 }
 
-/// Whether `program` is found as a batch file, as PowerShell finds `pnpm`
-/// on `PATH` as `pnpm.cmd`.
-#[cfg(windows)]
-fn resolves_to_batch_file(program: &str) -> bool {
-    which::which(program).is_ok_and(|path| {
-        path.extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| {
-                extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat")
-            })
-    })
+/// Whether `program` (Windows file name `name`) may run as a batch file:
+/// named `.cmd` or `.bat`, or on Windows any program not named `.exe` or
+/// `.com` and not found as one on `PATH` the way PowerShell finds a bare
+/// name (`pnpm` as `pnpm.cmd`). A path (`.\build`, `C:\p\x`) or a name
+/// not found may be a batch file the command's folder holds or a script
+/// creates first.
+fn may_be_batch_file(program: &str, name: &str) -> bool {
+    name.ends_with(".cmd")
+        || name.ends_with(".bat")
+        || (cfg!(windows) && !found_as_program(program))
 }
 
-/// Elsewhere a program is never a batch file cmd.exe reads.
-#[cfg(not(windows))]
-fn resolves_to_batch_file(_program: &str) -> bool {
+/// Whether `program` is a bare name PowerShell finds on `PATH` as an
+/// `.exe` or `.com` file, or is named as one. Only absolute local `PATH`
+/// folders are looked in, never a folder the command names; a relative or
+/// network folder before the match leaves it unknown.
+fn found_as_program(program: &str) -> bool {
+    let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    if lower.ends_with(".exe") || lower.ends_with(".com") {
+        return true;
+    }
+    if program.contains(['/', '\\', ':', '.']) {
+        return false;
+    }
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    for dir in std::env::split_paths(&path) {
+        let text = dir.to_string_lossy();
+        if !dir.is_absolute() || text.starts_with(['\\', '/']) {
+            return false;
+        }
+        for extension in extensions
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+        {
+            if dir.join(format!("{program}{extension}")).is_file() {
+                return extension.eq_ignore_ascii_case(".exe")
+                    || extension.eq_ignore_ascii_case(".com");
+            }
+        }
+    }
     false
 }
 

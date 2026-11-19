@@ -288,6 +288,13 @@ pub(crate) fn policy_program_name(program: &str) -> String {
     names::launcher_name_for(program, names::PLATFORM).into_owned()
 }
 
+/// #2704: the name `program` runs as on Windows (its file name, folded, a
+/// drive and trailing dots and spaces dropped, `.exe` dropped), on every
+/// platform, for finding cmd.exe and batch files.
+pub(crate) fn policy_windows_program_name(program: &str) -> String {
+    names::launcher_name_for(program, names::NameCase::Windows).into_owned()
+}
+
 /// #2585: whether `program` may run PowerShell on this platform (see
 /// [`names`]), which runs any command its words give it.
 pub(crate) fn policy_runs_powershell(program: &str) -> bool {
