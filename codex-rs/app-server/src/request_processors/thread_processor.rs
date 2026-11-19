@@ -41,6 +41,7 @@ use codex_app_server_protocol::ThreadSectionMoveResponse;
 use codex_config::types::WindowsSandboxModeToml;
 use codex_extension_api::ExtensionDataInit;
 use codex_extension_api::ThreadIdleCause;
+use codex_otel::auth_storage::AuthStorageOriginator;
 use codex_protocol::AgentPath;
 use codex_protocol::SanitizedGitUrl;
 use codex_protocol::config_types::MultiAgentMode;
@@ -995,6 +996,9 @@ impl ThreadRequestProcessor {
                 )
                 .await
         };
+        // Task-locals do not cross the spawn; carry the request's storage originator.
+        // Boxed so the scope wrapper does not copy the large revert future on the stack.
+        let revert = AuthStorageOriginator::current().scope(Box::pin(revert));
         let (response, thread_id) = self
             .background_tasks
             .spawn(revert.instrument(tracing::Span::current()))
