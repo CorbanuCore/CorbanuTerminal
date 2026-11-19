@@ -154,9 +154,10 @@ async fn tmpdir_uses_command_environment_over_rpc(
     } else {
         None
     };
-    let root = TempDir::new()?;
+    eprintln!("TEMP diagnostic: helpers staged");
+    let root = TempDir::new().context("create TEMP fixture")?;
     #[cfg(windows)]
-    protect_temp_fixture_root(root.path())?;
+    protect_temp_fixture_root(root.path()).context("protect TEMP fixture")?;
     let command_temp = root.path().join("command temp");
     let server_temp = root.path().join("server temp");
     std::fs::create_dir(&command_temp)?;
@@ -205,6 +206,9 @@ async fn tmpdir_uses_command_environment_over_rpc(
             format!("\"{}\"", outside.display()),
         ),
     ]);
+    eprintln!(
+        "TEMP diagnostic: RPC server ready; command={command_temp:?}, server={server_temp:?}"
+    );
     // Raw params have no TEMP. The executor must finish the env policy before
     // resolving permissions. No inheritance: omitted TMP must not grant server_temp.
     let mut configured_temp = HashMap::from([(
@@ -249,6 +253,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
             network_proxy: None,
         })
         .await?;
+    eprintln!("TEMP diagnostic: launch completed");
     assert_eq!(started.sandbox_type, Some(expected_type));
     let (stdout, stderr, code, exited) = collect_process_output_from_events_with_timeout(
         started.process,
@@ -259,6 +264,9 @@ async fn tmpdir_uses_command_environment_over_rpc(
         (code, exited),
         (Some(0), true),
         "unexpected launch result, stderr: {stderr}"
+    );
+    eprintln!(
+        "TEMP diagnostic: stdout={stdout:?}; stderr={stderr:?}; code={code:?}; exited={exited}"
     );
     let actual_temp = std::path::PathBuf::from(
         stdout
@@ -289,7 +297,10 @@ async fn tmpdir_uses_command_environment_over_rpc(
     }
     assert_eq!(
         (
-            std::fs::read_to_string(actual_temp.join("allowed.txt"))?
+            std::fs::read_to_string(actual_temp.join("allowed.txt"))
+                .with_context(|| format!(
+                    "read private TEMP child {actual_temp:?}; stderr={stderr:?}"
+                ))?
                 .trim_end()
                 .to_owned(),
             std::fs::read_to_string(outside)?
