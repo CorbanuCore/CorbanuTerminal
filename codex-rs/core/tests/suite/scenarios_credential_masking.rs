@@ -7,8 +7,10 @@ use core_test_support::exec_server::ExecServerProcess;
 use core_test_support::managed_network_requirements_loader;
 use core_test_support::responses::ev_function_call;
 use core_test_support::skip_if_sandbox;
+use futures::FutureExt;
 use pretty_assertions::assert_eq;
 use pretty_assertions::assert_ne;
+use std::panic::AssertUnwindSafe;
 
 #[test_case::test_case(false, false, None; "builtin_providers")]
 #[test_case::test_case(true, false, None; "configured_provider")]
@@ -54,7 +56,7 @@ async fn remote_credential_masking_request_history(
     executor_env.extend(executor_startup_env.map(|key| (key, "/dev/null")));
     let executor = ExecServerProcess::start_with_env(&executor_env).await?;
     let server = start_mock_server().await;
-    let test = test_codex()
+    let mut builder = test_codex()
         .with_home(home)
         .with_exec_server_url(executor.websocket_url.clone())
         .with_cloud_config_bundle(managed_network_requirements_loader())
@@ -110,9 +112,26 @@ credential_masking = true
         .with_model_info_override("gpt-5.5", |model| {
             model.tool_mode = Some(ToolMode::Direct);
             model.use_responses_lite = false;
-        })
-        .build(&server)
-        .await?;
+        });
+    if configured_provider {
+        // D612 (#2629): Corbanu's credential engine does not broker configured
+        // providers, so config load refuses one before any command runs.
+        // The test harness panics when the config fails to load.
+        let error = match AssertUnwindSafe(builder.build(&server))
+            .catch_unwind()
+            .await
+        {
+            Ok(Ok(_)) => anyhow::bail!("a config with an unbrokered credential provider loaded"),
+            Ok(Err(error)) => format!("{error:#}"),
+            Err(panic) => panic.downcast_ref::<String>().cloned().unwrap_or_default(),
+        };
+        assert!(
+            error.contains("unsupported network proxy credential provider `vendor` (VENDOR_TOKEN)"),
+            "{error}"
+        );
+        return Ok(());
+    }
+    let test = builder.build(&server).await?;
     let mut command = if !expect_masking {
         // Keep the real credential out of the model-visible command text.
         fs::write(test.workspace_path("expected-api-key"), credential)?;

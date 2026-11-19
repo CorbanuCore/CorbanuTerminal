@@ -2010,7 +2010,7 @@ async fn credential_masking_respects_config_precedence() -> std::io::Result<()> 
 [features.network_proxy]
 enabled = false
 [features.network_proxy.credentials.vendor]
-env = ["VENDOR_TOKEN"]
+env = ["GITHUB_TOKEN"]
 patterns = ["vendor_[a-z]{8}"]
 url_prefixes = ["https://api.vendor.example"]
 auth = ["bearer"]"#,
@@ -2108,15 +2108,132 @@ auth = ["bearer"]"#,
     Ok(())
 }
 
+/// D612 (#2629): a configured credential provider naming a source Corbanu's
+/// credential engine does not broker fails config load with an actionable
+/// error, wherever the provider comes from; built-in sources load as before.
+#[tokio::test]
+async fn unbrokered_credential_providers_are_rejected_at_config_load() -> std::io::Result<()> {
+    const VENDOR: &str = "\n[features.network_proxy.credentials.vendor]\n\
+        env = [\"VENDOR_TOKEN\"]\n\
+        patterns = [\"vendor_[a-z]{8}\"]\n\
+        url_prefixes = [\"https://api.vendor.example\"]\n";
+    const BUILT_IN: &str = "\n[features.network_proxy.credentials.enterprise]\n\
+        env = [\"GH_ENTERPRISE_TOKEN\"]\n\
+        patterns = [\"ghp_[A-Za-z0-9]{36}\"]\n\
+        url_prefixes = [\"https://github.example.com\"]\n";
+    for (name, source, profile_source, rejected) in [
+        (
+            "credential masking",
+            format!("[features]\ncredential_masking = true\n{VENDOR}"),
+            None,
+            true,
+        ),
+        (
+            "network proxy feature",
+            format!("[features.network_proxy]\nenabled = true\ncredential_broker = true\n{VENDOR}"),
+            None,
+            true,
+        ),
+        (
+            "selected profile",
+            "[features]\ncredential_masking = true\n".to_string(),
+            Some(VENDOR),
+            true,
+        ),
+        (
+            "built-in source (#2630)",
+            format!(
+                "[features]\ncredential_masking = true\n[features.network_proxy]\nenabled = true\n{BUILT_IN}"
+            ),
+            None,
+            false,
+        ),
+        (
+            "unused by a disabled feature",
+            format!(
+                "[features]\ncredential_masking = false\n[features.network_proxy]\nenabled = false\n{VENDOR}"
+            ),
+            None,
+            false,
+        ),
+    ] {
+        let home = tempdir()?;
+        let source = format!("openai_base_url = 'https://api.example.test/v1'\n{source}");
+        tokio::fs::write(home.path().join(CONFIG_TOML_FILE), &source).await?;
+        let mut loader_overrides = LoaderOverrides::without_managed_config_for_tests();
+        if let Some(profile_source) = profile_source {
+            let profile_path = home.path().join("work.config.toml");
+            tokio::fs::write(&profile_path, profile_source).await?;
+            loader_overrides.user_config_path = Some(
+                AbsolutePathBuf::from_absolute_path(&profile_path).expect("profile config path"),
+            );
+            loader_overrides.user_config_profile = Some("work".parse().expect("profile-v2 name"));
+        }
+        let result = ConfigBuilder::default()
+            .loader_overrides(loader_overrides)
+            .codex_home(home.path().to_path_buf())
+            .harness_overrides(ConfigOverrides {
+                cwd: Some(home.path().to_path_buf()),
+                permission_profile: Some(PermissionProfile::Managed {
+                    file_system: ManagedFileSystemPermissions::Unrestricted,
+                    network: NetworkSandboxPolicy::Enabled,
+                }),
+                ..Default::default()
+            })
+            .build()
+            .await;
+        if !rejected {
+            let config = result.unwrap_or_else(|error| panic!("{name}: {error}"));
+            if name.starts_with("built-in") {
+                let proxy = config
+                    .permissions
+                    .network
+                    .as_ref()
+                    .expect("proxy settings")
+                    .build_config_state_for_spec(Platform::native())?
+                    .config;
+                assert_eq!(
+                    proxy.credential_providers.keys().collect::<Vec<_>>(),
+                    vec!["enterprise"],
+                    "{name}"
+                );
+            }
+            continue;
+        }
+        let error = result
+            .err()
+            .unwrap_or_else(|| panic!("{name}: config loaded"));
+        let message = error.to_string();
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::InvalidInput,
+            "{name}: {message}"
+        );
+        assert!(
+            message.contains(
+                "unsupported network proxy credential provider `vendor` (VENDOR_TOKEN): \
+                 Corbanu's credential engine does not broker these environment variables."
+            ),
+            "{name}: {message}"
+        );
+        assert!(
+            message.contains("Remove them from [features.network_proxy.credentials]"),
+            "{name}: {message}"
+        );
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn credential_broker_ambiguity_guard_survives_permission_profile_selection()
 -> anyhow::Result<()> {
     for (key, other_key, other_value, ambiguous, credential_masking) in [
         ("GH_HOST", "gh_host", "second.example", true, false),
         ("VENDOR_HOST", "vendor_host", "second.example", true, false),
+        // D612 (#2629): a provider may only name sources Corbanu brokers.
         (
-            "VENDOR_PASSWORD",
-            "vendor_password",
+            "GITHUB_TOKEN",
+            "github_token",
             "second.example",
             true,
             false,
@@ -2137,7 +2254,7 @@ credential_masking = {credential_masking}
 enabled = true
 credential_broker = true
 [features.network_proxy.credentials.vendor]
-env = ["VENDOR_PASSWORD"]
+env = ["GITHUB_TOKEN"]
 patterns = ["pin_[a-z]{{8}}"]
 url_prefixes = ["https://api.vendor.example"]
 url_prefix_from_env = "VENDOR_HOST"

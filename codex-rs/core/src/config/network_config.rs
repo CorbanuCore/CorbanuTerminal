@@ -147,6 +147,13 @@ impl PreparedNetworkConfig {
         requirements: Option<Sourced<NetworkConstraints>>,
         effective_permission_profile: &PermissionProfile,
     ) -> std::io::Result<NetworkProxySpec> {
+        // D612 (#2629): refuse configured credential providers Corbanu cannot
+        // broker here, at config load. The proxy still withholds their values
+        // at run time as a second guard.
+        codex_network_proxy::reject_unbrokered_credential_providers(
+            &self.configured_proxy.credential_providers,
+        )
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
         let (requirements, source) = match requirements {
             Some(Sourced { value, source }) => (Some(value), Some(source)),
             None => (None, None),
