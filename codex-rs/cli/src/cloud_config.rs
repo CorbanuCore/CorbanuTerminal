@@ -18,15 +18,24 @@ pub async fn load_config(
     config_overrides: &CliConfigOverrides,
     loader_overrides: LoaderOverrides,
 ) -> Result<Config> {
-    let mut config = config_builder(
+    load_config_with_harness_overrides(
         config_overrides,
         loader_overrides,
         ConfigOverrides::default(),
     )
-    .await?
-    .build()
     .await
-    .context("failed to load configuration")?;
+}
+
+pub async fn load_config_with_harness_overrides(
+    config_overrides: &CliConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    harness_overrides: ConfigOverrides,
+) -> Result<Config> {
+    let mut config = config_builder(config_overrides, loader_overrides, harness_overrides)
+        .await?
+        .build()
+        .await
+        .context("failed to load configuration")?;
     config.config_layer_stack.ensure_config_server_applied()?;
     EmbeddedNetworkPolicy::default().activate(&mut config);
     Ok(config)

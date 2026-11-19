@@ -15,6 +15,7 @@ use codex_login::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
 use codex_login::login_with_bedrock_access_keys;
 use codex_protocol::shell_environment::OPENAI_FEDERATION_RULE_ID_ENV_VAR;
 use codex_protocol::shell_environment::OPENAI_IDENTITY_TOKEN_FILE_ENV_VAR;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -252,6 +253,52 @@ fn logout_clears_only_the_selected_bedrock_provider() -> Result<()> {
         assert_eq!(actual_config, expected_config);
     }
 
+    Ok(())
+}
+
+/// D737: `login`, `login status` and `logout` load a config whose model is
+/// outside the selected provider's catalog; every other command keeps the
+/// fail-closed model/provider pair check.
+#[test]
+fn credential_commands_skip_the_model_provider_pair_check() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = "cli_auth_credentials_store = \"file\"\n\
+                  model_provider = \"amazon-bedrock\"\n\
+                  model = \"gpt-5.6-sol\"\n\
+                  [model_providers.amazon-bedrock]\n\
+                  base_url = \"https://mantle.example.com/v1\"\n";
+    std::fs::write(&config_path, config)?;
+    let incompatible =
+        "explicit model/provider pair `gpt-5.6-sol` + `amazon-bedrock` is incompatible";
+
+    codex_command(codex_home.path())?
+        .args(["mcp", "list"])
+        .assert()
+        .failure()
+        .stderr(contains(incompatible));
+
+    codex_command(codex_home.path())?
+        .args(["login", "--with-api-key"])
+        .write_stdin("sk-d737-test-key\n")
+        .assert()
+        .success()
+        .stderr(contains(incompatible).not());
+    codex_command(codex_home.path())?
+        .args(["login", "status"])
+        .assert()
+        .success()
+        .stderr(contains("Logged in using an API key"));
+    // The credential commands left the configuration as it was.
+    assert_eq!(std::fs::read_to_string(&config_path)?, config);
+
+    codex_command(codex_home.path())?
+        .env_remove(CODEX_ACCESS_TOKEN_ENV_VAR)
+        .args(["logout"])
+        .assert()
+        .success()
+        .stderr(contains("Successfully logged out"));
+    assert!(!codex_home.path().join("auth.json").exists());
     Ok(())
 }
 
