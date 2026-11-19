@@ -10,6 +10,7 @@ use app_test_support::write_chatgpt_auth;
 use codex_config::types::AuthCredentialsStoreMode;
 use codex_login::CLIENT_ID;
 use codex_login::REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -237,5 +238,50 @@ async fn device_login_revokes_existing_auth_before_requesting_new_tokens() -> Re
 
     let auth = read_auth_json(codex_home.path())?;
     assert_eq!(auth["tokens"]["refresh_token"], "new-refresh");
+    Ok(())
+}
+
+/// D737: `login`, `login status` and `logout` load a config whose model is
+/// outside the selected provider's catalog; every other command keeps the
+/// fail-closed model/provider pair check.
+#[test]
+fn credential_commands_skip_the_model_provider_pair_check() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let config_path = codex_home.path().join("config.toml");
+    let config = "cli_auth_credentials_store = \"file\"\n\
+                  model_provider = \"amazon-bedrock\"\n\
+                  model = \"gpt-5.6-sol\"\n\
+                  [model_providers.amazon-bedrock]\n\
+                  base_url = \"https://mantle.example.com/v1\"\n";
+    std::fs::write(&config_path, config)?;
+    let incompatible =
+        "explicit model/provider pair `gpt-5.6-sol` + `amazon-bedrock` is incompatible";
+
+    codex_command(codex_home.path())?
+        .args(["mcp", "list"])
+        .assert()
+        .failure()
+        .stderr(contains(incompatible));
+
+    codex_command(codex_home.path())?
+        .args(["login", "--with-api-key"])
+        .write_stdin("sk-d737-test-key\n")
+        .assert()
+        .success()
+        .stderr(contains(incompatible).not());
+    codex_command(codex_home.path())?
+        .args(["login", "status"])
+        .assert()
+        .success()
+        .stderr(contains("Logged in using an API key"));
+    // The credential commands left the configuration as it was.
+    assert_eq!(std::fs::read_to_string(&config_path)?, config);
+
+    codex_command(codex_home.path())?
+        .args(["logout"])
+        .assert()
+        .success()
+        .stderr(contains("Successfully logged out"));
+    assert!(!codex_home.path().join("auth.json").exists());
     Ok(())
 }
