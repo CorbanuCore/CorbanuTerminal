@@ -551,6 +551,109 @@ async fn missing_directory_watch_moves_to_created_directory_for_child_events() {
     );
 }
 
+/// #2728: Windows reports a data change for a directory whenever an entry in
+/// it changes (here `config.toml` next to `skills`). That cannot change an
+/// existing watched root below it; a remove or rename of the ancestor can.
+#[tokio::test]
+async fn ancestor_content_change_does_not_notify_existing_child_watch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let home = temp_dir.path().join("home");
+    let skills_dir = home.join("skills");
+    std::fs::create_dir_all(&skills_dir).expect("create skills dir");
+
+    let watcher = Arc::new(FileWatcher::noop());
+    let (subscriber, rx) = watcher.add_subscriber();
+    let _registration = subscriber.register_path(skills_dir.clone(), /*recursive*/ true);
+    let mut rx = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
+    let (raw_tx, raw_rx) = mpsc::unbounded_channel();
+    watcher.spawn_event_loop_for_test(raw_rx);
+
+    for kind in [
+        EventKind::Modify(ModifyKind::Any),
+        EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Any)),
+        EventKind::Modify(ModifyKind::Metadata(notify::event::MetadataKind::Any)),
+    ] {
+        raw_tx
+            .send(Ok(notify_event(kind, vec![home.clone()])))
+            .expect("send ancestor content event");
+        let blocked = timeout(TEST_THROTTLE_INTERVAL * 2, rx.recv()).await;
+        assert!(blocked.is_err(), "{kind:?} on an ancestor notified");
+    }
+
+    for kind in [
+        EventKind::Modify(ModifyKind::Name(notify::event::RenameMode::Any)),
+        EventKind::Remove(notify::event::RemoveKind::Any),
+    ] {
+        raw_tx
+            .send(Ok(notify_event(kind, vec![home.clone()])))
+            .expect("send ancestor structural event");
+        let event = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("ancestor structural event timeout")
+            .expect("ancestor structural event");
+        assert_eq!(
+            event,
+            FileWatcherEvent {
+                paths: vec![home.clone()],
+            },
+            "{kind:?}"
+        );
+    }
+
+    // Changes below the watched root still arrive.
+    raw_tx
+        .send(Ok(notify_event(
+            EventKind::Modify(ModifyKind::Any),
+            vec![skills_dir.join("SKILL.md")],
+        )))
+        .expect("send child event");
+    let event = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("child event timeout")
+        .expect("child event");
+    assert_eq!(
+        event,
+        FileWatcherEvent {
+            paths: vec![skills_dir.join("SKILL.md")],
+        }
+    );
+}
+
+/// A content change to an ancestor still reports a missing watched path
+/// that has just been created (the fallback watch sees only the ancestor).
+#[tokio::test]
+async fn ancestor_content_change_reports_newly_created_missing_watch() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let parent = temp_dir.path().join("parent");
+    let skills_dir = parent.join("skills");
+    std::fs::create_dir(&parent).expect("create parent");
+
+    let watcher = Arc::new(FileWatcher::noop());
+    let (subscriber, rx) = watcher.add_subscriber();
+    let _registration = subscriber.register_path(skills_dir.clone(), /*recursive*/ true);
+    let mut rx = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
+    let (raw_tx, raw_rx) = mpsc::unbounded_channel();
+    watcher.spawn_event_loop_for_test(raw_rx);
+
+    std::fs::create_dir(&skills_dir).expect("create skills dir");
+    raw_tx
+        .send(Ok(notify_event(
+            EventKind::Modify(ModifyKind::Any),
+            vec![parent.clone()],
+        )))
+        .expect("send ancestor event");
+    let event = timeout(Duration::from_secs(1), rx.recv())
+        .await
+        .expect("ancestor event timeout")
+        .expect("ancestor event");
+    assert_eq!(
+        event,
+        FileWatcherEvent {
+            paths: vec![skills_dir],
+        }
+    );
+}
+
 #[tokio::test]
 async fn spawn_event_loop_filters_non_mutating_events() {
     let watcher = Arc::new(FileWatcher::noop());

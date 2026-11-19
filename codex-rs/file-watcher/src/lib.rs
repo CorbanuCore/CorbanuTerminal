@@ -17,6 +17,7 @@ use notify::EventKind;
 use notify::RecommendedWatcher;
 use notify::RecursiveMode;
 use notify::Watcher;
+use notify::event::ModifyKind;
 use tokio::runtime::Handle;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::Notify;
@@ -690,7 +691,13 @@ impl FileWatcher {
                                 continue;
                             }
                             let inner = inner.as_ref().and_then(std::sync::Weak::upgrade);
-                            Self::notify_subscribers(&state, inner.as_ref(), &event.paths).await;
+                            Self::notify_subscribers(
+                                &state,
+                                inner.as_ref(),
+                                &event.paths,
+                                can_change_descendants(&event),
+                            )
+                            .await;
                         }
                         Some(Err(err)) => {
                             warn!("file watcher error: {err}");
@@ -708,6 +715,7 @@ impl FileWatcher {
         state: &RwLock<WatchState>,
         inner: Option<&Arc<Mutex<FileWatcherInner>>>,
         event_paths: &[PathBuf],
+        descendants_may_change: bool,
     ) {
         let subscribers_to_notify: Vec<(WatchSender, Vec<PathBuf>)> = {
             let mut state = state
@@ -725,6 +733,7 @@ impl FileWatcher {
                             subscriber_watch,
                             subscriber_watch_state,
                             event_path,
+                            descendants_may_change,
                         ) {
                             changed_paths.push(path);
                         }
@@ -767,7 +776,13 @@ impl FileWatcher {
 
     #[cfg(test)]
     pub(crate) async fn send_paths_for_test(&self, paths: Vec<PathBuf>) {
-        Self::notify_subscribers(&self.state, self.inner.as_ref(), &paths).await;
+        Self::notify_subscribers(
+            &self.state,
+            self.inner.as_ref(),
+            &paths,
+            /*descendants_may_change*/ true,
+        )
+        .await;
     }
 
     #[cfg(test)]
@@ -789,6 +804,20 @@ impl FileWatcher {
             .get(path)
             .map(|counts| (counts.non_recursive, counts.recursive))
     }
+}
+
+/// Whether `event` can change what lies below its paths: a create, remove,
+/// rename or unknown change. A data or metadata change to a directory itself
+/// cannot. Windows reports such a change for a directory whenever an entry
+/// inside it changes, for example when `config.toml` is written next to a
+/// watched `skills` root (#2728).
+fn can_change_descendants(event: &Event) -> bool {
+    !matches!(
+        event.kind,
+        EventKind::Modify(
+            ModifyKind::Any | ModifyKind::Data(_) | ModifyKind::Metadata(_) | ModifyKind::Other
+        )
+    )
 }
 
 fn is_mutating_event(event: &Event) -> bool {
@@ -864,12 +893,14 @@ fn changed_path_for_event(
     subscriber_watch: &SubscriberWatchKey,
     subscriber_watch_state: &mut SubscriberWatchState,
     event_path: &Path,
+    descendants_may_change: bool,
 ) -> Option<PathBuf> {
     if let Some(path) = changed_path_for_matched_path(
         subscriber_watch,
         subscriber_watch_state,
         &subscriber_watch.matched,
         event_path,
+        descendants_may_change,
     ) {
         return Some(path);
     }
@@ -881,6 +912,7 @@ fn changed_path_for_event(
         subscriber_watch_state,
         &subscriber_watch.requested,
         event_path,
+        descendants_may_change,
     )
 }
 
@@ -891,6 +923,7 @@ fn changed_path_for_matched_path(
     subscriber_watch_state: &mut SubscriberWatchState,
     matched: &WatchPath,
     event_path: &Path,
+    descendants_may_change: bool,
 ) -> Option<PathBuf> {
     let requested = &subscriber_watch.requested;
     if event_path == matched.path {
@@ -899,6 +932,12 @@ fn changed_path_for_matched_path(
     }
     if matched.path.starts_with(event_path) {
         let now_exists = matched.path.exists();
+        // Corbanu (#2728): a data or metadata change to an ancestor directory
+        // cannot affect a watched path that existed before and still exists;
+        // changes below that path arrive as events for the path itself.
+        if !descendants_may_change && now_exists && subscriber_watch_state.last_exists {
+            return None;
+        }
         if subscriber_watch_state.fallback {
             let should_notify = now_exists || subscriber_watch_state.last_exists;
             subscriber_watch_state.last_exists = now_exists;
