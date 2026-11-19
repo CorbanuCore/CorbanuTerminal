@@ -14,6 +14,21 @@ fn documents() -> String {
     format!(r"{}\Documents", home())
 }
 
+/// The command's environment: a `PATH` holding only a temporary folder with
+/// the programs these scripts run, so they read alike wherever the tests run
+/// (Bazel's `PATH` holds none of them).
+fn command_env() -> std::collections::HashMap<String, String> {
+    static BIN: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    let bin = BIN.get_or_init(|| {
+        let bin = tempfile::tempdir().expect("bin");
+        for program in ["git.exe", "pnpm.cmd"] {
+            std::fs::write(bin.path().join(program), "").expect("program");
+        }
+        bin
+    });
+    std::collections::HashMap::from([("Path".to_string(), bin.path().display().to_string())])
+}
+
 async fn decide_in(
     shell: &str,
     script: &str,
@@ -21,6 +36,7 @@ async fn decide_in(
     approval_policy: AskForApproval,
     permission_profile: PermissionProfile,
 ) -> ExecApprovalRequirement {
+    let env = command_env();
     let command = vec![
         shell.to_string(),
         "-NoProfile".to_string(),
@@ -36,7 +52,7 @@ async fn decide_in(
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: Some(command.clone()),
             cwd: Some(AbsolutePathBuf::from_absolute_path(cwd).expect("absolute cwd")),
-            env: None,
+            env: Some(&env),
         })
         .await
 }

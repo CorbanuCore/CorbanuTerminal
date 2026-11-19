@@ -143,9 +143,14 @@ fn parts_are_normalised_and_folded() {
 }
 
 #[test]
-fn no_write_is_allowed_outside_a_scope() {
+fn no_write_is_allowed_outside_a_scope_or_elsewhere() {
     assert!(!writes_allowed(&["out.txt".to_string()], &[], &[]));
     assert!(!writes_allowed(&[], &["out.txt".to_string()], &[]));
+    // A command running elsewhere: no write, and no program name found.
+    let _scope = enter_powershell_write_scope(PowershellWriteScope::new(None, Vec::new(), None));
+    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[]));
+    assert!(!names_resolve(&["git".to_string()], &[]));
+    assert!(names_resolve(&[], &[]));
 }
 
 #[test]

@@ -334,7 +334,9 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) prefix_rule: Option<Vec<String>>,
     /// D729 (A): the local directory the command runs in, where a PowerShell
     /// script may write and still be read in full; `None` (a remote
-    /// environment, or unknown) reads every script that writes in part.
+    /// environment, or unknown) reads every script that writes in part, and
+    /// with `env` given (a remote environment) every script that runs a
+    /// program or module cmdlet too.
     pub(crate) cwd: Option<AbsolutePathBuf>,
     /// D729 (A): the command's environment, where its shell finds programs
     /// and modules (`PATH`, `PATHEXT`, `PSModulePath`); `None`: Corbanu's.
@@ -459,9 +461,9 @@ impl ExecPolicyManager {
         // is not `Send`: nothing below awaits.
         #[cfg(windows)]
         let _write_scope =
-            cwd.as_ref().map(|cwd| {
+            (cwd.is_some() || env.is_some()).then(|| {
                 codex_shell_command::powershell::enter_powershell_write_scope(
-                    powershell_write_scope(&permission_profile, cwd, env),
+                    powershell_write_scope(&permission_profile, cwd.as_ref(), env),
                 )
             });
         #[cfg(not(windows))]
@@ -1354,9 +1356,13 @@ fn program_key(token: &str) -> Option<String> {
 #[cfg(windows)]
 fn powershell_write_scope(
     permission_profile: &PermissionProfile,
-    cwd: &AbsolutePathBuf,
+    cwd: Option<&AbsolutePathBuf>,
     env: Option<&std::collections::HashMap<String, String>>,
 ) -> codex_shell_command::powershell::PowershellWriteScope {
+    let Some(cwd) = cwd else {
+        // A remote environment: nothing on this host to look at.
+        return codex_shell_command::powershell::PowershellWriteScope::new(None, Vec::new(), env);
+    };
     let policy = permission_profile.file_system_sandbox_policy();
     let policy = if policy.has_full_disk_write_access() {
         PermissionProfile::workspace_write().file_system_sandbox_policy()
@@ -1364,7 +1370,7 @@ fn powershell_write_scope(
         policy
     };
     codex_shell_command::powershell::PowershellWriteScope::new(
-        cwd,
+        Some(cwd),
         policy.get_writable_roots_with_cwd(cwd.as_path()),
         env,
     )

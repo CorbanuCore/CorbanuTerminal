@@ -30,7 +30,9 @@ thread_local! {
 /// environment variables its shell finds programs and modules with.
 #[derive(Debug, Clone)]
 pub struct PowershellWriteScope {
-    cwd: String,
+    /// `None`: the command runs elsewhere (a remote environment), whose
+    /// folders this host cannot look at.
+    cwd: Option<String>,
     roots: Vec<WritableRoot>,
     path: Option<std::ffi::OsString>,
     module_path: Option<String>,
@@ -38,10 +40,12 @@ pub struct PowershellWriteScope {
 }
 
 impl PowershellWriteScope {
+    /// `cwd` is where the command runs on this host (`None`: elsewhere, so
+    /// no write keeps a script readable and no program name can be found);
     /// `env` is the command's environment where known (`PATH`, `PATHEXT`,
-    /// `PSModulePath`, in any case); otherwise Corbanu's own.
+    /// `PSModulePath`, in any case), otherwise Corbanu's own.
     pub fn new(
-        cwd: &AbsolutePathBuf,
+        cwd: Option<&AbsolutePathBuf>,
         roots: Vec<WritableRoot>,
         env: Option<&std::collections::HashMap<String, String>>,
     ) -> Self {
@@ -53,7 +57,7 @@ impl PowershellWriteScope {
             None => std::env::var(name).ok(),
         };
         Self {
-            cwd: cwd.to_string_lossy().into_owned(),
+            cwd: cwd.map(|cwd| cwd.to_string_lossy().into_owned()),
             roots,
             path: var("PATH").map(Into::into),
             module_path: var("PSModulePath"),
@@ -96,7 +100,12 @@ pub(crate) fn writes_allowed(writes: &[String], removes: &[String], protected: &
     let Some(scope) = current_scope() else {
         return false;
     };
-    let Some(cwd) = WinPath::parse(&scope.cwd, None, Strictness::Lax).and_then(canonical) else {
+    let Some(cwd) = scope
+        .cwd
+        .as_deref()
+        .and_then(|cwd| WinPath::parse(cwd, None, Strictness::Lax))
+        .and_then(canonical)
+    else {
         return false;
     };
     let roots: Vec<Root> = scope.roots.iter().filter_map(Root::from_writable).collect();
@@ -190,19 +199,22 @@ fn executable_extensions(pathext: Option<&str>) -> Vec<String> {
 
 /// D729 (A): whether each of `programs` is a program (or script) on the
 /// command's `PATH`, and none of the module cmdlets `cmdlets` is shadowed by
-/// one there. Corbanu's own `PATH` outside a scope. Only absolute local
-/// folders are looked in; a relative or network folder leaves a cmdlet's
-/// shadow unknown (no).
+/// one there. Only absolute local folders are looked in; a relative or
+/// network folder leaves a cmdlet's shadow unknown (no). A command running
+/// elsewhere (no local folder) has no names this host can find. Outside a
+/// scope (no command to check, as in safety heuristics and tests) names are
+/// not looked up: the approval path always checks within one.
 pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     if programs.is_empty() && cmdlets.is_empty() {
         return true;
     }
-    let scope = current_scope();
-    let (path, extensions) = match &scope {
-        Some(scope) => (scope.path.clone(), scope.extensions.clone()),
-        None => (std::env::var_os("PATH"), std::env::var("PATHEXT").ok()),
+    let Some(scope) = current_scope() else {
+        return true;
     };
-    let lookup = PathLookup::new(path.as_deref(), extensions.as_deref());
+    if scope.cwd.is_none() {
+        return false;
+    }
+    let lookup = PathLookup::new(scope.path.as_deref(), scope.extensions.as_deref());
     programs.iter().all(|name| lookup.find(name) == Found::Yes)
         && cmdlets.iter().all(|name| lookup.find(name) == Found::No)
 }
@@ -225,11 +237,23 @@ struct PathLookup {
 
 impl PathLookup {
     fn new(path: Option<&std::ffi::OsStr>, pathext: Option<&str>) -> Self {
+        // An entry rooted at the current drive (`/usr/bin`, as Bazel and MSYS
+        // write it) is read on the system drive.
+        let system_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
         let dirs = path
             .map(std::env::split_paths)
             .into_iter()
             .flatten()
             .filter(|dir| !dir.as_os_str().is_empty())
+            .map(|dir| {
+                let text = dir.to_string_lossy().into_owned();
+                let rooted = matches!(text.as_bytes(), [b'/' | b'\\', second, ..] if *second != b'/' && *second != b'\\');
+                if rooted && cfg!(windows) {
+                    std::path::PathBuf::from(format!("{system_drive}{text}"))
+                } else {
+                    dir
+                }
+            })
             .map(|dir| {
                 // Never a network folder (`\\server\share`, `//server`): looking
                 // there before approval would reach out to it.
