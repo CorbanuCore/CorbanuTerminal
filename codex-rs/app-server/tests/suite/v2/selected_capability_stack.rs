@@ -477,10 +477,12 @@ async fn selected_capability_stack_tracks_environment_selection_and_resume() -> 
     }
     assert_plugin_guidance_count(&requests[4], /*expected_count*/ 0);
     assert_selected_skill_is_injected(&requests[5], /*expected_count*/ 2);
-    assert!(
-        latest_selected_skill_update(&requests[5])
-            .is_some_and(|text| text.contains(RESTORED_SELECTED_SKILLS_MESSAGE))
-    );
+    // Corbanu (#1532): this mock provider is not OpenAI, so it replaces context sections
+    // and gets the full current catalog back instead of upstream's short append-only notice.
+    let restored_update = latest_selected_skill_update(&requests[5])
+        .expect("the reattached catalog should be model-visible");
+    assert!(restored_update.contains(SKILL_DESCRIPTION));
+    assert!(!restored_update.contains(RESTORED_SELECTED_SKILLS_MESSAGE));
     assert_eq!(
         1,
         requests[5]
