@@ -135,6 +135,9 @@ struct HardenedState {
     credentials: Vec<HardenedRecord>,
     scoped_openai: Option<ScopedCredentialRecord>,
     isolated_openai: Option<IsolatedCredentialRecord>,
+    /// D732: a command environment could not be checked for copies of held
+    /// keys. From then on no request is given a key (fail closed).
+    env_copy_check_failed: bool,
 }
 
 struct HardenedRecord {
@@ -315,8 +318,10 @@ impl HardenedBroker {
         if !state.enabled {
             return;
         }
-        let source_env = env.clone();
+        let mut source_env = env.clone();
         virtualize_provider_env(&source_env, env, &mut state, &self.isolation);
+        self.take_env_copies(&mut state, env);
+        zeroize_values(&mut source_env);
     }
 
     pub(crate) fn virtualize_child_env(&self, env: &mut HashMap<String, String>) {
@@ -334,25 +339,72 @@ impl HardenedBroker {
         // With secretless launch the child environment no longer carries the
         // provider tokens; read them (and host context) from Core's own
         // environment, letting any value already in the child win.
-        let source_env = self
+        let mut source_env = self
             .process_env_source
             .as_ref()
-            .map(|source| process_credential_env(env, source));
-        let source_env = source_env.as_ref().unwrap_or(env).clone();
+            .map(|source| process_credential_env(env, source))
+            .unwrap_or_else(|| env.clone());
         virtualize_provider_env(&source_env, env, &mut state, &self.isolation);
         if let Some(scoped) = state.scoped_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                scoped.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    scoped.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
         if let Some(isolated) = state.isolated_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                isolated.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    isolated.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
+        self.take_env_copies(&mut state, env);
+        zeroize_values(&mut source_env);
         update_brokered_credentials_marker(&state, env);
+    }
+
+    /// D732: removes from a command (or shell-snapshot) environment every
+    /// variable whose value contains a key this engine holds, so a copy under
+    /// another name (a header such as `Bearer <key>`, a second variable) is
+    /// not inherited along with the dummy. Uses the D685 known-credential
+    /// check (`known_scan`): raw values directly, isolated and unavailable
+    /// records by keyed fingerprint. Keys shorter than 8 bytes are not looked
+    /// for. Removed values are zeroized; only names are logged.
+    ///
+    /// Fails closed: when a value cannot be checked, the copies found are
+    /// still removed and no request is given a key afterwards.
+    fn take_env_copies(&self, state: &mut HardenedState, env: &mut HashMap<String, String>) {
+        let entries: Vec<(&String, &String)> =
+            env.iter().filter(|(_, value)| !value.is_empty()).collect();
+        let texts: Vec<&str> = entries.iter().map(|(_, value)| value.as_str()).collect();
+        let results = self.env_copy_occurrences(state, &texts);
+        let checked = results.iter().all(Result::is_ok);
+        let copies: Vec<String> = entries
+            .iter()
+            .zip(results)
+            .filter(|(_, found)| matches!(found, Ok(true)))
+            .map(|((name, _), _)| (*name).clone())
+            .collect();
+        for name in &copies {
+            drop(env.remove(name).map(Zeroizing::new));
+        }
+        if !copies.is_empty() {
+            tracing::info!(
+                "copies of keys held by the network proxy credential broker removed from a command environment: {}",
+                copies.join(", ")
+            );
+        }
+        if !checked {
+            tracing::warn!(
+                "network proxy credential broker could not check a command environment for key copies; no request is given a key"
+            );
+            state.env_copy_check_failed = true;
+        }
     }
 
     pub(crate) fn install_scoped_openai_route(
@@ -456,9 +508,13 @@ impl HardenedBroker {
             return Ok(CredentialRouting::Direct(None));
         }
 
+        let env_copy_check_failed = state.env_copy_check_failed;
         if let Some(scoped) = state.scoped_openai.as_mut() {
             let carries_reference = scoped.matches_reference(headers);
             if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
+                if env_copy_check_failed {
+                    return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
+                }
                 return scoped
                     .inject(
                         scheme,
@@ -487,6 +543,10 @@ impl HardenedBroker {
         let Some(credential) = select_credential(headers, &matching_credentials) else {
             return Ok(CredentialRouting::Direct(None));
         };
+        // D732: a command may hold an unchecked copy of a key; use none.
+        if env_copy_check_failed {
+            return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
+        }
         if self.response_gate {
             credential
                 .provider
@@ -670,7 +730,17 @@ fn virtualize_env_var(
             real_value,
         ),
     };
-    env.insert(env_var.to_string(), dummy_value);
+    // The replaced value (the key itself) is zeroized.
+    drop(
+        env.insert(env_var.to_string(), dummy_value)
+            .map(Zeroizing::new),
+    );
+}
+
+fn zeroize_values(env: &mut HashMap<String, String>) {
+    for value in env.values_mut() {
+        zeroize::Zeroize::zeroize(value);
+    }
 }
 
 fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
