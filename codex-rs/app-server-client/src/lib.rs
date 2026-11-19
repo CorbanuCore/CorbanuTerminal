@@ -2763,12 +2763,13 @@ mod tests {
             Ok(Err(err)) => format!("then failed: {err}"),
             Err(_) => "and was still pending".to_string(),
         };
+        let shutdown_took = shutdown_began.elapsed();
         panic!(
-            "shutdown should not wait for the 5s fallback timeout (#2670): it ran {:?} {outcome} \
-             (client start took {start_took:?}). Well under 5 s points to a slow runner; \
-             about 5 s or 10 s to an in-process SHUTDOWN_TIMEOUT fallback (processor or \
-             outbound drain, runtime join); 35 s or more to the shutdown ack timeout.",
-            shutdown_began.elapsed()
+            "shutdown should not wait for the 5s fallback timeout (#2670): it ran \
+             {shutdown_took:?} {outcome} (client start took {start_took:?}). About 5 s or \
+             10 s points to the processor or outbound SHUTDOWN_TIMEOUT drain; other times \
+             under 35 s to a slow runner or a slow analytics flush (up to 25 s); 35-40 s to \
+             the shutdown ack timeout plus the runtime join."
         );
     }
 
