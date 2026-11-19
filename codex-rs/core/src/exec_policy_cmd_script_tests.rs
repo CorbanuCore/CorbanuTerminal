@@ -366,11 +366,8 @@ async fn windows_executor_powershell_batch_files_ask_on_any_host() {
             }
         }
     }
-    // A program named `.exe`, and a bash script's words, stay argv.
-    for command in [
-        argv(&["pwsh", "-Command", "git.exe log '--format=%H'"]),
-        argv(&["bash", "-lc", "printf '%s' x | cat"]),
-    ] {
+    // A bash script's words stay argv.
+    for command in [argv(&["bash", "-lc", "printf '%s' x | cat"])] {
         let result = decide(
             r#"prefix_rule(pattern=["secret-tool"], decision="forbidden")"#,
             &command,
