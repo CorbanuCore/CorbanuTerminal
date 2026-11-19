@@ -513,14 +513,8 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
         Ok(Some(auth)) => match auth.auth_mode() {
             AuthMode::ApiKey => match auth.get_token() {
                 Ok(api_key) => {
-<<<<<<< HEAD
                     eprintln!("{}", api_key_status(&config.codex_home, &api_key));
-||||||| 413492cd6c
-                    eprintln!("Logged in using an API key - {}", safe_format_key(&api_key));
-=======
-                    eprintln!("API key configured - {}", safe_format_key(&api_key));
                     eprintln!("{API_KEY_AUTHENTICATION_NOTICE}");
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
                     std::process::exit(0);
                 }
                 Err(e) => {
@@ -563,11 +557,6 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
     }
 }
 
-<<<<<<< HEAD
-pub async fn run_logout(cli_config_overrides: CliConfigOverrides, _all_credentials: bool) -> ! {
-||||||| 413492cd6c
-pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
-=======
 async fn logout_config_server(config: &Config) -> std::io::Result<bool> {
     match codex_cloud_config::managed_config_auth_manager(
         config.auth_config(),
@@ -578,8 +567,7 @@ async fn logout_config_server(config: &Config) -> std::io::Result<bool> {
     }
 }
 
-pub async fn run_logout(cli_config_overrides: CliConfigOverrides) -> ! {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+pub async fn run_logout(cli_config_overrides: CliConfigOverrides, _all_credentials: bool) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
     let auth_route_config = config.auth_route_config();
     let config_server_logout = if config
