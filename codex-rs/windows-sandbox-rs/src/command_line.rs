@@ -206,8 +206,8 @@ fn is_reparsing_program(program: &str) -> bool {
 /// Whether cmd could resolve the plain program token `program` through
 /// PATHEXT to a batch file: a `<program>.bat` or `<program>.cmd` (either
 /// case, or as PATHEXT spells it) in the working directory or a directory on
-/// any spelling of the child's PATH (for a bare name; each entry with and
-/// without its surrounding spaces, #2783), or next to the given
+/// any spelling of the child's PATH (for a bare name; each entry also as cmd
+/// reads it, #2783), or next to the given
 /// path. Any match counts, even one an earlier executable would shadow, and
 /// these extensions are tried whatever PATHEXT says. A drive-relative
 /// program (`C:npm`) is resolved by the child against its own directory on
@@ -229,36 +229,46 @@ fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Pa
     {
         return true;
     }
-    // cmd strips the quotes around a PATH (or PATHEXT) entry but not the
-    // spaces: `C:\bin ` searches a folder named `bin ` (checked natively on
-    // Windows 11, #2783). Each entry is looked up trimmed and, when that
-    // differs, untrimmed. As above, any failure but a missing file counts,
-    // except an invalid name in the untrimmed spelling (not `strict`).
-    let values = |key: &'static str| {
-        env.iter()
-            .filter(move |(name, _)| name.eq_ignore_ascii_case(key))
-            .flat_map(|(_, value)| value.split(';'))
-            .flat_map(|entry| {
+    // Each PATH (and PATHEXT) entry is looked up as before (split at every
+    // `;`, trimmed, outer quotes dropped) and, when that differs, as cmd
+    // reads it ([`cmd_list_entries`]). As above, any failure but a missing
+    // file counts, except an invalid name in cmd's spelling (not `strict`).
+    let values = |key: &str| {
+        let mut spellings: Vec<(String, bool)> = Vec::new();
+        for (_, value) in env
+            .iter()
+            .filter(|(name, _)| name.eq_ignore_ascii_case(key))
+        {
+            for entry in value.split(';') {
                 let trimmed = entry.trim().trim_matches('"');
-                let untrimmed = entry.trim_matches('"');
-                [(trimmed, true), (untrimmed, false)].into_iter().filter(
-                    move |(spelling, strict)| {
-                        !spelling.is_empty() && (*strict || *spelling != trimmed)
-                    },
-                )
-            })
+                if !trimmed.is_empty() {
+                    spellings.push((trimmed.to_string(), true));
+                }
+            }
+            for entry in cmd_list_entries(value) {
+                if !entry.is_empty() && !spellings.iter().any(|(known, _)| *known == entry) {
+                    spellings.push((entry, false));
+                }
+            }
+        }
+        spellings
     };
     let bases: Vec<(PathBuf, bool)> = if program.contains(['\\', '/', ':']) {
         vec![(cwd.join(program), true)]
     } else {
         std::iter::once((cwd.to_path_buf(), true))
-            .chain(values("PATH").map(|(dir, strict)| (cwd.join(dir), strict)))
+            .chain(
+                values("PATH")
+                    .into_iter()
+                    .map(|(dir, strict)| (cwd.join(dir), strict)),
+            )
             .map(|(dir, strict)| (dir.join(program), strict))
             .collect()
     };
+    let pathext = values("PATHEXT");
     let extensions: Vec<&str> = [".bat", ".cmd", ".BAT", ".CMD"]
         .into_iter()
-        .chain(values("PATHEXT").map(|(ext, _)| ext).filter(|ext| {
+        .chain(pathext.iter().map(|(ext, _)| ext.as_str()).filter(|ext| {
             let ext = ext.trim().to_ascii_lowercase();
             ext == ".bat" || ext == ".cmd"
         }))
@@ -269,7 +279,7 @@ fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Pa
             candidate.push(ext);
             match std::fs::metadata(&candidate) {
                 Ok(metadata) => !metadata.is_dir(),
-                // An untrimmed spelling no file can have (` C:\bin` joined to
+                // A spelling of cmd's no file can have (` C:\bin` joined to
                 // the working directory) holds nothing cmd could run.
                 Err(err) => {
                     !matches!(
@@ -280,6 +290,27 @@ fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Pa
             }
         })
     })
+}
+
+/// The entries of a PATH-style list as cmd reads them (checked natively on
+/// Windows 11, #2783): a `;` inside quotes doesn't split, every quote is
+/// dropped, and the spaces around an entry are kept (`"C:\bin" ` and
+/// `C:\bin ` both search a folder named `bin `).
+fn cmd_list_entries(value: &str) -> Vec<String> {
+    let mut entries = vec![String::new()];
+    let mut quoted = false;
+    for ch in value.chars() {
+        match ch {
+            '"' => quoted = !quoted,
+            ';' if !quoted => entries.push(String::new()),
+            _ => {
+                if let Some(entry) = entries.last_mut() {
+                    entry.push(ch);
+                }
+            }
+        }
+    }
+    entries
 }
 
 /// Recognizes `cmd[.exe] [/switch ...] /C|/K|/R [command ...]`. Returns `None`
