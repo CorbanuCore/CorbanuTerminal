@@ -1363,14 +1363,21 @@ async fn unified_exec_short_lived_network_denial_emits_failed_end_event() -> Res
     Ok(())
 }
 
+/// Upstream refuses a managed-network command under the non-admin Windows
+/// sandbox ("managed networking requires the elevated Windows sandbox
+/// backend"). D355 (main's rule, kept on sync): the Windows firewall rules
+/// belong to the elevated sandbox's users, so such a command runs on the
+/// elevated backend instead, as its firewall-restricted offline user, never
+/// unsandboxed (#2729).
 #[cfg(windows)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn unified_exec_rejects_unelevated_windows_sandbox_with_managed_network() -> Result<()> {
+async fn unified_exec_runs_unelevated_managed_network_on_the_elevated_windows_sandbox() -> Result<()>
+{
     let server = start_mock_server().await;
     let (test, permission_profile) = unified_exec_network_denial_test(&server).await?;
     let call_id = "uexec-unelevated-managed-network";
     let args = json!({
-        "cmd": "echo should not run",
+        "cmd": "whoami",
         "yield_time_ms": 1_000,
     });
     let responses = mount_unified_exec_network_denial_responses(&server, call_id, &args).await?;
@@ -1388,13 +1395,22 @@ async fn unified_exec_rejects_unelevated_windows_sandbox_with_managed_network() 
 
     let output_item = responses
         .last_request()
-        .expect("model should receive the rejected tool call output")
+        .expect("model should receive the tool call output")
         .function_call_output(call_id);
-    let output = extract_output_text(&output_item)
-        .expect("rejected tool call should include model-visible text");
+    let output =
+        extract_output_text(&output_item).expect("tool call should include model-visible text");
+    // With managed networking the command must run as the firewall-restricted
+    // offline sandbox user (`whoami` prints the bare name in its session, or
+    // `HOST\user`).
+    let ran_as_offline_user = output.lines().any(|line| {
+        let line = line.trim().to_ascii_lowercase();
+        line == "codexsandboxoffline" || line.ends_with("\\codexsandboxoffline")
+    });
     assert!(
-        output.contains("managed networking requires the elevated Windows sandbox backend"),
-        "unexpected output: {output}"
+        ran_as_offline_user
+            && output.contains("Process exited with code 0")
+            && !output.contains("managed networking requires the elevated Windows sandbox backend"),
+        "expected the command to run as the offline sandbox user: {output}"
     );
 
     Ok(())

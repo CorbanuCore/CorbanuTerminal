@@ -1193,7 +1193,17 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
 
     // Re-enter real setup after corrupting this test's bookkeeping, then exercise
     // recovery through the same agent tool path rather than relying on a cached launch.
-    let state_path = codex_home.path().join(".sandbox/deny_read_acl_state.json");
+    // Corbanu keeps this bookkeeping where the sandbox's users cannot write it
+    // (#304, `deny_read_state.rs`); upstream's `.sandbox/deny_read_acl_state.json`
+    // is not read (#2729).
+    let state_path = codex_home
+        .path()
+        .join(".sandbox-secrets/deny_read_acl_rules.json");
+    assert!(
+        state_path.is_file(),
+        "the first launch should record its deny-read bookkeeping at {}",
+        state_path.display()
+    );
     std::fs::write(&state_path, b"malformed bookkeeping")?;
     let permission_profile = harness
         .test()
@@ -1209,14 +1219,14 @@ async fn windows_elevated_unified_exec_enforces_large_recursive_deny_reads() -> 
         codex_home: codex_home.path().to_path_buf(),
     })
     .await?;
+    // Setup replaced the malformed bookkeeping. #304: a deny entry already on
+    // a file is not claimed again once its record is lost (it may be another
+    // session's), so it is never removed and the rebuilt record may be empty;
+    // the denies themselves must hold, which the command below checks.
     let rebuilt: serde_json::Value = serde_json::from_slice(&std::fs::read(&state_path)?)?;
-    let principals = rebuilt["principals"]
-        .as_object()
-        .expect("rebuilt principals");
     assert!(
-        principals
-            .values()
-            .any(|paths| paths.as_array().is_some_and(|paths| !paths.is_empty()))
+        rebuilt["principals"].is_object(),
+        "rebuilt deny-read bookkeeping: {rebuilt}"
     );
 
     std::fs::write(

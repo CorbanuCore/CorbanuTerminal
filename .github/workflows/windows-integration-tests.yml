@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --profile ci-test \
-            -p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher \
+            -p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher --bin codex-windows-managed-deny-probe \
             -p codex-cli --bin codex \
             -p codex-code-mode-host --bin codex-code-mode-host \
             -p codex-exec --bin codex-exec \
