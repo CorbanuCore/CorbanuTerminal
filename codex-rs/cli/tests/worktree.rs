@@ -336,6 +336,8 @@ trust_level = "trusted"
                 ],
             )?;
             fs::write(source.join(".codex/config.toml"), "")?;
+            // The logout asserted below must happen during this launch.
+            assert!(home.join("auth.json").is_file());
         }
         let (metric_tx, mut metric_rx) = tokio::sync::mpsc::unbounded_channel();
         Mock::given(wiremock::matchers::path("/metrics"))
@@ -493,13 +495,23 @@ trust_level = "trusted"
             }
         }).await;
         if auth_failure {
-            assert!(observed.is_ok_and(|result| result.is_err()), "{output}");
-            let exit =
-                tokio::time::timeout(Duration::from_secs(/*secs*/ 10), spawned.exit_rx).await??;
-            assert_ne!(exit, 0);
-            assert!(output.contains("API key login is required"), "{output}");
-            assert!(!home.join("auth.json").exists());
-            assert!(output.contains("The checkout was kept"), "{output}");
+            // Upstream ends startup here. Corbanu logs a default login of the wrong method
+            // out and continues (`LoginRestrictionViolation::Method` in codex-login); a wrong
+            // workspace still ends startup. The checkout's committed `forced_login_method`,
+            // not the source's empty working-tree config, still governs: the ChatGPT login
+            // is gone before the turn, which the local provider serves without it.
+            let (_, checkout, metadata) = observed
+                .with_context(|| format!("auth-failure startup timed out: {output}"))?
+                .with_context(|| format!("auth-failure startup: {output}"))?;
+            assert!(!home.join("auth.json").exists(), "{output}");
+            assert!(!previous.contains(&checkout), "{checkout}");
+            assert!(
+                metadata["ownerThreadId"].as_str().is_some(),
+                "owner bound before request"
+            );
+            assert!(!output.contains("The checkout was kept"), "{output}");
+            session.terminate();
+            let _ = tokio::time::timeout(Duration::from_secs(/*secs*/ 10), spawned.exit_rx).await;
             continue;
         }
         let renamed = if !fork && let Ok(Ok((_, _, metadata))) = &observed {
