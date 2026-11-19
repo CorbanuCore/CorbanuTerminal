@@ -28,9 +28,9 @@
 //! arguments once more.
 //!
 //! - A program that hands its arguments to cmd again re-parses them after
-//!   cmd removed the escapes (#2718): a nested `cmd`, the `start` builtin, and
-//!   a name cmd resolves through PATHEXT to a batch file (`npm` for
-//!   `npm.cmd`). With separate arguments, such a program is refused when an
+//!   cmd removed the escapes (#2718): a nested `cmd`, the `start`, `if` and
+//!   `for` builtins, and a name cmd resolves through PATHEXT to a batch file
+//!   (`npm` for `npm.cmd`). With separate arguments, such a program is refused when an
 //!   argument contains anything cmd acts on. Other programs that start a
 //!   shell on their arguments (PowerShell, `runas`, ...) are not recognized.
 
@@ -164,14 +164,22 @@ fn check_batch_arguments(argv: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// A program token cmd may run as a nested `cmd` or as its `start` builtin,
-/// both of which parse their arguments again (#2718). cmd splits a command
-/// name at several characters (`cmd.exe/c`, `start/b`, `start\..\x`), so any
-/// part between those characters counts. This over-matches (a directory
-/// named `start`), which only refuses more.
-fn is_nested_launcher(program: &str) -> bool {
-    program
-        .to_ascii_lowercase()
+/// A program token that makes cmd parse the following arguments as a command
+/// line again (#2718): a nested `cmd`, or the `start`, `if` or `for` builtin,
+/// which run a command taken from them (`if 1==1 cmd /c x a&b`). `call` is
+/// refused separately.
+///
+/// cmd reads a builtin from the start of the token, up to the first of
+/// several characters (`start/b`, `if/i`, `start\..\x`); the first non-empty
+/// part counts (`@start`). The nested cmd is
+/// the file the last `\` component names; each `/`-separated piece of it
+/// counts (`cmd.exe/c`, `c:/windows/system32/cmd.exe`), read as
+/// [`program_file_name`] reads it and cut at the characters cmd ends a
+/// command name at. A directory named `cmd` (Git's `Git\cmd\git.exe`) doesn't
+/// count.
+fn is_reparsing_program(program: &str) -> bool {
+    let lower = program.to_ascii_lowercase();
+    let builtin = lower
         .split(|c: char| {
             c.is_whitespace()
                 || matches!(
@@ -179,38 +187,75 @@ fn is_nested_launcher(program: &str) -> bool {
                     '\\' | '/' | ':' | '.' | '+' | '[' | ']' | ',' | ';' | '=' | '(' | ')' | '@'
                 )
         })
-        .any(|part| matches!(part, "cmd" | "start"))
+        .find(|part| !part.is_empty())
+        .unwrap_or_default();
+    if matches!(builtin, "start" | "if" | "for") {
+        return true;
+    }
+    let last = lower.rsplit('\\').next().unwrap_or_default();
+    last.split('/').any(|piece| {
+        let name = program_file_name(piece);
+        let name = name
+            .split(['+', '[', ']', ',', ';', '='])
+            .next()
+            .unwrap_or_default()
+            .trim_start()
+            .trim_end_matches(['.', ' ']);
+        matches!(name, "cmd" | "cmd.exe")
+    })
 }
 
 /// Whether cmd could resolve `program` through PATHEXT to a batch file: a
-/// `<program>.bat` or `<program>.cmd` in the working directory or on the
-/// child's PATH (for a bare name), or next to the given path. Any match
-/// counts, even one an earlier executable would shadow, and `.bat`/`.cmd` are
-/// tried whatever PATHEXT says, so this only refuses more. A file created
-/// after the launch isn't seen.
+/// `<program>.bat` or `<program>.cmd` (either case, or as PATHEXT spells it)
+/// in the working directory or a directory on any spelling of the child's
+/// PATH (for a bare name), or next to the given path. Any match counts, even
+/// one an earlier executable would shadow, and these extensions are tried
+/// whatever PATHEXT says. A drive-relative program (`C:npm`) is resolved by
+/// the child against its own directory on that drive and always counts.
+/// Anything but a missing file counts too, so a failure only refuses more. A
+/// file created after the launch isn't seen.
 fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
+    let bytes = program.as_bytes();
+    if bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && !matches!(bytes.get(2), Some(b'\\' | b'/'))
+    {
+        return true;
+    }
+    let values = |key: &'static str| {
+        env.iter()
+            .filter(move |(name, _)| name.eq_ignore_ascii_case(key))
+            .flat_map(|(_, value)| value.split(';'))
+            .map(|entry| entry.trim().trim_matches('"'))
+            .filter(|entry| !entry.is_empty())
+    };
     let bases: Vec<PathBuf> = if program.contains(['\\', '/', ':']) {
         vec![cwd.join(program)]
     } else {
-        let path = env
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("PATH"))
-            .map_or("", |(_, value)| value.as_str());
         std::iter::once(cwd.to_path_buf())
-            .chain(
-                path.split(';')
-                    .map(|dir| dir.trim().trim_matches('"'))
-                    .filter(|dir| !dir.is_empty())
-                    .map(|dir| cwd.join(dir)),
-            )
+            .chain(values("PATH").map(|dir| cwd.join(dir)))
             .map(|dir| dir.join(program))
             .collect()
     };
+    let extensions: Vec<&str> = [".bat", ".cmd", ".BAT", ".CMD"]
+        .into_iter()
+        .chain(values("PATHEXT").filter(|ext| {
+            let ext = ext.to_ascii_lowercase();
+            ext == ".bat" || ext == ".cmd"
+        }))
+        .collect();
     bases.iter().any(|base| {
-        [".bat", ".cmd"].iter().any(|ext| {
+        extensions.iter().any(|ext| {
             let mut candidate = OsString::from(base.as_os_str());
             candidate.push(ext);
-            Path::new(&candidate).is_file()
+            match std::fs::metadata(&candidate) {
+                Ok(metadata) => !metadata.is_dir(),
+                Err(err) => !matches!(
+                    err.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ),
+            }
         })
     })
 }
@@ -326,12 +371,13 @@ impl CmdInvocation {
         if is_batch_program(program) {
             check_batch_arguments(args)?;
         }
-        // A nested cmd, `start`, or a batch file found through PATHEXT gets
-        // the arguments with the escapes removed and parses them again.
+        // A nested cmd, `start`, `if`, `for`, or a batch file found through
+        // PATHEXT gets the arguments with the escapes removed and parses
+        // them again.
         if let Some(arg) = args.iter().find(|arg| arg.contains(CMD_ACTIVE)) {
-            if is_nested_launcher(program) {
+            if is_reparsing_program(program) {
                 bail!(
-                    "a nested cmd.exe or START would re-parse its arguments: {program:?} {arg:?} (#2718)"
+                    "a nested cmd.exe, START, IF or FOR would re-parse its arguments: {program:?} {arg:?} (#2718)"
                 );
             }
             if resolves_to_batch_file(program, env, cwd) {

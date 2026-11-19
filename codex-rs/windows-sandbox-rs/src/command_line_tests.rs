@@ -436,6 +436,8 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
         "start/b",
         "start+x",
         "start\\..\\x.exe",
+        "cmd.exe+x",
+        " cmd.exe",
     ] {
         for arg in [
             "a\"b", "%PATH%", "!x!", "a^b", "a&b", "a|b", "a<b", "a>b", "(x", "x)", "a\nb", "a\rb",
@@ -455,8 +457,37 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
         line(&["cmd", "/c", "start", "/b", "dump.exe", "x"]),
         "cmd /d /v:off /s /c \"start /b dump.exe x\""
     );
-    // Other names containing the same letters are programs.
-    for program in ["cmdline.exe", "restart.exe", "startup", "C:\\cmds\\x.exe"] {
+    // `if` and `for` run a command taken from their arguments (#2718 review).
+    for items in [
+        &["cmd", "/c", "if", "1==1", "cmd", "/c", "dump.exe", "a&b"][..],
+        &["cmd", "/c", "IF", "/i", "a==a", "npm", "a|b"],
+        &["cmd", "/c", "if", "exist", "f", "x.bat", "a&b"],
+        &["cmd", "/c", "if/i", "a==a", "dump.exe", "%X%"],
+        &[
+            "cmd", "/c", "if", "not", "defined", "X", "start", "x", "a&b",
+        ],
+        &["cmd", "/c", "for", "/f", "%i", "in", "(x)", "do", "y"],
+        &["cmd", "/c", "@start", "x", "a&b"],
+    ] {
+        assert!(refused(items, &none).contains("re-parse"), "{items:?}");
+    }
+    assert_eq!(
+        line(&["cmd", "/c", "if", "1==1", "dump.exe", "x"]),
+        "cmd /d /v:off /s /c \"if 1==1 dump.exe x\""
+    );
+    // Other names containing the same letters are programs, and so is a
+    // program in a directory named `cmd` or `start`.
+    for program in [
+        "cmdline.exe",
+        "restart.exe",
+        "startup",
+        "iffy.exe",
+        "format.exe",
+        "foo.cmd.exe",
+        "C:\\cmds\\x.exe",
+        "C:\\Program Files\\Git\\cmd\\git.exe",
+        "C:\\Start Menu\\start\\x.exe",
+    ] {
         let items = ["cmd", "/c", program, "a&b"];
         assert_eq!(
             crt_split(&cmd_unescape(cmd_tail(&line(&items)))),
@@ -481,6 +512,7 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
         std::fs::create_dir_all(dir).expect("mkdir");
     }
     for file in [
+        bin.join("Shout.CMD"),
         bin.join("npm.cmd"),
         bin.join("git.exe"),
         quoted.join("yarn.bat"),
@@ -489,18 +521,20 @@ fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
     ] {
         std::fs::write(file, "@echo off\r\n").expect("write");
     }
-    let env = HashMap::from([(
-        "Path".to_string(),
-        format!(
-            "{};;\"{}\";relative-missing",
-            bin.display(),
-            quoted.display()
+    // Two spellings of PATH: the child gets one of them, so both count.
+    let env = HashMap::from([
+        ("PATH".to_string(), "relative-missing".to_string()),
+        (
+            "Path".to_string(),
+            format!("{};;\"{}\"", bin.display(), quoted.display()),
         ),
-    )]);
+    ]);
     let run = |items: &[&str]| sandbox_command_line(&argv(items), &env, &cwd);
     for items in [
         ["cmd", "/c", "npm", "a&b"],
+        ["cmd", "/c", "Shout", "a&b"],
         ["cmd", "/c", "yarn", "%X%"],
+        ["cmd", "/c", "C:npm", "a&b"],
         ["cmd", "/c", "local", "a|b"],
         ["cmd", "/c", "sub/rel", "!x!"],
     ] {
