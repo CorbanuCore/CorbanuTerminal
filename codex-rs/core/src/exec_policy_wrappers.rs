@@ -21,6 +21,8 @@ use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 use codex_shell_command::powershell::UnreadPowershell;
 use codex_shell_command::powershell::unread_powershell_command_line;
 use roles::Role;
+use std::cell::Cell;
+use std::marker::PhantomData;
 
 #[path = "exec_policy_script_roles.rs"]
 mod roles;
@@ -843,15 +845,108 @@ fn may_be_batch_file(
             && windows_batch_file(program))
 }
 
-/// See [`may_be_batch_file`]. Sync: the executor may be another host than
-/// this one (#2671; a remote environment reports only its platform), whose
-/// `PATH` this host cannot read, so any program not named `.exe` or `.com`
-/// may be a batch file there (`pnpm` as `pnpm.cmd`, `.\build` in the
-/// command's folder or created by the script first). Main looks a bare name
-/// up on this host's `PATH`.
+thread_local! {
+    /// Whether the command being checked on this thread runs on this host
+    /// (see [`enter_local_executor`]).
+    static LOCAL_EXECUTOR: Cell<bool> = const { Cell::new(false) };
+}
+
+/// While the returned guard lives, commands checked on this thread run on
+/// this host when `local` (a local environment), so their PowerShell finds
+/// programs on this host's `PATH`. Outside it, or for a remote environment,
+/// a program's file is unknown (see [`windows_batch_file`]). The guard is not
+/// `Send`, so it cannot be held across an `.await`.
+#[must_use]
+pub(super) fn enter_local_executor(local: bool) -> LocalExecutorGuard {
+    LocalExecutorGuard {
+        previous: LOCAL_EXECUTOR.with(|current| current.replace(local)),
+        _not_send: PhantomData,
+    }
+}
+
+pub(super) struct LocalExecutorGuard {
+    previous: bool,
+    _not_send: PhantomData<*const ()>,
+}
+
+impl Drop for LocalExecutorGuard {
+    fn drop(&mut self) {
+        LOCAL_EXECUTOR.with(|current| current.set(self.previous));
+    }
+}
+
+/// Whether commands checked on this thread run on this host (tests).
+#[cfg(test)]
+pub(super) fn local_executor() -> bool {
+    LOCAL_EXECUTOR.with(Cell::get)
+}
+
+/// See [`may_be_batch_file`]. A command running on this host, a Windows one
+/// (#2729: the 6 sync-only Windows regressions #2711 caused): as on main, a bare name is looked up
+/// on this host's `PATH` ([`windows_batch_file_in`]), so PowerShell's own
+/// `echo` is not a batch file unless `PATH` holds one first. Sync: any other
+/// executor may be another host (#2671; a remote environment reports only its
+/// platform), whose `PATH` this host cannot read, so there any program not
+/// named `.exe` or `.com` may be a batch file (`pnpm` as `pnpm.cmd`,
+/// `.\build` in the command's folder or created by the script first).
 fn windows_batch_file(program: &str) -> bool {
+    if cfg!(windows) && LOCAL_EXECUTOR.with(Cell::get) {
+        return windows_batch_file_in(
+            program,
+            std::env::var_os("PATH"),
+            std::env::var("PATHEXT").ok(),
+        );
+    }
     let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
     !(lower.ends_with(".exe") || lower.ends_with(".com"))
+}
+
+/// [`windows_batch_file`] for a command on this host, with `PATH` and
+/// `PATHEXT` given (main's lookup). A bare name is looked for only in
+/// absolute local `PATH` folders, never in a folder the command names, and
+/// only the first match counts, as PowerShell takes it; a relative or network
+/// `PATH` folder before a match leaves it unknown (yes). A bare name found
+/// nowhere does not run unless a command first writes it into a `PATH` folder
+/// or changes `PATH` (a PowerShell command on the `env:` drive asks under
+/// strict rules, see `powershell_runs_code`). This is Corbanu's `PATH`: a
+/// user's `shell_environment_policy` can give the shell another one. A name
+/// named `.exe` or `.com` is not looked up: PowerShell may still find
+/// `x.exe.cmd` when `x.exe` is missing, which a command creating it could as
+/// well hold its commands in.
+pub(super) fn windows_batch_file_in(
+    program: &str,
+    path: Option<std::ffi::OsString>,
+    extensions: Option<String>,
+) -> bool {
+    let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    if lower.ends_with(".exe") || lower.ends_with(".com") {
+        return false;
+    }
+    if program.contains(['/', '\\', ':', '.']) {
+        return true;
+    }
+    let Some(path) = path else {
+        return false;
+    };
+    let extensions = extensions.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
+    // An empty entry (`a;;b`, a trailing `;`) names no folder. One rooted
+    // at the current drive (`\tools`, `/usr/bin`) depends on the command's
+    // drive: unknown.
+    for dir in std::env::split_paths(&path).filter(|dir| !dir.as_os_str().is_empty()) {
+        if !dir.is_absolute() || dir.to_string_lossy().starts_with(['\\', '/']) {
+            return true;
+        }
+        for extension in extensions
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+        {
+            if dir.join(format!("{program}{extension}")).is_file() {
+                return extension.eq_ignore_ascii_case(".cmd")
+                    || extension.eq_ignore_ascii_case(".bat");
+            }
+        }
+    }
+    false
 }
 
 /// #2543: the prompt and forbidden rule matches of a script command with

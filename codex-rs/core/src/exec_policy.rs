@@ -326,6 +326,11 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) prefix_rule: Option<Vec<String>>,
     pub(crate) allow_prefix_rules: AllowPrefixRules,
+    /// The local directory the command runs in; `None` for a remote
+    /// environment, whose `PATH` this host cannot read (and where there is no
+    /// command to run, as in heuristics and tests). Sync: only whether it is
+    /// local is used, for finding batch files (`exec_policy_wrappers`).
+    pub(crate) cwd: Option<AbsolutePathBuf>,
 }
 
 impl ExecPolicyManager {
@@ -503,7 +508,11 @@ impl ExecPolicyManager {
             sandbox_permissions,
             prefix_rule,
             allow_prefix_rules,
+            cwd,
         } = req;
+        // A command on this host finds its PowerShell programs on this host's
+        // `PATH`, as on main. The guard is not `Send`: nothing below awaits.
+        let _local_executor = wrappers::enter_local_executor(cwd.is_some());
         let exec_policy = self.current_for_environment_at(
             environment_policy,
             allow_prefix_rules,
