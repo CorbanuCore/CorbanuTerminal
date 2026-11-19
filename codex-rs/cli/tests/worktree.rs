@@ -336,6 +336,8 @@ trust_level = "trusted"
                 ],
             )?;
             fs::write(source.join(".codex/config.toml"), "")?;
+            // The logout asserted below must happen during this launch.
+            assert!(home.join("auth.json").is_file());
         }
         let (metric_tx, mut metric_rx) = tokio::sync::mpsc::unbounded_channel();
         Mock::given(wiremock::matchers::path("/metrics"))
