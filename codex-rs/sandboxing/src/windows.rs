@@ -361,6 +361,20 @@ pub fn resolve_windows_elevated_filesystem_overrides(
         ));
     }
 
+    // D377: launch selects a private child of the command's temp directory.
+    // The backend receives the complete profile and resolves all write roots
+    // after that selection. Freezing a symbolic temp grant here would instead
+    // grant the original parent; leave write-root resolution to that backend.
+    let defer_write_roots_to_session_temp = cfg!(windows)
+        && file_system_sandbox_policy.entries.iter().any(|entry| {
+            matches!(
+                &entry.path,
+                codex_protocol::permissions::FileSystemPath::Special {
+                    value: codex_protocol::permissions::FileSystemSpecialPath::Tmpdir,
+                }
+            ) && entry.access.can_write()
+        });
+
     // Windows protects existing metadata paths through the legacy writable root
     // projection. Do not turn skip-missing entries into newly-created
     // deny-write sentinels.
@@ -423,11 +437,12 @@ pub fn resolve_windows_elevated_filesystem_overrides(
         Some(split_readable_roots)
     };
 
-    let write_roots_override = if split_root_path_set == legacy_root_paths {
-        None
-    } else {
-        Some(split_root_paths)
-    };
+    let write_roots_override =
+        if defer_write_roots_to_session_temp || split_root_path_set == legacy_root_paths {
+            None
+        } else {
+            Some(split_root_paths)
+        };
 
     let additional_deny_write_paths = if needs_direct_runtime_enforcement
         || has_explicit_write_carveouts

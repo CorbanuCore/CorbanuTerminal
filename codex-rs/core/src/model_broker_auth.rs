@@ -561,6 +561,14 @@ impl CoreModelKeyBroker {
                 return Self::not_started(StartFailure::Unavailable, settings.origin);
             }
         }
+        // SMQ-2: copies of the held keys under other names go too. A broker
+        // that cannot check them is not trusted with any key.
+        if let Err(error) = take_env_copies(&broker) {
+            tracing::warn!(
+                "credential broker could not check the environment for key copies: {error}"
+            );
+            return Self::not_started(StartFailure::Unavailable, settings.origin);
+        }
         #[cfg(unix)]
         match codex_http_client::HttpClient::unix_socket(
             broker.socket_path(),
@@ -878,7 +886,7 @@ fn register(
         }
         ModelCredentialBrokerError::PipeSquatted => BrokerModelAuthError::PipeSquatted,
     };
-    match source {
+    let credential = match source {
         Source::ProviderKey {
             provider_key_id,
             env_vars,
@@ -908,7 +916,31 @@ fn register(
                 })
         }
         Source::Value { value, .. } => broker.register(wire, value).map_err(map_error),
+    }?;
+    // SMQ-2: a key registered now (a stored key, a refreshed token) may have
+    // a copy in the environment that commands would inherit.
+    if let Err(error) = take_env_copies(broker) {
+        unregister(&credential);
+        return Err(map_error(error));
     }
+    Ok(credential)
+}
+
+/// SMQ-2: removes copies of keys the broker holds from Core's environment and
+/// records their names (never values) like the provider keys themselves.
+#[cfg(any(unix, windows))]
+fn take_env_copies(
+    broker: &codex_network_proxy::model_auth::ModelCredentialBroker,
+) -> Result<(), codex_network_proxy::model_auth::ModelCredentialBrokerError> {
+    let taken = broker.take_env_copies()?;
+    if !taken.is_empty() {
+        tracing::info!(
+            "copies of keys held by the credential broker removed from the environment: {}",
+            taken.join(", ")
+        );
+        note_removed_env_keys(taken);
+    }
+    Ok(())
 }
 
 #[cfg(not(any(unix, windows)))]
