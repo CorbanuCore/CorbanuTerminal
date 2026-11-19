@@ -217,7 +217,11 @@ pub(crate) fn unread_script_matches(
         && reading.as_ref().is_none_or(|read| {
             !runs_more_than_argv(read) && (!read.fails_closed() || !strict_rules)
         });
-    if plain || (reading.is_none() && !runs_unread_script(command)) || heredoc_pass_suffices {
+    // #2704: a script cmd.exe reads is read here too (strict rules first:
+    // finding a batch file looks at `PATH`).
+    let unread = runs_unread_script(command)
+        || (strict_rules && runs_unread_cmd_script(command, platform));
+    if plain || (reading.is_none() && !unread) || heredoc_pass_suffices {
         return (Vec::new(), Vec::new());
     }
     let checked = check(
