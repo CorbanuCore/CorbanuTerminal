@@ -3,6 +3,7 @@ use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
 use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
+use app_test_support::command_string;
 use app_test_support::create_apply_patch_sse_response;
 use app_test_support::create_command_execution_sse_response;
 use app_test_support::create_escalated_command_execution_sse_response;
@@ -3151,9 +3152,9 @@ async fn turn_start_exec_approval_toggle_v2() -> Result<()> {
         "import sys, time; time.sleep(0.5); print(sys.argv[1].endswith('7890'))".to_string(),
         format!("Authorization: Bearer {bearer_token}"),
     ];
-    let expected_approval_command = format_with_current_shell_display(&shlex::try_join(
-        first_shell_command.iter().map(String::as_str),
-    )?);
+    // The fixture sends the shell's own quoting (PowerShell on Windows).
+    let expected_approval_command =
+        format_with_current_shell_display(&command_string(&first_shell_command)?);
     let expected_display_command =
         expected_approval_command.replace(bearer_token, "[REDACTED_SECRET]");
 
@@ -3394,9 +3395,9 @@ async fn run_turn_start_exec_approval_rejection_v2(
         "print(42)".to_string(),
         format!("Authorization: Bearer {bearer_token}"),
     ];
-    let expected_approval_command = format_with_current_shell_display(&shlex::try_join(
-        shell_command.iter().map(String::as_str),
-    )?);
+    // The fixture sends the shell's own quoting (PowerShell on Windows).
+    let expected_approval_command =
+        format_with_current_shell_display(&command_string(&shell_command)?);
     let expected_display_command =
         expected_approval_command.replace(bearer_token, "[REDACTED_SECRET]");
 
