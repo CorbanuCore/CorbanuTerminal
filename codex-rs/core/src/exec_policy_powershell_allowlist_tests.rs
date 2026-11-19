@@ -345,9 +345,10 @@ async fn allowlisted_forms_stay_precise() {
 
 /// D733 (#2709 CI, issue_2050): without a prompt or forbidden rule, and for
 /// known-safe classification always, a script reads as before D729, also for
-/// a remote environment where no name can be found.
-#[test]
-fn without_strict_rules_scripts_read_as_before() {
+/// a remote environment where no name can be found. With one, the allowlist
+/// decides: the same remote script asks.
+#[tokio::test]
+async fn without_strict_rules_scripts_read_as_before() {
     use codex_shell_command::powershell::PowershellCommandScope;
     use codex_shell_command::powershell::PowershellScriptRead;
     use codex_shell_command::powershell::enter_powershell_command_scope;
@@ -359,6 +360,28 @@ fn without_strict_rules_scripts_read_as_before() {
             "-Command".to_string(),
             "echo issue2050".to_string(),
         ];
+        let asked = ExecPolicyManager::new(policy_from_src(Some(GIT_PUSH_FORBIDDEN)))
+            .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+                command: &command,
+                approval_policy: AskForApproval::OnRequest,
+                permission_profile: PermissionProfile::Disabled,
+                windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+                sandbox_permissions: SandboxPermissions::UseDefault,
+                prefix_rule: Some(command.clone()),
+                cwd: None,
+                env: Some(&env),
+            })
+            .await;
+        assert!(
+            matches!(
+                asked,
+                ExecApprovalRequirement::NeedsApproval {
+                    proposed_execpolicy_amendment: None,
+                    ..
+                }
+            ),
+            "{shell}: {asked:?}"
+        );
         {
             let _scope = enter_powershell_command_scope(PowershellCommandScope::new(
                 /*cwd*/ None,
@@ -376,15 +399,17 @@ fn without_strict_rules_scripts_read_as_before() {
                 "{shell}"
             );
         }
-        let _scope = enter_powershell_command_scope(
-            PowershellCommandScope::new(/*cwd*/ None, Some(&env)).with_allowlist(false),
-        );
-        assert!(
-            matches!(
-                read_powershell_command_script(&command),
-                Some(PowershellScriptRead::Commands(_))
-            ),
-            "{shell}"
-        );
+        {
+            let _scope = enter_powershell_command_scope(
+                PowershellCommandScope::new(/*cwd*/ None, Some(&env)).with_allowlist(false),
+            );
+            assert!(
+                matches!(
+                    read_powershell_command_script(&command),
+                    Some(PowershellScriptRead::Commands(_))
+                ),
+                "{shell}"
+            );
+        }
     }
 }
