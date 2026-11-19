@@ -363,15 +363,21 @@ impl CredentialBroker {
             }
         }
         if let Some(scoped) = state.scoped_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                scoped.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    scoped.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
         if let Some(isolated) = state.isolated_openai.as_ref() {
-            env.insert(
-                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
-                isolated.dummy_value.clone(),
+            drop(
+                env.insert(
+                    resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                    isolated.dummy_value.clone(),
+                )
+                .map(Zeroizing::new),
             );
         }
         self.take_child_env_copies(&mut state, env, &virtualized);
@@ -749,7 +755,11 @@ fn virtualize_env_var<'a>(
             real_value,
         ),
     };
-    env.insert(env_var.to_string(), dummy_value);
+    // The replaced value (the key itself) is zeroized.
+    drop(
+        env.insert(env_var.to_string(), dummy_value)
+            .map(Zeroizing::new),
+    );
     Some(real_value)
 }
 

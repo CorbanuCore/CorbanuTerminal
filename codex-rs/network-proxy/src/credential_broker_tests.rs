@@ -1023,3 +1023,30 @@ fn d732_disabled_broker_leaves_the_env_unchanged() {
     broker.virtualize_child_env(&mut env);
     assert_eq!(env, before);
 }
+
+/// D732: a failed check is sticky: a later environment that checks cleanly
+/// does not make the broker give keys again.
+#[test]
+fn d732_failed_check_keeps_refusing_after_a_clean_check() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let mut env = env_map([("GH_TOKEN", D732_TOKEN)]);
+    broker.virtualize_child_env(&mut env);
+    let dummy = env["GH_TOKEN"].clone();
+    broker.write_state().env_copy_check_failed = true;
+    let mut later = env_map([("SAFE", "ordinary value")]);
+    broker.virtualize_child_env(&mut later);
+    assert!(broker.read_state().env_copy_check_failed);
+    assert_eq!(
+        broker
+            .route_request_credentials(
+                "https",
+                "api.github.com",
+                /*port*/ 443,
+                "GET",
+                "/user",
+                &mut headers_with_bearer(&dummy),
+            )
+            .err(),
+        Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+    );
+}
