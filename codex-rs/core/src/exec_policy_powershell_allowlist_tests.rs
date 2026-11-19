@@ -206,6 +206,9 @@ fn unread_scripts() -> Vec<String> {
         r"Test-Path 'Microsoft.PowerShell.Core\FileSystem::\\attacker.example\s::x'".into(),
         r"Get-Content -LiteralPath '\\.\C:\..\UNC\attacker.example\s\x'".into(),
         r"Get-Content -LiteralPath '\\?\UNC\attacker.example\s\x'".into(),
+        // Fail-closed after r6: any `::` and any leading `\\` or `//` asks.
+        r"Get-Content -LiteralPath '\\?\C:\does not\exist.txt' -Raw".into(),
+        "Write-Output 'a::b'".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
@@ -291,8 +294,6 @@ async fn allowlisted_forms_stay_precise() {
             // File-system dynamic parameters, also for a path that does not exist.
             r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",
             r"Get-Content -LiteralPath 'C:\does not\exist.txt' -Raw",
-            // A local device path is not a network path.
-            r"Get-Content -LiteralPath '\\?\C:\does not\exist.txt' -Raw",
         ] {
             for permission_profile in [
                 PermissionProfile::Disabled,

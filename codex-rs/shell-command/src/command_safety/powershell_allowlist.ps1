@@ -121,14 +121,13 @@ function Get-D729LiteralText($element) {
 }
 
 # A network path (`\\host\share`, `//host`) reaches another computer with the user's
-# credentials. PowerShell splits a provider qualifier (`FileSystem::`) at its first `::`,
-# so a path starting at the text's start or after any `::` counts. Only `\\?\` and `\\.\`
-# before a drive letter are local, and only with no `..` segment (`\\.\C:\..\UNC\host`).
+# credentials. Fail-closed: any text holding `::` (a provider qualifier, which PowerShell
+# splits at its first `::`) or starting with `\\` or `//` (also `\\?\` and `\\.\` device
+# paths, which `..` or `UNC\` can turn into network paths) counts.
 function Test-D729NetworkPath($text) {
     if ($null -eq $text) { return $false }
     $text = [string]$text
-    if ($text -match '(^|::)\s*[\\/]{2}(?![?.][\\/][A-Za-z]:)') { return $true }
-    return ($text -match '(^|::)\s*[\\/]{2}[?.][\\/]' -and $text -match '(^|[\\/])\.\.([\\/]|$)')
+    return ($text.Contains('::') -or $text -match '^\s*[\\/]{2}')
 }
 
 # Why a native program's argv may not be what PowerShell passes; $null if it is.
