@@ -19,6 +19,7 @@ use crate::migrations::runtime_state_migrator;
 use crate::migrations::runtime_thread_history_migrator;
 use crate::runtime::recovery::RuntimeDbInitError;
 use crate::runtime::validate_applied_migrations;
+use crate::runtime::validate_applied_migrations_with_busy_timeout;
 use crate::telemetry;
 use crate::telemetry::DbKind;
 use codex_file_system::LocalLogsDir;
@@ -366,7 +367,16 @@ impl SqliteConfig {
         // applied migrations this build doesn't know (another distribution's
         // or a newer build's database), whose rows were not written under
         // this build's validation.
-        validate_applied_migrations(self, &path, &runtime_state_migrator()).await?;
+        // The check reads the database too, so it gets the same bounded wait:
+        // with SQLite's default 5 s, a writer holding its lock delayed every
+        // configuration load (#2728).
+        validate_applied_migrations_with_busy_timeout(
+            self,
+            &path,
+            &runtime_state_migrator(),
+            Some(busy_timeout),
+        )
+        .await?;
         let pool = self.open_read_only_pool(&path, Some(busy_timeout)).await?;
         let providers =
             crate::runtime::gpu_runtime_providers::list_gpu_runtime_providers_in(&pool).await;

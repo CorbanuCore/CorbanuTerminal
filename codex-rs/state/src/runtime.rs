@@ -587,12 +587,24 @@ pub(super) async fn validate_applied_migrations(
     path: &Path,
     migrator: &Migrator,
 ) -> anyhow::Result<()> {
+    validate_applied_migrations_with_busy_timeout(
+        sqlite, path, migrator, /*busy_timeout*/ None,
+    )
+    .await
+}
+
+/// [`validate_applied_migrations`] whose read waits at most `busy_timeout`
+/// (SQLite's default otherwise) for another connection's write lock.
+pub(super) async fn validate_applied_migrations_with_busy_timeout(
+    sqlite: &SqliteConfig,
+    path: &Path,
+    migrator: &Migrator,
+    busy_timeout: Option<std::time::Duration>,
+) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(path).await? {
         return Ok(());
     }
-    let pool = sqlite
-        .open_read_only_pool(path, /*busy_timeout*/ None)
-        .await?;
+    let pool = sqlite.open_read_only_pool(path, busy_timeout).await?;
     let table_exists = sqlx::query_scalar::<_, i64>(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
     )
