@@ -112,6 +112,7 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
             .plan_type("pro"),
         codex_login::AuthCredentialsStoreMode::File,
     )?;
+    mount_workspace_routing(&fixture.server, "pf58-account").await;
     let auth: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(fixture.home.path().join("auth.json"))?)?;
     let rejection = Mock::given(method("POST"))

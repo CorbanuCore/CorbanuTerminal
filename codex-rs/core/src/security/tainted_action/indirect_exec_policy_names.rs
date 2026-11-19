@@ -397,6 +397,33 @@ mod tests {
         }
     }
 
+    /// #2699: the PowerShell reader refuses exactly the Windows names this
+    /// module is unsure of.
+    #[test]
+    fn shell_command_shares_windows_unsure_names() {
+        for word in [
+            "pwsh.exe:x.exe",
+            r"C:\PS\pwsh.exe:s",
+            "C:pwsh.exe:s",
+            "C:pwsh.exe",
+            "pwsh.exe::$DATA",
+            "BUSYBO~1.EXE",
+            r"C:\PROGRA~1\PowerShell\7\pwsh.exe",
+            "C:/PS/pwsh.exe:s/",
+            "/opt/a:b/pwsh",
+            "git~",
+            "~1",
+            "pwsh",
+            "",
+        ] {
+            assert_eq!(
+                super::unsure(word, NameCase::Windows),
+                codex_shell_command::shell_detect::windows_name_unsure(word),
+                "{word}"
+            );
+        }
+    }
+
     #[test]
     fn unsure_names_fail_closed() {
         let uncertain: Shape = (vec![0], true, None);

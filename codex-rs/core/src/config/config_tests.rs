@@ -14810,6 +14810,58 @@ async fn absent_gpu_runtime_overlay_does_not_create_state_db() -> std::io::Resul
     Ok(())
 }
 
+/// #2723: reading the overlay from an existing state database opens it
+/// read-only; it creates no other runtime database or lock file.
+#[tokio::test]
+async fn gpu_runtime_overlay_reads_existing_state_db_without_creating_files() -> anyhow::Result<()>
+{
+    let sqlite_home = TempDir::new()?;
+    let sqlite = codex_state::SqliteConfig::new_for_testing(sqlite_home.abs());
+    let state_db = sqlite.state_db_path();
+    let runtime = codex_state::StateRuntime::init(sqlite, "test".to_string()).await?;
+    runtime.close().await;
+    drop(runtime);
+    // Keep only the state database and its sidecars, as a home that never
+    // opened the other runtime databases.
+    let state_name = state_db
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_owned();
+    for entry in std::fs::read_dir(sqlite_home.path())? {
+        let path = entry?.path();
+        let keep = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(&state_name));
+        if !keep && path.is_file() {
+            std::fs::remove_file(path)?;
+        }
+    }
+    let list = || -> std::io::Result<Vec<std::ffi::OsString>> {
+        let mut names = std::fs::read_dir(sqlite_home.path())?
+            .map(|entry| entry.map(|entry| entry.file_name()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        names.sort();
+        Ok(names)
+    };
+    let before = list()?;
+
+    assert!(
+        load_gpu_runtime_model_provider_records(sqlite_home.path())
+            .await
+            .is_empty()
+    );
+    // SQLite's read-only WAL access may recreate the state database's own
+    // `-wal`/`-shm`; no other runtime database or lock file may appear.
+    let created = list()?
+        .into_iter()
+        .filter(|name| !before.contains(name) && !name.to_string_lossy().starts_with(&state_name))
+        .collect::<Vec<_>>();
+    assert!(created.is_empty(), "{created:?}");
+    Ok(())
+}
+
 #[tokio::test]
 async fn explicit_incompatible_model_provider_pair_fails_closed() -> std::io::Result<()> {
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;

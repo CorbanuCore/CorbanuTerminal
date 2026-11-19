@@ -5,6 +5,8 @@ codex_rust_crate(
     compile_data = [
         "src/command_safety/fixtures/powershell_lowering.json",
         "src/command_safety/powershell_parser.ps1",
+        "src/powershell/allowlist/core.json",
+        "src/powershell/allowlist/desktop.json",
     ],
     crate_name = "codex_shell_command",
 )

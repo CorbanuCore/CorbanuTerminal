@@ -326,7 +326,10 @@ async fn daemon_startup(command: &str) -> Result<()> {
             // thread; wait for the confirmed footer name, not the echoed command.
             steps.push_back(("GPT-5.6-Terra", b"/rename daemon-restart-test\r"));
             steps.push_back(("·daemon-restart-test", b"/daemon\r"));
-            steps.push_back(("Restartbackgroundserver", b"2"));
+            // Corbanu's /daemon menu offers Restart as its only enabled row (the public-stable
+            // update is hidden, D564; this CLI build has no package to copy), so select it by
+            // position instead of upstream's second-row shortcut. It opens the same prompt.
+            steps.push_back(("Restartbackgroundserver", b"\x1b[F\r"));
             steps.push_back(("Restartbackgroundserver?", b"2\r"));
             // Offline editing preserves text but suppresses Enter. Observe the command
             // popup in a complete connected frame before submitting the retained draft.
@@ -336,7 +339,7 @@ async fn daemon_startup(command: &str) -> Result<()> {
         } else if elevated_launch || command == "restrictive-job" && elevated {
             if let Some(action) = command.strip_prefix("elevated-") {
                 args.push(action.into());
-                steps.push_back(("Nosessionsyet", b"\x1b"));
+                steps.push_back(("Nosessions", b"\x1b"));
             }
             steps.push_back(("GPT-5.6-Terra", b"\x14"));
             "Runningasadministrator:sharedbackgroundserverdisabled."
@@ -363,8 +366,10 @@ async fn daemon_startup(command: &str) -> Result<()> {
                 if restart { "Server:Localbackgroundserver" } else { "Model:" }
             }
         } else if bedrock_onboarding {
-            // With GCP disabled, only Bedrock makes the sign-in menu advertise another provider.
-            "UseanAPIkeyoranotherprovider"
+            // Upstream waits for its OpenAI sign-in menu ("Use an API key or another provider",
+            // which only Bedrock enables here). Corbanu's first-run onboarding is the provider
+            // account list instead; the daemon assertions below are unchanged.
+            "ChooseaprovideraccountforCorbanuTerminal"
         } else {
             args.extend([command.into(), "--strict-config".into()]);
             if command == "resume" {
@@ -392,7 +397,9 @@ async fn daemon_startup(command: &str) -> Result<()> {
                 )?;
                 steps.push_back(("Savedresumesession", b"\r"));
             } else {
-                steps.push_back(("Nosessionsyet", b"\x1b"));
+                // Corbanu's picker opens on this folder's sessions and says "No sessions in
+                // this folder" (upstream: "No sessions yet"); either empty state will do.
+                steps.push_back(("Nosessions", b"\x1b"));
             }
             steps.push_back(("GPT-5.6-Terra", b"\x14"));
             if elevated {

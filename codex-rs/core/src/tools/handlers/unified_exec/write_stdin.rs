@@ -386,6 +386,38 @@ async fn post_taint_check(
     Ok(())
 }
 
+/// The terminal a write goes to. #2729 (sync): upstream looks the process
+/// up before the handler runs; as on main, typing under a level that refuses
+/// it on this Windows client without its sandbox (#1976, D491) is refused
+/// and listed in the inspector first, whether or not the process exists.
+/// The handler still judges the process's environment and the sandbox it
+/// started with.
+fn terminal_session_for_typing(
+    invocation: &ToolInvocation,
+) -> futures::future::BoxFuture<'_, Result<ToolEnvironments, FunctionCallError>> {
+    Box::pin(async move {
+        let typing = WriteStdinArgs::parse(&invocation.payload)
+            .is_ok_and(|args| !args.chars.is_empty() && !is_interrupt(&args.chars));
+        if typing
+            && let Some(refusal) = crate::security::windows_unsandboxed::session_typing_refusal(
+                &invocation.session,
+                invocation.turn.windows_sandbox_level,
+                /*started_with*/ None,
+            )
+        {
+            crate::security::inspection::record_refusal(
+                invocation.session.thread_id(),
+                crate::security::windows_unsandboxed::INSPECTED_TYPING,
+                crate::security::windows_unsandboxed::inspected_outcome(
+                    invocation.session.services.model_client().live_level(),
+                ),
+            );
+            return Err(FunctionCallError::RespondToModel(refusal));
+        }
+        super::terminal_session_for_input(invocation).await
+    })
+}
+
 /// Characters of typed text shown from each end in the approval question.
 const TYPED_TEXT_SHOWN: usize = 300;
 
@@ -395,7 +427,7 @@ impl CoreToolRuntime for WriteStdinHandler {
     }
 
     fn live_environment_resolver(&self) -> Option<LiveEnvironmentResolver> {
-        Some(super::terminal_session_for_input)
+        Some(terminal_session_for_typing)
     }
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
         matches!(payload, ToolPayload::Function { .. })

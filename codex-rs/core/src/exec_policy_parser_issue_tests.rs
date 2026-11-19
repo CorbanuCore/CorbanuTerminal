@@ -8,6 +8,9 @@
 //! outside the minimal lexical set (any here-document or here-string), or
 //! one using a builtin that defines or runs code (`hash`, `alias`, `trap`,
 //! `enable`, `mapfile`), asks whenever a prompt or forbidden rule exists.
+#[path = "exec_policy_powershell_stream_tests.rs"]
+mod stream_tests;
+
 use super::*;
 use pretty_assertions::assert_eq;
 
@@ -85,6 +88,8 @@ async fn aggressive_never(command: &[String], rules: &str) -> ExecApprovalRequir
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: Some(command.to_vec()),
                 allow_prefix_rules: AllowPrefixRules::Honor,
+                cwd: None,
+                env: None,
             },
             /*live_aggressive*/ true,
         )
@@ -423,6 +428,8 @@ async fn issue_2601_powershell_asks_for_the_windows_platform_on_any_host() {
                                 sandbox_permissions: SandboxPermissions::UseDefault,
                                 prefix_rule: Some(command.clone()),
                                 allow_prefix_rules: AllowPrefixRules::Honor,
+                                cwd: None,
+                                env: None,
                             },
                             &shell,
                             DangerousCommandPlatform::Windows,
@@ -469,6 +476,8 @@ async fn powershell_check_keeps_refusals_of_read_scripts() {
                                 sandbox_permissions: SandboxPermissions::UseDefault,
                                 prefix_rule: Some(command.clone()),
                                 allow_prefix_rules: AllowPrefixRules::Honor,
+                                cwd: None,
+                                env: None,
                             },
                             DangerousCommandPlatform::Windows,
                             /*live_aggressive*/ false,
@@ -516,6 +525,8 @@ async fn windows_requirements(command: &[String], rules: &str) -> Vec<ExecApprov
                         sandbox_permissions: SandboxPermissions::UseDefault,
                         prefix_rule: Some(command.to_vec()),
                         allow_prefix_rules: AllowPrefixRules::Honor,
+                        cwd: None,
+                        env: None,
                     },
                     DangerousCommandPlatform::Windows,
                     live_aggressive,
@@ -643,6 +654,8 @@ async fn issue_2671_posix_executor_powershell_folds_case_on_any_host() {
                         sandbox_permissions: SandboxPermissions::UseDefault,
                         prefix_rule: Some(command.clone()),
                         allow_prefix_rules: AllowPrefixRules::Honor,
+                        cwd: None,
+                        env: None,
                     },
                     DangerousCommandPlatform::Posix,
                     /*live_aggressive*/ false,

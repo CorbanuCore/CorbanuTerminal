@@ -336,6 +336,8 @@ trust_level = "trusted"
                 ],
             )?;
             fs::write(source.join(".codex/config.toml"), "")?;
+            // The logout asserted below must happen during this launch.
+            assert!(home.join("auth.json").is_file());
         }
         let (metric_tx, mut metric_rx) = tokio::sync::mpsc::unbounded_channel();
         Mock::given(wiremock::matchers::path("/metrics"))
@@ -493,13 +495,23 @@ trust_level = "trusted"
             }
         }).await;
         if auth_failure {
-            assert!(observed.is_ok_and(|result| result.is_err()), "{output}");
-            let exit =
-                tokio::time::timeout(Duration::from_secs(/*secs*/ 10), spawned.exit_rx).await??;
-            assert_ne!(exit, 0);
-            assert!(output.contains("API key login is required"), "{output}");
-            assert!(!home.join("auth.json").exists());
-            assert!(output.contains("The checkout was kept"), "{output}");
+            // Upstream ends startup here. Corbanu logs a default login of the wrong method
+            // out and continues (`LoginRestrictionViolation::Method` in codex-login); a wrong
+            // workspace still ends startup. The checkout's committed `forced_login_method`,
+            // not the source's empty working-tree config, still governs: the ChatGPT login
+            // is gone before the turn, which the local provider serves without it.
+            let (_, checkout, metadata) = observed
+                .with_context(|| format!("auth-failure startup timed out: {output}"))?
+                .with_context(|| format!("auth-failure startup: {output}"))?;
+            assert!(!home.join("auth.json").exists(), "{output}");
+            assert!(!previous.contains(&checkout), "{checkout}");
+            assert!(
+                metadata["ownerThreadId"].as_str().is_some(),
+                "owner bound before request"
+            );
+            assert!(!output.contains("The checkout was kept"), "{output}");
+            session.terminate();
+            let _ = tokio::time::timeout(Duration::from_secs(/*secs*/ 10), spawned.exit_rx).await;
             continue;
         }
         let renamed = if !fork && let Ok(Ok((_, _, metadata))) = &observed {
@@ -677,7 +689,7 @@ trust_level = "trusted"
                 .flat_map(|metric| metric["sum"]["dataPoints"].as_array().into_iter().flatten())
                 .next()
                 .context("codex.tui.start data point")?;
-            assert_eq!(point["asInt"], 1);
+            assert_eq!(otlp_int(point), Some(1));
             let tags = point["attributes"]
                 .as_array()
                 .context("codex.tui.start attributes")?
@@ -730,7 +742,7 @@ trust_level = "trusted"
                 .collect::<Vec<_>>();
             assert_eq!(observations.len(), 2);
             for observation in observations {
-                assert_eq!(observation["asInt"], 1);
+                assert_eq!(otlp_int(observation), Some(1));
                 let observation_tags = observation["attributes"]
                     .as_array()
                     .context("observation attributes")?
@@ -986,4 +998,12 @@ trust_level = "trusted"
         "{output}"
     );
     Ok(())
+}
+
+/// OTLP/JSON encodes int64 as a string (opentelemetry-proto 0.33, which the
+/// sync carries from main); older exporters wrote a number.
+fn otlp_int(point: &serde_json::Value) -> Option<i64> {
+    point["asInt"]
+        .as_i64()
+        .or_else(|| point["asInt"].as_str()?.parse().ok())
 }
