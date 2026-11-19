@@ -593,8 +593,9 @@ pub(super) async fn validate_applied_migrations(
     .await
 }
 
-/// [`validate_applied_migrations`] whose read waits at most `busy_timeout`
-/// (SQLite's default otherwise) for another connection's write lock.
+/// [`validate_applied_migrations`] whose reads wait at most `busy_timeout`
+/// (sqlx's 5 s default otherwise) for another connection's write lock, once
+/// while opening and once on the first query.
 pub(super) async fn validate_applied_migrations_with_busy_timeout(
     sqlite: &SqliteConfig,
     path: &Path,

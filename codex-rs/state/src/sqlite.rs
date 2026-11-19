@@ -368,8 +368,9 @@ impl SqliteConfig {
         // or a newer build's database), whose rows were not written under
         // this build's validation.
         // The check reads the database too, so it gets the same bounded wait:
-        // with SQLite's default 5 s, a writer holding its lock delayed every
-        // configuration load (#2728).
+        // with sqlx's 5 s default (paid on open and on the first query), a
+        // writer holding its lock delayed every configuration load by about
+        // 10 s (#2728). Each wait is now about `busy_timeout`.
         validate_applied_migrations_with_busy_timeout(
             self,
             &path,

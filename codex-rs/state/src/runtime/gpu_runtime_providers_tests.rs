@@ -344,10 +344,12 @@ async fn read_only_overlay_reader_waits_only_its_busy_timeout_for_a_locked_datab
         .execute(&mut *writer)
         .await
         .expect("create table");
-    sqlx::query("PRAGMA journal_mode=DELETE")
-        .execute(&mut *writer)
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode=DELETE")
+        .fetch_one(&mut *writer)
         .await
         .expect("journal mode");
+    // Only DELETE journaling makes the write lock block readers.
+    assert_eq!(journal_mode, "delete");
     sqlx::query("BEGIN EXCLUSIVE")
         .execute(&mut *writer)
         .await
@@ -361,6 +363,12 @@ async fn read_only_overlay_reader_waits_only_its_busy_timeout_for_a_locked_datab
     assert!(
         result.is_err(),
         "the locked database cannot be read: {result:?}"
+    );
+    // The read waited for the lock (at least one busy timeout) and gave up
+    // within its own bound (about two: the open and the first query).
+    assert!(
+        elapsed >= std::time::Duration::from_millis(200),
+        "the read did not wait for the write lock: {elapsed:?}, {result:?}"
     );
     assert!(
         elapsed < std::time::Duration::from_secs(3),
