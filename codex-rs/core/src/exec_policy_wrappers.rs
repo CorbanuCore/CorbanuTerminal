@@ -4,6 +4,7 @@
 use super::commands_for_exec_policy_for_platform;
 use crate::security::tainted_action::policy_runs_shell;
 use crate::security::tainted_action::policy_shell_script;
+use crate::security::tainted_action::policy_windows_program_name;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -475,6 +476,14 @@ pub(super) fn check(
                 let ask = any_rule();
                 raise_match(&mut matches, inner, ask);
                 unread_script_prompts |= ask.is_some();
+            } else if reads_script
+                && let Some(ask) = any_rule()
+                && runs_unread_cmd_script(parsed_as, platform)
+            {
+                // #2704: a script cmd.exe reads (`cmd /c "git push"`). Rules
+                // first: finding a batch file looks at `PATH`.
+                raise_match(&mut matches, inner, Some(ask));
+                unread_script_prompts = true;
             }
         }
         // #2548 (D553): a command whose program runs more than its argv:
@@ -701,6 +710,101 @@ fn runs_unread_script(command: &[String]) -> bool {
                     .strip_prefix('-')
                     .is_some_and(|letters| !letters.starts_with('-') && letters.contains('c'))
         })
+}
+
+/// #2704 (D553): whether `command` runs a script cmd.exe reads, which rules
+/// cannot see: cmd.exe itself, whatever its arguments (`/c`, `/k`, `/d/c`,
+/// or a script from its input), or a program that may be a batch file
+/// (see [`may_be_batch_file`]) given an argument cmd.exe would read as more
+/// than a word when it re-reads the batch file's command line
+/// (`pnpm.cmd '&git push'`). Approximate on the side of yes.
+fn runs_unread_cmd_script(command: &[String], platform: DangerousCommandPlatform) -> bool {
+    let Some((program, args)) = command.split_first() else {
+        return false;
+    };
+    // As Windows finds it (`C:\Windows\System32\CMD.EXE.`, `C:cmd`).
+    let name = policy_windows_program_name(program);
+    if name == "cmd" {
+        return true;
+    }
+    args.iter().any(|arg| cmd_rereads(arg)) && may_be_batch_file(program, &name, platform)
+}
+
+/// Whether cmd.exe may read `arg` as more than one plain word: a command
+/// separator, redirection, escape, variable expansion, quote, group or
+/// line break.
+fn cmd_rereads(arg: &str) -> bool {
+    arg.contains(['&', '|', '<', '>', '^', '%', '!', '"', '(', ')', '\r', '\n'])
+}
+
+/// Whether `program` (Windows file name `name`) may run as a batch file:
+/// named `.cmd` or `.bat`, or on Windows a path not named `.exe` or `.com`
+/// (`.\build`, `C:\p\x`: the command's folder may hold a batch file, or
+/// a script may create one first), or a bare name PowerShell finds on
+/// `PATH` as a batch file (`pnpm` as `pnpm.cmd`).
+fn may_be_batch_file(program: &str, name: &str, platform: DangerousCommandPlatform) -> bool {
+    name.ends_with(".cmd")
+        || name.ends_with(".bat")
+        || (platform == DangerousCommandPlatform::Windows && windows_batch_file(program))
+}
+
+/// See [`may_be_batch_file`]. A bare name is looked for only in absolute
+/// local `PATH` folders, never in a folder the command names, and only the
+/// first match counts, as PowerShell takes it; a relative or network `PATH`
+/// folder before a match leaves it unknown (yes). A bare name found nowhere
+/// does not run unless a command first writes it into a `PATH` folder or
+/// changes `PATH` (a PowerShell command on the `env:` drive asks under
+/// strict rules, see `powershell_runs_code`). This is Corbanu's `PATH`: a
+/// user's `shell_environment_policy` can give the shell another one. A name
+/// named `.exe` or `.com` is not looked up: PowerShell may still find
+/// `x.exe.cmd` when `x.exe` is missing, which a command creating it could
+/// as well hold its commands in.
+fn windows_batch_file(program: &str) -> bool {
+    // A Windows executor seen from another host (#2671): its `PATH` is not
+    // this one, so any name not named `.exe` or `.com` may be a batch file.
+    if !cfg!(windows) {
+        let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+        return !(lower.ends_with(".exe") || lower.ends_with(".com"));
+    }
+    windows_batch_file_in(
+        program,
+        std::env::var_os("PATH"),
+        std::env::var("PATHEXT").ok(),
+    )
+}
+
+/// [`windows_batch_file`] with `PATH` and `PATHEXT` given.
+pub(super) fn windows_batch_file_in(
+    program: &str,
+    path: Option<std::ffi::OsString>,
+    extensions: Option<String>,
+) -> bool {
+    let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    if lower.ends_with(".exe") || lower.ends_with(".com") {
+        return false;
+    }
+    if program.contains(['/', '\\', ':', '.']) {
+        return true;
+    }
+    let Some(path) = path else {
+        return false;
+    };
+    let extensions = extensions.unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into());
+    for dir in std::env::split_paths(&path) {
+        if !dir.is_absolute() || dir.to_string_lossy().starts_with(['\\', '/']) {
+            return true;
+        }
+        for extension in extensions
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+        {
+            if dir.join(format!("{program}{extension}")).is_file() {
+                return extension.eq_ignore_ascii_case(".cmd")
+                    || extension.eq_ignore_ascii_case(".bat");
+            }
+        }
+    }
+    false
 }
 
 /// #2543: the prompt and forbidden rule matches of a script command with
