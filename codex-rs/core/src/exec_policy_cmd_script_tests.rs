@@ -295,6 +295,27 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
     assert!(found("zz-exe", &[other.path(), dir.path()]));
     // Not found: it cannot run unless written into a `PATH` folder first.
     assert!(!found("zz-missing", &[dir.path()]));
+    // An empty entry names no folder.
+    assert!(!wrappers::windows_batch_file_in(
+        "zz-exe",
+        Some(std::ffi::OsString::from(format!(
+            ";{};",
+            dir.path().display()
+        ))),
+        None
+    ));
+    // Rooted at the current drive (Bazel's and MSYS's `/usr/bin`): read on
+    // the system drive, where these folders hold no batch file.
+    for path in [
+        "/bin:/usr/bin:/usr/local/bin",
+        "/usr/bin;/bin",
+        r"\zz-d729-missing",
+    ] {
+        assert!(
+            !wrappers::windows_batch_file_in("printf", Some(path.into()), None),
+            "{path}"
+        );
+    }
     // A relative or network folder before a match: unknown.
     assert!(found("zz-exe", &[Path::new("bin"), dir.path()]));
     assert!(found("zz-exe", &[Path::new(r"\\server\share"), dir.path()]));
