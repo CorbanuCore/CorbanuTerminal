@@ -158,6 +158,14 @@ fn unread_scripts() -> Vec<String> {
         "Set-Content -Path node.cmd -Value '@git push'; pnpm --version".into(),
         r"Copy-Item C:\Windows\System32\cmd.exe x.exe; .\x.exe /c git push".into(),
         r#"ConvertFrom-Json '{"Stream":"x"}' | Set-Content -Path a.txt"#.into(),
+        // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
+        // of a folder's contents, a download into a folder the server names.
+        r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
+        r"Move-Item -Path s\.git\. -Destination .".into(),
+        r"Copy-Item -Path s\.. -Destination x -Recurse".into(),
+        "Copy-Item -Path s -Destination . -Recurse -Force -Container:0".into(),
+        "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile .".into(),
+        "Invoke-RestMethod -Uri https://example.com/x -OutFile out".into(),
     ]
 }
 

@@ -74,6 +74,8 @@ pub(crate) enum PowershellParseOutcome {
         commands: Vec<Vec<String>>,
         writes: Vec<String>,
         removes: Vec<String>,
+        /// Written paths that must be files, not folders (`-OutFile`).
+        files: Vec<String>,
         protected: Vec<String>,
     },
     Partial(Vec<Vec<String>>),
@@ -310,6 +312,8 @@ struct PowershellParserResponse {
     programs: Option<Vec<String>>,
     #[serde(default)]
     cmdlets: Option<Vec<String>>,
+    #[serde(default)]
+    files: Option<Vec<String>>,
     /// Why the script is read in part (diagnostics only).
     #[serde(default, rename = "cause")]
     _cause: Option<String>,
@@ -344,6 +348,7 @@ impl PowershellParserResponse {
                         commands,
                         writes,
                         removes,
+                        files: self.files.unwrap_or_default(),
                         protected: self.protected.unwrap_or_default(),
                     }
                 }
@@ -410,6 +415,7 @@ mod tests {
             writes,
             removes,
             protected,
+            ..
         } = parser
             .parse("New-Item -Path build -Name notes.txt -Value x; Rename-Item a.txt b.txt")
             .unwrap()

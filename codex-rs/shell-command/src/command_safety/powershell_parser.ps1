@@ -14,8 +14,9 @@ $ProgressPreference = 'SilentlyContinue'
 # A request may say "noProfile": true (the shell runs with -NoProfile). An "ok" reading
 # also lists what the Rust side checks (D729 A): "writes" and "removes" (literal paths),
 # "protected" (folders PowerShell and Windows run code from), "programs" (names that must
-# be programs on the command's PATH) and "cmdlets" (module cmdlets no program on it may
-# shadow); a "partial" reading may name its "cause".
+# be programs on the command's PATH), "cmdlets" (module cmdlets no program on it may
+# shadow) and "files" (written paths that must not be folders); a "partial" reading may
+# name its "cause".
 #
 # "unsupported" is intentional: it means the script parsed successfully, but the AST
 # included constructs that we conservatively refuse to lower into argv-like command words.
@@ -130,7 +131,7 @@ function Invoke-ParseRequest {
     # and the protected folders), program names (each found on the command's `PATH`), and
     # module cmdlets (none shadowed by a program or script on it).
     $response = @{ id = $RequestId; status = 'ok'; commands = $commands }
-    foreach ($key in 'writes', 'removes', 'programs', 'cmdlets') {
+    foreach ($key in 'writes', 'removes', 'programs', 'cmdlets', 'files') {
         if ($review[$key].Count -gt 0) { $response[$key] = [string[]]@($review[$key]) }
     }
     if (($review.writes.Count + $review.removes.Count) -gt 0) {

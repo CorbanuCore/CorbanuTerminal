@@ -185,10 +185,13 @@ fn read_script_in(shell: &str, script: &str, options: ShellOptions) -> Powershel
             commands,
             writes,
             removes,
+            files,
             protected,
         } => {
             // `-WorkingDirectory` runs it elsewhere than the scope's folder.
-            if options.keeps_cwd && write_scope::writes_allowed(&writes, &removes, &protected) {
+            if options.keeps_cwd
+                && write_scope::writes_allowed(&writes, &removes, &files, &protected)
+            {
                 PowershellScriptRead::Commands(commands)
             } else {
                 PowershellScriptRead::Partial(commands)

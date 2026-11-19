@@ -86,7 +86,8 @@ Add-D729 'set-item', 'clear-item', 'set-itemproperty', 'new-itemproperty', 'remo
     'rename-itemproperty', 'export-csv', 'export-clixml' -Writes 'paths'
 Add-D729 'out-file' -Writes 'file'
 Add-D729 'new-item', 'mkdir' -Writes 'newitem'
-Add-D729 'copy-item' -Writes 'copy'
+# -Container:$false copies a folder's contents rather than the folder.
+Add-D729 'copy-item' -Excluded 'Container' -Writes 'copy'
 Add-D729 'move-item' -Writes 'move'
 Add-D729 'rename-item' -Writes 'rename'
 # Not Expand-Archive: an archive's entries can name paths outside its destination.
@@ -262,10 +263,11 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     return (Add-D729Writes $binding $target $entry.w $state)
 }
 
-# The last part of a path (`a\b.txt` gives `b.txt`); $null where there is none.
+# The last part of a path (`a\b.txt` gives `b.txt`); $null where there is none or it is
+# `.` or `..` (`s\.git\.` names `.git` once Windows normalises it).
 function Get-D729Leaf([string]$path) {
     $leaf = $path.Split([char[]]'\/')[-1]
-    if ([string]::IsNullOrEmpty($leaf)) { return $null }
+    if ([string]::IsNullOrEmpty($leaf) -or $leaf.Trim('. ').Length -eq 0) { return $null }
     return $leaf
 }
 
@@ -291,7 +293,12 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $state) {
             if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
             # Without -OutFile it writes nothing.
             if ($null -eq $value) { return $null }
+            # PowerShell 7.4+ names the file after the URI when -OutFile is a folder: only a
+            # file name with an extension, and the Rust side checks it is no folder.
+            $leaf = Get-D729Leaf $value
+            if ($null -eq $leaf -or $leaf -notmatch '.\.[^.]+$') { return "download target is not a file name: $target" }
             $paths = @($value)
+            $null = $state.files.Add([string]$value)
         }
         'newitem' {
             $type = Get-D729Bound $binding 'ItemType'
@@ -397,6 +404,7 @@ function Get-D729Review($ast) {
         removes = [System.Collections.ArrayList]::new()
         programs = [System.Collections.ArrayList]::new()
         cmdlets = [System.Collections.ArrayList]::new()
+        files = [System.Collections.ArrayList]::new()
     }
     foreach ($pipeline in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] }, $true)) {
         $index = 0

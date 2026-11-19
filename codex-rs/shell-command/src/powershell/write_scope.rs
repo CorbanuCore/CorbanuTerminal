@@ -96,7 +96,12 @@ impl Drop for PowershellWriteScopeGuard {
 /// Whether every path in `writes` and `removes` stays where the current
 /// scope lets a script write (`protected`: the parser's folders, to which
 /// the scope's `PATH` and `PSModulePath` folders are added).
-pub(crate) fn writes_allowed(writes: &[String], removes: &[String], protected: &[String]) -> bool {
+pub(crate) fn writes_allowed(
+    writes: &[String],
+    removes: &[String],
+    files: &[String],
+    protected: &[String],
+) -> bool {
     let Some(scope) = current_scope() else {
         return false;
     };
@@ -121,14 +126,26 @@ pub(crate) fn writes_allowed(writes: &[String], removes: &[String], protected: &
                 .flat_map(|value| value.split(';').map(str::to_string)),
         )
         .collect::<Vec<_>>();
+    // A folder rooted at the current drive (`\ws\bin`) is on the cwd's drive;
+    // one relative to another drive's current folder (`D:tools`) protects
+    // that whole drive.
     let protected: Vec<WinPath> = protected
         .iter()
         .chain(&scope_dirs)
         .map(|dir| dir.trim().trim_matches('"'))
         .filter(|dir| !dir.is_empty())
-        .filter_map(|dir| WinPath::parse(dir, Some(&cwd), Strictness::Lax))
+        .filter_map(|dir| resolve_folder(dir, &cwd))
         .filter_map(canonical)
         .collect();
+    // A download into an existing folder is named by the server.
+    let files_ok = files.iter().all(|file| {
+        WinPath::parse(file, Some(&cwd), Strictness::Write)
+            .and_then(canonical)
+            .is_some_and(|target| !target.is_dir())
+    });
+    if !files_ok {
+        return false;
+    }
     let extensions = executable_extensions(scope.extensions.as_deref());
     allows(
         writes,
@@ -140,6 +157,30 @@ pub(crate) fn writes_allowed(writes: &[String], removes: &[String], protected: &
             extensions: &extensions,
         },
     )
+}
+
+/// A configured folder (`PATH`, `PSModulePath`, the parser's) as Windows
+/// resolves it in `cwd`.
+fn resolve_folder(dir: &str, cwd: &WinPath) -> Option<WinPath> {
+    let bytes = dir.as_bytes();
+    if matches!(bytes, [b'/' | b'\\', second, ..] if *second != b'/' && *second != b'\\') {
+        return WinPath::parse(&format!("{}:{dir}", cwd.drive), None, Strictness::Lax);
+    }
+    if bytes.len() >= 2
+        && bytes[1] == b':'
+        && !matches!(bytes.get(2), Some(b'\\' | b'/'))
+        && char::from(bytes[0]).is_ascii_alphabetic()
+    {
+        let drive = char::from(bytes[0]).to_ascii_uppercase();
+        if drive == cwd.drive {
+            return WinPath::parse(&dir[2..], Some(cwd), Strictness::Lax);
+        }
+        return Some(WinPath {
+            drive,
+            parts: Vec::new(),
+        });
+    }
+    WinPath::parse(dir, Some(cwd), Strictness::Lax)
 }
 
 /// Where a script's paths resolve and may go.
@@ -277,6 +318,10 @@ impl PathLookup {
                 unknown = true;
                 continue;
             };
+            if unknown {
+                // A folder not looked in comes first: it may hold the name.
+                return Found::Unknown;
+            }
             let found = if has_extension {
                 dir.join(name).is_file()
             } else {
@@ -399,6 +444,16 @@ impl WinPath {
             }
         }
         Some(path)
+    }
+
+    /// Whether this path names an existing folder (Windows only: elsewhere
+    /// no PowerShell script is read).
+    fn is_dir(&self) -> bool {
+        cfg!(windows) && {
+            let mut path = std::path::PathBuf::from(format!("{}:\\", self.drive));
+            path.extend(&self.parts);
+            path.is_dir()
+        }
     }
 
     fn is_within(&self, other: &WinPath) -> bool {

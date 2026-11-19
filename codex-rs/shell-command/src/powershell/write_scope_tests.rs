@@ -144,11 +144,11 @@ fn parts_are_normalised_and_folded() {
 
 #[test]
 fn no_write_is_allowed_outside_a_scope_or_elsewhere() {
-    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[]));
-    assert!(!writes_allowed(&[], &["out.txt".to_string()], &[]));
+    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[], &[]));
+    assert!(!writes_allowed(&[], &["out.txt".to_string()], &[], &[]));
     // A command running elsewhere: no write, and no program name found.
     let _scope = enter_powershell_write_scope(PowershellWriteScope::new(None, Vec::new(), None));
-    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[]));
+    assert!(!writes_allowed(&["out.txt".to_string()], &[], &[], &[]));
     assert!(!names_resolve(&["git".to_string()], &[]));
     assert!(names_resolve(&[], &[]));
 }
@@ -213,8 +213,37 @@ fn names_resolve_as_powershell_finds_them_on_path() {
     assert_eq!(local.find("Get-Content"), Found::Yes);
     assert_eq!(local.find("inmo"), Found::No);
     assert_eq!(local.find(r"..\tool"), Found::Unknown);
-    // A relative folder is not looked in.
+    // A relative folder is not looked in, so what comes after it is unknown.
     let relative = lookup(vec!["bin".into(), dir.path().to_path_buf()]);
-    assert_eq!(relative.find("tool"), Found::Yes);
+    assert_eq!(relative.find("tool"), Found::Unknown);
     assert_eq!(relative.find("inmo"), Found::Unknown);
+    let relative_last = lookup(vec![dir.path().to_path_buf(), "bin".into()]);
+    assert_eq!(relative_last.find("tool"), Found::Yes);
+}
+
+#[test]
+fn configured_folders_resolve_as_windows_resolves_them() {
+    let cwd = path(r"C:\ws");
+    assert_eq!(resolve_folder(r"\ws\bin", &cwd), Some(path(r"C:\ws\bin")));
+    assert_eq!(resolve_folder("/tools", &cwd), Some(path(r"C:\tools")));
+    assert_eq!(resolve_folder("bin", &cwd), Some(path(r"C:\ws\bin")));
+    assert_eq!(resolve_folder("C:bin", &cwd), Some(path(r"C:\ws\bin")));
+    // Another drive's current folder is unknown: the whole drive.
+    assert_eq!(resolve_folder("D:tools", &cwd), Some(path(r"D:\")));
+    // A `PATH` folder rooted at the current drive protects what is in it.
+    let protected = vec![resolve_folder(r"\ws\bin", &cwd).expect("folder")];
+    assert!(!allows(
+        &[r"bin\git.ps1".to_string()],
+        &[],
+        &Places {
+            cwd: &cwd,
+            roots: &[Root {
+                root: path(r"C:\ws"),
+                read_only: Vec::new(),
+                metadata_names: Vec::new(),
+            }],
+            protected: &protected,
+            extensions: &executable_extensions(None),
+        },
+    ));
 }
