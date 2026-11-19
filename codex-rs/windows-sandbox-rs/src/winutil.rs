@@ -24,53 +24,11 @@ pub fn to_wide<S: AsRef<OsStr>>(s: S) -> Vec<u16> {
 
 /// Quote a single Windows command-line argument following the rules used by
 /// CommandLineToArgvW/CRT so that spaces, quotes, and backslashes are preserved.
-/// Reference behavior matches Rust std::process::Command on Windows.
+/// Reference behavior matches Rust std::process::Command on Windows. Not for a
+/// `cmd.exe /C` command line: see [`crate::command_line::sandbox_command_line`].
 #[cfg(target_os = "windows")]
 pub fn quote_windows_arg(arg: &str) -> String {
-    let needs_quotes = arg.is_empty()
-        || arg
-            .chars()
-            .any(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '"'));
-    if !needs_quotes {
-        return arg.to_string();
-    }
-
-    let mut quoted = String::with_capacity(arg.len() + 2);
-    quoted.push('"');
-    let mut backslashes = 0;
-    for ch in arg.chars() {
-        match ch {
-            '\\' => {
-                backslashes += 1;
-            }
-            '"' => {
-                quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
-                quoted.push('"');
-                backslashes = 0;
-            }
-            _ => {
-                if backslashes > 0 {
-                    quoted.push_str(&"\\".repeat(backslashes));
-                    backslashes = 0;
-                }
-                quoted.push(ch);
-            }
-        }
-    }
-    if backslashes > 0 {
-        quoted.push_str(&"\\".repeat(backslashes * 2));
-    }
-    quoted.push('"');
-    quoted
-}
-
-/// Build a Windows command line for CreateProcess-style APIs.
-#[cfg(target_os = "windows")]
-pub fn argv_to_command_line(argv: &[String]) -> String {
-    argv.iter()
-        .map(|arg| quote_windows_arg(arg))
-        .collect::<Vec<_>>()
-        .join(" ")
+    crate::command_line::quote_crt_arg(arg)
 }
 
 // Produce a readable description for a Win32 error code.
@@ -203,39 +161,4 @@ fn sid_bytes_from_string(sid_str: &str) -> Result<Vec<u8>> {
         return Err(anyhow::anyhow!("CopySid failed for {sid_str}"));
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::argv_to_command_line;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn argv_to_command_line_quotes_each_argument_independently() {
-        let argv = vec![
-            "cmd.exe".to_string(),
-            "/c".to_string(),
-            "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\" -NoProfile -EncodedCommand abc=="
-                .to_string(),
-        ];
-
-        assert_eq!(
-            argv_to_command_line(&argv),
-            "cmd.exe /c \"\\\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\\\" -NoProfile -EncodedCommand abc==\""
-        );
-    }
-
-    #[test]
-    fn argv_to_command_line_quotes_regular_program_args() {
-        let argv = vec![
-            "pwsh.exe".to_string(),
-            "-Command".to_string(),
-            "Write-Output \"hello world\"".to_string(),
-        ];
-
-        assert_eq!(
-            argv_to_command_line(&argv),
-            "pwsh.exe -Command \"Write-Output \\\"hello world\\\"\""
-        );
-    }
 }

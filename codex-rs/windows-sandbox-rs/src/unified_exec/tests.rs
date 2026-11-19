@@ -3516,6 +3516,10 @@ mod command_identity;
 #[path = "ctrl_c_tests.rs"]
 mod ctrl_c;
 
+/// D730 (#2702): `cmd.exe /C` command lines reach cmd and the program as written.
+#[path = "cmd_line_tests.rs"]
+mod cmd_line;
+
 /// #1770: a command's own token keeps it out of folders any user may write to.
 #[path = "token_boundary_tests.rs"]
 mod token_boundary;
