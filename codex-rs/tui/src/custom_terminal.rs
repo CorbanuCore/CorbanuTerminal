@@ -158,7 +158,7 @@ where
     /// Count of visible history rows rendered above the viewport in inline mode.
     visible_history_rows: u16,
     #[cfg(test)]
-    screen_size_override: Option<std::sync::Arc<std::sync::Mutex<Size>>>,
+    screen_size_override: Option<test_support::ScreenSizeOverride>,
 }
 
 impl<B> Drop for Terminal<B>
@@ -250,8 +250,7 @@ where
     ) -> Self {
         let mut terminal =
             Self::with_screen_size_and_cursor_position(backend, screen_size, cursor_pos);
-        terminal.screen_size_override =
-            Some(std::sync::Arc::new(std::sync::Mutex::new(screen_size)));
+        terminal.screen_size_override = Some(test_support::ScreenSizeOverride::new(screen_size));
         terminal
     }
 
@@ -610,7 +609,7 @@ where
     pub fn size(&self) -> io::Result<Size> {
         #[cfg(test)]
         if let Some(size) = &self.screen_size_override {
-            return Ok(*size.lock().expect("test screen size lock"));
+            return Ok(size.get());
         }
         self.backend.size()
     }
