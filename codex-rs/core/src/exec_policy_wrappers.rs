@@ -125,14 +125,17 @@ fn inner_runs_shell(command: &[String]) -> bool {
 }
 
 /// #2548: `command`'s words for deciding what its program runs: a word
-/// known only at run time that is always a number (`$?`) reads as one.
+/// known only at run time that is always a number (`$?`) reads as one,
+/// [`roles::RUN_TIME_NUMBER`].
 fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
     command
         .words
         .iter()
         .enumerate()
         .map(|(index, word)| match word {
-            None if command.numbers.get(index) == Some(&true) => Some("0".to_string()),
+            None if command.numbers.get(index) == Some(&true) => {
+                Some(roles::RUN_TIME_NUMBER.to_string())
+            }
             word => word.clone(),
         })
         .collect()
@@ -159,22 +162,27 @@ pub(super) fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
 /// see its commands. #2568: also a command line PowerShell reads in a way
 /// this reader cannot (unknown parameters, a script from stdin), and a
 /// `-File` script, whose content is not read. A parser-declined or partially
-/// read script has the same unknown remainder (#2556, #2583).
+/// read script has the same unknown remainder (#2556, #2583). #2671: so is
+/// PowerShell, as Windows names it, under a spelling neither the reader nor
+/// its respelling reads (`\\?\C:\PS\PWSH` runs `PWSH.exe`).
 #[cfg(windows)]
 fn powershell_script_unreadable(command: &[String]) -> bool {
     use codex_shell_command::powershell::PowershellScriptRead;
     let respelled = crate::security::tainted_action::policy_powershell_script(command);
-    matches!(
-        codex_shell_command::powershell::read_powershell_command_script(
-            respelled.as_deref().unwrap_or(command),
-        ),
+    match codex_shell_command::powershell::read_powershell_command_script(
+        respelled.as_deref().unwrap_or(command),
+    ) {
+        Some(PowershellScriptRead::Commands(_)) => false,
         Some(
             PowershellScriptRead::Unreadable
-                | PowershellScriptRead::NotPlain
-                | PowershellScriptRead::Partial(_)
-                | PowershellScriptRead::File(_)
-        )
-    )
+            | PowershellScriptRead::NotPlain
+            | PowershellScriptRead::Partial(_)
+            | PowershellScriptRead::File(_),
+        ) => true,
+        None => command.first().is_some_and(|program| {
+            crate::security::tainted_action::policy_runs_powershell(program)
+        }),
+    }
 }
 
 /// #2601 (D553): elsewhere no PowerShell script is read, so any PowerShell

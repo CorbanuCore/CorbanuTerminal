@@ -17,8 +17,10 @@ pub use script_read::CommandStdin;
 pub use script_read::RESERVED_WORDS;
 pub use script_read::ReadCommand;
 pub use script_read::ScriptRead;
+pub use script_read::ScriptShell;
 pub use script_read::numeric_operand;
 pub use script_read::read_script;
+pub use script_read::read_script_as;
 pub use script_read::runs_code_from_variable;
 
 /// Parse the provided bash source using tree-sitter-bash, returning a Tree on
@@ -246,10 +248,14 @@ pub fn parse_shell_lc_plain_commands(command: &[String]) -> Option<Vec<Vec<Strin
 }
 
 /// [`read_script`] for a `bash -lc "..."`, `sh -c "..."` or `zsh -lc "..."`
-/// invocation; `None` for any other command.
+/// invocation, as that shell runs it; `None` for any other command.
 pub fn shell_lc_script_read(command: &[String]) -> Option<ScriptRead> {
-    let (_, script) = extract_bash_command(command)?;
-    Some(read_script(script))
+    let (shell, script) = extract_bash_command(command)?;
+    let shell = match detect_shell_type(PathBuf::from(shell)) {
+        Some(ShellType::Bash | ShellType::Sh) => ScriptShell::Posix,
+        _ => ScriptShell::Any,
+    };
+    Some(read_script_as(script, shell))
 }
 
 /// The argv words of a command node; assignments, redirections and
@@ -1006,6 +1012,9 @@ mod tests {
 #[cfg(test)]
 #[path = "bash/script_commands_tests.rs"]
 mod script_commands_tests;
+#[cfg(test)]
+#[path = "bash/script_lexical_tests.rs"]
+mod script_lexical_tests;
 #[cfg(test)]
 #[path = "bash/script_read_tests.rs"]
 mod script_read_tests;

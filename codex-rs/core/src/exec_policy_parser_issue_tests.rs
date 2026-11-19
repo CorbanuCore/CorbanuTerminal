@@ -10,8 +10,8 @@
 //! `enable`, `mapfile`), asks whenever a prompt or forbidden rule exists.
 use super::*;
 
-const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
-const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
+pub(super) const FORBID: &str = r#"prefix_rule(pattern=["git", "push"], decision="forbidden")"#;
+pub(super) const PROMPT: &str = r#"prefix_rule(pattern=["git", "push"], decision="prompt")"#;
 /// #2597: an exact allow rule for the command as the dropped argv would
 /// read it must not approve what really runs.
 const ALLOW_AND_FORBID: &str = r#"
@@ -20,7 +20,7 @@ prefix_rule(pattern=[["bash", "sh", "zsh"]], decision="allow")
 prefix_rule(pattern=["git", "push"], decision="forbidden")
 "#;
 
-fn argv(words: &[&str]) -> Vec<String> {
+pub(super) fn argv(words: &[&str]) -> Vec<String> {
     words.iter().map(ToString::to_string).collect()
 }
 
@@ -116,7 +116,7 @@ async fn failures_for(commands: Vec<Vec<String>>, rule_sets: &[&str]) -> Vec<Str
     failures
 }
 
-async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
+pub(super) async fn assert_scripts_ask(scripts: &[&str], rule_sets: &[&str]) {
     let commands = scripts
         .iter()
         .flat_map(|script| spellings(script))
@@ -405,4 +405,35 @@ async fn powershell_check_keeps_refusals_of_read_scripts() {
             );
         }
     }
+}
+
+/// #2671: on Windows, PowerShell spelled so that neither the script reader
+/// nor its respelling reads it asks whenever a prompt or forbidden rule
+/// exists: a `\\?\` path skips Win32 name normalization, yet `\\?\…\PWSH`
+/// still runs `PWSH.exe` (`.exe` is appended); and 8.3 short names and
+/// stream suffixes may name it too. Device (`\\.\`), verbatim UNC
+/// (`\\?\UNC\`) and `//?/` spellings are read or ask, and so is the same
+/// shell behind a launcher.
+#[cfg(windows)]
+#[tokio::test]
+async fn issue_2671_unread_powershell_spellings_ask() {
+    let mut commands = Vec::new();
+    for shell in [
+        r"\\?\C:\PS\PWSH",
+        r"\\?\C:\Windows\System32\WindowsPowerShell\v1.0\POWERSHELL",
+        r"\\?\C:\PS\PWSH.EXE.",
+        r"\\?\UNC\srv\share\PWSH",
+        r"\\.\C:\PS\PWSH",
+        "//?/C:/PS/PWSH",
+        "PWSH~1.EXE",
+        r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE",
+        "pwsh.exe::$DATA",
+    ] {
+        for flag in ["-Command", "-c"] {
+            commands.push(argv(&[shell, "-NoProfile", flag, "git push"]));
+        }
+        commands.push(argv(&["env", "A=1", shell, "-c", "git push"]));
+    }
+    let failures = failures_for(commands, &[FORBID, PROMPT]).await;
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
