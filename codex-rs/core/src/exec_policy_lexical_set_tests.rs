@@ -107,6 +107,10 @@ async fn code_through_read_forms_asks() {
             "touch ./-v 'zsh_eval_context[$(git push)]'; [ * ]",
             "x=; printf '%s %d %s\\n' $x 5 'path[$(git push)]'",
             "printf '%s %d\\n' \"$@\" 'path[$(git push)]'",
+            // Review round 2: with zsh's `sh_word_split` (on where zsh runs
+            // as `sh`), an `IFS` of digits splits even `$?`.
+            "IFS=0; printf '%s %s %d\\n' $? 'zsh_eval_context[$(git push)]' 5",
+            "IFS=0; printf '%s %d\\n' $# 'path[$(git push)]'",
             // dash has no `[[`: it runs what follows `||`.
             "[[ -n x || git -nt push ]]",
             "[[ -n x || sh -c 'git push' ]]",

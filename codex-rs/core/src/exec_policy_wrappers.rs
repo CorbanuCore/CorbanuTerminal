@@ -655,14 +655,17 @@ fn inner_runs_shell(command: &[String]) -> bool {
 }
 
 /// #2548: `command`'s words for deciding what its program runs: a word
-/// known only at run time that is always a number (`$?`) reads as one.
+/// known only at run time that is always a number (`$?`) reads as one,
+/// [`roles::RUN_TIME_NUMBER`].
 fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
     command
         .words
         .iter()
         .enumerate()
         .map(|(index, word)| match word {
-            None if command.numbers.get(index) == Some(&true) => Some("0".to_string()),
+            None if command.numbers.get(index) == Some(&true) => {
+                Some(roles::RUN_TIME_NUMBER.to_string())
+            }
             word => word.clone(),
         })
         .collect()
