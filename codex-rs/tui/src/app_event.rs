@@ -2016,7 +2016,9 @@ pub(crate) enum AppEvent {
         provider: Option<String>,
     },
 
-    /// Apply a model-picker selection to the active conversation and saved local defaults.
+    /// Exercise the legacy combined selection path in unit tests. Live pickers
+    /// send provider-aware default updates or session-only selection events.
+    #[cfg(test)]
     ApplyModelSelection {
         model: String,
         effort: Option<ReasoningEffort>,

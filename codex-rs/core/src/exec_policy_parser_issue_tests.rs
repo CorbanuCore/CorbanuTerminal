@@ -354,6 +354,8 @@ const POWERSHELL_SCRIPTS: &[&str] = &[
     "\u{131}nvoke-expression 'git push'",
     "\u{17f}al f git; f push",
     "Set-Item al\u{131}as:f git; f push",
+    "i\u{200d}ex 'git push'",
+    "Invo\u{212a}e-Expression 'git push'",
     "\u{17f}et-location funct\u{131}on:; Set-Item f 'git push'; f",
 ];
 
@@ -441,7 +443,7 @@ async fn issue_2601_powershell_asks_for_the_windows_platform_on_any_host() {
 async fn powershell_check_keeps_refusals_of_read_scripts() {
     for script in [
         "eval git push alias:",
-        "eval git push \u{131}x:",
+        "eval git push al\u{131}as:",
         "bash -s alias: <<'E'\ngit push\nE",
     ] {
         for command in spellings(script) {

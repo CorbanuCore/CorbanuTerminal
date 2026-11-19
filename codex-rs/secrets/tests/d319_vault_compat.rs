@@ -59,8 +59,15 @@ fn fixtures_dir() -> PathBuf {
     if manifest.is_dir() {
         manifest
     } else {
-        // Bazel runs integration tests from a Cargo-like crate directory.
-        PathBuf::from("tests/fixtures/d319_vault")
+        // Direct Bazel rust_test targets start at the runfiles workspace root.
+        let bazel = Path::new(option_env!("BAZEL_PACKAGE").unwrap_or("."))
+            .join("tests/fixtures/d319_vault");
+        if bazel.is_dir() {
+            bazel
+        } else {
+            // Retain the original helper's crate-relative fallback.
+            PathBuf::from("tests/fixtures/d319_vault")
+        }
     }
 }
 

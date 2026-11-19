@@ -1,6 +1,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
+use anyhow::Context;
 use anyhow::Result;
 use codex_uds::UnixListener;
 use futures::SinkExt;
@@ -20,13 +21,13 @@ use super::update_loop::ProductionGateForTest;
 /// Sync: upstream derives the managed binary from the Codex home (the settings
 /// file's grandparent), so the fixture uses that layout; main's flat layout
 /// would select a binary outside the temporary directory.
-fn fixture_daemon(root: &std::path::Path) -> Daemon {
+fn fixture_daemon(root: &std::path::Path) -> Result<Daemon> {
     let state = root.join(super::STATE_DIR_NAME);
-    std::fs::create_dir_all(&state).expect("daemon state directory");
+    std::fs::create_dir_all(&state).context("daemon state directory")?;
     let managed_codex_bin = super::managed_install::managed_codex_bin(root);
-    std::fs::create_dir_all(managed_codex_bin.parent().expect("binary parent"))
-        .expect("managed binary directory");
-    Daemon {
+    std::fs::create_dir_all(managed_codex_bin.parent().context("binary parent")?)
+        .context("managed binary directory")?;
+    Ok(Daemon {
         log_diagnostics: false,
         socket_path: root.join("control.sock"),
         // The names `current_installation` selects for a dedicated package.
@@ -35,7 +36,7 @@ fn fixture_daemon(root: &std::path::Path) -> Daemon {
         operation_lock_file: state.join(super::OPERATION_LOCK_FILE_NAME),
         settings_file: state.join(super::SETTINGS_FILE_NAME),
         managed_codex_bin,
-    }
+    })
 }
 
 #[tokio::test]
@@ -61,7 +62,7 @@ async fn lifecycle_stops_old_updater_even_when_managed_binary_is_missing() -> Re
     ] {
         let temp = tempfile::tempdir()?;
         let root = temp.path();
-        let daemon = fixture_daemon(root);
+        let daemon = fixture_daemon(root)?;
         let quoted_root = root.display().to_string().replace('\'', "'\\''");
         tokio::fs::write(
             &daemon.managed_codex_bin,
@@ -130,7 +131,7 @@ async fn bootstrap_stops_old_updater_without_relaunching_and_keeps_daemon_workin
     let _gate = ProductionGateForTest::enter();
     let temp = tempfile::tempdir()?;
     let root = temp.path();
-    let daemon = fixture_daemon(root);
+    let daemon = fixture_daemon(root)?;
     let quoted_root = root.display().to_string().replace('\'', "'\\''");
     tokio::fs::write(
         &daemon.managed_codex_bin,

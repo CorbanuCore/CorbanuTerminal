@@ -280,7 +280,13 @@ policy through `approvalPolicy`, the approvals reviewer through
 and sandbox through `sandbox`, `permissions` or the `config` keys `sandbox_mode`
 and `default_permissions`. Its Windows
 sandbox and Corbanu security level are never below the loaded thread's current
-ones, whatever the request or the server's start-up config says (#2015).
+ones, whatever the request or the server's start-up config says (#2015). On
+Windows, when the server started with a Windows sandbox mode, the fork
+otherwise uses that mode, unless the request's `config` asks for a stricter
+one through `windows.sandbox` (or `sandbox` in a `windows` table): `elevated`
+instead of `unelevated` is kept (D721); `mxc` is not ranked against the other
+modes and never replaces the start-up mode. When the server started without
+one, the request's mode is used as sent.
 
 # Thread removal
 
