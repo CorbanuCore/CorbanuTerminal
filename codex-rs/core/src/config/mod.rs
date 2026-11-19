@@ -2066,6 +2066,10 @@ pub async fn load_gpu_runtime_model_providers(
         .collect()
 }
 
+/// How long the GPU runtime provider overlay waits for a writer's lock on the
+/// state database before loading without it.
+const GPU_RUNTIME_OVERLAY_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 pub async fn load_gpu_runtime_model_provider_records(
     sqlite_home: &Path,
 ) -> Vec<codex_state::GpuRuntimeProvider> {
@@ -2080,19 +2084,14 @@ pub async fn load_gpu_runtime_model_provider_records(
         sqlite_home,
         /*enforce_delete_on_nfs*/ false,
     );
-    if !sqlite.has_existing_state_db() {
-        return Vec::new();
-    }
-    let runtime =
-        match codex_state::StateRuntime::init(sqlite, "gpu-runtime-overlay".to_string()).await {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                tracing::warn!(%error, "failed to open GPU runtime provider overlay");
-                return Vec::new();
-            }
-        };
-
-    match runtime.list_gpu_runtime_providers().await {
+    // #2723: read through a read-only connection. Opening the state runtime
+    // here took the init lock, ran migrations and created every runtime
+    // database during each config load, including for `migrate-nfs-db` and
+    // `app-server --print-startup-config`, which must not touch them.
+    match sqlite
+        .read_gpu_runtime_providers(GPU_RUNTIME_OVERLAY_BUSY_TIMEOUT)
+        .await
+    {
         Ok(records) => records,
         Err(error) => {
             tracing::warn!(%error, "failed to read GPU runtime provider overlay");
