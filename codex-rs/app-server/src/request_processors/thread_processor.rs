@@ -980,14 +980,26 @@ impl ThreadRequestProcessor {
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        // Like thread/start, rebuild the session on a fresh task stack. Polled from
+        // the request dispatcher's large frame, the reload overflowed debug Windows'
+        // 8 MiB test stack (#2277).
+        let processor = self.clone();
+        let revert_request_id = request_id.clone();
+        let revert = async move {
+            processor
+                .thread_revert_response(
+                    &revert_request_id,
+                    params,
+                    app_server_client_name,
+                    app_server_client_version,
+                )
+                .await
+        };
         let (response, thread_id) = self
-            .thread_revert_response(
-                &request_id,
-                params,
-                app_server_client_name,
-                app_server_client_version,
-            )
-            .await?;
+            .background_tasks
+            .spawn(revert.instrument(tracing::Span::current()))
+            .await
+            .map_err(|_| internal_error("thread revert task stopped before completing"))??;
         self.outgoing.send_response(request_id, response).await;
         self.outgoing
             .send_server_notification(ServerNotification::ThreadReverted(
