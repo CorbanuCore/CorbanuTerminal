@@ -67,6 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest scripts.test_check_price_calendars
+          python3 -m unittest scripts.test_check_openai_api_prices
           # Warning only here; nightly-ci fails 30 days before a list runs out.
           python3 scripts/check_price_calendars.py --warn-only
 

@@ -911,14 +911,15 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
             );
         }
     }
-    // GPT-5.6 Sol's promotional price holds "at least through November 21,
-    // 2026"; after that the catalogue states no price until it is re-read.
+    // GPT-5.6 Sol's promotional price is "available until November 30, 2026"
+    // (read earliest: through November 29); after that the catalogue states
+    // no price until it is re-read.
     assert!(
         !responses_original(
             "gpt-5.6-sol",
             "openai",
             scope,
-            utc("2026-11-21T23:59:59.999Z"),
+            utc("2026-11-29T23:59:59.999Z"),
             /*tier*/ None
         )?
         .is_empty()
@@ -928,7 +929,7 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
             "gpt-5.6-sol",
             "openai",
             scope,
-            utc("2026-11-22T00:00:00Z"),
+            utc("2026-11-30T00:00:00Z"),
             /*tier*/ None
         )?
         .is_empty()
@@ -961,16 +962,18 @@ fn openai_api_key_rates_match_the_published_sheet() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// #368: GPT-5.6 Sol's API price is a promotion OpenAI states "at least
-/// through November 21, 2026" (re-read 2026-10-14: unchanged, and no
-/// post-promotion price is published). The last millisecond of that day is
-/// priced at the promotional rate; from the next millisecond an API-key turn
-/// has no price and a ChatGPT-login turn keeps its plan burn with no API
-/// equivalent, so nothing is priced at a rate OpenAI may no longer charge.
+/// #368: GPT-5.6 Sol's API price is a promotion OpenAI states is "available
+/// until November 30, 2026" (re-read 2026-11-19; it was "at least through
+/// November 21, 2026", and still no post-promotion price is published). Read
+/// earliest, the promotion runs through November 29. The last millisecond of
+/// that day is priced at the promotional rate; from the next millisecond an
+/// API-key turn has no price and a ChatGPT-login turn keeps its plan burn with
+/// no API equivalent, so nothing is priced at a rate OpenAI may no longer
+/// charge.
 #[test]
 fn gpt_5_6_sol_promotion_ends_at_its_stated_boundary() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
-    let last = utc("2026-11-21T23:59:59.999Z");
+    let last = utc("2026-11-29T23:59:59.999Z");
     let after = last + 1;
     let catalog = codex_models_manager::bundled_models_response()?;
     let billing = billing_for(&catalog.models, "gpt-5.6-sol", "openai").expect("bundled row");
