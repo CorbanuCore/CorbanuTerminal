@@ -9,7 +9,7 @@ fn argv(words: &[&str]) -> Vec<String> {
 }
 
 fn unread_cmd_forms() -> Vec<Vec<String>> {
-    vec![
+    let mut forms = vec![
         argv(&["cmd", "/c", "git push"]),
         argv(&["cmd", "/C", "git", "push"]),
         argv(&["cmd.exe", "/d", "/c", "git push"]),
@@ -33,10 +33,22 @@ fn unread_cmd_forms() -> Vec<Vec<String>> {
         argv(&["tool.cmd", "!x!"]),
         argv(&["tool.cmd", "a\nb"]),
         argv(&["tool.cmd.", "a>b"]),
+        // A drive-relative spelling.
+        argv(&["c:cmd", "/c", "git push"]),
         // Inside a shell script, and behind a launcher.
         argv(&["bash", "-c", "cmd /c 'git push'"]),
         argv(&["env", "cmd", "/c", "git push"]),
-    ]
+    ];
+    if cfg!(windows) {
+        // A program that may be a batch file: a path (the command's folder,
+        // or a file a script creates first), or a name not found on `PATH`.
+        forms.extend([
+            argv(&[r".\build", "&git push"]),
+            argv(&[r"C:\p\x", "&git push"]),
+            argv(&["zz-d729-not-on-path", "&git push"]),
+        ]);
+    }
+    forms
 }
 
 async fn decide(
@@ -153,6 +165,57 @@ async fn cmd_scripts_are_refused_under_aggressive_with_approvals_off() {
     }
 }
 
+/// The kind of a requirement and whether it offers an amendment.
+fn shape(result: &ExecApprovalRequirement) -> (&'static str, bool) {
+    match result {
+        ExecApprovalRequirement::Skip {
+            proposed_execpolicy_amendment,
+            ..
+        } => ("skip", proposed_execpolicy_amendment.is_some()),
+        ExecApprovalRequirement::NeedsApproval {
+            proposed_execpolicy_amendment,
+            ..
+        } => ("ask", proposed_execpolicy_amendment.is_some()),
+        ExecApprovalRequirement::Forbidden { .. } => ("refuse", false),
+    }
+}
+
+#[tokio::test]
+async fn cmd_scripts_with_no_strict_rules_are_unchanged() {
+    // Without a prompt or forbidden rule the unread-script check stays off:
+    // sandboxed, these run; with every command asked, an amendment is offered.
+    for command in unread_cmd_forms() {
+        for rules in [
+            None,
+            Some(r#"prefix_rule(pattern=["unrelated"], decision="allow")"#),
+        ] {
+            for (approval_policy, expected) in [
+                (AskForApproval::OnRequest, ("skip", false)),
+                (AskForApproval::UnlessTrusted, ("ask", true)),
+            ] {
+                let result =
+                    exec_approval_requirement_for_command(ExecApprovalRequirementScenario {
+                        policy_src: rules.map(str::to_string),
+                        command: command.clone(),
+                        approval_policy,
+                        permission_profile: PermissionProfile::workspace_write(),
+                        sandbox_permissions: SandboxPermissions::UseDefault,
+                        prefix_rule: None,
+                    })
+                    .await;
+                assert_eq!(
+                    shape(&result).0,
+                    expected.0,
+                    "{command:?} {rules:?}: {result:?}"
+                );
+                if expected.1 {
+                    assert!(shape(&result).1, "{command:?} {rules:?}: {result:?}");
+                }
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn batch_files_with_plain_arguments_read_as_argv() {
     // A batch file given plain words is a program with arguments, as before.
@@ -166,16 +229,19 @@ async fn batch_files_with_plain_arguments_read_as_argv() {
             argv(&["build.bat", "release", "x86_64", "a=b", "c,d"]),
             argv(&["build.exe", "release", "x86_64", "a=b", "c,d"]),
         ),
+        // A program named `.exe` given cmd.exe's special characters is argv.
+        (
+            argv(&["git.exe", "commit", "-m", "a & b (c) %d%"]),
+            argv(&["git.exe", "commit", "-m", "a b c d"]),
+        ),
     ] {
         let profile = PermissionProfile::Disabled;
-        let batch_result = decide(rules, &batch, AskForApproval::OnRequest, profile.clone()).await;
-        let exe_result = decide(rules, &exe, AskForApproval::OnRequest, profile).await;
-        assert_eq!(is_ask(&batch_result), is_ask(&exe_result), "{batch:?}");
+        for approval_policy in [AskForApproval::OnRequest, AskForApproval::UnlessTrusted] {
+            let batch_result = decide(rules, &batch, approval_policy, profile.clone()).await;
+            let exe_result = decide(rules, &exe, approval_policy, profile.clone()).await;
+            assert_eq!(shape(&batch_result), shape(&exe_result), "{batch:?}");
+        }
     }
-}
-
-fn is_ask(result: &ExecApprovalRequirement) -> bool {
-    matches!(result, ExecApprovalRequirement::NeedsApproval { .. })
 }
 
 #[cfg(windows)]
