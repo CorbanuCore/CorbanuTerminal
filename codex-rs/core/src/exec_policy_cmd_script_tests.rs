@@ -253,6 +253,14 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
         "cmd /k git push",
         r"C:\Windows\System32\cmd.exe /c git push",
         r".\tool.cmd '&git push'",
+        // A script that changes `PATH` or `PATHEXT` first changes which file
+        // a bare name runs (`gradlew` as `C:\repo\gradlew.bat`).
+        r"Set-Item env:PATH C:\repo; gradlew '&git push'",
+        r"New-Item env:Path -Value C:\repo -Force; gradlew '&git push'",
+        r"Set-Location env:; Set-Item PATH C:\repo; gradlew '&git push'",
+        r"Set-Item Env:PATHEXT .BAT; gradlew '&git push'",
+        r"Set-Item Environment::PATH C:\repo; gradlew '&git push'",
+        r"Set-Item Microsoft.PowerShell.Core\Environment::PATH C:\repo; gradlew '&git push'",
     ] {
         let command = argv(&["powershell.exe", "-NoProfile", "-Command", script]);
         for profile in [

@@ -149,7 +149,10 @@ const POWERSHELL_CODE_COMMANDS: &[&str] = &[
 /// name runs, or run code rules cannot read: one of
 /// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too), or any command given
 /// a literal path on the alias or function drive (`Set-Item alias:f git`,
-/// `Set-Location function:`), compared as [`powershell_fold`] does.
+/// `Set-Location function:`), or (#2704) on the environment drive, where
+/// `PATH` and `PATHEXT` decide which program a later name runs
+/// (`Set-Item env:PATH C:\repo; gradlew …` runs `gradlew.bat`), compared as
+/// [`powershell_fold`] does.
 /// Windows only: elsewhere no PowerShell script is read, so a PowerShell
 /// command line asks wherever a prompt or forbidden rule exists.
 ///
@@ -164,7 +167,7 @@ fn powershell_runs_code<'a>(program: &str, mut args: impl Iterator<Item = &'a st
     POWERSHELL_CODE_COMMANDS.contains(&powershell_fold(name).as_str())
         || args.any(|arg| {
             let arg = powershell_fold(arg);
-            ["alias:", "function:"]
+            ["alias:", "function:", "env:", "environment:"]
                 .iter()
                 .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
         })
