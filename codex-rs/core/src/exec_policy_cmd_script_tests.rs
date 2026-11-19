@@ -299,8 +299,9 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
     let other = tempfile::tempdir().expect("tempdir");
     std::fs::write(other.path().join("zz-exe.cmd"), "@echo %*").expect("write");
     let path = |dirs: &[&Path]| Some(std::env::join_paths(dirs).expect("PATH"));
-    let found =
-        |program: &str, dirs: &[&Path]| wrappers::windows_batch_file_in(program, path(dirs), None);
+    let found = |program: &str, dirs: &[&Path]| {
+        wrappers::windows_batch_file_in(program, path(dirs), /*extensions*/ None)
+    };
     // The first match on `PATH` counts.
     assert!(found("zz-tool", &[dir.path()]));
     assert!(!found("zz-exe", &[dir.path(), other.path()]));
@@ -309,17 +310,21 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
     assert!(!found("zz-missing", &[dir.path()]));
     // An empty entry names no folder.
     assert!(!wrappers::windows_batch_file_in(
-        "zz-exe",
+        /*program*/ "zz-exe",
         Some(std::ffi::OsString::from(format!(
             ";{};",
             dir.path().display()
         ))),
-        None
+        /*extensions*/ None
     ));
     // Rooted at the command's drive (`/usr/bin`, `\tools`): unknown.
     for path in ["/bin:/usr/bin:/usr/local/bin", r"\tools"] {
         assert!(
-            wrappers::windows_batch_file_in("printf", Some(path.into()), None),
+            wrappers::windows_batch_file_in(
+                /*program*/ "printf",
+                Some(path.into()),
+                /*extensions*/ None
+            ),
             "{path}"
         );
     }
