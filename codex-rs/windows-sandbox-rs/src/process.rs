@@ -123,7 +123,7 @@ pub unsafe fn create_process_as_user(
     console_mode: ConsoleMode,
     use_private_desktop: bool,
 ) -> Result<CreatedProcess> {
-    let cmdline_str = sandbox_command_line(argv, env_map)?;
+    let cmdline_str = sandbox_command_line(argv, env_map, cwd)?;
     let mut cmdline: Vec<u16> = to_wide(&cmdline_str);
     let env_block = make_env_block(env_map);
     let desktop = LaunchDesktop::prepare(

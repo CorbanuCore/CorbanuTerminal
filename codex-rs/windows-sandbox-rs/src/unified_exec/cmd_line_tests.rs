@@ -3,17 +3,24 @@
 //! on both backends, with and without a ConPTY. Nothing injected runs.
 
 use super::SandboxHome;
+use super::collect_stdout_and_exit;
 use super::command_identity::elevated::elevated_home;
 use super::command_identity::elevated::run_elevated;
+use super::command_identity::elevated::try_spawn_elevated;
 use super::command_identity::run_legacy_with_tty;
 use super::current_thread_runtime;
 use super::legacy_process_test_guard;
 use super::sandbox_home;
+use super::spawn_windows_sandbox_session_legacy;
 use super::system32_exe;
 use super::user_owned_test_root;
+use super::with_session_temp;
+use super::workspace_roots_for;
+use codex_protocol::models::PermissionProfile;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 
 const DUMP_ENTRY: &str = "unified_exec::tests::cmd_line::cmd_line_dump_entry";
 /// Precedes the dump file in the entry's arguments; what follows is dumped.
@@ -274,4 +281,106 @@ fn d730_elevated_tty_cmd_lines_arrive_unchanged() {
     };
     let _guard = legacy_process_test_guard();
     check(Backend::Elevated, /*tty*/ true, &home);
+}
+
+/// Starts `argv` without a ConPTY: `None` when the sandbox refused to start
+/// it, else its stdout and exit code.
+async fn try_run(
+    backend: Backend,
+    root: &Path,
+    home: &Path,
+    argv: Vec<String>,
+) -> Option<(String, i32)> {
+    let spawned = match backend {
+        Backend::Legacy => spawn_windows_sandbox_session_legacy(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(root).as_slice(),
+            home,
+            argv,
+            root,
+            with_session_temp(home, std::env::vars().collect()),
+            /*timeout_ms*/ Some(60_000),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .ok()?,
+        Backend::Elevated => try_spawn_elevated(root, home, argv, &[], /*tty*/ false)
+            .await
+            .ok()?,
+    };
+    let (stdout, exit_code) =
+        collect_stdout_and_exit(spawned, home, Duration::from_secs(/*secs*/ 90)).await;
+    Some((String::from_utf8_lossy(&stdout).into_owned(), exit_code))
+}
+
+/// #2718: a nested cmd (also behind `if`), `start`, and a batch file cmd
+/// finds through PATHEXT
+/// get their arguments with cmd's escapes removed and parse them again. With
+/// an argument cmd acts on they are refused; nothing injected runs. The same
+/// commands with a plain argument still run.
+fn check_reparsing_programs(backend: Backend, home: &SandboxHome) {
+    let root = user_owned_test_root();
+    fs::write(root.path().join("x.bat"), "@exit /b 0\r\n").expect("write x.bat");
+    fs::write(root.path().join("tool.cmd"), "@echo %*\r\n").expect("write tool.cmd");
+    let injection = format!("x&echo.INJECTED>{MARKER}");
+    let cases: [(&str, Vec<&str>, Option<&str>); 4] = [
+        ("nested cmd", vec!["cmd", "/c", "echo.ran"], Some("ran ")),
+        (
+            "if",
+            vec!["if", "1==1", "cmd", "/c", "echo.ran"],
+            Some("ran "),
+        ),
+        ("start", vec!["start", "/b", "/wait", "x.bat"], None),
+        ("PATHEXT batch", vec!["tool"], Some("")),
+    ];
+    current_thread_runtime().block_on(async {
+        for (label, program, echoed) in &cases {
+            let label = format!("{backend:?} {label}");
+            let argv = |last: &str| {
+                let mut argv = vec![cmd(), "/c".to_string()];
+                argv.extend(program.iter().map(|part| (*part).to_string()));
+                argv.push(last.to_string());
+                argv
+            };
+            let outcome = try_run(backend, root.path(), home.path(), argv(&injection)).await;
+            assert!(
+                !root.path().join(MARKER).exists(),
+                "{label}: an injected command ran; {outcome:?}"
+            );
+            if let Some((stdout, exit_code)) = &outcome {
+                assert_ne!(*exit_code, 0, "{label}: not refused; stdout={stdout:?}");
+            }
+
+            let (stdout, exit_code) = try_run(backend, root.path(), home.path(), argv("plain"))
+                .await
+                .unwrap_or_else(|| panic!("{label}: a plain argument was refused"));
+            assert_eq!(exit_code, 0, "{label} plain: stdout={stdout:?}");
+            if let Some(echoed) = echoed {
+                assert!(
+                    stdout.contains(&format!("{echoed}plain")),
+                    "{label} plain: stdout={stdout:?}"
+                );
+            }
+        }
+    });
+}
+
+#[test]
+fn d2718_legacy_reparsing_programs_are_refused() {
+    let _guard = legacy_process_test_guard();
+    let home = sandbox_home("d2718-legacy");
+    check_reparsing_programs(Backend::Legacy, &home);
+}
+
+#[test]
+fn d2718_elevated_reparsing_programs_are_refused() {
+    let Some(home) = elevated_home("d2718-elevated") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
+    check_reparsing_programs(Backend::Elevated, &home);
 }
