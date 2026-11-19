@@ -501,3 +501,26 @@ fn bare_names_are_batch_files_as_powershell_finds_them_on_path() {
     assert!(found(r".\zz-exe", &[dir.path()]));
     assert!(found(r"C:\p\x", &[]));
 }
+
+/// The local-executor guard defaults to the strict reading, nests, and is
+/// restored when dropped, also while a panic unwinds.
+#[test]
+fn local_executor_guard_nests_and_restores() {
+    assert!(!wrappers::local_executor());
+    {
+        let _outer = wrappers::enter_local_executor(/*local*/ true);
+        assert!(wrappers::local_executor());
+        {
+            let _inner = wrappers::enter_local_executor(/*local*/ false);
+            assert!(!wrappers::local_executor());
+        }
+        assert!(wrappers::local_executor());
+    }
+    assert!(!wrappers::local_executor());
+    let unwound = std::panic::catch_unwind(|| {
+        let _guard = wrappers::enter_local_executor(/*local*/ true);
+        panic!("unwind");
+    });
+    assert!(unwound.is_err());
+    assert!(!wrappers::local_executor());
+}

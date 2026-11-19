@@ -858,8 +858,14 @@ impl Drop for LocalExecutorGuard {
     }
 }
 
+/// Whether commands checked on this thread run on this host (tests).
+#[cfg(test)]
+pub(super) fn local_executor() -> bool {
+    LOCAL_EXECUTOR.with(Cell::get)
+}
+
 /// See [`may_be_batch_file`]. A command running on this host, a Windows one
-/// (#2711's 6 sync-only regressions): as on main, a bare name is looked up
+/// (#2729: the 6 sync-only Windows regressions #2711 caused): as on main, a bare name is looked up
 /// on this host's `PATH` ([`windows_batch_file_in`]), so PowerShell's own
 /// `echo` is not a batch file unless `PATH` holds one first. Sync: any other
 /// executor may be another host (#2671; a remote environment reports only its
