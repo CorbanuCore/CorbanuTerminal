@@ -17,7 +17,7 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (13; hash=a751a10b71132414):
+  tools (14; hash=258f0645d8c4de2d):
     - function/exec_command: Runs a command in a PTY, returning output or a session ID for ongoing interaction.; args=[cmd, justification, login, max_output_tokens, prefix_rule, sandbox_permissions, shell, tty, workdir, yield_time_ms]; hash=c04108e51a8548c5
     - function/write_stdin: Writes characters to an existing unified exec session and returns recent output.; args=[chars, max_output_tokens, session_id, yield_time_ms]; hash=7fb62d8a3e2df4e2
     - function/list_mcp_resources: Lists resources provided by MCP servers. Resources allow servers to share data that provides cont...; args=[cursor, server]; hash=6792edaff13561bd
@@ -28,7 +28,8 @@ Settings:
     - function/structured_edit: Modify an existing UTF-8 text file by replacing exact text. This is an edit tool only, not a read...; args=[new_string, old_string, path, replace_all]; hash=3a4d88a8d78298ae
     - function/structured_write: Create or intentionally overwrite a UTF-8 text file. This is a write tool only, not a read or ins...; args=[content, mode, path]; hash=dd17fa676504c92f
     - function/view_image: View a local image file from the filesystem when visual inspection is needed. Use this for images...; args=[detail, path]; hash=3b766d5bdec5d50e
-    - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=f662c3c1e428dade
+    - function/list_models: List authorized picker-visible models available to spawn_agent, with exact provider/model names, ...; args=[offset]; hash=5d5f32060cc3ce7e
+    - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=f8f86c009b8e5b6e
       - function/close_agent
       - function/resume_agent
       - function/send_input
@@ -47,7 +48,7 @@ Settings:
 
 ## Window 2 (after request 1)
 Settings: relative to window 1
-  tools (13; hash=648297ac406c61b8):
+  tools (14; hash=57dc9c5e2f16b199):
     ~ namespace/mcp__discovery: Use these tools to exercise the rmcp test server.; hash=66db79539eaf6be3
       - function/echo
       - function/search_tools

@@ -853,11 +853,13 @@ async fn tool_search_returns_deferred_v1_multi_agent_tools() -> Result<()> {
         vec![
             sse(vec![
                 ev_response_created("resp-1"),
+                // #2729: two results, since `list_models` (#2577, which finds
+                // the models `spawn_agent` accepts) also ranks for this query.
                 ev_tool_search_call(
                     call_id,
                     &json!({
                         "query": "spawn agent",
-                        "limit": 1,
+                        "limit": 2,
                     }),
                 ),
                 ev_completed("resp-1"),
@@ -1043,8 +1045,16 @@ async fn tool_search_returns_deferred_custom_tool_and_routes_follow_up_call() ->
             .any(|name| name == TOOL_SEARCH_TOOL_NAME)
     );
     assert!(initial_tools.iter().all(|name| name != "custom_echo"));
+    // #2729: `list_models` (#2577) also ranks for this query; its description
+    // mentions custom runtime selection. Only the custom tool is checked here.
+    let mut found = tool_search_output_tools(&requests[1], "search-1");
+    for namespace in &mut found {
+        if let Some(tools) = namespace.get_mut("tools").and_then(Value::as_array_mut) {
+            tools.retain(|tool| tool.get("name").and_then(Value::as_str) != Some("list_models"));
+        }
+    }
     assert_eq!(
-        tool_search_output_tools(&requests[1], "search-1"),
+        found,
         vec![json!({
             "type": "namespace",
             "name": "functions",

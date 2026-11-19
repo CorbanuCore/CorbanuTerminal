@@ -32,13 +32,14 @@ Settings:
   stream: true
   text: {"verbosity":"low"}
   tool_choice: "auto"
-  tools (10; hash=45eb46d55250598e):
+  tools (11; hash=db2e43b4d3308584):
     - custom/exec: Run JavaScript code to orchestrate/compose tool calls - Evaluates the provided JavaScript code in...; hash=fb415d7dadfbffe4
     - function/wait: Waits on a yielded `exec` cell and returns new output or completion. - Use `wait` only after `exe...; args=[cell_id, max_tokens, terminate, yield_time_ms]; hash=6692d8f6c55be489
     - function/request_user_input: Request user input for one to three short questions and wait for the response. This tool is only ...; args=[questions]; hash=64a729b25c424fc6
     - function/request_user_input_async: Ask the user one or more questions during ongoing work. Use this tool only to request missing inf...; args=[questions]; hash=d6d74f33db330162
     - namespace/clock: Tools for reading and waiting on time.; hash=f402e8c5e9b5e317
       - function/sleep
+    - function/list_models: List authorized picker-visible models available to spawn_agent, with exact provider/model names, ...; args=[offset]; hash=5d5f32060cc3ce7e
     - namespace/collaboration: Tools for spawning and managing sub-agents.; hash=a702926d7b2ec538
       - function/followup_task
       - function/interrupt_agent
@@ -46,7 +47,7 @@ Settings:
       - function/send_message
       - function/spawn_agent
       - function/wait_agent
-    - function/spawn_agent_plaintext: Plaintext adapter for `spawn_agent`. Use this for explicit provider/model selection (the native O...; args=[agent_type, fork_turns, message, model, model_provider, reasoning_effort, task_name]; hash=ff273d5a4490a438
+    - function/spawn_agent_plaintext: Plaintext adapter for `spawn_agent`. Use this for explicit provider/model selection (the native O...; args=[agent_type, fork_turns, message, model, model_provider, reasoning_effort, task_name]; hash=16b824fcfe2d9f23
     - function/send_message_plaintext: Plaintext adapter for `send_message`. Use this for explicit provider/model selection (the native ...; args=[message, target]; hash=51fec614a0c4ea4f
     - function/followup_task_plaintext: Plaintext adapter for `followup_task`. Use this for explicit provider/model selection (the native...; args=[message, target]; hash=10207826fa954415
     - web_search; hash=e214d4db1bc49e89
