@@ -14,9 +14,9 @@ fn has_blossom(tui: &tui::Tui) -> bool {
 }
 
 fn text(buffer: &Buffer) -> String {
-    let project = crate::test_support::test_path_display("/tmp/project");
+    let project = crate::chatwidget::tests::helpers::test_cwd_display();
     let normalized_project = format!("{:<width$}", "/tmp/project", width = project.len());
-    let rendered = buffer
+    buffer
         .content
         .chunks(usize::from(buffer.area.width))
         .map(|row| {
@@ -28,8 +28,7 @@ fn text(buffer: &Buffer) -> String {
                 .to_string()
         })
         .collect::<Vec<_>>()
-        .join("\n");
-    crate::chatwidget::tests::helpers::normalize_snapshot_paths(rendered)
+        .join("\n")
 }
 
 fn draw(app: &mut App, tui: &mut tui::Tui, size: Size) -> Result<Rect> {
