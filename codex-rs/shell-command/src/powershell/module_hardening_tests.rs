@@ -54,15 +54,14 @@ fn run_with_planted_module(shell: &std::path::Path, script: &str) -> (bool, Stri
 
 #[test]
 fn planted_modules_do_not_replace_cmdlets_under_the_agent_prefix() {
-    let shells: Vec<_> = [
-        try_find_powershell_executable_blocking(),
-        try_find_pwsh_executable_blocking(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
+    // Windows PowerShell searches an inherited `PSModulePath` first, so a
+    // test can plant there. PowerShell 7 puts the user's own module folder
+    // first instead (not planted by a test); see the next test for it.
+    let Some(shell) = try_find_powershell_executable_blocking() else {
+        return;
+    };
     let script = "Select-String -Path input.txt -Pattern needle | ForEach-Object Line";
-    for shell in shells {
+    {
         // Without the prefix the planted module replaces the cmdlet.
         let (planted, _) = run_with_planted_module(shell.as_path(), script);
         assert!(planted, "{shell:?}: the plant must work without the prefix");
@@ -94,4 +93,32 @@ fn allowlisted_cmdlets_work_under_the_agent_prefix() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+#[test]
+fn system_cmdlets_come_from_the_install_folder_and_autoloading_is_off() {
+    let shells: Vec<_> = [
+        try_find_powershell_executable_blocking(),
+        try_find_pwsh_executable_blocking(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let script = format!(
+        "{AGENT_SCRIPT_PREFIX}$PSModuleAutoLoadingPreference; foreach ($c in 'Select-String', 'Get-ChildItem', 'Get-FileHash', 'Get-Acl', 'Get-CimInstance', 'Compress-Archive') {{ ([System.IO.Path]::GetFullPath((Get-Command $c).Module.ModuleBase)).StartsWith([System.IO.Path]::GetFullPath($PSHOME), [System.StringComparison]::OrdinalIgnoreCase) }}"
+    );
+    for shell in shells {
+        let output = std::process::Command::new(shell.as_path())
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .expect("run PowerShell");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = stdout.lines().map(str::trim).collect();
+        assert_eq!(
+            lines,
+            ["None", "True", "True", "True", "True", "True", "True"],
+            "{shell:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
