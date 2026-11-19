@@ -84,7 +84,10 @@ fn actual_binary_uses_production_head_deadline_without_reading_stdin() {
             .spawn()
             .unwrap(),
     );
-    let startup_end = Instant::now() + Duration::from_secs(3);
+    // A loaded CI shard can delay process start and bind for several seconds.
+    // This first connection is also the first connection the proxy counts, so
+    // a separate readiness probe would change the eight-connection sequence.
+    let startup_end = Instant::now() + Duration::from_secs(30);
     let mut first = loop {
         match TcpStream::connect(address) {
             Ok(stream) => break stream,
