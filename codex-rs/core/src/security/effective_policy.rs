@@ -196,6 +196,18 @@ impl EffectivePolicyView {
         Ok(self.read_state()?.is_some())
     }
 
+    /// Test fixture only: makes the policy state unreadable, as after a
+    /// panic while it was being written.
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        let shared = Arc::clone(&self.shared);
+        let _ = std::thread::spawn(move || {
+            let _guard = shared.state.write();
+            panic!("deliberate security policy fixture poison");
+        })
+        .join();
+    }
+
     pub(crate) fn snapshot_for_agent(
         &self,
         agent_id: ThreadId,

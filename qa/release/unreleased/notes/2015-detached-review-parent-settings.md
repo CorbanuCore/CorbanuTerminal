@@ -11,4 +11,6 @@
   confirmed during the session. It no longer falls back to the settings the
   app server loaded when it started. A fork request can still choose its own
   sandbox and approval policy, but it can't set a security level or Windows
-  sandbox below the conversation's.
+  sandbox below the conversation's. On Windows, a fork request that asks for
+  a stricter Windows sandbox (elevated) than the app server started with now
+  keeps it instead of getting the start-up one (D721).

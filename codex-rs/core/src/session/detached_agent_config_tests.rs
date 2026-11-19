@@ -385,3 +385,68 @@ async fn d711_fork_keeps_the_parents_level_after_a_saved_downgrade() {
         SecurityLevel::Permissive
     );
 }
+
+/// D721: a fork asking for a stricter Windows sandbox than its parent's keeps
+/// it, an equal one is unchanged and a looser one is raised to the parent's.
+#[tokio::test]
+async fn d721_fork_keeps_a_stricter_windows_sandbox_and_floors_a_looser_one() {
+    let (session, _turn) = make_session_and_context().await;
+    session
+        .update_settings(SessionSettingsUpdate {
+            windows_sandbox_level: Some(WindowsSandboxLevel::RestrictedToken),
+            ..Default::default()
+        })
+        .await
+        .expect("sandbox setup");
+    for (requested, expected) in [
+        (WindowsSandboxLevel::Elevated, WindowsSandboxLevel::Elevated),
+        (
+            WindowsSandboxLevel::RestrictedToken,
+            WindowsSandboxLevel::RestrictedToken,
+        ),
+        (
+            WindowsSandboxLevel::Disabled,
+            WindowsSandboxLevel::RestrictedToken,
+        ),
+    ] {
+        let mut fork = loosest_fork_config(&session).await;
+        raise_windows_sandbox(&mut fork, requested);
+        session.hold_fork_to_current_floor(&mut fork).await;
+        assert_eq!(
+            WindowsSandboxLevel::from_config(&fork),
+            expected,
+            "requested {requested:?}"
+        );
+    }
+}
+
+/// D721 with D711 (a): when the parent's policy state can't be read, the
+/// fork still runs at Aggressive, and a stricter Windows sandbox it asked
+/// for stays.
+#[tokio::test]
+async fn d721_unreadable_parent_policy_forks_aggressive_with_the_stricter_sandbox() {
+    let (session, _turn) = make_session_and_context().await;
+    // The clone shares the session's policy tree.
+    let control = session
+        .services
+        .agent_control
+        .local()
+        .expect("local agent backend")
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("security policy");
+    control.effective_security_policy().poison_for_test();
+
+    let mut fork = loosest_fork_config(&session).await;
+    raise_windows_sandbox(&mut fork, WindowsSandboxLevel::Elevated);
+    session.hold_fork_to_current_floor(&mut fork).await;
+    assert_eq!(fork.security_level, SecurityLevel::Aggressive);
+    assert_eq!(
+        WindowsSandboxLevel::from_config(&fork),
+        WindowsSandboxLevel::Elevated
+    );
+}
