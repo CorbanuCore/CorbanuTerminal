@@ -499,6 +499,8 @@ impl ExecPolicyManager {
             exec_policy.as_ref(),
             &commands,
             /*read_own_scripts*/ true,
+            // #2704: PowerShell finds the programs of its script's commands.
+            command_from_powershell(command_origin),
             &exec_policy_fallback,
             &match_options,
         );
@@ -1326,6 +1328,18 @@ fn program_key(token: &str) -> Option<String> {
         .find_map(|suffix| name.strip_suffix(suffix))
         .unwrap_or(&name);
     (!name.is_empty()).then(|| name.to_string())
+}
+
+/// Whether commands of this origin are a PowerShell script's.
+#[cfg(windows)]
+fn command_from_powershell(origin: ExecPolicyCommandOrigin) -> bool {
+    origin == ExecPolicyCommandOrigin::PowerShell
+}
+
+/// Elsewhere no PowerShell script is read into commands.
+#[cfg(not(windows))]
+fn command_from_powershell(_origin: ExecPolicyCommandOrigin) -> bool {
+    false
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {
