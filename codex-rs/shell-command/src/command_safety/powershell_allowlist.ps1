@@ -130,10 +130,6 @@ function Test-D729NetworkPath($text) {
     if ($text -match '(^|::)\s*[\\/]{2}(?![?.][\\/][A-Za-z]:)') { return $true }
     return ($text -match '(^|::)\s*[\\/]{2}[?.][\\/]' -and $text -match '(^|[\\/])\.\.([\\/]|$)')
 }
-    $index = ([string]$text).LastIndexOf('::')
-    if ($index -ge 0) { $text = ([string]$text).Substring($index + 2) }
-    return ($text -match '^[\\/]{2}' -and $text -notmatch '^[\\/]{2}[?.][\\/][A-Za-z]:')
-}
 
 # Why a native program's argv may not be what PowerShell passes; $null if it is.
 function Get-D729NativeCause($commandAst) {
