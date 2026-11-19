@@ -20,8 +20,10 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::chat_ready;
 use crate::support::file_hash::sha256_file;
 use crate::support::secret_scan;
+use crate::support::thread_title;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -221,6 +223,7 @@ async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Re
     let binary = codex_binary(&repo_root)?;
     let home = tempdir()?;
     let server = MockServer::start().await;
+    thread_title::mount_thread_title_response(&server).await;
     let _first = responses::mount_sse_once(&server, response("pf53 first request")).await;
     let _restart = responses::mount_sse_once(&server, response("pf53 restart request")).await;
     write_config(home.path(), &repo_root, &server.uri())?;
@@ -275,7 +278,7 @@ async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Re
         "chat header or onboarding after restart",
         READY_TIMEOUT,
         |capture| {
-            capture.contains("/model to change") || capture.contains("Choose a provider account")
+            chat_ready::session_configured(capture) || capture.contains("Choose a provider account")
         },
     )?;
     ensure!(
@@ -818,7 +821,7 @@ async fn tmux_preset_provider_key_entry_continues_to_chat() -> Result<()> {
         "chat, or the key-entry loop, after the key is saved",
         READY_TIMEOUT,
         |capture| {
-            capture.contains("/model to change")
+            chat_ready::session_configured(capture)
                 || capture.contains("Provide your PF53 Loopback API key")
         },
     )?;
@@ -1047,7 +1050,7 @@ fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
         "chat composer without a selection overlay",
         READY_TIMEOUT,
         |capture| {
-            capture.contains("/model to change")
+            chat_ready::session_configured(capture)
                 && !capture.contains("Press enter to confirm or esc to go back")
                 && !capture.contains("Vault credential — secure view")
                 && !capture.contains("Press Enter or Esc to clear")
