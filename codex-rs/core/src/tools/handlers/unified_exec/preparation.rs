@@ -75,6 +75,27 @@ impl PreparedExecCommand {
             Some("windows") | Some(_) => DangerousCommandPlatform::Windows,
             None => DangerousCommandPlatform::host(),
         };
+        // D729 (A): where the command runs, and the environment its shell
+        // finds programs with: for a local command, the one its shell
+        // environment policy builds (as the command gets it); a remote
+        // command's is not this host's, and only its being remote matters. A
+        // local command whose folder this host cannot read is checked as a
+        // remote one, never as no command (see `ExecApprovalRequest::env`).
+        let remote = environment.environment.is_remote();
+        let cwd = if remote {
+            None
+        } else {
+            self.cwd.to_abs_path().ok()
+        };
+        let command_env = if remote {
+            std::collections::HashMap::new()
+        } else {
+            crate::exec_env::create_env(
+                environment.shell_environment_policy(),
+                /*thread_id*/ None,
+            )
+        };
+        let no_env = std::collections::HashMap::new();
         session
             .services
             .exec_policy
@@ -95,11 +116,8 @@ impl PreparedExecCommand {
                     },
                     prefix_rule: self.prefix_rule.clone(),
                     allow_prefix_rules: step.turn.allow_prefix_rules(),
-                    cwd: if environment.environment.is_remote() {
-                        None
-                    } else {
-                        self.cwd.to_abs_path().ok()
-                    },
+                    env: Some(if cwd.is_some() { &command_env } else { &no_env }),
+                    cwd,
                 },
                 configured_shell,
                 command_platform,

@@ -164,6 +164,15 @@ pub(super) fn possible_rule_decision(rule: Decision) -> Option<Decision> {
     }
 }
 
+/// D729 (A): whether any prompt, prompt-user or forbidden rule exists, which
+/// a PowerShell script read only in part might hide a command from (D733:
+/// otherwise scripts are read literally, as before D729).
+pub(super) fn any_strict_rule(policy: &Policy, options: &MatchOptions) -> bool {
+    policy
+        .strictest_rule_matching_more_args_by(&[], options, possible_rule_decision)
+        .is_some()
+}
+
 /// Keep the stricter of the current heuristic and `decision` for `command`.
 fn raise<'a>(
     heuristic: &mut Option<(&'a [String], Decision)>,

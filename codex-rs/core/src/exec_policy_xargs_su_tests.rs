@@ -308,6 +308,7 @@ async fn managed_requirement(line: &str, rules: &str, managed: &str) -> ExecAppr
             prefix_rule: None,
             allow_prefix_rules: AllowPrefixRules::Honor,
             cwd: None,
+            env: None,
         })
         .await
 }

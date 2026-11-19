@@ -3,11 +3,18 @@ use std::path::PathBuf;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
 
+use crate::command_safety::try_parse_powershell_command_words;
 use crate::command_safety::try_parse_powershell_commands;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
 
+mod allowlist;
 mod cli;
+mod command_scope;
+
+pub use command_scope::PowershellCommandScope;
+pub use command_scope::PowershellCommandScopeGuard;
+pub use command_scope::enter_powershell_command_scope;
 
 macro_rules! utf8_output_prefix {
     () => {
@@ -166,18 +173,20 @@ pub enum UnreadPowershell<'a> {
 /// read; `None` for other commands and scripts fully lowered into a plain
 /// command list. A PowerShell invocation without a script can read stdin.
 pub fn unread_powershell_command_line(command: &[String]) -> Option<UnreadPowershell<'_>> {
-    let (_, invocation) = read_invocation(command)?;
+    let (shell, invocation) = read_invocation(command)?;
     match invocation.run {
         cli::Run::File(file) => Some(UnreadPowershell::File(file)),
         cli::Run::Unreadable | cli::Run::Interactive => Some(UnreadPowershell::Unreadable),
-        cli::Run::Command { script, .. } => unread_script(&script),
-        cli::Run::Encoded(script) => unread_script(&script),
+        cli::Run::Command { script, .. } => unread_script(shell, invocation.no_profile, &script),
+        cli::Run::Encoded(script) => unread_script(shell, invocation.no_profile, &script),
     }
 }
 
-fn unread_script(script: &str) -> Option<UnreadPowershell<'static>> {
-    if try_parse_powershell_commands(script).is_some() {
-        return None;
+fn unread_script(shell: &str, no_profile: bool, script: &str) -> Option<UnreadPowershell<'static>> {
+    if let Some(commands) = try_parse_powershell_command_words(script) {
+        let read_in_part = allowlist_reads_in_part(shell, no_profile, &commands);
+        let commands = word_texts(commands);
+        return read_in_part.then_some(UnreadPowershell::Partial(commands));
     }
     let prefixes = crate::command_safety::powershell_restrictive_prefixes(script);
     Some(if prefixes.is_empty() {
@@ -185,6 +194,47 @@ fn unread_script(script: &str) -> Option<UnreadPowershell<'static>> {
     } else {
         UnreadPowershell::Partial(prefixes)
     })
+}
+
+/// D729 (A): where a prompt or forbidden rule exists (D733), a lowered script
+/// is read as its commands only when every command is allowlisted (or a
+/// program on the command's `PATH`); otherwise in part, its literal commands
+/// adding prompts and refusals only.
+fn allowlist_reads_in_part(
+    shell: &str,
+    no_profile: bool,
+    commands: &[Vec<crate::command_safety::LoweredWord>],
+) -> bool {
+    command_scope::allowlist_applies()
+        && allowlist::review(shell, PowershellKind::of(shell), no_profile, commands).is_some()
+}
+
+fn word_texts(commands: Vec<Vec<crate::command_safety::LoweredWord>>) -> Vec<Vec<String>> {
+    commands
+        .into_iter()
+        .map(|command| command.into_iter().map(|word| word.text).collect())
+        .collect()
+}
+
+/// The script of `command`, a PowerShell command line, and its commands when
+/// rules read it in full: lowered, and (D729 (A), within a
+/// [`PowershellCommandScope`] where the allowlist applies) every command
+/// allowlisted. `None` for any other command line, which
+/// [`unread_powershell_command_line`] reads in part.
+pub fn read_powershell_plain_commands(
+    command: &[String],
+) -> Option<(Cow<'_, str>, Vec<Vec<String>>)> {
+    let (shell, invocation) = read_invocation(command)?;
+    let script = match invocation.run {
+        cli::Run::Command { script, .. } => script,
+        cli::Run::Encoded(script) => Cow::Owned(script),
+        cli::Run::File(_) | cli::Run::Unreadable | cli::Run::Interactive => return None,
+    };
+    let commands = try_parse_powershell_command_words(&script)?;
+    if allowlist_reads_in_part(shell, invocation.no_profile, &commands) {
+        return None;
+    }
+    Some((script, word_texts(commands)))
 }
 
 /// Parse the script body from a top-level PowerShell wrapper into argv-like commands.

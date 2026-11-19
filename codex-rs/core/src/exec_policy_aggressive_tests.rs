@@ -91,6 +91,7 @@ async fn requirement(
                 environment_policy: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd: None,
+                env: None,
             },
             live_aggressive,
         )
@@ -334,6 +335,7 @@ async fn issue_626_note_names_only_suspended_rules() {
                 environment_policy: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd: None,
+                env: None,
             },
             /*live_aggressive*/ true,
         )
@@ -381,6 +383,7 @@ async fn issue_626_rejection_names_the_suspended_rule() {
                 environment_policy: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd: None,
+                env: None,
             },
             /*live_aggressive*/ true,
         )
@@ -590,6 +593,7 @@ async fn strict_vault_rule_sees_the_whole_command_of_an_unconfigured_shell() {
                 environment_policy: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd: None,
+                env: None,
             },
             &configured,
             codex_shell_command::is_dangerous_command::DangerousCommandPlatform::Posix,
