@@ -387,7 +387,9 @@ async fn windows_executor_powershell_batch_files_ask_on_any_host() {
 }
 
 /// The requirement for PowerShell `script` on a Windows executor, run on this
-/// host in `cwd` (`None`: a remote environment).
+/// host in `cwd` (`None`: a remote environment), in the elevated sandbox as
+/// pf_30_s01 runs it (sync: without a sandbox, approvals off refuse every
+/// command no rule allows).
 #[cfg(windows)]
 async fn decide_windows_powershell(
     rules: &str,
@@ -407,7 +409,7 @@ async fn decide_windows_powershell(
                 approval_policy,
                 permission_profile: PermissionProfile::workspace_write(),
                 environment_policy: None,
-                windows_sandbox_level: WindowsSandboxLevel::Disabled,
+                windows_sandbox_level: WindowsSandboxLevel::Elevated,
                 sandbox_permissions: SandboxPermissions::UseDefault,
                 prefix_rule: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
