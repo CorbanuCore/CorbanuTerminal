@@ -178,7 +178,7 @@ fn spawn_legacy_process(
         let launcher = crate::helper_materialization::conpty_launcher()?;
         // Preserve the command line exactly as the direct launch serialized it.
         // The launcher runs under the same token and job from its first instruction.
-        let command_line = crate::command_line::sandbox_command_line(command, env_map)?;
+        let command_line = crate::command_line::sandbox_command_line(command, env_map, cwd)?;
         let launch_command = vec![launcher.display().to_string(), command_line];
         let (pi, mut conpty) = spawn_conpty_process_as_user(
             token.raw(),

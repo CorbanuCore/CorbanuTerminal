@@ -1,0 +1,3 @@
+## Windows sandbox
+
+- In the Windows sandbox, a program given with separate arguments after `cmd.exe /C` is now refused instead of run when it would parse those arguments as a command line again and an argument contains a character cmd acts on (`" % ! ^ & | < > ( )` or a line break): a nested `cmd`/`cmd.exe` (any case or path), the `start` builtin, or a name cmd finds through PATHEXT as a batch file (for example `npm` for `npm.cmd` in the working directory or on `PATH`). Previously such an argument (for example `a&b` passed to `cmd /c cmd /c x`) could run text after it as a separate command. The same programs with plain arguments, and a single command line after `/C`, run as before (#2718).

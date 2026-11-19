@@ -108,7 +108,7 @@ pub fn spawn_conpty_process_as_user(
     use_private_desktop: bool,
     logs_base_dir: Option<&Path>,
 ) -> Result<(PROCESS_INFORMATION, ConptyInstance)> {
-    let cmdline_str = crate::command_line::sandbox_command_line(argv, env_map)?;
+    let cmdline_str = crate::command_line::sandbox_command_line(argv, env_map, cwd)?;
     let mut cmdline: Vec<u16> = to_wide(&cmdline_str);
     let env_block = make_env_block(env_map);
     let mut si: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
