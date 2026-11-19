@@ -403,3 +403,28 @@ async fn powershell_check_keeps_refusals_of_read_scripts() {
         }
     }
 }
+
+/// #2671: on Windows, PowerShell spelled so that neither the script reader
+/// nor its respelling reads it asks whenever a prompt or forbidden rule
+/// exists: a `\\?\` path skips Win32 name normalization, yet `\\?\…\PWSH`
+/// still runs `PWSH.exe` (`.exe` is appended); and 8.3 short names and
+/// stream suffixes may name it too.
+#[cfg(windows)]
+#[tokio::test]
+async fn issue_2671_unread_powershell_spellings_ask() {
+    let mut commands = Vec::new();
+    for shell in [
+        r"\\?\C:\PS\PWSH",
+        r"\\?\C:\Windows\System32\WindowsPowerShell\v1.0\POWERSHELL",
+        r"\\?\C:\PS\PWSH.EXE.",
+        "PWSH~1.EXE",
+        r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE",
+        "pwsh.exe::$DATA",
+    ] {
+        for flag in ["-Command", "-c"] {
+            commands.push(argv(&[shell, "-NoProfile", flag, "git push"]));
+        }
+    }
+    let failures = failures_for(commands, &[FORBID, PROMPT]).await;
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
