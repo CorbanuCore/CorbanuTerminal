@@ -385,6 +385,20 @@ fn batch_files_refuse_what_cmd_would_act_on() {
         }
     }
     assert!(refused(&["C:\\a&b\\x.bat", "plain"], &none).contains("batch file"));
+    // A named stream, as Windows reads it.
+    assert!(refused(&["C:\\w\\x.txt:y.bat", "a&b"], &none).contains("batch file"));
+    // A batch file run by cmd /c gets the same refusal.
+    for items in [
+        ["cmd", "/c", "x.bat", "a&b"],
+        ["cmd", "/c", "C:\\dir x\\y.cmd", "%X%"],
+        ["cmd", "/c", "x.cmd.", "!x!"],
+    ] {
+        assert!(refused(&items, &none).contains("batch file"), "{items:?}");
+    }
+    assert_eq!(
+        line(&["cmd", "/c", "C:\\dir x\\y.cmd", "plain", "two words"]),
+        "cmd /d /v:off /s /c \"\"C:\\dir x\\y.cmd\" plain ^\"two words^\"\""
+    );
     // Plain arguments keep the CRT join.
     assert_eq!(
         line(&["C:\\scripts\\x.bat", "plain", "two words", ""]),

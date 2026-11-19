@@ -125,11 +125,16 @@ fn is_cmd_program(program: &str) -> bool {
     matches!(program_file_name(program).as_str(), "cmd" | "cmd.exe")
 }
 
-/// A batch file: `CreateProcess*` runs it through cmd, which parses its
-/// command line.
+/// A batch file: `CreateProcess*` and cmd run it through cmd, which parses
+/// its arguments. Any `:`-separated part counts, since Windows looks at the
+/// last `.` of a named stream (`x.txt:y.bat`) too. A bare name cmd resolves
+/// through PATHEXT (`npm` for `npm.cmd`) can't be recognized here.
 fn is_batch_program(program: &str) -> bool {
-    let name = program_file_name(program);
-    name.ends_with(".bat") || name.ends_with(".cmd")
+    let name = program.rsplit(['\\', '/']).next().unwrap_or(program);
+    name.split(':').any(|part| {
+        let part = part.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+        part.ends_with(".bat") || part.ends_with(".cmd")
+    })
 }
 
 /// cmd parses a batch file's CRT-joined command line, and how Windows hands
@@ -243,6 +248,11 @@ impl CmdInvocation {
     ) -> Result<String> {
         if self.delayed_expansion == Some(true) {
             bail!("cmd.exe /V:ON can't pass arguments through unchanged (#2702)");
+        }
+        // cmd hands a batch file its arguments unescaped, and the batch file
+        // parses them again (`%1`, `%*`).
+        if is_batch_program(program) {
+            check_batch_arguments(args)?;
         }
         let all = std::iter::once(program).chain(args.iter().map(String::as_str));
         if all.clone().any(|arg| arg.contains(['\r', '\n'])) {
