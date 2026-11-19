@@ -187,11 +187,11 @@ pub(crate) fn is_intact(dir: &Path, hold: &Hold) -> bool {
     same && now.metadata().is_ok_and(|meta| meta.is_dir()) && is_link(&now).is_ok_and(|link| !link)
 }
 
+/// `key`'s value under the spelling the command's environment block keeps
+/// (`process::make_env_block`: `TEMP` before `Temp`), never whichever
+/// spelling `HashMap` iteration meets first (#2780).
 fn env_value(env_map: &HashMap<String, String>, key: &str) -> Option<String> {
-    env_map
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(key))
-        .map(|(_, value)| value.clone())
+    crate::env::get_ignoring_case(env_map, key).cloned()
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
