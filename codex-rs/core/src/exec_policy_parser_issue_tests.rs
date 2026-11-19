@@ -408,7 +408,9 @@ async fn powershell_check_keeps_refusals_of_read_scripts() {
 /// nor its respelling reads it asks whenever a prompt or forbidden rule
 /// exists: a `\\?\` path skips Win32 name normalization, yet `\\?\…\PWSH`
 /// still runs `PWSH.exe` (`.exe` is appended); and 8.3 short names and
-/// stream suffixes may name it too.
+/// stream suffixes may name it too. Device (`\\.\`), verbatim UNC
+/// (`\\?\UNC\`) and `//?/` spellings are read or ask, and so is the same
+/// shell behind a launcher.
 #[cfg(windows)]
 #[tokio::test]
 async fn issue_2671_unread_powershell_spellings_ask() {
@@ -417,6 +419,9 @@ async fn issue_2671_unread_powershell_spellings_ask() {
         r"\\?\C:\PS\PWSH",
         r"\\?\C:\Windows\System32\WindowsPowerShell\v1.0\POWERSHELL",
         r"\\?\C:\PS\PWSH.EXE.",
+        r"\\?\UNC\srv\share\PWSH",
+        r"\\.\C:\PS\PWSH",
+        "//?/C:/PS/PWSH",
         "PWSH~1.EXE",
         r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE",
         "pwsh.exe::$DATA",
@@ -424,6 +429,7 @@ async fn issue_2671_unread_powershell_spellings_ask() {
         for flag in ["-Command", "-c"] {
             commands.push(argv(&[shell, "-NoProfile", flag, "git push"]));
         }
+        commands.push(argv(&["env", "A=1", shell, "-c", "git push"]));
     }
     let failures = failures_for(commands, &[FORBID, PROMPT]).await;
     assert!(failures.is_empty(), "{}", failures.join("\n"));
