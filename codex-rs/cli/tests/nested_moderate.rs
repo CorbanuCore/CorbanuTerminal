@@ -159,7 +159,7 @@ impl Run {
 }
 
 /// Prints `marker=1` where the sandbox marks the command, else
-/// `marker=unset`, within #2548's minimal lexical set (no `${…}`).
+/// `marker=unset`, within #2548's minimal lexical set.
 const MARKER: &str = "printf marker=; printenv CODEX_SANDBOX_USER_NAMESPACES_DENIED || echo unset";
 
 /// `value` as one POSIX shell word.

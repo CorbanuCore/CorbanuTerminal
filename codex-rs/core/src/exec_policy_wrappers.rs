@@ -4,6 +4,7 @@
 use super::commands_for_exec_policy_for_platform;
 use crate::security::tainted_action::policy_runs_shell;
 use crate::security::tainted_action::policy_shell_script;
+use crate::security::tainted_action::policy_windows_program_name;
 use crate::security::tainted_action::policy_wrapper_commands;
 use codex_execpolicy::Decision;
 use codex_execpolicy::Evaluation;
@@ -40,17 +41,24 @@ pub(crate) const MAX_SCRIPT_DEPTH: usize = 8;
 fn script_commands(
     command: &[String],
     platform: DangerousCommandPlatform,
-) -> Option<(Vec<Vec<String>>, bool)> {
+) -> Option<(Vec<Vec<String>>, bool, bool)> {
     let parsed = commands_for_exec_policy_for_platform(command, platform);
     if parsed.commands.len() != 1 || parsed.commands[0] != command {
-        return Some((parsed.commands, false));
+        // #2704: a PowerShell script's commands, whose programs PowerShell
+        // finds (`pnpm` as `pnpm.cmd`).
+        let powershell = matches!(
+            parsed.command_origin,
+            super::ExecPolicyCommandOrigin::PowerShell
+                | super::ExecPolicyCommandOrigin::PowerShellLiteral
+        );
+        return Some((parsed.commands, false, powershell));
     }
     // #2548: a here-document a shell reads as its script (or any script
     // whose commands run more than their argv) is read whole, input and all.
     if shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read)) {
         return None;
     }
-    parse_shell_lc_single_command_prefix(command).map(|single| (vec![single], true))
+    parse_shell_lc_single_command_prefix(command).map(|single| (vec![single], true, false))
 }
 
 /// `read_own_scripts` as for [`check`]: whether `command` came from a split
@@ -193,7 +201,8 @@ pub(crate) fn check_with_wrappers_and_folded(
     platform: DangerousCommandPlatform,
 ) -> (Evaluation, Vec<RuleMatch>) {
     let checked = check(
-        policy, commands, /*read_own_scripts*/ true, fallback, options, platform,
+        policy, commands, /*read_own_scripts*/ true, /*from_powershell*/ false, fallback,
+        options, platform,
     );
     (checked.evaluation, checked.folded)
 }
@@ -230,13 +239,18 @@ pub(crate) fn unread_script_matches(
         && reading.as_ref().is_none_or(|read| {
             !runs_more_than_argv(read) && (!read.fails_closed() || !strict_rules)
         });
-    if plain || (reading.is_none() && !runs_unread_script(command)) || heredoc_pass_suffices {
+    // #2704: a script cmd.exe reads is read here too (strict rules first:
+    // finding a batch file looks at `PATH`).
+    let unread = runs_unread_script(command)
+        || (strict_rules && runs_unread_cmd_script(command, platform, /*powershell*/ false));
+    if plain || (reading.is_none() && !unread) || heredoc_pass_suffices {
         return (Vec::new(), Vec::new());
     }
     let checked = check(
         policy,
         std::slice::from_ref(&command.to_vec()),
         /*read_own_scripts*/ true,
+        /*from_powershell*/ false,
         &|_: &[String]| Decision::Allow,
         options,
         platform,
@@ -272,6 +286,9 @@ struct Pending {
     restrict_only: bool,
     /// #2548: where its input comes from, for a command from a script.
     stdin: CommandStdin,
+    /// #2704: from a PowerShell script, so PowerShell finds its program
+    /// (`pnpm` as `pnpm.cmd` on `PATH`).
+    powershell: bool,
 }
 
 /// Where a word is known only at run time (#2543), launchers read this.
@@ -286,10 +303,13 @@ const UNKNOWN_WORD: &str = "\0";
 /// reads it). Scripts behind a launcher or a respelled shell in it, and
 /// scripts nested in those, are still read. Main uses the same switch for
 /// the zsh-fork escalation path, which the sync branch no longer has.
+/// `from_powershell`: `commands` are a PowerShell script's (#2704: their
+/// programs are found as PowerShell finds them).
 pub(super) fn check(
     policy: &Policy,
     commands: &[Vec<String>],
     read_own_scripts: bool,
+    from_powershell: bool,
     fallback: &impl Fn(&[String]) -> Decision,
     options: &MatchOptions,
     platform: DangerousCommandPlatform,
@@ -311,10 +331,16 @@ pub(super) fn check(
     let mut next = commands.iter();
     loop {
         let owned = pending.pop();
-        let (command, depth, restrict_only, stdin) = match &owned {
-            Some(item) => (&item.command, item.depth, item.restrict_only, &item.stdin),
+        let (command, depth, restrict_only, stdin, powershell) = match &owned {
+            Some(item) => (
+                &item.command,
+                item.depth,
+                item.restrict_only,
+                &item.stdin,
+                item.powershell,
+            ),
             None => match next.next() {
-                Some(command) => (command, 0, false, &CommandStdin::Inherited),
+                Some(command) => (command, 0, false, &CommandStdin::Inherited, from_powershell),
                 None => break,
             },
         };
@@ -387,6 +413,7 @@ pub(super) fn check(
                         restrict_only,
                         depth,
                         stdin: CommandStdin::Inherited,
+                        powershell: true,
                     }));
                 } else if depth < MAX_SCRIPT_DEPTH || start > 0 {
                     // #2556, #2583 (D553): known literal prefixes of a script
@@ -398,6 +425,7 @@ pub(super) fn check(
                         restrict_only: true,
                         depth: depth + 1,
                         stdin: CommandStdin::Inherited,
+                        powershell: true,
                     }));
                 }
             }
@@ -407,6 +435,18 @@ pub(super) fn check(
                 command: command.to_vec(),
                 decision,
             });
+        }
+        // #2704: in a PowerShell script any program of the command, a
+        // launcher (`.\env foo …`) or a shell spelled as a path (`.\bash -c
+        // …`) too, may be a batch file cmd.exe re-reads.
+        if powershell
+            && let Some(ask) = any_rule()
+            && wrappers.starts.iter().any(|&start| {
+                runs_unread_cmd_script(&command[start..], platform, /*powershell*/ true)
+            })
+        {
+            raise_match(&mut matches, command, Some(ask));
+            unread_script_prompts = true;
         }
         if let Some(&start) = wrappers.starts.last() {
             let inner = &command[start..];
@@ -425,7 +465,7 @@ pub(super) fn check(
             let reads_script = always_read || depth > 0 || read_own_scripts;
             let reads_past_bound = depth < MAX_SCRIPT_DEPTH || always_read;
             if reads_script
-                && let Some((inner_commands, used_complex_parsing)) =
+                && let Some((inner_commands, used_complex_parsing, inner_powershell)) =
                     script_commands(parsed_as, platform)
             {
                 // A heredoc asks, as main's `used_complex_parsing` does, also
@@ -462,6 +502,7 @@ pub(super) fn check(
                         depth: depth + 1,
                         restrict_only,
                         stdin: CommandStdin::Inherited,
+                        powershell: inner_powershell,
                     }));
                 }
             } else if reads_script && let Some(read) = shell_lc_script_read(parsed_as) {
@@ -493,6 +534,14 @@ pub(super) fn check(
                 let ask = any_rule();
                 raise_match(&mut matches, inner, ask);
                 unread_script_prompts |= ask.is_some();
+            } else if reads_script
+                && let Some(ask) = any_rule()
+                && runs_unread_cmd_script(parsed_as, platform, powershell)
+            {
+                // #2704: a script cmd.exe reads (`cmd /c "git push"`). Rules
+                // first: finding a batch file looks at `PATH`.
+                raise_match(&mut matches, inner, Some(ask));
+                unread_script_prompts = true;
             }
         }
         // #2548 (D553): a command whose program runs more than its argv:
@@ -601,6 +650,7 @@ fn queue_script(
                     depth: depth + 1,
                     restrict_only: true,
                     stdin,
+                    powershell: false,
                 });
             }
         } else {
@@ -673,14 +723,17 @@ fn inner_runs_shell(command: &[String]) -> bool {
 }
 
 /// #2548: `command`'s words for deciding what its program runs: a word
-/// known only at run time that is always a number (`$?`) reads as one.
+/// known only at run time that is always a number (`$?`) reads as one,
+/// [`roles::RUN_TIME_NUMBER`].
 fn role_words(command: &ReadCommand) -> Vec<Option<String>> {
     command
         .words
         .iter()
         .enumerate()
         .map(|(index, word)| match word {
-            None if command.numbers.get(index) == Some(&true) => Some("0".to_string()),
+            None if command.numbers.get(index) == Some(&true) => {
+                Some(roles::RUN_TIME_NUMBER.to_string())
+            }
             word => word.clone(),
         })
         .collect()
@@ -719,6 +772,69 @@ fn runs_unread_script(command: &[String]) -> bool {
                     .strip_prefix('-')
                     .is_some_and(|letters| !letters.starts_with('-') && letters.contains('c'))
         })
+}
+
+/// #2704 (D553): whether `command` runs a script cmd.exe reads, which rules
+/// cannot see: cmd.exe itself, whatever its arguments (`/c`, `/k`, `/d/c`,
+/// or a script from its input), or a program that may be a batch file
+/// (see [`may_be_batch_file`]) given an argument cmd.exe would read as more
+/// than a word when it re-reads the batch file's command line
+/// (`pnpm.cmd '&git push'`). Approximate on the side of yes.
+///
+/// `powershell`: the command comes from a PowerShell script, which finds its
+/// program as a batch file on `PATH` or by a path without an extension;
+/// another shell (bash) or a command line run as given does not.
+fn runs_unread_cmd_script(
+    command: &[String],
+    platform: DangerousCommandPlatform,
+    powershell: bool,
+) -> bool {
+    let Some((program, args)) = command.split_first() else {
+        return false;
+    };
+    // As Windows finds it (`C:\Windows\System32\CMD.EXE.`, `C:cmd`).
+    let name = policy_windows_program_name(program);
+    if name == "cmd" {
+        return true;
+    }
+    args.iter().any(|arg| cmd_rereads(arg))
+        && may_be_batch_file(program, &name, platform, powershell)
+}
+
+/// Whether cmd.exe may read `arg` as more than one plain word: a command
+/// separator, redirection, escape, variable expansion, quote, group or
+/// line break.
+fn cmd_rereads(arg: &str) -> bool {
+    arg.contains(['&', '|', '<', '>', '^', '%', '!', '"', '(', ')', '\r', '\n'])
+}
+
+/// Whether `program` (Windows file name `name`) may run as a batch file:
+/// named `.cmd` or `.bat`, or on Windows a path not named `.exe` or `.com`
+/// (`.\build`, `C:\p\x`: the command's folder may hold a batch file, or
+/// a script may create one first), or a bare name PowerShell finds on
+/// `PATH` as a batch file (`pnpm` as `pnpm.cmd`).
+fn may_be_batch_file(
+    program: &str,
+    name: &str,
+    platform: DangerousCommandPlatform,
+    powershell: bool,
+) -> bool {
+    name.ends_with(".cmd")
+        || name.ends_with(".bat")
+        || (powershell
+            && platform == DangerousCommandPlatform::Windows
+            && windows_batch_file(program))
+}
+
+/// See [`may_be_batch_file`]. Sync: the executor may be another host than
+/// this one (#2671; a remote environment reports only its platform), whose
+/// `PATH` this host cannot read, so any program not named `.exe` or `.com`
+/// may be a batch file there (`pnpm` as `pnpm.cmd`, `.\build` in the
+/// command's folder or created by the script first). Main looks a bare name
+/// up on this host's `PATH`.
+fn windows_batch_file(program: &str) -> bool {
+    let lower = program.trim_end_matches(['.', ' ']).to_ascii_lowercase();
+    !(lower.ends_with(".exe") || lower.ends_with(".com"))
 }
 
 /// #2543: the prompt and forbidden rule matches of a script command with

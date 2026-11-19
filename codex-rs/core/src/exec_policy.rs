@@ -552,6 +552,12 @@ impl ExecPolicyManager {
                 policy,
                 &commands,
                 read_own_scripts,
+                // #2704: PowerShell finds the programs of its script's commands.
+                matches!(
+                    command_origin,
+                    ExecPolicyCommandOrigin::PowerShell
+                        | ExecPolicyCommandOrigin::PowerShellLiteral
+                ),
                 &fallback,
                 &match_options,
                 command_platform,
