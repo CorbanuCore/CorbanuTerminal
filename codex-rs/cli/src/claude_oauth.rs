@@ -1209,6 +1209,30 @@ mod tests {
         }
     }
 
+    /// Writes an executable fake `claude` from a child process. Written here, a
+    /// sibling test that forks while the file is open for writing keeps a copy
+    /// of that descriptor until it execs, and running the script then fails
+    /// with ETXTBSY on Linux (#1448; same fix as #1614 and #635).
+    #[cfg(unix)]
+    fn write_fake_claude(path: &Path, contents: &str) {
+        use std::io::Write as _;
+
+        let mut writer = std::process::Command::new("/bin/sh")
+            .args(["-c", "cat > \"$1\" && chmod 700 \"$1\"", "sh"])
+            .arg(path)
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("spawn fake Claude writer");
+        writer
+            .stdin
+            .take()
+            .expect("fake Claude writer stdin")
+            .write_all(contents.as_bytes())
+            .expect("write fake Claude");
+        let status = writer.wait().expect("wait for fake Claude writer");
+        assert!(status.success(), "fake Claude writer failed: {status}");
+    }
+
     #[cfg(unix)]
     fn fake_claude_status(
         directory: &Path,
@@ -1233,13 +1257,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             cwd_log.display(),
             custom_oauth_log.display()
         );
-        std::fs::write(&executable, script).expect("write fake status Claude");
-        let mut permissions = std::fs::metadata(&executable)
-            .expect("fake status Claude metadata")
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&executable, permissions)
-            .expect("make fake status Claude executable");
+        write_fake_claude(&executable, &script);
         (executable, cwd_log, custom_oauth_log)
     }
 
@@ -2226,24 +2244,14 @@ printf '%s\n' '{{"claudeAiOauth":{{"accessToken":"refreshed-access","refreshToke
 exit {exit_code}
 "#
         );
-        std::fs::write(&executable, script).expect("write fake Claude");
-        let mut permissions = std::fs::metadata(&executable)
-            .expect("fake Claude metadata")
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&executable, permissions).expect("make fake Claude executable");
+        write_fake_claude(&executable, &script);
         executable
     }
 
     #[cfg(unix)]
     fn fake_failing_claude(config_dir: &Path) -> PathBuf {
         let executable = config_dir.join("failing-claude");
-        std::fs::write(&executable, "#!/bin/sh\nexit 7\n").expect("write failing Claude");
-        let mut permissions = std::fs::metadata(&executable)
-            .expect("failing Claude metadata")
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&executable, permissions).expect("make fake Claude executable");
+        write_fake_claude(&executable, "#!/bin/sh\nexit 7\n");
         executable
     }
 

@@ -1,0 +1,18 @@
+{
+  "binary_sha256": "dccaf6f6d147026224cd4a03214bb554ff7d745f8b9b2f6c28404d949daacfbc",
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "checks": {
+    "/status": true,
+    "/model": true,
+    "/providers": true,
+    "/docs": true,
+    "/security": true,
+    "slash_list": true,
+    "typing_does_not_accept_approval": true,
+    "approval_cancelled": true,
+    "first_response": true,
+    "cancel_then_recover": true,
+    "two_persisted_completions": true,
+    "persisted_abort": true
+  }
+}

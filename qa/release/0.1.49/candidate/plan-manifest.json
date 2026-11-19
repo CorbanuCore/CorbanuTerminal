@@ -1,0 +1,9 @@
+{
+  "source_commit": "c46a9d10edb39e3a44bc74b0705408269233eee3",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/astra-rel149/debug/corbanu",
+  "version": "corbanu 0.1.49",
+  "sha256": "13d3a99b5928a1b3fcf7f7e17e32fa24c5427fe6f0e4c27f8493cbac1dba8bb3",
+  "credential_transport": "existing sign-in read only in broker memory; capability-protected loopback endpoint; synthetic auth in isolated product home; built-in OpenAI SSE route",
+  "operator_read_denied": true,
+  "scope": "three low-effort true-TUI plan smokes; no fallback, optional recovery or WebSocket claim"
+}
