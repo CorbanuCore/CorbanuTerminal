@@ -58,6 +58,31 @@ pub fn detect_shell_type(shell_path: impl AsRef<std::path::Path>) -> Option<Shel
     }
 }
 
+/// #2699: whether Windows may run another file than the one `program`
+/// spells: its file name (after any drive, `C:pwsh.exe`) names an NTFS
+/// stream (`pwsh.exe:x.exe`, `C:\PS\pwsh.exe:s`, `pwsh.exe::$DATA`) or holds
+/// an 8.3 short-name tail (`~` then a digit). [`detect_shell_type`] reads
+/// such names through their stems (`pwsh.exe:x.exe` as `pwsh`), but Windows
+/// runs the stream's content. Only the file name counts: short directory
+/// names (`C:\PROGRA~1\`) do not change which program runs. The same test
+/// as core's `names::unsure` for Windows names.
+pub fn windows_name_unsure(program: &str) -> bool {
+    let name = program
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(program);
+    let name = match name.as_bytes() {
+        [drive, b':', ..] if drive.is_ascii_alphabetic() => &name[2..],
+        _ => name,
+    };
+    name.contains(':')
+        || name
+            .as_bytes()
+            .windows(2)
+            .any(|pair| pair[0] == b'~' && pair[1].is_ascii_digit())
+}
+
 #[cfg(unix)]
 fn get_user_shell_path() -> Option<PathBuf> {
     let uid = unsafe { libc::getuid() };
@@ -364,5 +389,27 @@ mod tests {
             detect_shell_type(PathBuf::from("cmd.exe")),
             Some(ShellType::Cmd)
         );
+    }
+
+    #[test]
+    fn windows_names_that_may_run_another_file_are_unsure() {
+        for (program, unsure) in [
+            ("pwsh.exe:x.exe", true),
+            (r"C:\PS\pwsh.exe:s", true),
+            ("pwsh.exe::$DATA", true),
+            ("C:pwsh.exe:s", true),
+            ("C:/PS/pwsh.exe:s/", true),
+            ("PWSH~1.EXE", true),
+            (r"C:\PS\pwsh.~1", true),
+            ("~1", true),
+            ("pwsh.exe", false),
+            ("C:pwsh.exe", false),
+            (r"C:\PROGRA~1\PowerShell\7\pwsh.exe", false),
+            ("/opt/a:b/pwsh", false),
+            ("pwsh~", false),
+            ("", false),
+        ] {
+            assert_eq!(windows_name_unsure(program), unsure, "{program}");
+        }
     }
 }
