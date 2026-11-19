@@ -63,17 +63,20 @@ Add-D729 'get-itemproperty', 'get-itempropertyvalue', 'resolve-path', 'convert-p
 # Text and object shaping (script blocks are never literal).
 Add-D729 'select-string', 'measure-object', 'select-object', 'sort-object', 'group-object',
     'where-object', 'get-unique', 'compare-object', 'format-table', 'format-list', 'format-wide',
-    'format-custom', 'format-hex', 'out-string', 'out-null', 'out-host', 'out-default',
+    'format-custom', 'format-hex', 'out-string', 'out-null', 'out-default',
     'write-output', 'write-host', 'write-information', 'write-warning', 'write-error', 'write-verbose',
     'write-progress', 'convertto-json', 'convertfrom-json', 'convertto-csv', 'convertfrom-csv',
     'import-csv', 'convertto-xml', 'convertto-html', 'convertfrom-stringdata', 'get-member',
     'get-variable', 'get-alias', 'get-history', 'get-random', 'get-date', 'new-timespan', 'get-culture',
     'get-uiculture', 'get-host', 'get-timezone', 'get-uptime', 'start-sleep', 'clear-host', 'get-verb',
     'set-strictmode', 'get-clipboard'
-# System queries (no method calls).
-Add-D729 'get-process', 'stop-process', 'wait-process', 'get-service', 'get-ciminstance',
-    'get-wmiobject', 'get-eventlog', 'get-computerinfo', 'test-connection', 'get-job', 'wait-job',
-    'receive-job', 'remove-job', 'stop-job'
+# Paging waits for a key.
+Add-D729 'out-host' -Excluded 'Paging'
+# System queries (no method calls). Not WMI/CIM (`Win32_Product` repairs installed
+# programs, `-Path \\host\…` reaches another computer), `Test-Connection` (any host), or
+# `Stop-Process` (may prompt).
+Add-D729 'get-process', 'wait-process', 'get-service', 'get-eventlog', 'get-computerinfo',
+    'get-job', 'wait-job', 'receive-job', 'remove-job', 'stop-job'
 Add-D729 'set-location', 'push-location', 'pop-location'
 # No cmdlet that writes, copies, moves, renames, removes or downloads files (Set-Content,
 # Out-File, New-Item, Copy-Item, Invoke-WebRequest, Invoke-RestMethod, …): where such a
@@ -115,6 +118,16 @@ function Get-D729LiteralText($element) {
     if ($element -is [System.Management.Automation.Language.ExpandableStringExpressionAst]) { return $element.Value }
     if ($element -is [System.Management.Automation.Language.ConstantExpressionAst]) { return $element.Value.ToString() }
     return $null
+}
+
+# A network path (`\\host\share`, `//host`, also after a provider qualifier such as
+# `FileSystem::`) reaches another computer with the user's credentials; only `\\?\` and
+# `\\.\` before a drive letter are local.
+function Test-D729NetworkPath($text) {
+    if ($null -eq $text) { return $false }
+    $index = ([string]$text).LastIndexOf('::')
+    if ($index -ge 0) { $text = ([string]$text).Substring($index + 2) }
+    return ($text -match '^[\\/]{2}' -and $text -notmatch '^[\\/]{2}[?.][\\/][A-Za-z]:')
 }
 
 # Why a native program's argv may not be what PowerShell passes; $null if it is.
@@ -185,6 +198,13 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     $skipNext = $false
     for ($i = 1; $i -lt $elements.Count; $i++) {
         $element = $elements[$i]
+        $text = $null
+        if ($element -is [System.Management.Automation.Language.CommandParameterAst]) {
+            if ($null -ne $element.Argument) { $text = Get-D729LiteralText $element.Argument }
+        } else {
+            $text = Get-D729LiteralText $element
+        }
+        if (Test-D729NetworkPath $text) { return "network path: $target" }
         if ($skipNext) {
             $skipNext = $false
             if ($element -is [System.Management.Automation.Language.CommandParameterAst]) { return "dynamic parameter without a value: $target" }
@@ -279,6 +299,13 @@ function Get-D729Review($ast) {
     $state = @{
         programs = [System.Collections.ArrayList]::new()
         cmdlets = [System.Collections.ArrayList]::new()
+    }
+    # Strings outside a command's own words (`$p = '\\host\s'`, `Get-Content a,\\host\s`):
+    # a network path anywhere asks. A command's own words are checked per cmdlet below.
+    foreach ($string in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -or $n -is [System.Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+        $parent = $string.Parent
+        if ($parent -is [System.Management.Automation.Language.CommandAst] -or $parent -is [System.Management.Automation.Language.CommandParameterAst]) { continue }
+        if (Test-D729NetworkPath $string.Value) { return @{ cause = 'network path' } }
     }
     foreach ($pipeline in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.PipelineAst] }, $true)) {
         $index = 0
