@@ -46,7 +46,7 @@ foreach ($letter in [char[]]'abcdefghijklmnopqrstuvwxyz') { $D729Functions["${le
 # The allowlist: cmdlets whose parameters cannot run code once every argument is a literal.
 #   x: excluded parameters; w: what it writes (see Add-D729Writes);
 #   d: file-system dynamic parameters (1 takes a value, 0 is a switch), set aside before
-#      binding when this process's metadata lacks them (PowerShell usually lists them).
+#      binding.
 $D729Allow = @{}
 function Add-D729 {
     param([string[]]$Names, [string[]]$Excluded = @(), [string]$Writes = $null, [hashtable]$Dynamic = @{})
@@ -100,7 +100,8 @@ $D729ContentWriters = @{
 }
 # Common parameters that set variables or prompt.
 $D729Banned = @('OutVariable', 'ErrorVariable', 'WarningVariable', 'InformationVariable', 'PipelineVariable', 'Debug', 'Confirm')
-$D729ActionValues = @('silentlycontinue', 'stop', 'continue', 'ignore')
+# By name or number (Inquire is 3, Suspend 5, Break 6).
+$D729ActionValues = @('silentlycontinue', 'stop', 'continue', 'ignore', '0', '1', '2', '4')
 $D729SystemModules = @('microsoft.powershell.management', 'microsoft.powershell.utility', 'microsoft.powershell.security',
     'microsoft.powershell.archive', 'microsoft.powershell.core', 'cimcmdlets')
 
@@ -208,7 +209,9 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $writes,
             $canonical = Resolve-D729Parameter $element.ParameterName $table
             if ($null -eq $canonical) { return "unknown or ambiguous parameter -$($element.ParameterName): $target" }
             if ($D729Banned -contains $canonical -or $entry.x -contains $canonical) { return "excluded parameter -${canonical}: $target" }
-            if ($entry.d.ContainsKey($canonical) -and -not $info.Parameters.ContainsKey($canonical)) {
+            # Dynamic parameters are set aside before binding: the binder knows them
+            # only for a path that exists when the script is read.
+            if ($entry.d.ContainsKey($canonical)) {
                 if ($entry.d[$canonical] -eq 1 -and $null -eq $element.Argument) { $skipNext = $true }
                 continue
             }
@@ -334,9 +337,11 @@ function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
     }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }
     if ($lower -match '\.[^.]*$' -and $lower -notmatch '\.(exe|com|cmd|bat)$') { return "script file: $name" }
-    # A name PowerShell does not find as a program on `PATH` may load a module that
-    # exports it (`ForEach-Object`, `Get-ScheduledTask`, or a module a command wrote).
-    if (-not (Find-D729OnPath $lower)) { return "command not on the allowlist or PATH: $lower" }
+    # A Verb-Noun name PowerShell does not find as a program on `PATH` is a module's
+    # command (`ForEach-Object`, `Get-ScheduledTask`, or a module a command wrote).
+    # Other names are programs: the shell's `PATH` may hold more than this process's
+    # (Corbanu's own tools), so a program not found here still runs as argv.
+    if ($lower -match '^[a-z]+-[a-z]' -and -not (Find-D729OnPath $lower)) { return "command not on the allowlist: $lower" }
     return (Get-D729NativeCause $commandAst)
 }
 

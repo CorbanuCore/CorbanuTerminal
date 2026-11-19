@@ -212,6 +212,9 @@ async fn allowlisted_forms_stay_precise() {
             "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile x.html",
             "Invoke-RestMethod -Uri https://example.com/x.json",
             "Compress-Archive -Path a.txt -DestinationPath a.zip",
+            // File-system dynamic parameters, also for a path that does not exist.
+            r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",
+            r"Get-Content -LiteralPath 'C:\does not\exist.txt' -Raw",
         ] {
             for permission_profile in [
                 PermissionProfile::Disabled,
