@@ -909,10 +909,9 @@ fn shell_step(call_id: &str, command: &str) -> Step {
 }
 
 /// #2548 (coordinator decision, 2026-11-18): Aggressive always has prompt
-/// and forbidden rules, so a script outside the minimal lexical set (these
-/// build paths at run time with `$(…)` and variables) asks before it runs,
-/// and with approvals off it would be refused before the sandbox is
-/// exercised. Under Aggressive these runs therefore allow approvals and
+/// and forbidden rules, so a script outside the minimal lexical set (D713
+/// reads `$(…)` and variables as arguments) asks before it runs, and with
+/// approvals off it would be refused before the sandbox is exercised. Under Aggressive these runs therefore allow approvals and
 /// approve that prompt; the sandbox assertions are unchanged.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn reading_gate_approval(level: SecurityLevel) -> AskForApproval {

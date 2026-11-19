@@ -387,10 +387,8 @@ async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
         "true;#note",
         "[ -n \"$(git status --porcelain)\" ] || [ \"$(uname)\" = Darwin ]",
         "cmd >/dev/null 2>&1",
-        // The literal list (review round 7): no `$name`, `$(…)` or `&`.
-        "printf '%s\\n' \"$x\" | sort",
+        // The literal list (review round 7): no `&`.
         "sleep 1 & pid=$!; kill $pid; wait $!",
-        "printf '%s: %d\\n' \"$name\" 3",
     ] {
         let result = check(script, FORBID, /*mode*/ 0).await;
         assert!(asks(&result), "{script:?}: {result:?}");
@@ -423,6 +421,20 @@ async fn scripts_outside_the_minimal_set_ask_only_with_strict_rules() {
             "{script:?}: {result:?}"
         );
     }
+    // D713 reads parameter expansions as arguments: these run nothing a
+    // rule matches (`printf` reads no number from them).
+    for script in [
+        "printf '%s\\n' \"$x\" | sort",
+        "printf '%s: %d\\n' \"$name\" 3",
+    ] {
+        let result = check(script, FORBID, /*mode*/ 0).await;
+        assert!(
+            matches!(result, ExecApprovalRequirement::Skip { .. }),
+            "{script:?}: {result:?}"
+        );
+    }
+    let result = check("printf '%d\\n' \"$x\"", FORBID, /*mode*/ 0).await;
+    assert!(asks(&result), "{result:?}");
 }
 
 #[tokio::test]

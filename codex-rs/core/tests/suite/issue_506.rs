@@ -82,10 +82,11 @@ async fn run(level: SecurityLevel, confirm: bool, command: Command) -> anyhow::R
         Command::ListAboveRecursively => format!("ls -aR '{}'", above.display()),
     };
     // #2548 (coordinator decision A): Aggressive's rules include a forbidden
-    // one, so a script outside the minimal lexical set (`"$CODEX_HOME"`)
-    // asks before it runs, and with approvals off it would be refused
-    // before the sandbox is exercised. Such runs allow approvals and approve
-    // the prompt (the loop below); the sandbox still decides.
+    // one, so a script outside the minimal lexical set asks before it runs
+    // (`"$CODEX_HOME"` lies within it since D713), and with approvals off it
+    // would be refused before the sandbox is exercised. Such runs allow
+    // approvals and approve the prompt (the loop below); the sandbox still
+    // decides.
     let reading_gate = level == SecurityLevel::Aggressive
         && codex_shell_command::bash::read_script(&command).fails_closed();
     let approval_policy = if reading_gate {

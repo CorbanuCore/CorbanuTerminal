@@ -75,10 +75,10 @@ async fn run(
         marker.display()
     );
     // #2548 (coordinator decision A): Aggressive's rules include a forbidden
-    // one, so a script outside the minimal lexical set (`${…:-unset}`) asks
-    // before it runs, and with approvals off it would be refused before the
-    // sandbox is exercised. Such runs allow approvals and approve that
-    // prompt (below); the sandbox still decides.
+    // one, so a script outside the minimal lexical set asks before it runs
+    // (`${…:-unset}` lies within it since D713), and with approvals off it
+    // would be refused before the sandbox is exercised. Such runs allow
+    // approvals and approve that prompt (below); the sandbox still decides.
     let reading_gate = level == SecurityLevel::Aggressive
         && codex_shell_command::bash::read_script(&script).fails_closed();
     let approval_policy = if reading_gate {
