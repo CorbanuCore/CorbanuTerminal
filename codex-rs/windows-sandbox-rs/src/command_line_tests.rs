@@ -3,6 +3,7 @@ use super::sandbox_command_line;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 
 /// A working directory without any batch file in it.
 fn no_cwd() -> &'static Path {
@@ -522,6 +523,68 @@ fn nested_cmd_and_start_are_refused_with_metacharacters() {
     assert_eq!(
         line(&["cmd", "/c", "cmd /c x a&b"]),
         "cmd /d /v:off /s /c \"cmd /c x a&b\""
+    );
+}
+
+/// `path` as Win32 takes it literally: it drops a trailing space from the
+/// last component of an ordinary path, so on Windows use the verbatim form.
+fn verbatim(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(format!(r"\\?\{}", path.display()))
+    } else {
+        path.to_path_buf()
+    }
+}
+
+/// #2783: cmd reads a PATH entry with every quote dropped, its spaces kept and
+/// no split at a quoted `;` (`C:\bin ` and `"C:\bin" ` search a folder named
+/// `bin `, checked natively), so a batch file there counts even though the
+/// trimmed spelling names a folder without one.
+#[test]
+fn batch_files_in_untrimmed_path_entries_are_refused() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let cwd = root.path().join("work");
+    let trailing = root.path().join("trailing ");
+    let leading = cwd.join(" leading");
+    let quoted_space = root.path().join("quoted space ");
+    let semicolon = root.path().join("semi;colon");
+    let plain = root.path().join("plain");
+    for dir in [&cwd, &trailing, &leading, &quoted_space, &semicolon, &plain] {
+        std::fs::create_dir_all(verbatim(dir)).expect("mkdir");
+    }
+    for (dir, file) in [
+        (&trailing, "npm.cmd"),
+        (&leading, "yarn.bat"),
+        (&quoted_space, "pnpm.cmd"),
+        (&semicolon, "bun.bat"),
+    ] {
+        std::fs::write(verbatim(dir).join(file), "@echo off\r\n").expect("write");
+    }
+    std::fs::write(plain.join("git.exe"), "").expect("write");
+    let env = HashMap::from([(
+        "PATH".to_string(),
+        format!(
+            " {};{}; leading;\"{}\" ;\"{}\"",
+            plain.display(),
+            trailing.display(),
+            root.path().join("quoted space").display(),
+            semicolon.display()
+        ),
+    )]);
+    let run = |items: &[&str]| sandbox_command_line(&argv(items), &env, &cwd);
+    for program in ["npm", "yarn", "pnpm", "bun"] {
+        let items = ["cmd", "/c", program, "a&b"];
+        let error = format!("{:#}", run(&items).expect_err("must be refused"));
+        assert!(
+            error.contains("resolves to a batch file"),
+            "{items:?}: {error}"
+        );
+    }
+    // cmd's spelling ` <plain>` names no folder (on Windows, not even a valid
+    // path once joined to the working directory); `git` still runs.
+    assert_eq!(
+        run(&["cmd", "/c", "git", "a&b"]).expect("ok"),
+        "cmd /d /v:off /s /c \"git a^&b\""
     );
 }
 
