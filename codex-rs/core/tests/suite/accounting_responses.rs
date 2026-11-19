@@ -4,6 +4,7 @@ use codex_core::TurnInputRequest;
 use codex_core::config::AccountingMode;
 use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
+#[cfg(not(target_os = "windows"))]
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_state::accounting::*;
 use core_test_support::responses;
