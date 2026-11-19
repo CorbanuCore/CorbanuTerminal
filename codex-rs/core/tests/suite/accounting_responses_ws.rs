@@ -112,6 +112,7 @@ async fn accounting_responses_ws_native_incremental_sampling_and_turn_identity()
     let server = MockServer::start().await;
     let mut gate = Gate::start().await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+        .with_pre_build_hook(crate::suite::accounting_chat::support::allow_fixture_command)
         .build_with_auto_env(&server)
         .await?;
     submit(&test).await?;

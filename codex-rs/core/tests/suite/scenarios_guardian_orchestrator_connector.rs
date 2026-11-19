@@ -27,6 +27,7 @@ use wiremock::matchers::body_partial_json;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+#[ignore = "D604 (#2562): orchestrator-trusted connectors reach Guardian only through background scoring, which is off on Corbanu; the synchronous review never carries trusted-tool context (core/src/guardian/prompt.rs); restore with the scoring gate (#2729)"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn host_owned_orchestrator_connector_reaches_guardian_context() -> Result<()> {
     skip_if_no_network!(Ok(()));

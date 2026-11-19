@@ -108,6 +108,16 @@ fn windows_name_unread(command: &[String], platform: DangerousCommandPlatform) -
         && crate::security::tainted_action::windows_names_unread(command)
 }
 
+/// #2699: `command` for a Windows executor starts with PowerShell spelled
+/// so Windows may run another file, which no reader reads.
+fn windows_powershell_unsure(command: &[String], platform: DangerousCommandPlatform) -> bool {
+    platform == DangerousCommandPlatform::Windows
+        && command.first().is_some_and(|program| {
+            codex_shell_command::powershell::is_powershell_program(program)
+                && codex_shell_command::shell_detect::windows_name_unsure(program)
+        })
+}
+
 struct UnreadPowershellCommands {
     commands: Vec<Vec<String>>,
     restrict_only: bool,
@@ -412,6 +422,13 @@ pub(super) fn check(
                 || windows_name_unread(candidate, platform)
             {
                 raise(&mut heuristic, candidate, could_complete(&[]));
+            }
+            // #2699: for a Windows executor, a PowerShell spelled so Windows
+            // may run another file (`pwsh.exe:x.exe`, an NTFS stream) is not
+            // read, so its script is neither matched nor judged dangerous:
+            // it asks, as an uncertain launcher does on a Windows host.
+            if !restrict_only && windows_powershell_unsure(candidate, platform) {
+                raise(&mut heuristic, candidate, Some(Decision::Prompt));
             }
             if platform == DangerousCommandPlatform::Windows
                 && let Some(unread) = unread_powershell_line(candidate, platform)

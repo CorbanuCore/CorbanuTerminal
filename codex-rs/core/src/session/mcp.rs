@@ -577,6 +577,10 @@ impl Session {
                             ),
                             environment,
                         );
+                    crate::security::windows_unsandboxed::keep_configured_selection(
+                        &mut sandbox,
+                        environment,
+                    );
                     (environment.selection.environment_id.clone(), sandbox)
                 })
                 .collect::<HashMap<_, _>>()

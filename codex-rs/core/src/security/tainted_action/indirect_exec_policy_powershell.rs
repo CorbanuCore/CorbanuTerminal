@@ -124,6 +124,11 @@ mod tests {
             (r"\\?\C:\PS\pwsh.exe ", None),
             (r"\\?\C:\PS\PWSH", None),
             ("bash", None),
+            // #2699: names Windows may run as another file are never respelled.
+            ("PWSH.EXE:x.exe", None),
+            (r"C:\PS\PWSH:s", None),
+            ("PWSH::$DATA", None),
+            ("PWSH~1.EXE", None),
         ] {
             let command = words(&[program, "-NoProfile", "-Command", "git push"]);
             let expected =
