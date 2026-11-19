@@ -344,7 +344,8 @@ impl SqliteConfig {
     /// init lock, run migrations and create the other runtime databases before
     /// commands such as `migrate-nfs-db` or `app-server --print-startup-config`
     /// that must not touch them. Returns no providers when no state database
-    /// exists; `busy_timeout` bounds the wait for a writer's lock.
+    /// exists, and an error for a database with foreign migrations;
+    /// `busy_timeout` bounds the wait for a writer's lock on the query.
     pub async fn read_gpu_runtime_providers(
         &self,
         busy_timeout: Duration,
@@ -361,6 +362,11 @@ impl SqliteConfig {
                 _ => return Ok(Vec::new()),
             }
         };
+        // As the runtime does before using a state database: refuse one whose
+        // applied migrations this build doesn't know (another distribution's
+        // or a newer build's database), whose rows were not written under
+        // this build's validation.
+        validate_applied_migrations(self, &path, &runtime_state_migrator()).await?;
         let pool = self.open_read_only_pool(&path, Some(busy_timeout)).await?;
         let providers =
             crate::runtime::gpu_runtime_providers::list_gpu_runtime_providers_in(&pool).await;

@@ -1977,6 +1977,22 @@ pub fn gpu_runtime_model_provider(
         );
         return None;
     }
+    // The rental controller only stores HTTPS or loopback endpoints; check
+    // again here, where the endpoint is given the rental's token (#2723).
+    let endpoint_allowed = url::Url::parse(record.base_url.as_str()).is_ok_and(|url| {
+        url.scheme() == "https"
+            || (url.scheme() == "http"
+                && url
+                    .host_str()
+                    .is_some_and(|host| matches!(host, "127.0.0.1" | "[::1]" | "localhost")))
+    });
+    if !endpoint_allowed {
+        tracing::warn!(
+            provider_id = %record.provider_id,
+            "ignoring GPU runtime provider without an HTTPS or loopback endpoint"
+        );
+        return None;
+    }
     let wire_api = match record.wire_api.as_str() {
         "chat" => WireApi::Chat,
         "responses" => WireApi::Responses,
