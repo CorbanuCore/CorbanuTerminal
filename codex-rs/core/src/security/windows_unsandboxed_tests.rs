@@ -242,10 +242,11 @@ async fn issue_2088_discovery_and_skill_reads_keep_the_refusal_with_full_disk_ac
                     })
                 );
                 // Upstream gives a remote Windows executor with no configured sandbox the
-                // restricted token (main forwarded Disabled); the refusal above stays.
+                // restricted token; with a refusal the context keeps main's `Disabled`, so
+                // the executor's report is judged for the sandbox configured (#2729).
                 assert_eq!(
                     context.windows_sandbox_selection,
-                    codex_file_system::WindowsSandboxSelection::RestrictedToken
+                    codex_file_system::WindowsSandboxSelection::Disabled
                 );
                 let local = snapshot
                     .sandbox_contexts()
@@ -698,6 +699,66 @@ async fn issue_2562_discovery_judges_an_elevated_environment_in_an_unsandboxed_s
             context.unsandboxed_refusal,
             cfg!(windows).then(|| file_refusal(level)),
             "{level:?}"
+        );
+    }
+}
+
+/// #2729: a context carrying a refusal keeps main's `Disabled` selection
+/// where upstream raised it to the restricted token; nothing else changes.
+#[test]
+fn issue_2729_a_refusal_keeps_the_configured_windows_selection() {
+    use codex_file_system::FileSystemSandboxContext;
+    use codex_file_system::WindowsSandboxSelection;
+    use codex_protocol::models::PermissionProfile;
+
+    for (level, sandbox_type, refusal, raised, kept) in [
+        (
+            WindowsSandboxLevel::Disabled,
+            codex_sandboxing::SandboxType::WindowsRestrictedToken,
+            true,
+            WindowsSandboxSelection::RestrictedToken,
+            WindowsSandboxSelection::Disabled,
+        ),
+        (
+            WindowsSandboxLevel::Disabled,
+            codex_sandboxing::SandboxType::WindowsRestrictedToken,
+            false,
+            WindowsSandboxSelection::RestrictedToken,
+            WindowsSandboxSelection::RestrictedToken,
+        ),
+        (
+            WindowsSandboxLevel::RestrictedToken,
+            codex_sandboxing::SandboxType::WindowsRestrictedToken,
+            true,
+            WindowsSandboxSelection::RestrictedToken,
+            WindowsSandboxSelection::RestrictedToken,
+        ),
+        (
+            WindowsSandboxLevel::Elevated,
+            codex_sandboxing::SandboxType::WindowsRestrictedToken,
+            true,
+            WindowsSandboxSelection::Elevated,
+            WindowsSandboxSelection::Elevated,
+        ),
+        (
+            WindowsSandboxLevel::Disabled,
+            codex_sandboxing::SandboxType::WindowsMxc,
+            true,
+            WindowsSandboxSelection::Mxc,
+            WindowsSandboxSelection::Mxc,
+        ),
+    ] {
+        let environment = configured_environment(/*url*/ None, level, sandbox_type);
+        let mut context = FileSystemSandboxContext::from_permission_profile(
+            PermissionProfile::read_only(),
+            codex_utils_path_uri::PathUri::parse("file:///C:/work").expect("cwd"),
+        );
+        context.windows_sandbox_selection = raised;
+        context.unsandboxed_refusal = refusal.then(|| "refused".to_string());
+        keep_configured_selection(&mut context, &environment);
+        assert_eq!(
+            context.windows_sandbox_selection, kept,
+            "{level:?} {sandbox_type:?} refusal={refusal}"
         );
     }
 }
