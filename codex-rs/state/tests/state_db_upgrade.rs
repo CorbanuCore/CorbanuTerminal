@@ -48,8 +48,14 @@ fn fixture(name: &str) -> PathBuf {
     if manifest.is_file() {
         manifest
     } else {
-        // Bazel runs integration tests from a Cargo-like crate directory.
-        relative
+        // Direct Bazel rust_test targets start at the runfiles workspace root.
+        let bazel = Path::new(option_env!("BAZEL_PACKAGE").unwrap_or(".")).join(&relative);
+        if bazel.is_file() {
+            bazel
+        } else {
+            // Wrapped Windows tests retain a Cargo-like crate working directory.
+            relative
+        }
     }
 }
 
