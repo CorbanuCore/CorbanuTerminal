@@ -331,6 +331,10 @@ pub(crate) struct ExecApprovalRequest<'a> {
     /// command to run, as in heuristics and tests). Sync: only whether it is
     /// local is used, for finding batch files (`exec_policy_wrappers`).
     pub(crate) cwd: Option<AbsolutePathBuf>,
+    /// D729 (A): the command's environment, where its shell finds programs
+    /// (`PATH`, `PATHEXT`); `None`: Corbanu's (sync: the approval is decided
+    /// before the command's environment is built).
+    pub(crate) env: Option<&'a std::collections::HashMap<String, String>>,
 }
 
 impl ExecPolicyManager {
@@ -467,13 +471,48 @@ impl ExecPolicyManager {
         .await
     }
 
+    /// D729 (A): while the returned guard lives, PowerShell scripts are read
+    /// as those of `req`'s command, on this host (its `PATH`, a profile) or
+    /// another, with the allowlist only where a prompt or forbidden rule
+    /// exists (D733). Sync: on any host, since a Windows executor's scripts
+    /// are read on any (#2671); only a Windows host runs one locally. The
+    /// guard is not `Send`: hold it only where nothing awaits.
+    pub(super) fn powershell_command_scope(
+        &self,
+        req: &ExecApprovalRequest<'_>,
+        command_platform: DangerousCommandPlatform,
+        live_aggressive: bool,
+    ) -> codex_shell_command::powershell::PowershellCommandScopeGuard {
+        let exec_policy = self.current_for_environment_at(
+            req.environment_policy,
+            req.allow_prefix_rules,
+            live_aggressive,
+        );
+        let local_windows = cfg!(windows) && req.cwd.is_some();
+        codex_shell_command::powershell::enter_powershell_command_scope(
+            codex_shell_command::powershell::PowershellCommandScope::new(
+                req.cwd.as_ref().filter(|_| local_windows),
+                req.env,
+            )
+            .with_documents(local_windows.then(dirs::document_dir).flatten())
+            .with_allowlist(wrappers::any_strict_rule(
+                exec_policy.as_ref(),
+                &exec_policy_match_options(command_platform),
+            )),
+        )
+    }
+
     async fn create_exec_approval_requirement_for_command_platform(
         &self,
         req: ExecApprovalRequest<'_>,
         command_platform: DangerousCommandPlatform,
         live_aggressive: bool,
     ) -> ExecApprovalRequirement {
-        let commands = commands_for_exec_policy_for_platform(req.command, command_platform);
+        let commands = {
+            let _command_scope =
+                self.powershell_command_scope(&req, command_platform, live_aggressive);
+            commands_for_exec_policy_for_platform(req.command, command_platform)
+        };
         let full_command = req.command;
         self.create_exec_approval_requirement_for_parsed_commands(
             req,
@@ -499,6 +538,8 @@ impl ExecPolicyManager {
         // `create_exec_approval_requirement_for_shell`).
         full_command: &[String],
     ) -> ExecApprovalRequirement {
+        // The guard is not `Send`: nothing below awaits.
+        let _command_scope = self.powershell_command_scope(&req, command_platform, live_aggressive);
         let ExecApprovalRequest {
             command,
             approval_policy,
@@ -509,6 +550,7 @@ impl ExecPolicyManager {
             prefix_rule,
             allow_prefix_rules,
             cwd,
+            env: _,
         } = req;
         // A command on this host finds its PowerShell programs on this host's
         // `PATH`, as on main. The guard is not `Send`: nothing below awaits.
@@ -531,14 +573,7 @@ impl ExecPolicyManager {
                 command_platform,
             )
         };
-        let match_options = MatchOptions {
-            resolve_host_executables: true,
-            // D692: forbidden and prompt rules match the program name in
-            // any case where this platform finds programs that way. Sync: a
-            // command for a remote Windows executor folds too (stricter only).
-            fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE
-                || command_platform == DangerousCommandPlatform::Windows,
-        };
+        let match_options = exec_policy_match_options(command_platform);
         // #2531: rules read a shell script among the commands given, which on
         // main always come from the caller's split. Sync: a command line the
         // split left whole (a top-level heredoc) keeps its own script to the
@@ -1533,15 +1568,16 @@ fn commands_for_exec_policy_for_platform(
         // script in process, so main's #2546 trusted-parser lookup does not
         // apply; (#2671) the executor's naming applies on any host.
         let respelled = crate::security::tainted_action::policy_powershell_script(command);
-        if let Some((_, script)) = codex_shell_command::powershell::extract_powershell_command(
-            respelled.as_deref().unwrap_or(command),
-        ) && let Some(commands) =
-            codex_shell_command::powershell::parse_powershell_script_into_plain_commands(&script)
+        if let Some((script, commands)) =
+            codex_shell_command::powershell::read_powershell_plain_commands(
+                respelled.as_deref().unwrap_or(command),
+            )
             && !commands.is_empty()
         {
             // #2568: the script as PowerShell reads it (every argument after
             // `-Command`, `-EncodedCommand` decoded); one rules cannot read
-            // asks (`wrappers`).
+            // (D729 (A): also one with a command off the allowlist where a
+            // prompt or forbidden rule exists) asks (`wrappers`).
             return ExecPolicyCommands {
                 command_origin: powershell_command_origin(&script, &commands),
                 commands,
@@ -1552,6 +1588,18 @@ fn commands_for_exec_policy_for_platform(
     ExecPolicyCommands {
         commands: vec![command.to_vec()],
         command_origin: ExecPolicyCommandOrigin::Generic,
+    }
+}
+
+/// How rules match a command for `command_platform`.
+fn exec_policy_match_options(command_platform: DangerousCommandPlatform) -> MatchOptions {
+    MatchOptions {
+        resolve_host_executables: true,
+        // D692: forbidden and prompt rules match the program name in any case
+        // where this platform finds programs that way. Sync: a command for a
+        // remote Windows executor folds too (stricter only).
+        fold_program_case: codex_execpolicy::PROGRAM_NAMES_FOLD_CASE
+            || command_platform == DangerousCommandPlatform::Windows,
     }
 }
 

@@ -100,6 +100,9 @@ impl PreparedExecCommand {
                     } else {
                         self.cwd.to_abs_path().ok()
                     },
+                    // Sync: the command's environment is built after approval;
+                    // its shell's `PATH` is looked for in Corbanu's.
+                    env: None,
                 },
                 configured_shell,
                 command_platform,

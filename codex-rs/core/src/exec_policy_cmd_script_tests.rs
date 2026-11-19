@@ -145,6 +145,7 @@ async fn cmd_scripts_are_refused_under_aggressive_with_approvals_off() {
                         prefix_rule: Some(command.clone()),
                         allow_prefix_rules: AllowPrefixRules::Honor,
                         cwd: None,
+                        env: None,
                     },
                     /*live_aggressive*/ true,
                 )
@@ -357,6 +358,7 @@ async fn windows_executor_powershell_batch_files_ask_on_any_host() {
                         prefix_rule: None,
                         allow_prefix_rules: AllowPrefixRules::Honor,
                         cwd: None,
+                        env: None,
                     },
                     &shell,
                     DangerousCommandPlatform::Windows,
@@ -414,6 +416,7 @@ async fn decide_windows_powershell(
                 prefix_rule: None,
                 allow_prefix_rules: AllowPrefixRules::Honor,
                 cwd,
+                env: None,
             },
             &shell,
             DangerousCommandPlatform::Windows,

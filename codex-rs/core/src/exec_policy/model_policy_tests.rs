@@ -147,6 +147,7 @@ async fn cyber_policy_requires_approval_for_broad_wrapped_and_resolved_prefixes(
                 prefix_rule: Some(vec!["cargo".to_string(), "install".to_string()]),
                 allow_prefix_rules: AllowPrefixRules::IgnoreForCyberModel,
                 cwd: None,
+                env: None,
             })
             .await;
 
@@ -181,6 +182,7 @@ async fn cyber_policy_keeps_heuristically_safe_commands_inside_the_sandbox() {
             prefix_rule: None,
             allow_prefix_rules: AllowPrefixRules::IgnoreForCyberModel,
             cwd: None,
+            env: None,
         })
         .await;
     assert_eq!(
@@ -202,6 +204,7 @@ async fn cyber_policy_keeps_heuristically_safe_commands_inside_the_sandbox() {
             prefix_rule: None,
             allow_prefix_rules: AllowPrefixRules::Honor,
             cwd: None,
+            env: None,
         })
         .await;
     assert_eq!(

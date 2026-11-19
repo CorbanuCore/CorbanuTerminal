@@ -8,7 +8,7 @@ use crate::shell::Shell;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 use codex_shell_command::powershell::extract_powershell_command;
-use codex_shell_command::powershell::parse_powershell_script_into_plain_commands;
+use codex_shell_command::powershell::read_powershell_plain_commands;
 use std::path::Path;
 
 impl ExecPolicyManager {
@@ -31,24 +31,26 @@ impl ExecPolicyManager {
                 .await;
         }
 
-        let mut policy_commands = if command_platform == DangerousCommandPlatform::Windows {
-            match extract_powershell_command(command) {
-                Some((_, script)) => {
-                    let commands = parse_powershell_script_into_plain_commands(&script);
-                    let command_origin = commands
-                        .as_ref()
-                        .map_or(ExecPolicyCommandOrigin::PowerShell, |commands| {
-                            powershell_command_origin(&script, commands)
-                        });
-                    ExecPolicyCommands {
-                        commands: commands.unwrap_or_else(|| vec![command.to_vec()]),
-                        command_origin,
-                    }
+        let mut policy_commands = {
+            // D729 (A): the script read for this command (not `Send`).
+            let _command_scope =
+                self.powershell_command_scope(&request, command_platform, live_aggressive);
+            if command_platform == DangerousCommandPlatform::Windows
+                && extract_powershell_command(command).is_some()
+            {
+                match read_powershell_plain_commands(command) {
+                    Some((script, commands)) => ExecPolicyCommands {
+                        command_origin: powershell_command_origin(&script, &commands),
+                        commands,
+                    },
+                    None => ExecPolicyCommands {
+                        commands: vec![command.to_vec()],
+                        command_origin: ExecPolicyCommandOrigin::PowerShell,
+                    },
                 }
-                None => commands_for_exec_policy_for_platform(command, command_platform),
+            } else {
+                commands_for_exec_policy_for_platform(command, command_platform)
             }
-        } else {
-            commands_for_exec_policy_for_platform(command, command_platform)
         };
 
         // Evaluate the executable alongside its apparent commands. Inner

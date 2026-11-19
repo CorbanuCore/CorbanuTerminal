@@ -48,6 +48,7 @@ fn command_joins_every_remaining_argument() {
                     script: Cow::Owned("git status ; git push".to_string()),
                 },
                 plain: true,
+                no_profile: false,
             },
             "{shell}"
         );
@@ -80,6 +81,7 @@ fn single_script_argument_is_borrowed() {
                 script: Cow::Borrowed("Get-ChildItem"),
             },
             plain: true,
+            no_profile: true,
         }
     );
 }
@@ -389,4 +391,29 @@ fn no_script_is_interactive() {
             "{line:?}"
         );
     }
+}
+
+#[test]
+fn no_profile_is_recorded() {
+    let no_profile = |line: &[&str]| {
+        let command = words(line);
+        read(&command, PowershellKind::of(line[0])).no_profile
+    };
+    assert!(no_profile(&["pwsh", "-nop", "-c", "x"]));
+    assert!(no_profile(&[
+        "powershell.exe",
+        "-NoProfile",
+        "-Command",
+        "x"
+    ]));
+    assert!(no_profile(&[
+        "pwsh",
+        "-WorkingDirectory",
+        "C:\\",
+        "-nop",
+        "-c",
+        "x"
+    ]));
+    assert!(!no_profile(&["pwsh", "-c", "x", "-NoProfile"]));
+    assert!(!no_profile(&["powershell.exe", "-Command", "x"]));
 }
