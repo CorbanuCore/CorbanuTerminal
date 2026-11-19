@@ -26,10 +26,25 @@
 //! Anything this can't serialize faithfully is refused rather than guessed,
 //! including `CALL` as the program, which expands and re-parses its
 //! arguments once more.
+//!
+//! - A program that hands its arguments to cmd again re-parses them after
+//!   cmd removed the escapes (#2718): a nested `cmd`, the `start` builtin, and
+//!   a name cmd resolves through PATHEXT to a batch file (`npm` for
+//!   `npm.cmd`). With separate arguments, such a program is refused when an
+//!   argument contains anything cmd acts on. Other programs that start a
+//!   shell on their arguments (PowerShell, `runas`, ...) are not recognized.
 
 use anyhow::Result;
 use anyhow::bail;
 use std::collections::HashMap;
+use std::ffi::OsString;
+use std::path::Path;
+use std::path::PathBuf;
+
+/// Characters cmd acts on when it parses a command line again.
+const CMD_ACTIVE: [char; 13] = [
+    '"', '%', '!', '^', '&', '|', '<', '>', '(', ')', '\r', '\n', '\0',
+];
 
 /// Quote a single Windows command-line argument following the rules used by
 /// CommandLineToArgvW/CRT so that spaces, quotes, and backslashes are preserved.
@@ -79,10 +94,12 @@ fn quote_crt(arg: &str, force: bool) -> String {
 
 /// The command line `CreateProcess*` gets for `argv` in the sandbox: the CRT
 /// join for ordinary programs, cmd's own rules for a `cmd.exe /C` invocation
-/// (see the module docs). `env` is the child's environment.
+/// (see the module docs). `env` is the child's environment and `cwd` its
+/// working directory, where cmd looks for a program first.
 pub(crate) fn sandbox_command_line(
     argv: &[String],
     env: &HashMap<String, String>,
+    cwd: &Path,
 ) -> Result<String> {
     if argv
         .first()
@@ -91,7 +108,7 @@ pub(crate) fn sandbox_command_line(
         check_batch_arguments(argv)?;
     }
     match cmd_invocation(argv)? {
-        Some(cmd) => cmd.serialize(argv, env),
+        Some(cmd) => cmd.serialize(argv, env, cwd),
         None => Ok(argv
             .iter()
             .map(|arg| quote_crt_arg(arg))
@@ -127,8 +144,9 @@ fn is_cmd_program(program: &str) -> bool {
 
 /// A batch file: `CreateProcess*` and cmd run it through cmd, which parses
 /// its arguments. Any `:`-separated part counts, since Windows looks at the
-/// last `.` of a named stream (`x.txt:y.bat`) too. A bare name cmd resolves
-/// through PATHEXT (`npm` for `npm.cmd`) can't be recognized here.
+/// last `.` of a named stream (`x.txt:y.bat`) too. A name cmd resolves
+/// through PATHEXT (`npm` for `npm.cmd`) isn't recognized by its spelling;
+/// see [`resolves_to_batch_file`].
 fn is_batch_program(program: &str) -> bool {
     let name = program.rsplit(['\\', '/']).next().unwrap_or(program);
     name.split(':').any(|part| {
@@ -140,13 +158,61 @@ fn is_batch_program(program: &str) -> bool {
 /// cmd parses a batch file's CRT-joined command line, and how Windows hands
 /// it over can strip quotes, so any character cmd acts on is refused.
 fn check_batch_arguments(argv: &[String]) -> Result<()> {
-    const ACTIVE: [char; 13] = [
-        '"', '%', '!', '^', '&', '|', '<', '>', '(', ')', '\r', '\n', '\0',
-    ];
-    if let Some(arg) = argv.iter().find(|arg| arg.contains(ACTIVE)) {
+    if let Some(arg) = argv.iter().find(|arg| arg.contains(CMD_ACTIVE)) {
         bail!("a batch file argument can't contain cmd.exe metacharacters: {arg:?} (#2702)");
     }
     Ok(())
+}
+
+/// A program token cmd may run as a nested `cmd` or as its `start` builtin,
+/// both of which parse their arguments again (#2718). cmd splits a command
+/// name at several characters (`cmd.exe/c`, `start/b`, `start\..\x`), so any
+/// part between those characters counts. This over-matches (a directory
+/// named `start`), which only refuses more.
+fn is_nested_launcher(program: &str) -> bool {
+    program
+        .to_ascii_lowercase()
+        .split(|c: char| {
+            c.is_whitespace()
+                || matches!(
+                    c,
+                    '\\' | '/' | ':' | '.' | '+' | '[' | ']' | ',' | ';' | '=' | '(' | ')' | '@'
+                )
+        })
+        .any(|part| matches!(part, "cmd" | "start"))
+}
+
+/// Whether cmd could resolve `program` through PATHEXT to a batch file: a
+/// `<program>.bat` or `<program>.cmd` in the working directory or on the
+/// child's PATH (for a bare name), or next to the given path. Any match
+/// counts, even one an earlier executable would shadow, and `.bat`/`.cmd` are
+/// tried whatever PATHEXT says, so this only refuses more. A file created
+/// after the launch isn't seen.
+fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Path) -> bool {
+    let bases: Vec<PathBuf> = if program.contains(['\\', '/', ':']) {
+        vec![cwd.join(program)]
+    } else {
+        let path = env
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("PATH"))
+            .map_or("", |(_, value)| value.as_str());
+        std::iter::once(cwd.to_path_buf())
+            .chain(
+                path.split(';')
+                    .map(|dir| dir.trim().trim_matches('"'))
+                    .filter(|dir| !dir.is_empty())
+                    .map(|dir| cwd.join(dir)),
+            )
+            .map(|dir| dir.join(program))
+            .collect()
+    };
+    bases.iter().any(|base| {
+        [".bat", ".cmd"].iter().any(|ext| {
+            let mut candidate = OsString::from(base.as_os_str());
+            candidate.push(ext);
+            Path::new(&candidate).is_file()
+        })
+    })
 }
 
 /// Recognizes `cmd[.exe] [/switch ...] /C|/K|/R [command ...]`. Returns `None`
@@ -211,7 +277,12 @@ fn parse_cmd_switch(arg: &str) -> Option<(char, Option<&str>)> {
 }
 
 impl CmdInvocation {
-    fn serialize(&self, argv: &[String], env: &HashMap<String, String>) -> Result<String> {
+    fn serialize(
+        &self,
+        argv: &[String],
+        env: &HashMap<String, String>,
+        cwd: &Path,
+    ) -> Result<String> {
         // A NUL would end the command line early, and with it the closing
         // quote `/S` relies on.
         if argv.iter().any(|arg| arg.contains('\0')) {
@@ -221,7 +292,7 @@ impl CmdInvocation {
         let line = match tail {
             [] => String::new(),
             [line] => line.clone(),
-            [program, args @ ..] => self.escaped_program_line(program, args, env)?,
+            [program, args @ ..] => self.escaped_program_line(program, args, env, cwd)?,
         };
         let mut parts = vec![quote_crt_arg(&argv[0])];
         if !self.has_d {
@@ -245,6 +316,7 @@ impl CmdInvocation {
         program: &str,
         args: &[String],
         env: &HashMap<String, String>,
+        cwd: &Path,
     ) -> Result<String> {
         if self.delayed_expansion == Some(true) {
             bail!("cmd.exe /V:ON can't pass arguments through unchanged (#2702)");
@@ -253,6 +325,20 @@ impl CmdInvocation {
         // parses them again (`%1`, `%*`).
         if is_batch_program(program) {
             check_batch_arguments(args)?;
+        }
+        // A nested cmd, `start`, or a batch file found through PATHEXT gets
+        // the arguments with the escapes removed and parses them again.
+        if let Some(arg) = args.iter().find(|arg| arg.contains(CMD_ACTIVE)) {
+            if is_nested_launcher(program) {
+                bail!(
+                    "a nested cmd.exe or START would re-parse its arguments: {program:?} {arg:?} (#2718)"
+                );
+            }
+            if resolves_to_batch_file(program, env, cwd) {
+                bail!(
+                    "{program:?} resolves to a batch file, whose arguments can't contain cmd.exe metacharacters: {arg:?} (#2718)"
+                );
+            }
         }
         let all = std::iter::once(program).chain(args.iter().map(String::as_str));
         if all.clone().any(|arg| arg.contains(['\r', '\n'])) {
