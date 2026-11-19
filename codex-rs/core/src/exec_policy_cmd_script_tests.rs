@@ -248,8 +248,11 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
         // the command's folder, or one a script creates first.
         r".\build '&git push'",
         r"C:\p\x '&git push'",
-        // Behind a launcher.
+        // Behind a launcher, or a launcher or shell that is itself a batch
+        // file in the command's folder.
         r"env .\build '&git push'",
+        r".\env foo '&git push'",
+        r#".\bash -c 'echo "&git push&"'"#,
         // A script that changes `PATH` or `PATHEXT` first changes which file
         // a bare name runs (`gradlew` as `C:\repo\gradlew.bat`).
         r"Set-Item env:PATH C:\repo; gradlew '&git push'",
@@ -261,12 +264,12 @@ async fn powershell_scripts_running_cmd_ask_under_forbidden_git_push() {
     ] {
         let command = argv(&["powershell.exe", "-NoProfile", "-Command", script]);
         let mut commands = vec![command];
-        if script == r".\build '&git push'" {
+        if script == r".\build '&git push'" || script == r".\env foo '&git push'" {
             // The same PowerShell script nested in bash.
             commands.push(argv(&[
                 "bash",
                 "-c",
-                r#"powershell.exe -NoProfile -Command ".\build '&git push'""#,
+                &format!(r#"powershell.exe -NoProfile -Command "{script}""#),
             ]));
         }
         for (command, profile) in commands.iter().flat_map(|command| {

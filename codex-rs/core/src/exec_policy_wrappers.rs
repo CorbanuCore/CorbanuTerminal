@@ -369,6 +369,22 @@ pub(crate) fn check(
                 decision,
             });
         }
+        // #2704: in a PowerShell script any program of the command, a
+        // launcher (`.\env foo …`) or a shell spelled as a path (`.\bash -c
+        // …`) too, may be a batch file cmd.exe re-reads.
+        if powershell
+            && any_strict_rule()
+            && wrappers
+                .starts
+                .iter()
+                .any(|&start| runs_unread_cmd_script(&command[start..], /*powershell*/ true))
+        {
+            matches.push(RuleMatch::HeuristicsRuleMatch {
+                command: command.to_vec(),
+                decision: Decision::Prompt,
+            });
+            unread_script_prompts = true;
+        }
         if let Some(&start) = wrappers.starts.last() {
             let inner = &command[start..];
             // #2510 (D688): a shell spelled as this platform runs it
