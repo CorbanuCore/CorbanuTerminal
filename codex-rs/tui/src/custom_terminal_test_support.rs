@@ -9,12 +9,17 @@ use ratatui::layout::Size;
 
 use super::Terminal;
 
-/// Change the backend's sampled size without synthesizing a resize event.
-pub(crate) fn set_screen_size<B>(terminal: &mut Terminal<B>, size: Size)
+/// Control the sampled backend size while an event loop borrows the terminal.
+pub(crate) fn screen_size_controller<B>(terminal: &Terminal<B>) -> impl Fn(Size) + use<B>
 where
     B: Backend<Error = io::Error> + Write,
 {
-    terminal.screen_size_override = Some(size);
+    let size = terminal
+        .screen_size_override
+        .as_ref()
+        .expect("test screen size override")
+        .clone();
+    move |next_size| *size.lock().expect("test screen size lock") = next_size
 }
 
 pub(crate) fn last_rendered_buffer<B>(terminal: &Terminal<B>) -> &Buffer
