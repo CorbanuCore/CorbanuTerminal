@@ -88,7 +88,8 @@ Add-D729 'new-item', 'mkdir' -Writes 'newitem'
 Add-D729 'copy-item' -Writes 'copy'
 Add-D729 'move-item' -Writes 'move'
 Add-D729 'rename-item' -Writes 'rename'
-Add-D729 'expand-archive', 'compress-archive' -Writes 'dest'
+# Not Expand-Archive: an archive's entries can name paths outside its destination.
+Add-D729 'compress-archive' -Writes 'dest'
 Add-D729 'set-location', 'push-location', 'pop-location' -Writes 'location'
 
 # Writers whose input from the pipeline is content, not a path; any other writer asks after
@@ -166,9 +167,14 @@ function Resolve-D729Parameter([string]$token, $table) {
 $D729NotLiteral = [object]::new()
 function Get-D729Bound($binding, [string]$name) {
     if (-not $binding.BoundParameters.ContainsKey($name)) { return $null }
-    $value = $binding.BoundParameters[$name].ConstantValue
-    if ($null -eq $value) { return $D729NotLiteral }
-    return [string]$value
+    $bound = $binding.BoundParameters[$name]
+    if ($null -ne $bound.ConstantValue) { return [string]$bound.ConstantValue }
+    # A double-quoted string with nothing to expand is a literal too.
+    $ast = $bound.Value
+    if ($ast -is [System.Management.Automation.Language.ExpandableStringExpressionAst] -and $ast.NestedExpressions.Count -eq 0) {
+        return $ast.Value
+    }
+    return $D729NotLiteral
 }
 
 function Test-D729NotLiteral($value) { return [object]::ReferenceEquals($value, $D729NotLiteral) }
@@ -250,10 +256,11 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
         'paths' { }
         'file' { }
         'outfile' {
-            $paths = @()
             $value = Get-D729Bound $binding 'OutFile'
             if (Test-D729NotLiteral $value) { return "writer path is not literal: $target" }
-            if ($null -ne $value) { $paths += $value }
+            # Without -OutFile it writes nothing.
+            if ($null -eq $value) { return $null }
+            $paths = @($value)
         }
         'newitem' {
             $type = Get-D729Bound $binding 'ItemType'
@@ -289,7 +296,7 @@ function Add-D729Writes($binding, [string]$target, [string]$kind, $writes) {
         'dest' {
             $destination = Get-D729Bound $binding 'DestinationPath'
             if (Test-D729NotLiteral $destination) { return "writer path is not literal: $target" }
-            if ($null -eq $destination) { $destination = '.' }
+            if ($null -eq $destination) { return "writer path not given: $target" }
             $paths = @($destination)
         }
     }
@@ -317,9 +324,12 @@ function Get-D729CommandCause($commandAst, [int]$index, $writes, $state) {
     $target = $lower
     if ($D729Aliases.ContainsKey($lower)) { $target = $D729Aliases[$lower] }
     if ($D729Allow.ContainsKey($target)) {
-        # PowerShell finds a cmdlet it has not loaded yet only after a program or script
-        # of that name on `PATH` (`Get-Content.ps1`).
-        if (Find-D729OnPath $target -Scripts) { return "program or script on PATH named like a cmdlet: $target" }
+        # PowerShell finds a module's command it has not loaded yet only after a program
+        # or script of that name on `PATH` (`Get-Content.ps1`).
+        $info = $D729Info[$target]
+        if ($null -ne $info -and $info.ModuleName -and $info.ModuleName -ne 'Microsoft.PowerShell.Core' -and (Find-D729OnPath $target -Scripts)) {
+            return "program or script on PATH named like a cmdlet: $target"
+        }
         return (Get-D729CmdletCause $commandAst $target $index $writes $state)
     }
     if ($D729Aliases.ContainsKey($lower) -or $D729Functions.ContainsKey($lower)) { return "command not on the allowlist: $target" }

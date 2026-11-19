@@ -125,6 +125,8 @@ fn unread_scripts() -> Vec<String> {
         // Paths from pipeline input.
         "Get-ChildItem | Remove-Item".into(),
         "Get-ChildItem | Copy-Item -Destination out".into(),
+        // An archive's entries can name paths outside its destination.
+        "Expand-Archive -Path a.zip -DestinationPath out".into(),
     ]
 }
 
@@ -206,6 +208,10 @@ async fn allowlisted_forms_stay_precise() {
             "Rename-Item -Path a.txt -NewName b.txt",
             "Get-ChildItem -ErrorAction SilentlyContinue",
             "Write-Output x | Out-File -FilePath log.txt -Append",
+            "Set-Content -Path \"out.txt\" -Value \"x y\"",
+            "Invoke-WebRequest -UseBasicParsing -Uri https://example.com/x -OutFile x.html",
+            "Invoke-RestMethod -Uri https://example.com/x.json",
+            "Compress-Archive -Path a.txt -DestinationPath a.zip",
         ] {
             for permission_profile in [
                 PermissionProfile::Disabled,
