@@ -148,7 +148,9 @@ pub(super) fn powershell_runs_code(program_and_args: &[String]) -> bool {
     POWERSHELL_CODE_COMMANDS.contains(&powershell_fold(name).as_str())
         || args.iter().any(|arg| {
             let arg = powershell_fold(arg);
-            ["alias:", "function:"]
+            // #2704: also the environment drive, where `PATH` and `PATHEXT`
+            // decide which program a later name runs.
+            ["alias:", "function:", "env:", "environment:"]
                 .iter()
                 .any(|drive| arg.starts_with(drive) || arg.contains(&format!("\\{drive}:")))
         })

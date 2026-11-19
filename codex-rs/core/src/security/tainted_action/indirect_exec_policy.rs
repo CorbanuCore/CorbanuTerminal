@@ -297,6 +297,13 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
 }
 
+/// #2704: the name `program` runs as on Windows (its file name, folded, a
+/// drive and trailing dots and spaces dropped, `.exe` dropped), on every
+/// platform, for finding cmd.exe and batch files.
+pub(crate) fn policy_windows_program_name(program: &str) -> String {
+    names::launcher_name_for(program, names::NameCase::Windows).into_owned()
+}
+
 /// #2548: the name `program` runs as on this platform (its file name,
 /// compared as [`names`] says), for looking up builtins a wrapper script
 /// such as macOS's `/usr/bin/read` runs.

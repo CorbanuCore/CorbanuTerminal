@@ -165,8 +165,9 @@ async fn tmpdir_uses_command_environment_over_rpc(
     std::fs::write(&outside, "original")?;
     let command_temp_file = command_temp.join("outside-session.txt");
     std::fs::write(&command_temp_file, "original")?;
-    // Use a batch fixture, as the native D377 probes do: quotes in an inline
-    // /C argument are escaped by the launcher before cmd.exe interprets them.
+    // Use a batch fixture, as the native D377 probes do. (Since #2720 an
+    // inline /C command line reaches cmd.exe as typed; the fixture just keeps
+    // the probe's own quoting out of it.)
     let probe_name = "probe-session-temp.cmd";
     std::fs::write(
         root.path().join(probe_name),

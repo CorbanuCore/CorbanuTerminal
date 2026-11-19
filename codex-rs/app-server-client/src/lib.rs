@@ -2743,12 +2743,34 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_completes_promptly_without_retained_managers() {
+        let start_began = std::time::Instant::now();
         let client = start_test_client(SessionSource::Cli).await;
+        let start_took = start_began.elapsed();
 
-        timeout(Duration::from_secs(1), client.shutdown())
-            .await
-            .expect("shutdown should not wait for the 5s fallback timeout")
-            .expect("shutdown should complete");
+        let shutdown_began = std::time::Instant::now();
+        let shutdown = client.shutdown();
+        tokio::pin!(shutdown);
+        if let Ok(result) = timeout(Duration::from_secs(1), &mut shutdown).await {
+            result.expect("shutdown should complete");
+            return;
+        }
+
+        // #2670: this failed once on a loaded native Windows runner. Keep
+        // waiting so the failure tells a slow runner apart from a shutdown
+        // that really waited for a fallback timeout.
+        let outcome = match timeout(Duration::from_secs(60), &mut shutdown).await {
+            Ok(Ok(())) => "then completed".to_string(),
+            Ok(Err(err)) => format!("then failed: {err}"),
+            Err(_) => "and was still pending".to_string(),
+        };
+        let shutdown_took = shutdown_began.elapsed();
+        panic!(
+            "shutdown should not wait for the 5s fallback timeout (#2670): it ran \
+             {shutdown_took:?} {outcome} (client start took {start_took:?}). About 5 s or \
+             10 s points to the processor or outbound SHUTDOWN_TIMEOUT drain; other times \
+             under 35 s to a slow runner or a slow analytics flush (up to 25 s); 35-40 s to \
+             the shutdown ack timeout plus the runtime join."
+        );
     }
 
     #[tokio::test(start_paused = true)]

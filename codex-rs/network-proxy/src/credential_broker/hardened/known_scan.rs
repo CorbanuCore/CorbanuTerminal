@@ -48,36 +48,49 @@ impl HardenedBroker {
         }
         let key = self.fingerprint_key();
         let state = self.read_state();
-        let mut records = Vec::new();
-        let mut found = false;
-        for record in &state.credentials {
-            if record.value_len < output_gate::MIN_VALUE_BYTES {
-                return Err(KnownCredentialScanError::Unrecognizable);
-            }
-            let fingerprint = match &record.secret {
-                RecordSecret::Raw(value) => {
-                    found |= raw_occurs(text.as_bytes(), value.as_bytes());
-                    continue;
-                }
-                #[cfg(any(unix, windows))]
-                RecordSecret::Brokered { fingerprint, .. } => fingerprint,
-                RecordSecret::Unavailable { fingerprint } => fingerprint,
-            };
-            let key = key
-                .as_deref()
-                .ok_or(KnownCredentialScanError::Unrecognizable)?;
-            let mut prefix = key.to_vec();
-            prefix.extend_from_slice(record.env_var.as_bytes());
-            prefix.push(0);
-            records.push(crate::credential_broker::snapshot_scan::Fingerprint {
-                length: record.value_len,
-                prefix,
-                digest: *fingerprint,
-            });
+        if state
+            .credentials
+            .iter()
+            .any(|record| record.value_len < output_gate::MIN_VALUE_BYTES)
+        {
+            return Err(KnownCredentialScanError::Unrecognizable);
         }
-        let isolated = crate::credential_broker::snapshot_scan::scan(text, records, max_windows)
-            .map_err(|()| KnownCredentialScanError::BudgetExceeded)?;
-        Ok(found || isolated)
+        scan_records(state.credentials.iter(), key.as_deref(), text, max_windows)
+    }
+
+    /// D732: which of `texts` contain a registered credential of at least
+    /// [`MIN_SUBSTRING_CREDENTIAL_BYTES`] (shorter ones are not looked for),
+    /// with the same D685 bounds as [`Self::known_credential_occurs_in`].
+    /// Takes the state the caller already holds. A text that cannot be
+    /// checked is an error; with nothing to look for every text is clean.
+    pub(super) fn env_copy_occurrences(
+        &self,
+        state: &super::HardenedState,
+        texts: &[&str],
+    ) -> Vec<Result<bool, KnownCredentialScanError>> {
+        let key = self.fingerprint_key();
+        let records: Vec<&super::HardenedRecord> = state
+            .credentials
+            .iter()
+            .filter(|record| record.value_len >= MIN_SUBSTRING_CREDENTIAL_BYTES)
+            .collect();
+        texts
+            .iter()
+            .map(|text| {
+                if records.is_empty() {
+                    return Ok(false);
+                }
+                if text.len() > output_gate::MAX_SCAN_BYTES {
+                    return Err(KnownCredentialScanError::BudgetExceeded);
+                }
+                scan_records(
+                    records.iter().copied(),
+                    key.as_deref(),
+                    text,
+                    MAX_FINGERPRINT_WINDOWS,
+                )
+            })
+            .collect()
     }
 
     fn fingerprint_key(&self) -> Option<Zeroizing<[u8; 32]>> {
@@ -89,6 +102,41 @@ impl HardenedBroker {
             Isolation::Unsupported => Some(Zeroizing::new([0; 32])),
         }
     }
+}
+
+/// Raw records match directly; isolated and unavailable ones by keyed
+/// fingerprint through the shared bounded scanner.
+fn scan_records<'a>(
+    credentials: impl Iterator<Item = &'a super::HardenedRecord>,
+    key: Option<&[u8; 32]>,
+    text: &str,
+    max_windows: usize,
+) -> Result<bool, KnownCredentialScanError> {
+    let mut records = Vec::new();
+    let mut found = false;
+    for record in credentials {
+        let fingerprint = match &record.secret {
+            RecordSecret::Raw(value) => {
+                found |= raw_occurs(text.as_bytes(), value.as_bytes());
+                continue;
+            }
+            #[cfg(any(unix, windows))]
+            RecordSecret::Brokered { fingerprint, .. } => fingerprint,
+            RecordSecret::Unavailable { fingerprint } => fingerprint,
+        };
+        let key = key.ok_or(KnownCredentialScanError::Unrecognizable)?;
+        let mut prefix = key.to_vec();
+        prefix.extend_from_slice(record.env_var.as_bytes());
+        prefix.push(0);
+        records.push(crate::credential_broker::snapshot_scan::Fingerprint {
+            length: record.value_len,
+            prefix,
+            digest: *fingerprint,
+        });
+    }
+    let isolated = crate::credential_broker::snapshot_scan::scan(text, records, max_windows)
+        .map_err(|()| KnownCredentialScanError::BudgetExceeded)?;
+    Ok(found || isolated)
 }
 
 fn is_word_byte(byte: u8) -> bool {

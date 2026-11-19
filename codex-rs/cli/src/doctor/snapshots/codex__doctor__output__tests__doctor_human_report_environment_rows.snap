@@ -7,16 +7,10 @@ Corbanu Terminal Doctor v0.0.0
 Notes
    ↑ desktop      build 123 available (ready to install)
    ⚠ terminal     narrow terminal
-<<<<<<< HEAD
    ✗ auth         token expired - Run `corbanu login`.
-||||||| 413492cd6c
-   ✗ auth         token expired - Run `codex login`.
-=======
-   ✗ auth         token expired - Run `codex login`.
    ✗ network      provider is unreachable - A macOS system proxy is configured but unused. If your organization requires it, ask your administrator whether to enable the experimental System proxy setting in `/experimental` or with `codex features enable respect_system_proxy`. Restart Codex after changing this setting.
    ⚠ git          this worktree is not on a Windows Dev Drive - create a trusted Windows Dev Drive: https://learn.microsoft.com/en-us/windows/dev-drive/
    ⚠ security     Microsoft Defender can interfere with Codex. Verify Codex exclusions.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
 ─────────────────────────────────────────────────────────────
 
 Environment
@@ -52,16 +46,10 @@ Environment
   ✓ state        state paths inspectable
 
 Configuration
-<<<<<<< HEAD
-  ✗ auth         token expired — Run `corbanu login`.
-||||||| 413492cd6c
-  ✗ auth         token expired — Run `codex login`.
-=======
   ✓ config       loaded
       feature flags            0 enabled · 0 overridden
       configured TUI mode      fullscreen
-  ✗ auth         token expired — Run `codex login`.
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
+  ✗ auth         token expired — Run `corbanu login`.
       OPENAI_API_KEY           present
 
 Desktop App
