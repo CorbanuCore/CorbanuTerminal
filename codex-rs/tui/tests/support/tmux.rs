@@ -59,6 +59,7 @@ pub(crate) enum TmuxKey {
     Enter,
     Escape,
     CtrlC,
+    F2,
 }
 
 impl TmuxKey {
@@ -69,6 +70,7 @@ impl TmuxKey {
             Self::Enter => "Enter",
             Self::Escape => "Escape",
             Self::CtrlC => "C-c",
+            Self::F2 => "F2",
         }
     }
 }
