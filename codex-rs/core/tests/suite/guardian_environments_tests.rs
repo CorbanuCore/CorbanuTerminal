@@ -2,7 +2,6 @@
 
 use super::*;
 use codex_core::context::UserGoalUpdate;
-use codex_history::RolloutItem;
 use codex_protocol::protocol::GuardianAssessmentStatus;
 use codex_protocol::protocol::TurnEnvironmentRequests;
 use core_test_support::streaming_sse::StreamingSseChunk;
@@ -19,7 +18,6 @@ use wiremock::matchers::path;
 #[test_case("exec_command")]
 #[test_case("apply_patch")]
 #[test_case("request_permissions")]
-#[ignore = "D604 (#2562): background scoring is off on Corbanu, so the first computer's score this test waits for is never recorded; restore with the scoring gate (#2729)"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -38,7 +36,7 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
         .with_pre_build_hook(|home| {
             std::fs::write(
                 home.join("config.toml"),
-                "[features.guardianv2]\nenabled = true\npersist_scores = true\n\n[features.guardianv2.review_scope]\ncomputer_use_only = false\n",
+                "[features.guardianv2]\nenabled = true\n\n[features.guardianv2.review_scope]\ncomputer_use_only = false\n",
             )
             .expect("configure asynchronous review");
         })
@@ -163,8 +161,9 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
         ev_assistant_message("done", "done"),
         ev_completed("done"),
     ]));
-    // Hold the second action until the first score is published. Its own classifier
-    // response stays pending, so only the score for the other computer is available.
+    // D604/D605 (#2562, #2729): background scoring is off on Corbanu, so no
+    // classifier score exists and each action gets a synchronous review. Hold the
+    // second action until the first review has finished.
     let (advance, next_action) = tokio::sync::oneshot::channel();
     let mut next_action = Some(next_action);
     let (parent, _) = start_streaming_sse_server(
@@ -181,29 +180,7 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
             .collect(),
     )
     .await;
-    let (publish, score_ready) = tokio::sync::oneshot::channel();
-    let (_hold_score, pending_score) = tokio::sync::oneshot::channel();
-    let (classifier, _) = start_streaming_sse_server(vec![
-        vec![StreamingSseChunk {
-            gate: Some(score_ready),
-            body: sse(vec![
-                ev_assistant_message("score-0", "low"),
-                ev_completed("score-0"),
-            ]),
-        }],
-        vec![StreamingSseChunk {
-            gate: Some(pending_score),
-            body: sse(vec![
-                ev_assistant_message("score-1", "low"),
-                ev_completed("score-1"),
-            ]),
-        }],
-    ])
-    .await;
-    for (model, destination) in [
-        ("guardian-environments-parent", parent.uri()),
-        ("gpt-5.6-luna", classifier.uri()),
-    ] {
+    for (model, destination) in [("guardian-environments-parent", parent.uri())] {
         Mock::given(method("POST"))
             .and(path("/v1/responses"))
             .and(body_partial_json(json!({"model": model})))
@@ -233,20 +210,12 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
             }),
         )
         .await?;
-    tokio::time::timeout(std::time::Duration::from_secs(30), async {
-        parent.wait_for_request_count(/*count*/ 2).await;
-        publish.send(()).expect("publish the first computer score");
-        loop {
-            let history = test.codex.load_history(/*include_archived*/ false).await?;
-            if history.items.into_iter().any(|item| {
-                matches!(item, RolloutItem::SecurityRiskScore(score) if score.call_id.as_deref() == Some("action-0"))
-            }) {
-                return Ok::<_, anyhow::Error>(());
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await??;
+    // The parent's second request arrives only after the first review finished.
+    tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        parent.wait_for_request_count(/*count*/ 2),
+    )
+    .await?;
     advance
         .send(())
         .expect("start action on the primary computer");
@@ -301,14 +270,8 @@ async fn guardian_reviews_target_environment_and_reuses_prefix(tool: &str) -> Re
         reviews[1].input().starts_with(&reviews[0].input()),
         "earlier Guardian input must remain unchanged"
     );
-    let classifier_requests = classifier.requests().await;
-    let request: Value = serde_json::from_slice(&classifier_requests[0])?;
-    let input = request["input"].to_string();
-    assert!(input.contains(secondary_id));
-    assert!(input.contains("secondary-private"));
     test.codex.shutdown_and_wait().await?;
     parent.shutdown().await;
-    classifier.shutdown().await;
     shutdown.send(()).expect("stop secondary executor");
     executor.await?;
     Ok(())
