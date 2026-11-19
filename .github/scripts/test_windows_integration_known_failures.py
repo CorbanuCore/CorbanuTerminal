@@ -188,7 +188,7 @@ class WorkflowTest(unittest.TestCase):
     def test_runs_integration_tests_with_the_filter(self) -> None:
         workflow = self.workflow()
         self.assertIn("runs-on: windows-2022", workflow)
-        self.assertIn("timeout-minutes: 60", workflow)
+        self.assertIn("timeout-minutes: 90", workflow)
         self.assertIn(
             "package: ${{ fromJSON(needs.packages.outputs.packages) }}", workflow
         )
