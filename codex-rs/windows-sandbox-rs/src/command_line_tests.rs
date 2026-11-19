@@ -137,6 +137,7 @@ const NASTY: &[&str] = &[
     ",;=",
     "x\" & echo INJECTED & \"",
     "\" | calc | \"",
+    "x\" & echo INJECTED>injected.txt & rem \"",
     "^\" & echo INJECTED",
     "%COMSPEC% /c echo INJECTED",
     "h\u{e9}llo \u{2713} \u{65e5}\u{672c}",

@@ -1,0 +1,3 @@
+## Windows sandbox
+
+- Commands run through `cmd.exe /C` in the Windows sandbox (both backends, with or without a terminal) now reach cmd exactly as written, so quoted paths such as `echo hi > "%TEMP%\out.txt"` work. Previously the sandbox quoted them for ordinary programs, which cmd misreads: such commands failed, and a quote inside an argument could make cmd run text after it as a separate command. cmd now starts with `/D /S /V:OFF` (no registry AutoRun commands, delayed `!VAR!` expansion off unless the caller chose `/V`). A program given with separate arguments after `/C` receives each argument unchanged, with no `%VAR%` expansion or operators; arguments cmd can't pass on unchanged (line breaks, NUL, `/V:ON`) are refused instead of run (#2702, D730).

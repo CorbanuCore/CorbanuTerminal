@@ -101,6 +101,8 @@ fn hostile_arguments() -> Vec<String> {
         "@at",
         ",;=",
         "x\" & echo INJECTED > \"injected.txt\" & \"",
+        // On main's CRT join this one ran its `echo` (#2702).
+        "x\" & echo INJECTED>injected.txt & rem \"",
         "a & echo INJECTED > injected.txt",
         "| cmd /c echo INJECTED > injected.txt",
         "^\" & echo INJECTED > injected.txt & ^\"",
@@ -132,6 +134,10 @@ fn check(backend: Backend, tty: bool, home: &SandboxHome) {
         ];
         argv.extend(arguments.iter().cloned());
         let (stdout, exit_code) = run(backend, root.path(), home.path(), argv, tty).await;
+        assert!(
+            !root.path().join(MARKER).exists(),
+            "{label} argv: an injected command ran; stdout={stdout:?}"
+        );
         assert_eq!(exit_code, 0, "{label} argv: stdout={stdout:?}");
         assert_eq!(read_dump(&dump, &stdout), arguments, "{label} argv");
 
@@ -196,7 +202,6 @@ fn d730_legacy_cmd_lines_arrive_unchanged() {
     let _guard = legacy_process_test_guard();
     let home = sandbox_home("d730-legacy");
     check(Backend::Legacy, /*tty*/ false, &home);
-    check(Backend::Legacy, /*tty*/ true, &home);
 
     // Past cmd's 8191-character limit cmd refuses the line: nothing runs.
     let root = user_owned_test_root();
@@ -227,11 +232,26 @@ fn d730_legacy_cmd_lines_arrive_unchanged() {
 }
 
 #[test]
+fn d730_legacy_tty_cmd_lines_arrive_unchanged() {
+    let _guard = legacy_process_test_guard();
+    let home = sandbox_home("d730-legacy-tty");
+    check(Backend::Legacy, /*tty*/ true, &home);
+}
+
+#[test]
 fn d730_elevated_cmd_lines_arrive_unchanged() {
     let Some(home) = elevated_home("d730-elevated") else {
         return;
     };
     let _guard = legacy_process_test_guard();
     check(Backend::Elevated, /*tty*/ false, &home);
+}
+
+#[test]
+fn d730_elevated_tty_cmd_lines_arrive_unchanged() {
+    let Some(home) = elevated_home("d730-elevated-tty") else {
+        return;
+    };
+    let _guard = legacy_process_test_guard();
     check(Backend::Elevated, /*tty*/ true, &home);
 }
