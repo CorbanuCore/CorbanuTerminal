@@ -1,0 +1,3 @@
+## Security
+
+On Windows, agent PowerShell commands now start with module autoloading off and load the system modules PowerShell's own commands come from (Management, Utility, Security, Archive, CIM) from PowerShell's install folder, so a module written into a user module folder can no longer replace a cmdlet an agent's script calls (#2661, D729, D731). Commands from other modules (for example `Get-ScheduledTask`, `Get-NetTCPConnection`, `Get-LocalUser`) now need an explicit `Import-Module`, which asks for approval under strict command rules; this affected 3.3% of a corpus of 2,492 agent PowerShell scripts on Windows PowerShell 5.1 and PowerShell 7.7.
