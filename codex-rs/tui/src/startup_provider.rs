@@ -11,6 +11,8 @@ pub(crate) struct StartupProviderResolution {
     pub(crate) policy: ProviderModelPolicy,
     pub(crate) current: CurrentSelectionDecision,
     pub(crate) requires_provider_onboarding: bool,
+    /// The default OpenAI login state this resolution used.
+    pub(crate) openai: OpenAiAuthMetadata,
     context: StartupProviderContext,
 }
 
@@ -47,6 +49,7 @@ pub(crate) async fn resolve(
     {
         account.openai = openai;
     }
+    let openai = account.openai;
     let mut host = ProviderStatusHost::from_config(config, account);
     // Provider auth commands are executable credential resolvers. Running every configured
     // command during startup creates unrelated side effects and can add a full command timeout
@@ -72,6 +75,7 @@ pub(crate) async fn resolve(
         policy,
         current,
         requires_provider_onboarding,
+        openai,
         context: StartupProviderContext::from_config(config),
     }
 }
@@ -92,6 +96,34 @@ pub(crate) fn openai_metadata(login_status: crate::LoginStatus) -> OpenAiAuthMet
         crate::LoginStatus::AuthMode(crate::AuthMode::ApiKey) => OpenAiAuthMetadata::ApiKey,
         crate::LoginStatus::AuthMode(_) => OpenAiAuthMetadata::ExternallyManaged,
         crate::LoginStatus::NotAuthenticated => OpenAiAuthMetadata::Missing,
+    }
+}
+
+/// The default OpenAI login status for the startup gates. `account/read`
+/// describes the app server's own provider; when that provider does not use
+/// the OpenAI login (#2728, #2778), its status says nothing about this
+/// launch's default login, so the locally discovered state is used instead.
+pub(crate) fn default_login_status(
+    server_reports_openai_login: bool,
+    server: crate::LoginStatus,
+    local: OpenAiAuthMetadata,
+) -> crate::LoginStatus {
+    if server_reports_openai_login {
+        return server;
+    }
+    match local {
+        OpenAiAuthMetadata::Account => crate::LoginStatus::AuthMode(crate::AuthMode::Chatgpt),
+        OpenAiAuthMetadata::ApiKey | OpenAiAuthMetadata::EnvironmentApiKey => {
+            crate::LoginStatus::AuthMode(crate::AuthMode::ApiKey)
+        }
+        OpenAiAuthMetadata::ExternallyManaged => {
+            crate::LoginStatus::AuthMode(crate::AuthMode::AgentIdentity)
+        }
+        // A login needing recovery or of an unsupported kind is reported as
+        // missing by an OpenAI app server too.
+        OpenAiAuthMetadata::Missing
+        | OpenAiAuthMetadata::RecoveryRequired
+        | OpenAiAuthMetadata::Unsupported => crate::LoginStatus::NotAuthenticated,
     }
 }
 
@@ -150,6 +182,113 @@ mod tests {
             /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
+    }
+
+    #[test]
+    fn startup_gates_judge_the_default_login_not_another_providers_server() {
+        use crate::AuthMode;
+        use crate::LoginStatus;
+        let chatgpt_gate = |status| {
+            should_show_provider_onboarding(
+                /*show_trust_screen*/ false,
+                /*requires_provider_onboarding*/ false,
+                Some(crate::ForcedLoginMethod::Chatgpt),
+                status,
+            )
+        };
+        // A server on another provider reports no account; a local ChatGPT
+        // login satisfies a required ChatGPT login.
+        let status = default_login_status(
+            /*server_reports_openai_login*/ false,
+            LoginStatus::NotAuthenticated,
+            OpenAiAuthMetadata::Account,
+        );
+        assert_eq!(status, LoginStatus::AuthMode(AuthMode::Chatgpt));
+        assert!(!chatgpt_gate(status));
+        // Its own provider key is not an OpenAI login, and is not a ready
+        // OpenAI key for an early resume either.
+        let status = default_login_status(
+            /*server_reports_openai_login*/ false,
+            LoginStatus::AuthMode(AuthMode::ApiKey),
+            OpenAiAuthMetadata::Missing,
+        );
+        assert_eq!(status, LoginStatus::NotAuthenticated);
+        assert_eq!(openai_metadata(status), OpenAiAuthMetadata::Missing);
+        assert!(chatgpt_gate(status));
+        // An OpenAI server's report stands, whatever local discovery says.
+        let status = default_login_status(
+            /*server_reports_openai_login*/ true,
+            LoginStatus::NotAuthenticated,
+            OpenAiAuthMetadata::Account,
+        );
+        assert_eq!(status, LoginStatus::NotAuthenticated);
+        assert!(chatgpt_gate(status));
+        // Workload identity has no account/read and keeps its ChatGPT status.
+        let status = default_login_status(
+            /*server_reports_openai_login*/ true,
+            LoginStatus::AuthMode(AuthMode::Chatgpt),
+            OpenAiAuthMetadata::Missing,
+        );
+        assert_eq!(status, LoginStatus::AuthMode(AuthMode::Chatgpt));
+        assert!(!chatgpt_gate(status));
+        // Local states map to what an OpenAI server would report.
+        for (local, expected) in [
+            (OpenAiAuthMetadata::ApiKey, OpenAiAuthMetadata::ApiKey),
+            (
+                OpenAiAuthMetadata::EnvironmentApiKey,
+                OpenAiAuthMetadata::ApiKey,
+            ),
+            (
+                OpenAiAuthMetadata::ExternallyManaged,
+                OpenAiAuthMetadata::ExternallyManaged,
+            ),
+            (
+                OpenAiAuthMetadata::RecoveryRequired,
+                OpenAiAuthMetadata::Missing,
+            ),
+            (OpenAiAuthMetadata::Unsupported, OpenAiAuthMetadata::Missing),
+        ] {
+            let status = default_login_status(
+                /*server_reports_openai_login*/ false,
+                LoginStatus::NotAuthenticated,
+                local,
+            );
+            assert_eq!(openai_metadata(status), expected, "{local:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn resolution_discovers_the_default_login_when_the_server_does_not_report_it() {
+        let home = tempfile::tempdir().unwrap();
+        codex_login::login_with_api_key(
+            home.path(),
+            "sk-test-local-default-login",
+            codex_login::AuthCredentialsStoreMode::File,
+            codex_login::AuthKeyringBackendKind::default(),
+        )
+        .unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.cli_auth_credentials_store_mode = codex_login::AuthCredentialsStoreMode::File;
+        config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.to_string();
+        config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+
+        // The early resume passes `None` when a server on another provider
+        // answered account/read: the local key is found.
+        assert_eq!(
+            resolve(&config, /*openai*/ None).await.openai,
+            OpenAiAuthMetadata::ApiKey
+        );
+        // An OpenAI server's report is used as given.
+        assert_eq!(
+            resolve(&config, Some(OpenAiAuthMetadata::Missing))
+                .await
+                .openai,
+            OpenAiAuthMetadata::Missing
+        );
     }
 
     #[tokio::test]
