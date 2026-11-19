@@ -9593,6 +9593,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place() -> Res
 }
 
 async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario() -> Result<()> {
+    eprintln!("BZ2_STACK scenario entered");
     use codex_protocol::items::TurnItem;
     use codex_protocol::items::UserMessageItem;
     use codex_protocol::models::ImageReference;
@@ -9813,12 +9814,14 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         mention_bindings: Vec::new(),
     };
 
+    eprintln!("BZ2_STACK before UpdateModel");
     boxed_future!(app.handle_event(
         &mut tui,
         &mut app_server,
         AppEvent::UpdateModel("gpt-5.4".into()),
     ))
     .await?;
+    eprintln!("BZ2_STACK after UpdateModel");
     app.app_server_target = crate::AppServerTarget::Remote {
         endpoint: crate::RemoteAppServerEndpoint::WebSocket {
             websocket_url: "ws://127.0.0.1:4500".to_string(),
@@ -9829,6 +9832,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         .thread_read(source_thread_id, /*include_turns*/ true)
         .await?;
     for text in [None, Some("/help"), Some(" \t!")] {
+        eprintln!("BZ2_STACK before remote prompt revert");
         let mut remote_prompt = prompt.clone();
         if let Some(text) = text {
             remote_prompt.text = text.into();
@@ -9847,6 +9851,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             },
         ))
         .await?;
+        eprintln!("BZ2_STACK after remote prompt revert");
         assert!(app.chat_widget.composer_is_empty());
         assert_eq!(
             app_server
@@ -9876,6 +9881,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             /*limit*/ 1,
         )
         .await?;
+    eprintln!("BZ2_STACK before older history page");
     app.handle_older_history_page(
         &mut tui,
         &mut app_server,
@@ -9884,13 +9890,17 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         Ok(page),
     )
     .await?;
+    eprintln!("BZ2_STACK before embedded prompt revert");
     let control = boxed_future!(app.handle_event(&mut tui, &mut app_server, selection)).await?;
+    eprintln!("BZ2_STACK after embedded prompt revert");
 
     while let Ok(event) = app_event_rx.try_recv() {
         match event {
             AppEvent::InsertHistoryCell(cell) => app.transcript_cells.push(Arc::from(cell)),
             event @ AppEvent::FinishPromptRevert { .. } => {
+                eprintln!("BZ2_STACK before FinishPromptRevert");
                 boxed_future!(app.handle_event(&mut tui, &mut app_server, event)).await?;
+                eprintln!("BZ2_STACK after FinishPromptRevert");
             }
             _ => {}
         }
@@ -9917,6 +9927,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         })
         .collect::<Vec<_>>()
         .join("\n");
+    eprintln!("BZ2_STACK before history snapshot");
     let stable_cwd = "/tmp/project";
     let cwd = config.cwd.display().to_string();
     let transcript = transcript.replace(&cwd, &format!("{stable_cwd:<width$}", width = cwd.len()));
@@ -9970,6 +9981,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             .iter()
             .any(|line| line.contains("Thread forked from"))
     );
+    eprintln!("BZ2_STACK before first-visible prompt phase");
     // Editing the first visible prompt also discards search state from the removed window.
     app.transcript_view.begin_search();
     assert!(app.transcript_view.is_search_editing());
@@ -10015,8 +10027,10 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         vec!["turn-0"]
     );
     tui.set_owned_screen(/*owned*/ true)?;
+    eprintln!("BZ2_STACK before Draw");
     app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)
         .await?;
+    eprintln!("BZ2_STACK after Draw");
     assert_eq!(
         app.transcript_view.history,
         crate::pager_overlay::TranscriptHistoryState::LoadingOlder
