@@ -6,11 +6,12 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 
 ## Window 1
 -- request 1 (turn) --
-00:additional_tools/developer (2; hash=011163ce485c9b16):
-        - namespace/functions; hash=21f8b8ad28a4ab0b
+00:additional_tools/developer (2; hash=2f8cb25ce980815a):
+        - namespace/functions; hash=13680db40b1e6db3
           - custom/exec
           - function/wait
           - function/request_user_input
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
@@ -68,11 +69,12 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 
 ## Window 2 (after request 6: input diverged at item 03)
 -- request 7 (turn) --
-00:additional_tools/developer (2; hash=011163ce485c9b16):
-        - namespace/functions; hash=21f8b8ad28a4ab0b
+00:additional_tools/developer (2; hash=2f8cb25ce980815a):
+        - namespace/functions; hash=13680db40b1e6db3
           - custom/exec
           - function/wait
           - function/request_user_input
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
@@ -115,11 +117,12 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 
 ## Window 3 (after request 7: input diverged at item 07)
 -- request 8 (turn) --
-00:additional_tools/developer (2; hash=011163ce485c9b16):
-        - namespace/functions; hash=21f8b8ad28a4ab0b
+00:additional_tools/developer (2; hash=2f8cb25ce980815a):
+        - namespace/functions; hash=13680db40b1e6db3
           - custom/exec
           - function/wait
           - function/request_user_input
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext
@@ -187,11 +190,12 @@ Scenario: A parent with no configured environment delegates an API migration, qu
 
 ## Window 4 (after request 9: input diverged at item 20)
 -- request 10 (turn) --
-00:additional_tools/developer (2; hash=011163ce485c9b16):
-        - namespace/functions; hash=21f8b8ad28a4ab0b
+00:additional_tools/developer (2; hash=2f8cb25ce980815a):
+        - namespace/functions; hash=13680db40b1e6db3
           - custom/exec
           - function/wait
           - function/request_user_input
+          - function/list_models
           - function/spawn_agent_plaintext
           - function/send_message_plaintext
           - function/followup_task_plaintext

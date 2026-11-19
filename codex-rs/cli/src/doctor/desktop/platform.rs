@@ -52,8 +52,6 @@ pub(in crate::doctor) struct InstalledApp {
     package_family: &'static str,
     #[cfg(target_os = "macos")]
     pub(in crate::doctor) bundle: PathBuf,
-    #[cfg(target_os = "macos")]
-    pub(in crate::doctor) build: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -268,16 +266,10 @@ pub(in crate::doctor) async fn inspect_macos_bundle(
         .or_else(|| metadata.get("CFBundleVersion"))
         .and_then(Value::as_str)
         .ok_or(DiscoveryError)?;
-    let build = metadata
-        .get("CFBundleVersion")
-        .and_then(Value::as_str)
-        .and_then(|value| value.parse().ok())
-        .ok_or(DiscoveryError)?;
 
     Ok(Some(InstalledApp {
         identity: "com.openai.codex",
         version: version.to_string(),
         bundle: bundle.to_path_buf(),
-        build,
     }))
 }

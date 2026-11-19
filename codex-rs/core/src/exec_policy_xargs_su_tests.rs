@@ -307,6 +307,7 @@ async fn managed_requirement(line: &str, rules: &str, managed: &str) -> ExecAppr
             sandbox_permissions: SandboxPermissions::UseDefault,
             prefix_rule: None,
             allow_prefix_rules: AllowPrefixRules::Honor,
+            cwd: None,
         })
         .await
 }

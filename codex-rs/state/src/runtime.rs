@@ -51,7 +51,7 @@ pub(crate) mod db_lock;
 mod external_agent_config_imports;
 mod goals;
 mod gpu_rentals;
-mod gpu_runtime_providers;
+pub(crate) mod gpu_runtime_providers;
 mod guardian_feedback;
 mod log_scrub;
 mod logs;

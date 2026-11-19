@@ -104,10 +104,12 @@ pub fn is_powershell_program(program: &str) -> bool {
 }
 
 /// `command` read as PowerShell reads its command line (#2568); `None` when
-/// `command[0]` is not a PowerShell.
+/// `command[0]` is not a PowerShell, or (#2699) is spelled so Windows may run
+/// another file (`pwsh.exe:x.exe`, an NTFS stream): such a command is never
+/// read as PowerShell, so it stays one command rules see whole.
 fn read_invocation(command: &[String]) -> Option<(&str, cli::Invocation<'_>)> {
     let shell = command.first()?;
-    if !is_powershell_program(shell) {
+    if !is_powershell_program(shell) || crate::shell_detect::windows_name_unsure(shell) {
         return None;
     }
     Some((shell, cli::read(command, PowershellKind::of(shell))))
@@ -539,5 +541,62 @@ mod tests {
                 vec!["Measure-Object".to_string()],
             ]
         );
+    }
+
+    /// #2699: a PowerShell spelled as an NTFS stream or an 8.3 short-name
+    /// tail still names PowerShell to `is_powershell_program`, but Windows
+    /// runs another file: no reader reads its command line.
+    #[test]
+    fn stream_spelled_powershell_is_not_read() {
+        let line = |shell: &str, rest: &[&str]| {
+            std::iter::once(shell)
+                .chain(rest.iter().copied())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        let mut shells = vec![
+            "pwsh.exe:x.exe",
+            "pwsh.exe::$DATA",
+            "powershell.exe:x.exe",
+            "/opt/ps/pwsh.exe:x.exe",
+            "pwsh.~1",
+        ];
+        if cfg!(windows) {
+            shells.extend([r"C:\PS\pwsh.exe:s", "C:pwsh.exe:s", r"C:\PS\pwsh.ex~1"]);
+        }
+        for shell in shells {
+            assert!(super::is_powershell_program(shell), "{shell}");
+            for rest in [
+                &["-Command", "git status"][..],
+                &["-NoProfile", "-c", "git", "status"],
+                &["-EncodedCommand", "ZwBpAHQA"],
+                &["-File", "x.ps1"],
+            ] {
+                let command = line(shell, rest);
+                assert_eq!(extract_powershell_command(&command), None, "{command:?}");
+                assert_eq!(
+                    super::extract_plain_powershell_command(&command),
+                    None,
+                    "{command:?}"
+                );
+                assert_eq!(
+                    super::unread_powershell_command_line(&command),
+                    None,
+                    "{command:?}"
+                );
+            }
+        }
+        // A short directory name or a drive does not change which program
+        // runs: these still read.
+        for shell in ["/opt/PROGRA~1/pwsh.exe", "pwsh.exe"] {
+            let command = line(shell, &["-Command", "git status"]);
+            assert!(extract_powershell_command(&command).is_some(), "{shell}");
+        }
+        if cfg!(windows) {
+            for shell in [r"C:\PROGRA~1\PowerShell\7\pwsh.exe", "C:pwsh.exe"] {
+                let command = line(shell, &["-Command", "git status"]);
+                assert!(extract_powershell_command(&command).is_some(), "{shell}");
+            }
+        }
     }
 }

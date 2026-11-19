@@ -5,7 +5,6 @@ expression: "render_human_report(&report, detailed_no_color_unicode_options())"
 Corbanu Terminal Doctor v0.0.0
 
 Notes
-   ↑ desktop      build 123 available (ready to install)
    ⚠ terminal     narrow terminal
    ✗ auth         token expired - Run `corbanu login`.
    ✗ network      provider is unreachable - A macOS system proxy is configured but unused. If your organization requires it, ask your administrator whether to enable the experimental System proxy setting in `/experimental` or with `codex features enable respect_system_proxy`. Restart Codex after changing this setting.
@@ -61,8 +60,6 @@ Desktop App
 
 Updates
   ✓ updates      update configuration is locally consistent
-      desktop update status    ready to install
-      desktop latest build     123
 
 Connectivity
   ✓ network      network environment readable
@@ -74,7 +71,7 @@ Background Server
   ✓ app-server   background server is not running
 
 ─────────────────────────────────────────────────────────────
-16 ok · 6 notes · 3 warn · 2 fail failed
+16 ok · 5 notes · 3 warn · 2 fail failed
 
 --summary compact output           --all expand truncated lists
 --json redacted report

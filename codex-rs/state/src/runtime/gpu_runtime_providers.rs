@@ -183,16 +183,7 @@ ON CONFLICT(rental_id) DO UPDATE SET
     }
 
     pub async fn list_gpu_runtime_providers(&self) -> anyhow::Result<Vec<GpuRuntimeProvider>> {
-        Ok(sqlx::query_as::<_, GpuRuntimeProvider>(
-            r#"
-SELECT p.*, r.provider AS infrastructure_provider FROM gpu_runtime_providers p
-JOIN gpu_rentals r ON r.rental_id = p.rental_id
-WHERE r.observed_state IN ('ready', 'degraded')
-ORDER BY p.updated_at_ms DESC
-            "#,
-        )
-        .fetch_all(self.pool.as_ref())
-        .await?)
+        list_gpu_runtime_providers_in(self.pool.as_ref()).await
     }
 
     pub async fn remove_gpu_runtime_provider(&self, rental_id: &str) -> anyhow::Result<bool> {
@@ -345,3 +336,19 @@ fn validate_runtime_provider(provider: &GpuRuntimeProviderUpsert) -> anyhow::Res
 #[cfg(test)]
 #[path = "gpu_runtime_providers_tests.rs"]
 mod tests;
+
+/// The runtime providers of rentals that are ready or degraded, newest first.
+pub(crate) async fn list_gpu_runtime_providers_in(
+    pool: &sqlx::SqlitePool,
+) -> anyhow::Result<Vec<GpuRuntimeProvider>> {
+    Ok(sqlx::query_as::<_, GpuRuntimeProvider>(
+        r#"
+SELECT p.*, r.provider AS infrastructure_provider FROM gpu_runtime_providers p
+JOIN gpu_rentals r ON r.rental_id = p.rental_id
+WHERE r.observed_state IN ('ready', 'degraded')
+ORDER BY p.updated_at_ms DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?)
+}

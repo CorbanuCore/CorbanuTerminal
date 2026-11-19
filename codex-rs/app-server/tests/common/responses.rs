@@ -3,7 +3,8 @@ use serde_json::json;
 use std::path::Path;
 
 /// Joins a fixture command into the `cmd` string the user's shell runs.
-fn command_string(command: &[String]) -> anyhow::Result<String> {
+/// Tests that assert the displayed command must build it from this same string.
+pub fn command_string(command: &[String]) -> anyhow::Result<String> {
     if cfg!(windows) {
         // PowerShell does not understand POSIX single-quote escaping.
         let (program, args) = command

@@ -1977,6 +1977,22 @@ pub fn gpu_runtime_model_provider(
         );
         return None;
     }
+    // The rental controller only stores HTTPS or loopback endpoints; check
+    // again here, where the endpoint is given the rental's token (#2723).
+    let endpoint_allowed = url::Url::parse(record.base_url.as_str()).is_ok_and(|url| {
+        url.scheme() == "https"
+            || (url.scheme() == "http"
+                && url
+                    .host_str()
+                    .is_some_and(|host| matches!(host, "127.0.0.1" | "[::1]" | "localhost")))
+    });
+    if !endpoint_allowed {
+        tracing::warn!(
+            provider_id = %record.provider_id,
+            "ignoring GPU runtime provider without an HTTPS or loopback endpoint"
+        );
+        return None;
+    }
     let wire_api = match record.wire_api.as_str() {
         "chat" => WireApi::Chat,
         "responses" => WireApi::Responses,
@@ -2066,6 +2082,10 @@ pub async fn load_gpu_runtime_model_providers(
         .collect()
 }
 
+/// How long the GPU runtime provider overlay waits for a writer's lock on the
+/// state database before loading without it.
+const GPU_RUNTIME_OVERLAY_BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
 pub async fn load_gpu_runtime_model_provider_records(
     sqlite_home: &Path,
 ) -> Vec<codex_state::GpuRuntimeProvider> {
@@ -2080,19 +2100,14 @@ pub async fn load_gpu_runtime_model_provider_records(
         sqlite_home,
         /*enforce_delete_on_nfs*/ false,
     );
-    if !sqlite.has_existing_state_db() {
-        return Vec::new();
-    }
-    let runtime =
-        match codex_state::StateRuntime::init(sqlite, "gpu-runtime-overlay".to_string()).await {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                tracing::warn!(%error, "failed to open GPU runtime provider overlay");
-                return Vec::new();
-            }
-        };
-
-    match runtime.list_gpu_runtime_providers().await {
+    // #2723: read through a read-only connection. Opening the state runtime
+    // here took the init lock, ran migrations and created every runtime
+    // database during each config load, including for `migrate-nfs-db` and
+    // `app-server --print-startup-config`, which must not touch them.
+    match sqlite
+        .read_gpu_runtime_providers(GPU_RUNTIME_OVERLAY_BUSY_TIMEOUT)
+        .await
+    {
         Ok(records) => records,
         Err(error) => {
             tracing::warn!(%error, "failed to read GPU runtime provider overlay");
