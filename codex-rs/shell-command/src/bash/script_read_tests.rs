@@ -151,7 +151,6 @@ fn shapes_not_fully_understood_are_unread() {
         "cat <<EOF\necho safe\nEOFX\necho later\nEOF",
         // The grammar takes this `0` for an argument after the start marker.
         "bash <<'EOF' 0>&3\necho hi\nEOF",
-        "echo \"a `git push` b\"",
         // Backquotes the grammar leaves inside tokens (review r1).
         "cat <<EOF\n`git push`\nEOF",
         "cat <<EOF > notes.md\n`git push`\nEOF",
@@ -204,6 +203,16 @@ fn shapes_not_fully_understood_are_unread() {
         "echo /(e:'git push':)",
         "X==(git push)",
         "precmd_functions=(x)",
+        // D713: `[` splits expansions into words that may become operators,
+        // and a quoted operand may read as one.
+        "[ -n \"$(git status --porcelain)\" ]",
+        "[ -n $x ]",
+        "[ \"$a\" \"$b\" ]",
+        "[ x \"-eq\" 1 ]",
+        // An operator where operands are arithmetic is one too (`-n`
+        // negates the value of `n`).
+        "[[ 1 -eq -n ]]",
+        "[ 1 -eq 1 -a x ]",
         // Does not parse.
         "git push (",
         "echo *(e:'git push':)",
@@ -236,7 +245,6 @@ fn understood_shapes_are_read() {
         "cat <<'EOF'\nuse `code` and $(this) literally\nEOF",
         "true;#note",
         "a+=(c); f() { :; }; [[ -n $x || -z $y ]]",
-        "[ -n \"$(git status --porcelain)\" ] && [ -d \"$(dirname \"$f\")\" ]",
         "case $x in a|b*) echo;; esac",
         "[ -t 1 ] && [[ -t 0 ]]",
     ] {
@@ -278,14 +286,13 @@ fn ambiguous_heredocs_are_not_reduced_to_one_command() {
 #[test]
 fn lexically_unsafe_scripts_are_unread() {
     for script in [
-        "[[ $y == *.rs ]]",
         "[[ $x =~ ^a(b|c)$ ]]",
         "echo ${x#*/} ${x%%.*} ${#x} ${x/a/b}",
         "echo a \\\n  b",
         "echo \"a\\\nb\"",
         "ls /usr/bin/gi[t]",
         "echo {a,b}",
-        "echo $((1 + 2))",
+        "echo $((x + 2))",
         "cat <<EOF\n$(date)\nEOF",
         "echo na\u{ef}ve",
         "echo a\u{a0}b",
@@ -308,21 +315,19 @@ fn minimal_set_refuses_more_than_the_tree() {
         "cat <(echo hi)",
         "cat <<'EOF'\nhi\nEOF",
         "bash <<EOF\necho safe\nEOF",
-        "if [ -f x ]; then echo a; fi",
-        "[[ -n x ]]",
         "case x in a) echo;; esac",
         "f() { echo; }",
         "( cd x && make )",
         "{ echo; }",
         "a=(x y)",
-        "echo ${x:-default}",
         "true;#note",
         "cmd >/dev/null 2>&1",
         "cmd > \"out\"",
-        // The literal list (review round 7): no `$name`, `${…}` or `$(…)`.
-        "x=$(git log -1); echo \"$x\"",
-        "echo \"$HOME\" \"${HOME}\"",
-        "for f in *.rs; do wc -l \"$f\"; done",
+        // D713: expansions only as arguments, tests only on one line.
+        "$cmd push",
+        "x=$(git log -1) $x",
+        "[ \"$a\" \"$b\" ]",
+        "[[ -n x || -z y ]]",
         "sleep 1 & wait",
         "\"\"=git push",
         // Review round 8: an escaped blank, then `#`.
@@ -341,6 +346,13 @@ fn minimal_set_refuses_more_than_the_tree() {
         "if test -f x; then echo a; else echo b; fi # done",
         "for f in a b; do wc -l f; done",
         "echo 'na\u{ef}ve $HOME $(x)' a\\b",
+        // D713.
+        "if [ -f x ]; then echo a; fi",
+        "[[ -n x ]]",
+        "echo ${x:-default}",
+        "x=$(git log -1); echo \"$x\"",
+        "echo \"$HOME\" \"${HOME}\"",
+        "for f in *.rs; do wc -l \"$f\"; done",
     ] {
         assert!(!read_script(script).fails_closed(), "{script:?}");
     }

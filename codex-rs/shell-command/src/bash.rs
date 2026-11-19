@@ -1007,5 +1007,8 @@ mod tests {
 #[path = "bash/script_commands_tests.rs"]
 mod script_commands_tests;
 #[cfg(test)]
+#[path = "bash/script_lexical_tests.rs"]
+mod script_lexical_tests;
+#[cfg(test)]
 #[path = "bash/script_read_tests.rs"]
 mod script_read_tests;

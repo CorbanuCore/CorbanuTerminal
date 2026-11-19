@@ -475,6 +475,30 @@ impl<'a> Reader<'a> {
             self.deny(node, stack);
             return;
         }
+        // D713: `[` splits an expansion into words, which may become
+        // operators (`-v 'a[$(…)]'`): only those that are always a number,
+        // or a quoted one where the lexical set fixes the operators.
+        if single && !only_numeric_parameters(self.text(node)) && !lexically_safe(self.text(node)) {
+            self.deny(node, stack);
+            return;
+        }
+        // An arithmetic operator anywhere makes every operand arithmetic:
+        // the grammar may group `!` and `-a`/`-o` other than `[` does.
+        let node_arithmetic = {
+            let mut parts = vec![node];
+            let mut found = false;
+            while let Some(part) = parts.pop() {
+                for (_, child) in fields(part, /*named_only*/ true) {
+                    if child.kind() == "test_operator" {
+                        let operator = self.text(child);
+                        found |= ARITHMETIC_TESTS.contains(&operator) || operator == "-t";
+                    } else {
+                        parts.push(child);
+                    }
+                }
+            }
+            found
+        };
         let mut inner = vec![node];
         while let Some(part) = inner.pop() {
             // In `[ … ]` the grammar takes `|`, `&`, `&&` and `||` for test
@@ -491,25 +515,37 @@ impl<'a> Reader<'a> {
                 self.deny(node, stack);
                 return;
             }
-            let children = fields(part, /*named_only*/ true);
-            // zsh's `-t FD` evaluates FD as arithmetic too.
-            let arithmetic = children.iter().any(|(_, child)| {
-                child.kind() == "test_operator"
-                    && (ARITHMETIC_TESTS.contains(&self.text(*child)) || self.text(*child) == "-t")
-            });
-            for (_, child) in children {
+            for (_, child) in fields(part, /*named_only*/ true) {
                 match child.kind() {
-                    "binary_expression" | "unary_expression" | "parenthesized_expression"
-                        if !arithmetic =>
-                    {
+                    "binary_expression" | "unary_expression" | "parenthesized_expression" => {
                         inner.push(child);
                     }
-                    "test_operator" if !matches!(self.text(child), "-v" | "-R") => {}
-                    _ if arithmetic && !numeric_operand(self.text(child)) => {
+                    // zsh's `-t FD` evaluates FD as arithmetic too. Where
+                    // operands are arithmetic, another operator may be one
+                    // (`1 -eq -n` negates `n`'s value).
+                    "test_operator"
+                        if node_arithmetic
+                            && !(ARITHMETIC_TESTS.contains(&self.text(child))
+                                || self.text(child) == "-t") =>
+                    {
                         self.deny(node, stack);
                         return;
                     }
+                    "test_operator" if !matches!(self.text(child), "-v" | "-R") => {}
                     "test_operator" => {
+                        self.deny(node, stack);
+                        return;
+                    }
+                    _ if node_arithmetic && !numeric_operand(self.text(child)) => {
+                        self.deny(node, stack);
+                        return;
+                    }
+                    // A quoted or escaped operand `[` would read as an
+                    // operator (`"-v"`).
+                    _ if script_word(child, self.src).is_some_and(|word| {
+                        word != self.text(child) && word.starts_with(['-', '!', '(', ')'])
+                    }) =>
+                    {
                         self.deny(node, stack);
                         return;
                     }
@@ -816,6 +852,28 @@ impl<'a> Reader<'a> {
         own.contains(['{', '}'])
     }
 
+    /// Whether `node`'s text holds a backquote outside the command
+    /// substitutions within it.
+    fn backquote_outside_substitutions(&self, node: Node<'_>) -> bool {
+        let mut substitutions = Vec::new();
+        let mut stack = vec![node];
+        while let Some(part) = stack.pop() {
+            if part != node && part.kind() == "command_substitution" {
+                substitutions.push(part.byte_range());
+                continue;
+            }
+            stack.extend(
+                fields(part, /*named_only*/ true)
+                    .into_iter()
+                    .map(|(_, child)| child),
+            );
+        }
+        node.byte_range().any(|at| {
+            self.src.as_bytes()[at] == b'`'
+                && !substitutions.iter().any(|range| range.contains(&at))
+        })
+    }
+
     /// Whether a `regex` or `extglob_pattern` token is where bash reads a
     /// pattern as the grammar does.
     /// The scanner keeps quotes, `<(…)` and operators inside these tokens
@@ -859,7 +917,7 @@ impl<'a> Reader<'a> {
             | "extglob_pattern" => {}
             // A backquote in a double-quoted string runs a command; the
             // grammar may leave it outside any node.
-            "string" | "concatenation" if self.text(node).contains('`') => {
+            "string" | "concatenation" if self.backquote_outside_substitutions(node) => {
                 self.deny(node, stack);
             }
             "string" | "concatenation" | "brace_expression" => {
@@ -894,10 +952,16 @@ impl<'a> Reader<'a> {
                     }
                 }
             }
-            // Backquotes nest by escaping, which the grammar does not read.
-            "command_substitution" if !self.text(node).starts_with('`') => {
+            // Backquotes nest by escaping, which the grammar does not read:
+            // read only without a backslash (D713).
+            "command_substitution"
+                if !self.text(node).starts_with('`') || !self.text(node).contains('\\') =>
+            {
                 push_named_children(node, Visit::Statement, stack);
             }
+            // D713: digits and operators only. A name's value is evaluated
+            // as an expression, which can run code (`x='a[$(cmd)]'`).
+            "arithmetic_expansion" if constant_arithmetic(self.text(node)) => {}
             "process_substitution" => push_named_children(node, Visit::Statement, stack),
             _ => self.deny(node, stack),
         }
@@ -982,6 +1046,48 @@ pub fn numeric_operand(text: &str) -> bool {
     let digits = text.strip_prefix('-').unwrap_or(text);
     (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
         || matches!(text, "$?" | "$#" | "$$" | "$!")
+}
+
+/// Whether every `$` in `text` begins `$?`, `$#`, `$$` or `$!`, not
+/// followed by a name character.
+fn only_numeric_parameters(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut at = 0;
+    while let Some(offset) = bytes[at..].iter().position(|byte| *byte == b'$') {
+        let dollar = at + offset;
+        let numeric = bytes
+            .get(dollar + 1)
+            .is_some_and(|byte| b"?#$!".contains(byte))
+            && !bytes
+                .get(dollar + 2)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_');
+        if !numeric {
+            return false;
+        }
+        at = dollar + 2;
+    }
+    true
+}
+
+/// `$(( … ))` of digits, blanks, `+ - * / %` and `$?` `$#` `$$` `$!`
+/// (D713).
+fn constant_arithmetic(text: &str) -> bool {
+    let Some(inner) = text
+        .strip_prefix("$((")
+        .and_then(|inner| inner.strip_suffix("))"))
+    else {
+        return false;
+    };
+    let mut bytes = inner.bytes();
+    while let Some(byte) = bytes.next() {
+        let known = byte.is_ascii_digit()
+            || b" +-*/%".contains(&byte)
+            || (byte == b'$' && bytes.next().is_some_and(|byte| b"?#$!".contains(&byte)));
+        if !known {
+            return false;
+        }
+    }
+    true
 }
 
 /// The nodes [`script_command_words`] reads as words, in the same order.
