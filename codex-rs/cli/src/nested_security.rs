@@ -37,7 +37,8 @@ pub(crate) fn nested_launch_kind(
         Subcommand::Review(_) => ("review", Agent),
         Subcommand::Resume(_) => ("resume", Interactive),
         Subcommand::Fork(_) => ("fork", Interactive),
-        Subcommand::McpServer(_) => ("mcp-server", Host),
+        // Upstream's `agents` opens the interactive command center.
+        Subcommand::Agents(_) => ("agents", Interactive),
         Subcommand::AppServer(AppServerCommand {
             subcommand:
                 Some(
@@ -65,6 +66,13 @@ pub(crate) fn nested_launch_kind(
         Subcommand::ClaudePaneWorkflowSuite(_) => ("claude-pane-workflow-suite", Host),
         // Reaches a running app server or daemon socket, as a host would.
         Subcommand::StdioToUds(_) => ("stdio-to-uds", Host),
+        // Upstream's: queues input into a person's session through its app server.
+        Subcommand::Queue(_) => ("queue", Host),
+        // Upstream's: rewrite the person's saved sessions or databases in this home.
+        Subcommand::MigrateRollouts(_) => ("migrate-rollouts", Host),
+        Subcommand::MigrateNfsDb(_) => ("migrate-nfs-db", Host),
+        // Upstream's internal helper: opens a tunnel through a CONNECT proxy for a host.
+        Subcommand::TcpTunnel(_) => ("tcp-tunnel", Host),
         Subcommand::Vault(_) => ("vault", Credentials),
         Subcommand::Account(_) => ("account", Credentials),
         Subcommand::Model(_) => ("model", Credentials),

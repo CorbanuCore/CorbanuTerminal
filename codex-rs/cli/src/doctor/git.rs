@@ -65,41 +65,7 @@ fn git_check_from_inputs(inputs: GitCheckInputs) -> DoctorCheck {
     )
     .details(details);
 
-<<<<<<< HEAD
-    if inputs.selected_git.is_some() && inputs.git_version.is_none() {
-        check.status = CheckStatus::Warning;
-        check.summary = "Git executable found but could not be run".to_string();
-        check = check.issue(
-            DoctorIssue::new(
-                CheckStatus::Warning,
-                "Git executable was found on PATH but did not return a version",
-            )
-            .expected("git --version succeeds")
-            .remedy(
-                "Fix the selected Git executable or PATH so Corbanu Terminal can inspect Git metadata.",
-            )
-            .field("git version")
-            .field("selected git"),
-        );
-    } else if inputs.selected_git.is_none() && inputs.repo_root.is_some() {
-||||||| 413492cd6c
-    if inputs.selected_git.is_some() && inputs.git_version.is_none() {
-        check.status = CheckStatus::Warning;
-        check.summary = "Git executable found but could not be run".to_string();
-        check = check.issue(
-            DoctorIssue::new(
-                CheckStatus::Warning,
-                "Git executable was found on PATH but did not return a version",
-            )
-            .expected("git --version succeeds")
-            .remedy("Fix the selected Git executable or PATH so Codex can inspect Git metadata.")
-            .field("git version")
-            .field("selected git"),
-        );
-    } else if inputs.selected_git.is_none() && inputs.repo_root.is_some() {
-=======
     if inputs.selected_git.is_none() && inputs.repo_root.is_some() {
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
         check.status = CheckStatus::Warning;
         check.summary = "Git repository detected but git executable was not found".to_string();
         check = check.issue(
@@ -111,40 +77,6 @@ fn git_check_from_inputs(inputs: GitCheckInputs) -> DoctorCheck {
             .remedy("Install Git or fix PATH so Corbanu Terminal can inspect repository metadata.")
             .field("selected git"),
         );
-<<<<<<< HEAD
-    } else if let Some(cause) =
-        old_windows_git_warning(inputs.git_version.as_deref(), cfg!(windows))
-    {
-        check.status = CheckStatus::Warning;
-        check.summary = cause.clone();
-        check = check.issue(
-            DoctorIssue::new(CheckStatus::Warning, cause)
-                .measured(inputs.git_version.unwrap_or_else(|| "unknown".to_string()))
-                .expected("current Git for Windows")
-                .remedy(
-                    "Update Git for Windows or the bundled Git executable Corbanu Terminal resolves first.",
-                )
-                .field("git version")
-                .field("selected git"),
-        );
-||||||| 413492cd6c
-    } else if let Some(cause) =
-        old_windows_git_warning(inputs.git_version.as_deref(), cfg!(windows))
-    {
-        check.status = CheckStatus::Warning;
-        check.summary = cause.clone();
-        check = check.issue(
-            DoctorIssue::new(CheckStatus::Warning, cause)
-                .measured(inputs.git_version.unwrap_or_else(|| "unknown".to_string()))
-                .expected("current Git for Windows")
-                .remedy(
-                    "Update Git for Windows or the bundled Git executable Codex resolves first.",
-                )
-                .field("git version")
-                .field("selected git"),
-        );
-=======
->>>>>>> 086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a
     }
 
     check
@@ -214,6 +146,7 @@ mod tests {
             overall_status: check.status,
             codex_version: "test".to_string(),
             checks: vec![check],
+            corbanu_terminal_version: "0.0.0".to_string(),
         };
         insta::assert_snapshot!(super::super::render_human_report(
             &report,

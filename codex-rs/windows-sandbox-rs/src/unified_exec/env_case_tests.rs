@@ -71,7 +71,7 @@ fn probe_argv(root: &Path, tools: &Path) -> Vec<String> {
         system32_exe("cmd.exe").display().to_string(),
         "/d".to_string(),
         "/c".to_string(),
-        script_path.display().to_string(),
+        format!("\"{}\"", script_path.display()),
     ]
 }
 

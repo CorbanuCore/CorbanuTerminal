@@ -675,7 +675,7 @@ pub(super) async fn run_legacy(
     run_legacy_with_tty(root, codex_home, argv, env, /*tty*/ false).await
 }
 
-async fn run_legacy_with_tty(
+pub(super) async fn run_legacy_with_tty(
     root: &Path,
     codex_home: &Path,
     argv: Vec<String>,
