@@ -7,6 +7,9 @@
 #[path = "exec_policy_powershell_unread_tests.rs"]
 mod unread_tests;
 
+#[path = "exec_policy_powershell_stream_tests.rs"]
+mod stream_tests;
+
 use super::*;
 use base64::Engine as _;
 use codex_shell_command::is_safe_command::is_known_safe_command;

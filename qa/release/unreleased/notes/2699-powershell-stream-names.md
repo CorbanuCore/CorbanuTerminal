@@ -1,0 +1,3 @@
+## Security
+
+On Windows, a PowerShell program spelled as an NTFS stream or with an 8.3 short-name tail (`pwsh.exe:x.exe -Command "git status"`, `C:\PS\pwsh.exe:s -c …`) is no longer read as PowerShell: Windows runs the stream's content, not PowerShell, so command rules no longer judge it by its `-Command` script, a remembered approval for a PowerShell script no longer covers it, and Corbanu no longer adds its PowerShell script prefixes to it. Such a command is now checked as one unknown command, at the top level and inside bash, cmd.exe or PowerShell scripts: it asks wherever a prompt or forbidden rule exists (also where a forbidden rule matched its script before), and the prompt never offers an always-allow rule (#2699).
