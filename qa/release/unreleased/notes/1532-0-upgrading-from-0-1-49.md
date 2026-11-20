@@ -7,7 +7,9 @@ and its key storage, sessions and history together.
 This version adds upstream's state database migrations (Corbanu numbers
 0054–0069) and new migrations to the memory, queue and thread history
 databases. 0.1.49 refuses to open the upgraded state database and may report
-that its migrations belong to a different distribution. This is a version
+that its migrations belong to a different distribution. Its interactive
+terminal stops with a message that the local database appears to be damaged;
+`corbanu exec` still runs, without the state database. This is a version
 mismatch, not evidence of corruption. To return to 0.1.49, restore the matching
 pre-upgrade backup of the whole home along with the old package. Do not delete
 migration records to bypass the check. Conversations created after the backup

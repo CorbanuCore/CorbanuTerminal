@@ -1,0 +1,41 @@
+{
+ "phase": "rollback",
+ "checks": {
+  "restored_files_match_baseline": true,
+  "old_binary_resumes_restored_session_0": true,
+  "old_binary_resumes_restored_session_1": true,
+  "restored_state_migrations_are_0_1_49s": true,
+  "restored_dbs_integrity_ok": true,
+  "vault_credential_readable": true,
+  "named_accounts_listed": true,
+  "api_key_login_present": true,
+  "archived_session_still_archived": true
+ },
+ "observations": {
+  "old_binary_resumes_restored_session_0": {
+   "exit": 0
+  },
+  "old_binary_resumes_restored_session_1": {
+   "exit": 0
+  },
+  "vault_credential_readable": {
+   "exit": 0,
+   "stderr_tail": []
+  },
+  "named_accounts_listed": {
+   "exit": 0,
+   "stdout": [
+    "anthropic\twork\tapi_key",
+    "claude-plan\tteam\tclaude_oauth_token",
+    "zai\tpersonal\tapi_key"
+   ]
+  },
+  "api_key_login_present": {
+   "exit": 0,
+   "text": [
+    "Logged in using an API key - API key configured (fingerprint 0ce6df5b3797)"
+   ]
+  }
+ },
+ "version": "corbanu 0.1.49"
+}
