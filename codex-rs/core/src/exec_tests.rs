@@ -49,6 +49,33 @@ fn sandbox_detection_identifies_keyword_in_stderr() {
     assert!(is_likely_sandbox_denied(SandboxType::LinuxSeccomp, &output));
 }
 
+/// #2820 follow-up: bubblewrap's refusals to create a user namespace (by
+/// version, and Debian's and Ubuntu's) are denials under the Linux sandbox
+/// only; whether it failed to start is the launcher probe's call.
+#[test]
+fn sandbox_detection_identifies_bubblewrap_namespace_refusals() {
+    for wording in [
+        "bwrap: No permissions to creating new namespace, likely because the kernel does not allow non-privileged user namespaces.",
+        "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces.",
+        "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces. See <https://deb.li/bubblewrap> or <file:///usr/share/doc/bubblewrap/README.Debian.gz>.",
+    ] {
+        let output = make_exec_output(/*exit_code*/ 1, "", wording, "");
+        assert!(
+            is_likely_sandbox_denied(SandboxType::LinuxSeccomp, &output),
+            "{wording}"
+        );
+        assert!(
+            !is_likely_sandbox_denied(SandboxType::None, &output),
+            "{wording}"
+        );
+        let output = make_exec_output(/*exit_code*/ 0, "", wording, "");
+        assert!(
+            !is_likely_sandbox_denied(SandboxType::LinuxSeccomp, &output),
+            "{wording}"
+        );
+    }
+}
+
 #[test]
 fn sandbox_detection_respects_quick_reject_exit_codes() {
     let output = make_exec_output(/*exit_code*/ 127, "", "command not found", "");
