@@ -423,3 +423,24 @@ fn daemon_exclusion_warning_snapshot() {
         .join("\n");
     insta::assert_snapshot!("daemon_exclusion_warning", text);
 }
+
+/// D739: an automatic background-server start failure falls back to running
+/// without the server; a launch that explicitly needs the server keeps the
+/// error and its `--no-daemon` hint.
+#[test]
+fn auto_start_failure_falls_back_unless_the_server_was_requested() {
+    let err = anyhow::anyhow!("daemon executable not found");
+    daemon_startup::auto_start_failure(&err, /*explicit_daemon_request*/ false)
+        .expect("automatic start failure falls back");
+    let refused = daemon_startup::auto_start_failure(&err, /*explicit_daemon_request*/ true)
+        .expect_err("explicit request keeps its error");
+    let message = refused.to_string();
+    assert!(message.contains("daemon executable not found"), "{message}");
+    assert!(message.contains(daemon_startup::FAILURE_HINT), "{message}");
+    assert!(
+        daemon_startup::AUTO_START_FALLBACK_NOTICE.starts_with("Corbanu Terminal ")
+            && !daemon_startup::AUTO_START_FALLBACK_NOTICE.contains('\n')
+            && daemon_startup::AUTO_START_FALLBACK_NOTICE.len() <= 78,
+        "the fallback notice is one line naming Corbanu Terminal"
+    );
+}

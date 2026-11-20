@@ -16,6 +16,26 @@ use std::collections::BTreeMap;
 
 pub(super) const FAILURE_HINT: &str = "To work without the background server, rerun the same command with --no-daemon (including resume or fork and its arguments).";
 pub(super) const WSL_DRVFS_EXCLUSION: &str = "a Windows-mounted WSL CODEX_HOME (DrvFS/9p)";
+/// D739: launch exclusion recorded when an automatic background-server start fails.
+pub(super) const AUTO_START_FAILED_EXCLUSION: &str = "background server start failure";
+/// D739: the one-line notice shown when Corbanu Terminal runs without the background server.
+pub(super) const AUTO_START_FALLBACK_NOTICE: &str =
+    "Corbanu Terminal could not start its background server; running without it.";
+
+/// D739: an automatic background-server start that fails (for example a CLI
+/// built from source, which has no installable server) falls back to running
+/// without it. A launch that explicitly needs the server (the agents overview)
+/// keeps the error and the `--no-daemon` hint.
+pub(super) fn auto_start_failure(
+    err: &anyhow::Error,
+    explicit_daemon_request: bool,
+) -> std::io::Result<()> {
+    if explicit_daemon_request {
+        return Err(std::io::Error::other(format!("{err:#}\n{FAILURE_HINT}")));
+    }
+    tracing::warn!(error = %format!("{err:#}"), "background server did not start; running without it");
+    Ok(())
+}
 
 /// Returns whether `codex_home` is on a Windows-mounted WSL filesystem.
 pub fn uses_wsl_drvfs(codex_home: &std::path::Path) -> bool {
