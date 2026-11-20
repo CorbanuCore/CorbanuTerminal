@@ -420,8 +420,8 @@ else
     # Leave headroom for the runner and Bazel while large Rust actions overlap.
     bazel_run_args+=("--local_resources=memory=HOST_RAM*.6")
     if [[ "${RUNNER_OS}" == "Linux" ]]; then
-      # Linux clippy exhausted swap at eight jobs; Windows keeps its tested limit.
-      bazel_run_args+=(--jobs=4)
+      # Linux exhausted swap at eight and four jobs; Windows keeps its tested limit.
+      bazel_run_args+=(--jobs=2)
     else
       bazel_run_args+=(--jobs=8)
     fi
