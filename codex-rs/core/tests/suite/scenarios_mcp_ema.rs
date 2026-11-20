@@ -10,6 +10,7 @@ use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
 use core_test_support::responses;
+use core_test_support::responses::WhileActive;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event_match;
@@ -162,6 +163,9 @@ async fn enterprise_lifecycle_preserves_history_and_ordinary_tools(
     use codex_login::AuthRouteConfig;
     use serde_json::json;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
+    use tokio::sync::Notify;
     use wiremock::Mock;
     use wiremock::ResponseTemplate;
     use wiremock::matchers::method;
@@ -617,15 +621,24 @@ http_headers = {{ Authorization = "Bearer ordinary-access" }}
     )
     .await;
     test.submit_text_turn("List my work events.").await?;
-    let pending_request = Mock::given(method("POST"))
+    let pending_request_active = Arc::new(AtomicBool::new(true));
+    let pending_request_started = Arc::new(Notify::new());
+    let pending_request_started_in_responder = Arc::clone(&pending_request_started);
+    // wiremock 0.6.5 deactivates scoped mocks by registration index after
+    // sorting them by priority. Retire this mock with a matcher switch instead.
+    Mock::given(method("POST"))
+        .and(WhileActive(Arc::clone(&pending_request_active)))
         .and(path("/api/codex/ps/mcp"))
         .and(wiremock::matchers::body_partial_json(json!({
             "method": "tools/call", "params": {"arguments": {"query": "blocked"}}
         })))
-        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(60)))
+        .respond_with(move |_: &wiremock::Request| {
+            pending_request_started_in_responder.notify_one();
+            ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(60))
+        })
         .with_priority(1)
         .expect(1)
-        .mount_as_scoped(&mcp)
+        .mount(&mcp)
         .await;
     let thread = Arc::clone(&test.codex);
     let request_started = std::time::Instant::now();
@@ -639,7 +652,7 @@ http_headers = {{ Authorization = "Bearer ordinary-access" }}
             )
             .await
     });
-    pending_request.wait_until_satisfied().await;
+    pending_request_started.notified().await;
     match scenario {
         EnterpriseLifecycle::Policy => {
             let denied =
@@ -727,5 +740,7 @@ http_headers = {{ Authorization = "Bearer ordinary-access" }}
         )
     );
     test.codex.shutdown_and_wait().await?;
+    mcp.verify().await;
+    pending_request_active.store(false, Ordering::SeqCst);
     Ok(())
 }

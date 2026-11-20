@@ -38,6 +38,7 @@ use codex_utils_path_uri::PathUri;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
+use core_test_support::responses::WhileActive;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -65,7 +66,6 @@ use tempfile::TempDir;
 use test_case::test_case;
 use tokio::sync::Notify;
 use wiremock::Mock;
-use wiremock::MockGuard;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
@@ -425,12 +425,15 @@ fn remote_installed_plugins_response(plugins: Vec<Value>) -> ResponseTemplate {
     }))
 }
 
-async fn mount_empty_remote_installed_plugins(server: &wiremock::MockServer) -> MockGuard {
+async fn mount_empty_remote_installed_plugins(server: &wiremock::MockServer) -> Arc<AtomicBool> {
+    let active = Arc::new(AtomicBool::new(true));
     Mock::given(method("GET"))
+        .and(WhileActive(Arc::clone(&active)))
         .and(path("/ps/plugins/installed"))
         .respond_with(remote_installed_plugins_response(Vec::new()))
-        .mount_as_scoped(server)
-        .await
+        .mount(server)
+        .await;
+    active
 }
 
 async fn mount_remote_calendar_installed_plugins(server: &wiremock::MockServer) {
@@ -1403,7 +1406,8 @@ async fn run_remote_plugin_install_refresh_case(refreshed_tools: RefreshedAppsTo
         RefreshedAppsTools::Missing => AppsTestServer::mount_without_tools(&server).await?,
     };
     mount_remote_calendar_recommendation(&server).await;
-    let initial_remote_installed_plugins = mount_empty_remote_installed_plugins(&server).await;
+    let initial_remote_installed_plugins_active =
+        mount_empty_remote_installed_plugins(&server).await;
 
     let install_call_id = "install-calendar";
     let suggest_reason = "Use Calendar for this request";
@@ -1439,7 +1443,7 @@ async fn run_remote_plugin_install_refresh_case(refreshed_tools: RefreshedAppsTo
 
     let elicitation = start_install_turn(&test, "use Calendar").await?;
     mount_remote_calendar_installed_plugins(&server).await;
-    drop(initial_remote_installed_plugins);
+    initial_remote_installed_plugins_active.store(false, Ordering::SeqCst);
     tools_available.store(
         matches!(refreshed_tools, RefreshedAppsTools::Available),
         Ordering::SeqCst,

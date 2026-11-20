@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S02"
 created: 2026-11-07
-updated: 2026-11-14
+updated: 2026-11-19
 ---
 
 # PF-85-S04 — Tier 3: TUI, app-server, exec, CLI
@@ -49,10 +49,14 @@ updated: 2026-11-14
 
 - [x] Sprint record created and linked to one plan feature.
 
+- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): S4a 179/179, S4b 226/226, S4d 16/16 and S4e 41/41 ledger rows resolved. The obsolete `mcp-server` remnants were closed after CLI #2274 merged (`dacadfcc4a`). S4c is 112/112: the app-server CLI tail closed in the same reconciliation, with a current-head run where all 14 former CLI exclusions pass on Linux and macOS (Windows doesn't compile them; its suite has 0 failures).
+- [x] CLI #2274 merged. The app-server suite reached 0 failures on all three platforms after #2754/#2758 (#2277). At `91efec006d`, Linux and Windows are still at 0; macOS shows 2 non-CLI failures, now on #2277.
+- [x] CI-mode revert prepared as held draft #2801 (`voice-host` stays excluded, D316). Applied only on the final candidate.
+
 ## Remaining
 
-- [ ] Slice PRs S4a–S4e; snapshots re-accepted after reading each diff.
-- [ ] Revert the sync-branch CI mode (`voice-host` stays in `.bazelignore` and the Cargo `exclude` list, D316).
+- [ ] CLI/TUI integration failures with causes (#2728), TUI fixtures #2757/#2767 (astra-bazel2), and #2122.
+- [ ] The two macOS app-server failures at `91efec006d` (#2277), Bazel qualification (#2645), and merging #2801 on the final candidate.
 - [ ] True-TUI QA and demo reels.
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 

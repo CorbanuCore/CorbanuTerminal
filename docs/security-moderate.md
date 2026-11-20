@@ -77,8 +77,8 @@ without them Corbanu refuses every model request under Moderate, so
   model keys: the agent passes the model and provider with `-m` and `-c`, and
   they reach the model only if agent commands have network access and a key.
   They run headless, nobody approves their commands, and a run without a
-  sandbox is refused. Interactive sessions, `app-server`, `mcp-server` and
-  credential commands (such as `corbanu vault`) an agent command starts are
+  sandbox is refused. Interactive sessions, `app-server` and credential
+  commands (such as `corbanu vault`) an agent command starts are
   refused.
 
 Not available yet: financial preview and approvals, isolated retrieval,

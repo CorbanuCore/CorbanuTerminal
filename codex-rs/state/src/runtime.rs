@@ -587,39 +587,68 @@ pub(super) async fn validate_applied_migrations(
     path: &Path,
     migrator: &Migrator,
 ) -> anyhow::Result<()> {
-    validate_applied_migrations_with_busy_timeout(
-        sqlite, path, migrator, /*busy_timeout*/ None,
-    )
-    .await
-}
-
-/// [`validate_applied_migrations`] whose reads wait at most `busy_timeout`
-/// (sqlx's 5 s default otherwise) for another connection's write lock, once
-/// while opening and once on the first query.
-pub(super) async fn validate_applied_migrations_with_busy_timeout(
-    sqlite: &SqliteConfig,
-    path: &Path,
-    migrator: &Migrator,
-    busy_timeout: Option<std::time::Duration>,
-) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(path).await? {
         return Ok(());
     }
-    let pool = sqlite.open_read_only_pool(path, busy_timeout).await?;
+    let pool = sqlite
+        .open_read_only_pool(path, /*busy_timeout*/ None)
+        .await?;
+    let result = match pool.acquire().await {
+        Ok(mut connection) => {
+            validate_applied_migrations_on(&mut connection, path, migrator, /*deadline*/ None).await
+        }
+        Err(err) => Err(err.into()),
+    };
+    pool.close().await;
+    result
+}
+
+/// Sets `connection`'s wait for another connection's write lock to what is
+/// left until `deadline` (none once it has passed).
+pub(super) async fn set_busy_timeout_until(
+    connection: &mut SqliteConnection,
+    deadline: Instant,
+) -> anyhow::Result<()> {
+    QueryBuilder::<Sqlite>::new("PRAGMA busy_timeout = ")
+        .push(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .as_millis(),
+        )
+        .build()
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
+}
+
+/// [`validate_applied_migrations`] on an open read-only `connection`. With a
+/// `deadline`, each query waits for a writer's lock only until then, so the
+/// whole check shares one budget instead of paying a full busy timeout per
+/// query (#2728).
+pub(super) async fn validate_applied_migrations_on(
+    connection: &mut SqliteConnection,
+    path: &Path,
+    migrator: &Migrator,
+    deadline: Option<Instant>,
+) -> anyhow::Result<()> {
+    if let Some(deadline) = deadline {
+        set_busy_timeout_until(connection, deadline).await?;
+    }
     let table_exists = sqlx::query_scalar::<_, i64>(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
     )
-    .fetch_optional(&pool)
+    .fetch_optional(&mut *connection)
     .await?
     .is_some();
     if !table_exists {
-        pool.close().await;
         return Ok(());
     }
+    if let Some(deadline) = deadline {
+        set_busy_timeout_until(connection, deadline).await?;
+    }
     let applied = sqlx::query("SELECT version, checksum FROM _sqlx_migrations ORDER BY version")
-        .fetch_all(&pool)
+        .fetch_all(&mut *connection)
         .await?;
-    pool.close().await;
     let foreign = applied
         .into_iter()
         .filter_map(|row| {
