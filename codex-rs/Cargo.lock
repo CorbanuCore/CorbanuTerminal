@@ -2023,6 +2023,7 @@ dependencies = [
  "codex-plugin",
  "codex-prompts",
  "codex-protocol",
+ "codex-provider-auth",
  "codex-queue-extension",
  "codex-rmcp-client",
  "codex-rollout",
