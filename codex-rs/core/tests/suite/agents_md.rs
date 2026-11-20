@@ -869,6 +869,7 @@ async fn denied_project_instructions_fail_thread_creation() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn symlinked_writable_root_grants_its_real_location_without_session_corruption() -> Result<()>
 {
+    use anyhow::Context as _;
     use codex_exec_server::FileSystemSandboxContext;
 
     let server = start_mock_server().await;
@@ -906,33 +907,60 @@ async fn symlinked_writable_root_grants_its_real_location_without_session_corrup
         test.config.permissions.permission_profile().clone(),
         PathUri::from_abs_path(&test.config.cwd),
     );
+    // The harness's local filesystem has no sandbox runtime; this one runs
+    // sandboxed operations the way the session's local executor does.
+    let fs: Arc<dyn codex_exec_server::ExecutorFileSystem> =
+        Arc::new(codex_exec_server::LocalFileSystem::with_runtime_paths(
+            codex_exec_server::ExecServerRuntimeOptions::new(
+                std::env::current_exe()?,
+                /*codex_linux_sandbox_exe*/ None,
+            )?,
+        ));
     for (root, name) in [
         (&visualization_root, "through-link.txt"),
         (&visualization_target, "through-real-path.txt"),
     ] {
-        test.fs()
-            .write_file(
-                &PathUri::from_host_native_path(root.join(name))?,
-                b"written".to_vec(),
-                Default::default(),
-                Some(&sandbox),
-            )
-            .await?;
+        fs.write_file(
+            &PathUri::from_host_native_path(root.join(name))?,
+            b"written".to_vec(),
+            Default::default(),
+            Some(&sandbox),
+        )
+        .await?;
         assert_eq!(std::fs::read(visualization_target.join(name))?, b"written");
     }
 
     let private_file = test.config.cwd.join("private.txt");
+    let public_file = test.config.cwd.join("public.txt");
     std::fs::write(private_file.as_path(), "private")?;
+    std::fs::write(public_file.as_path(), "public")?;
+    // Control: the same sandbox reads an ordinary file, so the error below is the denial.
+    assert_eq!(
+        fs.read_file(
+            &PathUri::from_abs_path(&public_file),
+            Default::default(),
+            Some(&sandbox),
+        )
+        .await?,
+        b"public"
+    );
+    let denial = fs
+        .read_file(
+            &PathUri::from_abs_path(&private_file),
+            Default::default(),
+            Some(&sandbox),
+        )
+        .await
+        .err()
+        .context("granting the real writable root must preserve the explicit read denial")?;
+    // A refusal, not an unrelated failure (the sandboxed helper reports
+    // denials as invalid requests).
     assert!(
-        test.fs()
-            .read_file(
-                &PathUri::from_abs_path(&private_file),
-                Default::default(),
-                Some(&sandbox),
-            )
-            .await
-            .is_err(),
-        "granting the real writable root must preserve the explicit read denial"
+        matches!(
+            denial.kind(),
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::InvalidInput
+        ) && !denial.to_string().contains("configured runtime paths"),
+        "{denial:?}"
     );
     Ok(())
 }

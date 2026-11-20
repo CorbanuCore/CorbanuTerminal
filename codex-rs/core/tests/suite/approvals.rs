@@ -1172,7 +1172,10 @@ fn scenarios() -> Vec<ScenarioSpec> {
             },
         },
         ScenarioSpec {
-            name: "python_heredoc_requested_prefix_rule_proposes_full_command",
+            // #2428/#2543 (main #2396 parity): a top-level heredoc fed to an
+            // interpreter runs a script no rule reads, so no remembered-command
+            // amendment is offered (fail closed), as on main.
+            name: "python_heredoc_requested_prefix_rule_omits_amendment",
             approval_policy: OnRequest,
             sandbox_policy: workspace_write(false),
             action: ActionKind::RunCommandWithPrefixRule {
@@ -1186,7 +1189,7 @@ fn scenarios() -> Vec<ScenarioSpec> {
             outcome: Outcome::ExecApprovalWithAmendment {
                 decision: ReviewDecision::denied("rejected by user"),
                 expected_reason: None,
-                expected_execpolicy_amendment: Some(ExpectedExecPolicyAmendment::FullCommand),
+                expected_execpolicy_amendment: None,
             },
             expectation: Expectation::CommandFailure {
                 output_contains: "rejected by user",
