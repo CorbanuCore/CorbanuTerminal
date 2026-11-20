@@ -140,8 +140,15 @@ async fn snapshot_failure_omits_credentials_and_stops_descendants(
         // included, must still carry no part of the credential.
         assert_eq!(format!("{error:#}"), expected);
         let debug = format!("{error:?}");
-        for secret in ["ghp_abcdefghijklmnopqrstuvwxyz0123456789", "GH_TOKEN", "ghp_"] {
-            assert!(!debug.contains(secret), "{secret} reached the error: {debug}");
+        for secret in [
+            "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+            "GH_TOKEN",
+            "ghp_",
+        ] {
+            assert!(
+                !debug.contains(secret),
+                "{secret} reached the error: {debug}"
+            );
         }
     }
     tokio::time::sleep(Duration::from_millis(1_100)).await;
