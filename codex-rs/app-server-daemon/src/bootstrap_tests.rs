@@ -16,6 +16,24 @@ use super::RemoteControlMode;
 use super::backend;
 use super::settings::DaemonSettings;
 
+/// Whether the updater is still reported as starting or running after a short grace.
+///
+/// A stopped updater can read as `Starting` for a moment: the pid file is gone, but a
+/// process forked by a parallel test still holds a duplicate of the reservation-lock
+/// descriptor until it execs. A real survivor (the fixture sleeps 30 s) stays reported.
+async fn updater_outlives_grace(updater: &backend::PidBackend) -> Result<bool> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        if !updater.is_starting_or_running().await? {
+            return Ok(false);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Ok(true);
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 #[tokio::test]
 async fn lifecycle_stops_old_updater_even_when_managed_binary_is_missing() -> Result<()> {
     #[derive(Debug)]
@@ -82,7 +100,7 @@ async fn lifecycle_stops_old_updater_even_when_managed_binary_is_missing() -> Re
                 .await
                 .map(|_| ()),
         };
-        let still_running = updater.is_starting_or_running().await?;
+        let still_running = updater_outlives_grace(&updater).await?;
         updater.stop().await?;
         observed.push((format!("{operation:?}"), still_running, result.is_ok()));
     }
@@ -177,7 +195,7 @@ async fn bootstrap_stops_old_updater_without_relaunching_and_keeps_daemon_workin
             })
             .await?;
         let version = daemon.run(LifecycleCommand::Version).await?;
-        let updater_running = updater.is_starting_or_running().await?;
+        let updater_running = updater_outlives_grace(&updater).await?;
         Ok::<_, anyhow::Error>((output, version, updater_running))
     })
     .await;
