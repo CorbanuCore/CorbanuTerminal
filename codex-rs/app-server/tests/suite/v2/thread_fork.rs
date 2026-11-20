@@ -930,6 +930,8 @@ async fn thread_fork_flushes_live_source_goal_progress_before_deferring() -> Res
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
+        // The host-local shell_command probe needs a host-native cwd, e.g. under wine-exec.
+        .with_local_auto_env()
         .without_managed_config()
         .build_initialized()
         .await?;
