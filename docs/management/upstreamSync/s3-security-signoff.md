@@ -211,6 +211,8 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
    gh workflow run windows-security-probes.yml --ref <branch>
    gh workflow run windows-integration-tests.yml --ref <branch>
    ```
+   Plan for macOS: a dispatched `rust-ci-core-security` run starts with a cold cache. Its first attempt here hit the 60-minute job limit, and the build alone took 37 minutes. Allow one rerun.
+
    Then rerun the three local suites with the same commands:
    - glitch: `cargo test -p codex-linux-sandbox -p codex-sandboxing`;
    - Mac: `-p codex-sandboxing` and `-p codex-exec --test all -- suite::seatbelt` at `-j6`, with at least 25% memory free;
