@@ -339,7 +339,7 @@ mod tests;
 
 /// The runtime providers of rentals that are ready or degraded, newest first.
 pub(crate) async fn list_gpu_runtime_providers_in(
-    pool: &sqlx::SqlitePool,
+    executor: impl sqlx::SqliteExecutor<'_>,
 ) -> anyhow::Result<Vec<GpuRuntimeProvider>> {
     Ok(sqlx::query_as::<_, GpuRuntimeProvider>(
         r#"
@@ -349,6 +349,6 @@ WHERE r.observed_state IN ('ready', 'degraded')
 ORDER BY p.updated_at_ms DESC
         "#,
     )
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await?)
 }

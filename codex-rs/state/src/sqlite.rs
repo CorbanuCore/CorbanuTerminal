@@ -18,8 +18,9 @@ use crate::migrations::runtime_queue_migrator;
 use crate::migrations::runtime_state_migrator;
 use crate::migrations::runtime_thread_history_migrator;
 use crate::runtime::recovery::RuntimeDbInitError;
+use crate::runtime::set_busy_timeout_until;
 use crate::runtime::validate_applied_migrations;
-use crate::runtime::validate_applied_migrations_with_busy_timeout;
+use crate::runtime::validate_applied_migrations_on;
 use crate::telemetry;
 use crate::telemetry::DbKind;
 use codex_file_system::LocalLogsDir;
@@ -346,7 +347,7 @@ impl SqliteConfig {
     /// commands such as `migrate-nfs-db` or `app-server --print-startup-config`
     /// that must not touch them. Returns no providers when no state database
     /// exists, and an error for a database with foreign migrations;
-    /// `busy_timeout` bounds the wait for a writer's lock on the query.
+    /// `busy_timeout` bounds all of its waits for a writer's lock together.
     pub async fn read_gpu_runtime_providers(
         &self,
         busy_timeout: Duration,
@@ -363,24 +364,30 @@ impl SqliteConfig {
                 _ => return Ok(Vec::new()),
             }
         };
-        // As the runtime does before using a state database: refuse one whose
-        // applied migrations this build doesn't know (another distribution's
-        // or a newer build's database), whose rows were not written under
-        // this build's validation.
-        // The check reads the database too, so it gets the same bounded wait:
-        // with sqlx's 5 s default (paid on open and on the first query), a
-        // writer holding its lock delayed every configuration load by about
-        // 10 s (#2728). Each wait is now about `busy_timeout`.
-        validate_applied_migrations_with_busy_timeout(
-            self,
-            &path,
-            &runtime_state_migrator(),
-            Some(busy_timeout),
-        )
-        .await?;
+        // #2728: every wait for a writer's lock (on open, in the migration
+        // check, in the read) comes out of one `busy_timeout` budget. Paying
+        // a full timeout at each step made a locked database delay every
+        // configuration load by several timeouts.
+        let deadline = Instant::now() + busy_timeout;
         let pool = self.open_read_only_pool(&path, Some(busy_timeout)).await?;
-        let providers =
-            crate::runtime::gpu_runtime_providers::list_gpu_runtime_providers_in(&pool).await;
+        let providers = async {
+            let mut connection = pool.acquire().await?;
+            // As the runtime does before using a state database: refuse one
+            // whose applied migrations this build doesn't know (another
+            // distribution's or a newer build's database), whose rows were
+            // not written under this build's validation.
+            validate_applied_migrations_on(
+                &mut connection,
+                &path,
+                &runtime_state_migrator(),
+                Some(deadline),
+            )
+            .await?;
+            set_busy_timeout_until(&mut connection, deadline).await?;
+            crate::runtime::gpu_runtime_providers::list_gpu_runtime_providers_in(&mut *connection)
+                .await
+        }
+        .await;
         pool.close().await;
         providers
     }
