@@ -1,0 +1,672 @@
+{
+ "phase": "upgrade",
+ "checks": {
+  "resume_exec_0_completed": true,
+  "resumed_rollout_0_extends_old_prefix": true,
+  "resume_exec_1_completed": true,
+  "resumed_rollout_1_extends_old_prefix": true,
+  "state_applied_rows_unchanged": true,
+  "state_added_exactly_0054_0069": true,
+  "state_0070_applied_before_0054_0069": true,
+  "pfterminal_goals_1.sqlite_applied_rows_unchanged": true,
+  "pfterminal_goals_1.sqlite_integrity_ok": true,
+  "pfterminal_logs_2.sqlite_applied_rows_unchanged": true,
+  "pfterminal_logs_2.sqlite_integrity_ok": true,
+  "pfterminal_memories_1.sqlite_applied_rows_unchanged": true,
+  "pfterminal_memories_1.sqlite_integrity_ok": true,
+  "pfterminal_queue_1.sqlite_integrity_ok": true,
+  "pfterminal_state_5.sqlite_applied_rows_unchanged": true,
+  "pfterminal_state_5.sqlite_integrity_ok": true,
+  "threads_survive": true,
+  "archived_rollout_kept": true,
+  "vault_auth_memory_archive_files_byte_identical": true,
+  "vault_credential_readable": true,
+  "named_accounts_listed": true,
+  "api_key_login_present": true,
+  "second_start_completed": true,
+  "second_start_adds_no_migration": true,
+  "schemas_match_fresh_candidate_home": true,
+  "no_clear_text_credentials": true
+ },
+ "observations": {
+  "resume_exec_0_completed": {
+   "exit": 0
+  },
+  "resume_exec_1_completed": {
+   "exit": 0
+  },
+  "state_added_exactly_0054_0069": [
+   [
+    54,
+    "rollout migration state"
+   ],
+   [
+    55,
+    "thread section appearance"
+   ],
+   [
+    56,
+    "projects"
+   ],
+   [
+    57,
+    "threads section empty preview indexes"
+   ],
+   [
+    58,
+    "thread artifacts"
+   ],
+   [
+    59,
+    "projects recency"
+   ],
+   [
+    60,
+    "threads originator"
+   ],
+   [
+    61,
+    "threads daybreak enabled"
+   ],
+   [
+    62,
+    "thread attachments"
+   ],
+   [
+    63,
+    "threads creator identity"
+   ],
+   [
+    64,
+    "cleanup guardian thread metadata"
+   ],
+   [
+    65,
+    "threads archive sort indexes"
+   ],
+   [
+    66,
+    "thread attachment reverse lookup"
+   ],
+   [
+    67,
+    "guardian review feedback"
+   ],
+   [
+    68,
+    "thread read state"
+   ],
+   [
+    69,
+    "threads attached parent"
+   ]
+  ],
+  "vault_auth_memory_archive_files_byte_identical": [],
+  "vault_credential_readable": {
+   "exit": 0,
+   "stderr_tail": []
+  },
+  "named_accounts_listed": {
+   "exit": 0,
+   "stdout": [
+    "anthropic\twork\tapi_key",
+    "claude-plan\tteam\tclaude_oauth_token",
+    "zai\tpersonal\tapi_key"
+   ]
+  },
+  "api_key_login_present": {
+   "exit": 0,
+   "text": [
+    "Authentication is checked when you send a request."
+   ]
+  },
+  "second_start_completed": {
+   "exit": 0
+  },
+  "schemas_match_fresh_candidate_home": {}
+ },
+ "version": "corbanu 0.1.48",
+ "binary_sha256": "76dcdba0e9d2116bc18d422160f82ef45145c7a9ec7e3bdd6b488453c08fb1fb",
+ "databases": {
+  "pfterminal_goals_1.sqlite": {
+   "integrity": "ok",
+   "migrations": [
+    [
+     1,
+     "thread goals",
+     "8ce6280244a0b4b3",
+     1
+    ],
+    [
+     2,
+     "thread goal continuation deferrals",
+     "f3ff7de2fd899148",
+     1
+    ]
+   ]
+  },
+  "pfterminal_logs_2.sqlite": {
+   "integrity": "ok",
+   "migrations": [
+    [
+     1,
+     "logs",
+     "009639eafe599be9",
+     1
+    ],
+    [
+     2,
+     "logs feedback log body",
+     "cf6c93af074a9022",
+     1
+    ]
+   ]
+  },
+  "pfterminal_memories_1.sqlite": {
+   "integrity": "ok",
+   "migrations": [
+    [
+     1,
+     "memories",
+     "a1af50da50775a70",
+     1
+    ],
+    [
+     2,
+     "consolidation progress",
+     "18f0a8dd7fe9a847",
+     1
+    ]
+   ],
+   "stage1_outputs": 0
+  },
+  "pfterminal_queue_1.sqlite": {
+   "integrity": "ok",
+   "migrations": [
+    [
+     1,
+     "queued items",
+     "cea113c9a74fe4ed",
+     1
+    ],
+    [
+     2,
+     "queued thread revisions",
+     "983a2b17b454feb0",
+     1
+    ]
+   ]
+  },
+  "pfterminal_state_5.sqlite": {
+   "integrity": "ok",
+   "migrations": [
+    [
+     1,
+     "threads",
+     "627ef19164c9bb29",
+     1
+    ],
+    [
+     2,
+     "logs",
+     "521b72cbc04c7d03",
+     1
+    ],
+    [
+     3,
+     "logs thread id",
+     "e58a2862bdb66d32",
+     1
+    ],
+    [
+     4,
+     "thread dynamic tools",
+     "8adc251366e4c7e5",
+     1
+    ],
+    [
+     5,
+     "threads cli version",
+     "1ac64f85e083e5b4",
+     1
+    ],
+    [
+     6,
+     "memories",
+     "a203fc4b597e1420",
+     1
+    ],
+    [
+     7,
+     "threads first user message",
+     "7e35a464df6d4c82",
+     1
+    ],
+    [
+     8,
+     "backfill state",
+     "aa3f287f7a448554",
+     1
+    ],
+    [
+     9,
+     "stage1 outputs rollout slug",
+     "8b469360777e6dd6",
+     1
+    ],
+    [
+     10,
+     "logs process id",
+     "8adaf1365f8e5dee",
+     1
+    ],
+    [
+     11,
+     "logs partition prune indexes",
+     "31ececbd07f04452",
+     1
+    ],
+    [
+     12,
+     "logs estimated bytes",
+     "0012a213ed25f2cf",
+     1
+    ],
+    [
+     13,
+     "threads agent nickname",
+     "05526a0900a84305",
+     1
+    ],
+    [
+     14,
+     "agent jobs",
+     "4d2fbb2442c5c5c7",
+     1
+    ],
+    [
+     15,
+     "agent jobs max runtime seconds",
+     "0eece6db59c948fa",
+     1
+    ],
+    [
+     16,
+     "memory usage",
+     "4768f743e9812937",
+     1
+    ],
+    [
+     17,
+     "phase2 selection flag",
+     "4cbdb2edfebf6040",
+     1
+    ],
+    [
+     18,
+     "phase2 selection snapshot",
+     "a4363003bc44f0a4",
+     1
+    ],
+    [
+     19,
+     "thread dynamic tools defer loading",
+     "3884c02f080f0184",
+     1
+    ],
+    [
+     20,
+     "threads model reasoning effort",
+     "07673f4859f74013",
+     1
+    ],
+    [
+     21,
+     "thread spawn edges",
+     "ea1aebe4f5a1d56c",
+     1
+    ],
+    [
+     22,
+     "threads agent path",
+     "160fe01b757dd06f",
+     1
+    ],
+    [
+     23,
+     "drop logs",
+     "e6c748a9a18286e4",
+     1
+    ],
+    [
+     24,
+     "remote control enrollments",
+     "e92aa526b1f36e26",
+     1
+    ],
+    [
+     25,
+     "thread timestamps millis",
+     "d6fb51d79941b93c",
+     1
+    ],
+    [
+     26,
+     "thread dynamic tools namespace",
+     "6c62a325d3b9ca8e",
+     1
+    ],
+    [
+     27,
+     "threads cwd sort indexes",
+     "d84dca6a039e004c",
+     1
+    ],
+    [
+     28,
+     "device key bindings",
+     "ef44adaa291e40df",
+     1
+    ],
+    [
+     29,
+     "thread goals",
+     "e9ec76f97dbf41ce",
+     1
+    ],
+    [
+     30,
+     "threads thread source",
+     "80c1cdacd4520b42",
+     1
+    ],
+    [
+     31,
+     "drop device key bindings",
+     "943675a9b3dc92d0",
+     1
+    ],
+    [
+     32,
+     "threads preview",
+     "3c01d615c5e3aba0",
+     1
+    ],
+    [
+     33,
+     "thread goal stopped statuses",
+     "4904aae354e3d8ce",
+     1
+    ],
+    [
+     34,
+     "drop thread goals",
+     "d6fea739c76ebdef",
+     1
+    ],
+    [
+     35,
+     "drop memory tables",
+     "d7b56acb07c96858",
+     1
+    ],
+    [
+     36,
+     "threads visible sort indexes",
+     "6381f7bb4c36be41",
+     1
+    ],
+    [
+     37,
+     "remote control enrollments enabled",
+     "f6a5ab0db36bb9e4",
+     1
+    ],
+    [
+     38,
+     "external agent config imports",
+     "e7778522cbe529f5",
+     1
+    ],
+    [
+     39,
+     "threads recency at",
+     "c217b3d14c08c236",
+     1
+    ],
+    [
+     40,
+     "provider request state",
+     "1769289c7a064a4b",
+     1
+    ],
+    [
+     41,
+     "provider request cache usage",
+     "d339c309a93ed2bf",
+     1
+    ],
+    [
+     42,
+     "gpu rentals",
+     "f15e2c57acc7fed6",
+     1
+    ],
+    [
+     43,
+     "gpu provisioning overlay",
+     "a788d59d453455e6",
+     1
+    ],
+    [
+     44,
+     "gpu runtime provider context window",
+     "ec788e1f9c414b53",
+     1
+    ],
+    [
+     45,
+     "agent mailbox",
+     "07a48f39ad16bef7",
+     1
+    ],
+    [
+     46,
+     "threads history mode",
+     "a7a99674f90a4318",
+     1
+    ],
+    [
+     47,
+     "threads name",
+     "0dc734dbe4cbcc5a",
+     1
+    ],
+    [
+     48,
+     "drop agent jobs",
+     "cfdc4fd47328d1b6",
+     1
+    ],
+    [
+     49,
+     "threads is pinned",
+     "605128e722bd2521",
+     1
+    ],
+    [
+     50,
+     "external agent config imports provider id",
+     "5d29223bd1cafe45",
+     1
+    ],
+    [
+     51,
+     "threads section",
+     "a7fadc8caea8b6ab",
+     1
+    ],
+    [
+     52,
+     "threads section order",
+     "63addf6115c3fb1a",
+     1
+    ],
+    [
+     53,
+     "provider request key salt",
+     "1996e53b75571794",
+     1
+    ],
+    [
+     70,
+     "provider reset hint",
+     "831937b876cfd94a",
+     1
+    ],
+    [
+     54,
+     "rollout migration state",
+     "1ae117e4ab40813d",
+     1
+    ],
+    [
+     55,
+     "thread section appearance",
+     "9d298333f7523010",
+     1
+    ],
+    [
+     56,
+     "projects",
+     "faf45c392bb85720",
+     1
+    ],
+    [
+     57,
+     "threads section empty preview indexes",
+     "d2802e96f5fc1900",
+     1
+    ],
+    [
+     58,
+     "thread artifacts",
+     "23360a03a7fc307c",
+     1
+    ],
+    [
+     59,
+     "projects recency",
+     "071e96313d402e4c",
+     1
+    ],
+    [
+     60,
+     "threads originator",
+     "e86ef7ccbcc891b1",
+     1
+    ],
+    [
+     61,
+     "threads daybreak enabled",
+     "e62a9977d99c7eab",
+     1
+    ],
+    [
+     62,
+     "thread attachments",
+     "6daadc5527b3f57f",
+     1
+    ],
+    [
+     63,
+     "threads creator identity",
+     "5de44fac5505249b",
+     1
+    ],
+    [
+     64,
+     "cleanup guardian thread metadata",
+     "729562c57bfa8b43",
+     1
+    ],
+    [
+     65,
+     "threads archive sort indexes",
+     "68467af3ce1ff097",
+     1
+    ],
+    [
+     66,
+     "thread attachment reverse lookup",
+     "4297dffb4fb308f0",
+     1
+    ],
+    [
+     67,
+     "guardian review feedback",
+     "d7f0cf0a69fa7199",
+     1
+    ],
+    [
+     68,
+     "thread read state",
+     "4a8337048bb958a2",
+     1
+    ],
+    [
+     69,
+     "threads attached parent",
+     "dab8b7c8390f9c76",
+     1
+    ]
+   ],
+   "threads": [
+    [
+     "01a1f705-6adc-7240-a5d8-2dcb309cbed2",
+     "Reply for baseline exec 1",
+     1,
+     "/work/os-home/.corbanu/archived_sessions/rollout-2026-11-20T03-34-49-01a1f705-6adc-7240-a5d8-2dcb309cbed2.jsonl",
+     "release-fixture"
+    ],
+    [
+     "01a1f705-6b74-7970-889c-0452a769e220",
+     "Reply for baseline exec 2",
+     0,
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-49-01a1f705-6b74-7970-889c-0452a769e220.jsonl",
+     "release-fixture"
+    ],
+    [
+     "01a1f705-6cc4-7d90-8e5c-7151e4e16a41",
+     "Reply for baseline tui",
+     0,
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-50-01a1f705-6cc4-7d90-8e5c-7151e4e16a41.jsonl",
+     "release-fixture"
+    ]
+   ],
+   "provider_request_state_columns": [
+    "provider_id",
+    "model",
+    "key_fingerprint",
+    "cooldown_until_ms",
+    "lease_owner",
+    "lease_until_ms",
+    "last_status",
+    "last_request_id",
+    "last_input_tokens",
+    "last_cached_input_tokens",
+    "last_request_bytes",
+    "last_thread_id",
+    "last_turn_id",
+    "consecutive_429_count",
+    "updated_at_ms",
+    "last_provider_input_tokens",
+    "last_provider_cached_input_tokens",
+    "provider_reset_at_ms"
+   ]
+  }
+ },
+ "secret_scan_hits": [],
+ "config_changed": true,
+ "requests": 6
+}
