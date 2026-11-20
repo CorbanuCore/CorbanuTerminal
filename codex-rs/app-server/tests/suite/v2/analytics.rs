@@ -441,6 +441,26 @@ async fn multi_agent_v2_tools_emit_collaborator_analytics() -> Result<()> {
         .without_managed_config()
         .build_initialized()
         .await?;
+    // Keep the worker's follow-up turn in flight until `interrupt_agent` reaches it.
+    // Without this, a fast child can finish first and the interrupt then reports the
+    // worker as idle without emitting its activity item. The interrupt aborts this
+    // request, so the delay is a fixture rather than something the test waits for.
+    Mock::given(method("POST"))
+        .and(path_regex(".*/responses$"))
+        .and(|request: &wiremock::Request| {
+            let body = String::from_utf8_lossy(&request.body);
+            body.contains("Message Type: NEW_TASK") && body.contains("PRIVATE_FOLLOWUP")
+        })
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_string(responses::sse(vec![responses::ev_completed(
+                    "response-followup",
+                )]))
+                .set_delay(Duration::from_secs(60)),
+        )
+        .mount(&server)
+        .await;
     let thread = app_server
         .start_thread(ThreadStartParams::default())
         .await?
