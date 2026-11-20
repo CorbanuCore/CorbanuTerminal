@@ -22,7 +22,9 @@ use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
+use super::super::CONNECT_TIMEOUT;
 use super::super::ExecServerError;
+use super::super::INITIALIZE_TIMEOUT;
 use super::super::LazyRemoteExecServerClient;
 use super::super::NetworkPolicyDecisionController;
 use super::accept_websocket;
@@ -123,7 +125,7 @@ async fn abandoned_process_start_unregisters_and_cleans_up() {
     });
 
     let client = LazyRemoteExecServerClient::new(
-        ExecServerTransportParams::websocket_url(websocket_url, Duration::from_secs(1)),
+        ExecServerTransportParams::websocket_url(websocket_url, CONNECT_TIMEOUT),
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
     .get()
@@ -298,8 +300,8 @@ async fn policy_requests_use_process_decider_and_cancel_on_unregister() {
     let client = LazyRemoteExecServerClient::new(
         ExecServerTransportParams::WebSocketUrl {
             websocket_url,
-            connect_timeout: Duration::from_secs(1),
-            initialize_timeout: Duration::from_secs(1),
+            connect_timeout: CONNECT_TIMEOUT,
+            initialize_timeout: INITIALIZE_TIMEOUT,
         },
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
@@ -420,7 +422,7 @@ async fn executor_denials_reach_the_process_observer() {
     });
 
     let client = LazyRemoteExecServerClient::new(
-        ExecServerTransportParams::websocket_url(websocket_url, Duration::from_secs(1)),
+        ExecServerTransportParams::websocket_url(websocket_url, CONNECT_TIMEOUT),
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
     .get()
@@ -504,7 +506,7 @@ async fn denial_reports_must_match_the_observer() {
     });
 
     let client = LazyRemoteExecServerClient::new(
-        ExecServerTransportParams::websocket_url(websocket_url, Duration::from_secs(1)),
+        ExecServerTransportParams::websocket_url(websocket_url, CONNECT_TIMEOUT),
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
     .get()
@@ -598,7 +600,7 @@ async fn malformed_denial_drops_the_connection() {
     });
 
     let client = LazyRemoteExecServerClient::new(
-        ExecServerTransportParams::websocket_url(websocket_url, Duration::from_secs(1)),
+        ExecServerTransportParams::websocket_url(websocket_url, CONNECT_TIMEOUT),
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
     .get()
