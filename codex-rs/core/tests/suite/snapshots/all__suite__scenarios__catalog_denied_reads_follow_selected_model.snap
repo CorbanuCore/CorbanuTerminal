@@ -16,13 +16,14 @@ Settings:
   stream: true
   tool_choice: "auto"
 -- request 1 (request) --
-00:additional_tools/developer (2; hash=f4b6a8a6c54dc442):
-        - namespace/functions; hash=ce01915b77cef9ee
+00:additional_tools/developer (2; hash=8968f8420fe730c8):
+        - namespace/functions; hash=02834f50376fc28d
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/view_image
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=8332d23712eed5fb
+          - function/list_models
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=772fe5057ec7c0ae
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -55,13 +56,14 @@ Settings:
 Settings: relative to window 1
   model: "catalog-writable-roots-b"
 -- request 2 (request) --
-00:additional_tools/developer (2; hash=f4b6a8a6c54dc442):
-        - namespace/functions; hash=ce01915b77cef9ee
+00:additional_tools/developer (2; hash=8968f8420fe730c8):
+        - namespace/functions; hash=02834f50376fc28d
           - function/exec_command
           - function/write_stdin
           - function/request_user_input
           - function/view_image
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=8332d23712eed5fb
+          - function/list_models
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=772fe5057ec7c0ae
           - function/close_agent
           - function/resume_agent
           - function/send_input
@@ -91,8 +93,8 @@ Settings: relative to window 1
     Inspect the writable workspace.
 05:message/developer:
     This is an incremental tools update. Previously declared tools remain available for direct calls unless ...here, its latest definition replaces the earlier one. [hash=bceb65fad1afdf9c]
-06:additional_tools/developer (1; hash=1c004b1ad41a9afc):
-        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=b5b55102a1887ce8
+06:additional_tools/developer (1; hash=c241b287dc6ab5a9):
+        - namespace/multi_agent_v1: Tools for spawning and managing sub-agents.; hash=a852454f138bbdd3
           - function/spawn_agent
 07:message/developer:
     <model_instructions>
