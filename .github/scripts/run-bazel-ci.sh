@@ -415,7 +415,8 @@ else
   # Ephemeral runners already retain their outputs in the execution root.
   # Avoid a second copy in the default disk cache when `ci` is not selected.
   bazel_run_args+=(--keep_going --disk_cache=)
-  if [[ "${GITHUB_ACTIONS:-}" == "true" && "${RUNNER_OS:-}" == "Linux" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == "true" &&
+    ( "${RUNNER_OS:-}" == "Linux" || "${RUNNER_OS:-}" == "Windows" ) ]]; then
     # Leave headroom for the runner and Bazel while large Rust actions overlap.
     bazel_run_args+=("--local_resources=memory=HOST_RAM*.6" --jobs=8)
   fi

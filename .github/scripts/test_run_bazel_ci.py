@@ -176,7 +176,7 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertIn("--keep_going", args)
             self.assertNotIn("--config=windows-native-tests", args)
 
-    def test_local_linux_ci_resource_limits_preserve_other_callers(self) -> None:
+    def test_local_ci_resource_limits_preserve_other_callers(self) -> None:
         script = Path(__file__).with_name("run-bazel-ci.sh")
         cases = (
             ("Linux", "true", False, 0, True),
@@ -184,7 +184,9 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             ("Linux", "true", True, 0, False),
             ("Linux", "false", False, 0, False),
             ("Linux", None, False, 0, False),
-            ("Windows", "true", False, 0, False),
+            ("Windows", "true", False, 0, True),
+            ("Windows", "true", False, 3, True),
+            ("Windows", "false", False, 0, False),
             ("Windows", "true", True, 0, False),
             ("macOS", "true", False, 0, False),
         )
