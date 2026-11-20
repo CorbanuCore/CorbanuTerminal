@@ -1530,6 +1530,24 @@ impl ToolOrchestrator {
                 }
                 let sandbox_startup_failure =
                     is_sandbox_startup_failure(initial_sandbox, output.as_ref());
+                // D639(a) (#2808): an ordinary denial stays final for a tool
+                // that keeps it so (unified exec): the approval does not turn
+                // it into a retry outside the sandbox, however fast the
+                // denial is seen. A network prompt and a sandbox that failed
+                // to start keep their own retries.
+                if tool.keeps_sandbox_denial_final()
+                    && network_approval_context.is_none()
+                    && !sandbox_startup_failure
+                {
+                    otel.sandbox_outcome(
+                        &otel_tn,
+                        otel_ci,
+                        "denied",
+                        initial_duration,
+                        /*escalated_duration*/ None,
+                    );
+                    return Err(ToolError::Codex(err));
+                }
                 // #874: nor while the git check's findings are still there
                 // (an approval doesn't lift the rules then); the person is
                 // told why.

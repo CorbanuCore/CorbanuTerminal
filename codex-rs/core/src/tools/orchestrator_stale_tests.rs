@@ -97,6 +97,8 @@ struct Probe {
     /// Whether each run, in order, is denied by the sandbox (later ones are
     /// not).
     sandbox_denies: Vec<bool>,
+    /// D639(a) (#2808): as unified exec, an ordinary denial is final.
+    keeps_denial_final: bool,
     runs: usize,
 }
 
@@ -142,6 +144,10 @@ impl Approvable<Req> for Probe {
 impl crate::tools::sandboxing::Sandboxable for Probe {
     fn sandbox_preference(&self) -> codex_sandboxing::SandboxablePreference {
         codex_sandboxing::SandboxablePreference::Auto
+    }
+
+    fn keeps_sandbox_denial_final(&self) -> bool {
+        self.keeps_denial_final
     }
 }
 
@@ -203,6 +209,7 @@ struct Case {
     while_asked: Vec<Transition>,
     while_running: Vec<Transition>,
     sandbox_denies: Vec<bool>,
+    keeps_denial_final: bool,
     approval_policy: AskForApproval,
     additional: Option<codex_protocol::models::AdditionalPermissionProfile>,
     /// #1057: the request is prepared as a tool handler does: a session
@@ -223,6 +230,7 @@ impl Default for Case {
             while_asked: Vec::new(),
             while_running: Vec::new(),
             sandbox_denies: Vec::new(),
+            keeps_denial_final: false,
             approval_policy: AskForApproval::OnRequest,
             additional: None,
             handler: None,
@@ -302,6 +310,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         requirement: case.requirement,
         while_running: case.while_running,
         sandbox_denies: case.sandbox_denies,
+        keeps_denial_final: case.keeps_denial_final,
         runs: 0,
     };
     let tool_ctx = ToolCtx {
@@ -493,6 +502,47 @@ async fn issue_1001_unprompted_retry_after_a_transition_is_not_run() {
     assert_eq!(result, Ok(()));
     assert_eq!(probe.asked, vec![first_prompt()]);
     assert_eq!(probe.runs, 2);
+}
+
+/// D639(a) (#2808): where an ordinary sandbox denial is final (unified
+/// exec), the retry outside the sandbox that the first approval would have
+/// let run unasked (above) is not run, nor offered to a run that skipped the
+/// prompt: the denial stands.
+#[tokio::test]
+async fn issue_2808_a_final_denial_is_not_retried_outside_the_sandbox() {
+    let (probe, result) = run_probe(Case {
+        sandbox_denies: vec![true],
+        keeps_denial_final: true,
+        approval_policy: AskForApproval::UnlessTrusted,
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(
+        probe.asked,
+        vec![first_prompt()],
+        "approved once, before it ran"
+    );
+    assert_eq!(probe.runs, 1, "not retried");
+
+    let (probe, result) = run_probe(Case {
+        requirement: ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+        sandbox_denies: vec![true],
+        keeps_denial_final: true,
+        approval_policy: AskForApproval::UnlessTrusted,
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(
+        probe.asked,
+        Vec::<Option<String>>::new(),
+        "no retry offered"
+    );
+    assert_eq!(probe.runs, 1, "not retried");
 }
 
 /// D51 (#1001): a request carrying additional permissions (a handler adds

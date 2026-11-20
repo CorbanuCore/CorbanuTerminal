@@ -456,6 +456,13 @@ pub(crate) trait Sandboxable {
     fn escalate_on_failure(&self) -> bool {
         true
     }
+    /// D639(a) (#2808): whether an ordinary sandbox denial of this tool's
+    /// run is final: no retry outside the sandbox, approved before or after.
+    /// A network prompt and a sandbox that failed to start keep their own
+    /// retries.
+    fn keeps_sandbox_denial_final(&self) -> bool {
+        false
+    }
 }
 
 pub(crate) struct ToolCtx {
