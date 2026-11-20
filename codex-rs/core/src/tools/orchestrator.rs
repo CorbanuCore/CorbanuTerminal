@@ -1365,8 +1365,15 @@ impl ToolOrchestrator {
                     );
                     return Err(ToolError::Codex(err));
                 }
-                let sandbox_startup_failure =
-                    is_sandbox_startup_failure(initial_sandbox, output.as_ref());
+                // #2820 (D747): decided by the launcher, never by what the
+                // command printed (`sandbox_failed_to_start`).
+                let sandbox_startup_failure = sandbox_failed_to_start(
+                    &initial_attempt,
+                    tool.local_search_path(req),
+                    tool.command_cwd(req).map(PathUri::from),
+                    output.as_ref(),
+                )
+                .await;
                 // #874: nor while the git check's findings are still there
                 // (an approval doesn't lift the rules then); the person is
                 // told why.
@@ -1387,8 +1394,9 @@ impl ToolOrchestrator {
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
                 // surface a concise sandbox denial that preserves the original
                 // output. Exception: if the platform sandbox itself failed to
-                // start after an explicit OnRequest approval, the approval is
-                // enough to retry unsandboxed when doing so would not drop
+                // start after an explicit OnRequest approval, the person may be
+                // asked again (#2820: never retried on that approval alone)
+                // to retry unsandboxed when doing so would not drop
                 // denied-read enforcement, nor (#540) leave a kept sandbox
                 // outside a protected action's fresh approval
                 // (`retry_may_leave_sandbox`).
@@ -1455,14 +1463,13 @@ impl ToolOrchestrator {
                 // Strict auto-review approval covers the sandboxed attempt only;
                 // retrying without the sandbox requires a fresh guardian review.
                 // A post-taint approval covered the sandboxed attempt only.
+                // #2820 (D747): a sandbox that failed to start is never retried
+                // outside it on an earlier approval: the person is asked
+                // again, once only.
                 let bypass_retry_approval = !strict_auto_review
                     && post_taint.is_none()
-                    && (tool.should_bypass_approval(approval_policy, already_approved)
-                        || allow_on_request_sandbox_startup_retry(
-                            approval_policy,
-                            already_approved,
-                            sandbox_startup_failure,
-                        ))
+                    && !sandbox_startup_failure
+                    && tool.should_bypass_approval(approval_policy, already_approved)
                     && network_approval_context.is_none();
                 // D50: a retry due on an approval from before a security
                 // transition (one committed while the first attempt ran) is
@@ -1479,6 +1486,19 @@ impl ToolOrchestrator {
                     return Err(ToolError::Codex(err));
                 }
                 if !bypass_retry_approval {
+                    // #2820 (D747): only a person answers a retry after the
+                    // sandbox failed to start; refused where no person may
+                    // be asked (automatic review is required).
+                    if sandbox_startup_failure && !person_may_answer(strict_auto_review, turn_ctx) {
+                        otel.sandbox_outcome(
+                            &otel_tn,
+                            otel_ci,
+                            "denied",
+                            initial_duration,
+                            /*escalated_duration*/ None,
+                        );
+                        return Err(ToolError::Rejected(STARTUP_RETRY_NEEDS_PERSON.to_string()));
+                    }
                     let approval_ctx = ApprovalCtx {
                         session: &tool_ctx.session,
                         turn: &tool_ctx.turn,
@@ -1488,7 +1508,9 @@ impl ToolOrchestrator {
                             None => retry_reason,
                         }),
                         network_approval_context: network_approval_context.clone(),
-                        fresh_human_authority: post_taint.is_some(),
+                        // #2820 (D747): for this run only: no hook allows it,
+                        // no "don't ask again", nothing remembered or reused.
+                        fresh_human_authority: post_taint.is_some() || sandbox_startup_failure,
                     };
 
                     let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
@@ -1511,8 +1533,9 @@ impl ToolOrchestrator {
                     if let Some(action) = &post_taint {
                         post_taint_recheck(action, tool_ctx)?;
                     }
-                    // Issue #540: leaving the sandbox here takes a person.
-                    if keeps_sandbox
+                    // Issue #540: leaving the sandbox here takes a person;
+                    // #2820 (D747): so does any retry after it failed to start.
+                    if (keeps_sandbox || sandbox_startup_failure)
                         && unsandboxed_allowed
                         && retry_approved_by != ApprovalResolutionSource::User
                     {
@@ -2825,7 +2848,108 @@ fn allow_on_request_sandbox_startup_retry(
         && sandbox_startup_failure
 }
 
-fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput) -> bool {
+/// #2820 (D747): why a retry after the sandbox failed to start is refused
+/// where no person may answer it.
+const STARTUP_RETRY_NEEDS_PERSON: &str = "the sandbox failed to start; running outside it \
+     needs a person's approval, and this session requires automatic review";
+
+/// #2820 (D747): whether a person may answer this turn's prompts (not where
+/// automatic review is required).
+fn person_may_answer(
+    strict_auto_review: bool,
+    turn: &crate::session::turn_context::TurnContext,
+) -> bool {
+    !strict_auto_review
+        && turn
+            .config
+            .config_layer_stack
+            .requirements()
+            .approvals_reviewer
+            .can_set(&codex_config::types::ApprovalsReviewer::User)
+            .is_ok()
+}
+
+/// #2820: the longest the launcher probe may take.
+const SANDBOX_START_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// #2820 (D747, as sync #2834): whether the platform sandbox itself failed
+/// to start for `attempt`. A command can print a startup failure's text and
+/// exit, so its output only says where to look: the launcher is then run
+/// once more, as the command's run started it (the same sandbox, the `PATH`
+/// it finds the system bubblewrap on, the folder) but with a command that
+/// prints nothing (`true`), and the sandbox failed to start only when that
+/// probe fails with a startup failure's text too, which only the launcher
+/// can have written. Anything else (the probe ran, timed out or could not be
+/// prepared, or the run's `PATH` is unknown, as for a patch or a remote run)
+/// is an ordinary denial; so is a probe that needs the managed network proxy
+/// it is not given. Linux (bubblewrap) only.
+async fn sandbox_failed_to_start(
+    attempt: &SandboxAttempt<'_>,
+    search_path: Option<&str>,
+    command_cwd: Option<PathUri>,
+    output: &ExecToolCallOutput,
+) -> bool {
+    if !has_sandbox_startup_marker(attempt.sandbox, output) {
+        return false;
+    }
+    let Some(search_path) = search_path else {
+        return false;
+    };
+    let Some(probe) = probe_sandbox_start(attempt, search_path, command_cwd).await else {
+        return false;
+    };
+    let failed = probe.exit_code != 0 && has_sandbox_startup_marker(attempt.sandbox, &probe);
+    tracing::info!(
+        probe_exit_code = probe.exit_code,
+        failed,
+        "#2820: sandbox startup probe after a startup failure's text"
+    );
+    failed
+}
+
+/// #2820: runs `true` through `attempt`'s sandbox launcher, started with
+/// only `search_path` as its `PATH` in `command_cwd` (else the sandbox's
+/// folder); its output, or `None` when the probe could not be prepared, did
+/// not finish or found no `true` to run.
+async fn probe_sandbox_start(
+    attempt: &SandboxAttempt<'_>,
+    search_path: &str,
+    command_cwd: Option<PathUri>,
+) -> Option<ExecToolCallOutput> {
+    let program = ["/usr/bin/true", "/bin/true"]
+        .into_iter()
+        .find(|program| std::path::Path::new(program).is_file())?;
+    let command = codex_sandboxing::SandboxCommand {
+        program: program.into(),
+        args: Vec::new(),
+        cwd: command_cwd.unwrap_or_else(|| attempt.sandbox_cwd.clone()),
+        env: std::collections::HashMap::from([("PATH".to_string(), search_path.to_string())]),
+        managed_network: None,
+        additional_permissions: None,
+    };
+    let options = crate::sandboxing::ExecOptions {
+        expiration: crate::exec::ExecExpiration::Timeout(SANDBOX_START_PROBE_TIMEOUT),
+        capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+    };
+    let request = attempt
+        .env_for(
+            command, options, /*network*/ None, /*environment_id*/ None,
+        )
+        .ok()?;
+    match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
+        Ok(output) => Some(output),
+        Err(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
+                Some(output.as_ref().clone())
+            }
+            _ => None,
+        },
+    }
+}
+
+/// Whether `output` carries a bubblewrap startup failure's text. Never
+/// enough on its own (#2820): the command may have printed it.
+fn has_sandbox_startup_marker(sandbox: SandboxType, output: &ExecToolCallOutput) -> bool {
     if sandbox != SandboxType::LinuxSeccomp {
         return false;
     }
@@ -2836,13 +2960,24 @@ fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput)
     let text =
         format!("{}\n{}", output.stderr.text, output.aggregated_output.text).to_ascii_lowercase();
 
+    // #2820 follow-up: bubblewrap's own wordings, from its source. Where it
+    // may not create a user namespace it says "No permissions to creating
+    // new namespace" (0.11.x and earlier), "... to create a new namespace"
+    // (later, and the bundled copy) or, patched by Debian and Ubuntu (0.9.0
+    // on glitch), "... to create new namespace". Its loopback setup can also
+    // fail before the RTM_NEW* steps.
     const STARTUP_FAILURE_MARKERS: &[&str] = &[
         "bubblewrap is unavailable",
         "failed to exec bundled bubblewrap",
         "failed to exec system bubblewrap",
+        "loopback: failed to look up lo",
+        "loopback: failed to create netlink_route socket",
+        "loopback: failed to bind netlink_route socket",
         "loopback: failed rtm_newaddr",
         "loopback: failed rtm_newlink",
+        "no permissions to creating new namespace",
         "no permissions to create a new namespace",
+        "no permissions to create new namespace",
         "setting up uid map: permission denied",
         "creating new namespace failed",
         "cannot create user namespace",
@@ -2929,36 +3064,51 @@ mod tests {
 
     #[test]
     fn linux_sandbox_startup_failure_is_classified_narrowly() {
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
         ));
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bubblewrap is unavailable: no system bwrap was found"),
         ));
         // #563: the helper's refusal when no bubblewrap is found.
         #[cfg(target_os = "linux")]
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output(codex_sandboxing::BWRAP_UNAVAILABLE_MESSAGE),
         ));
-        assert!(!is_sandbox_startup_failure(
+        // #2820 follow-up: bubblewrap's wordings where it may not create a
+        // user namespace, by version, and its earlier loopback steps.
+        for wording in [
+            "bwrap: No permissions to creating new namespace, likely because the kernel does not allow non-privileged user namespaces. On e.g. debian this can be enabled with 'sysctl kernel.unprivileged_userns_clone=1'.",
+            "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces. On e.g. debian this can be enabled with 'sysctl kernel.unprivileged_userns_clone=1'.",
+            "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces. See <https://deb.li/bubblewrap> or <file:///usr/share/doc/bubblewrap/README.Debian.gz>.",
+            "bwrap: loopback: Failed to look up lo: No such device",
+            "bwrap: loopback: Failed to create NETLINK_ROUTE socket: Operation not permitted",
+            "bwrap: loopback: Failed to bind NETLINK_ROUTE socket: Operation not permitted",
+        ] {
+            assert!(
+                has_sandbox_startup_marker(SandboxType::LinuxSeccomp, &denied_output(wording)),
+                "{wording}"
+            );
+        }
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("sandbox fails to start"),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &output_with_streams(
                 "command ran before failing",
                 "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
             ),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bash: ./script.sh: Permission denied"),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::None,
             &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
         ));

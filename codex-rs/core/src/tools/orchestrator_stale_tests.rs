@@ -65,6 +65,17 @@ struct Probe {
     /// not).
     sandbox_denies: Vec<bool>,
     asked: Vec<Option<String>>,
+    /// #2820: whether each prompt, in order, was for a person only
+    /// (`fresh_human_authority`: no hook, no "don't ask again", nothing
+    /// remembered).
+    fresh: Vec<bool>,
+    /// #2820: what a denied run printed (its stderr), if anything.
+    denial_text: Option<&'static str>,
+    /// #2820: asks for a retry outside the sandbox where the shell tools do
+    /// (by the approval policy), not under every policy.
+    sandbox_approval_by_policy: bool,
+    /// #2820: the `PATH` it runs with, if known.
+    search_path: Option<&'static str>,
     runs: usize,
     revocations: RevocationState,
     level: SecurityLevel,
@@ -130,8 +141,13 @@ impl Approvable<Req> for Probe {
         Some(self.requirement.clone())
     }
 
-    fn wants_no_sandbox_approval(&self, _policy: AskForApproval) -> bool {
-        true
+    fn wants_no_sandbox_approval(&self, policy: AskForApproval) -> bool {
+        !self.sandbox_approval_by_policy
+            || match policy {
+                AskForApproval::UnlessTrusted => true,
+                AskForApproval::Never | AskForApproval::OnRequest => false,
+                AskForApproval::Granular(granular_config) => granular_config.sandbox_approval,
+            }
     }
 
     fn start_approval_async<'a>(
@@ -142,6 +158,7 @@ impl Approvable<Req> for Probe {
         // A person is shown the prompt (not a remembered answer).
         crate::tools::sandboxing::note_person_asked();
         self.asked.push(ctx.retry_reason);
+        self.fresh.push(ctx.fresh_human_authority);
         if !self.while_asked.is_empty() {
             let transition = self.while_asked.remove(0);
             self.apply(transition);
@@ -185,6 +202,10 @@ impl ToolRuntime<Req, ()> for Probe {
         None
     }
 
+    fn local_search_path<'a>(&self, _req: &'a Req) -> Option<&'a str> {
+        self.search_path
+    }
+
     async fn run(
         &mut self,
         _req: &Req,
@@ -198,9 +219,14 @@ impl ToolRuntime<Req, ()> for Probe {
         let denied = self.sandbox_denies.get(self.runs).copied().unwrap_or(false);
         self.runs += 1;
         if denied {
+            let text = self.denial_text.unwrap_or_default();
             return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
                 output: Box::new(ExecToolCallOutput {
                     exit_code: 1,
+                    stderr: codex_protocol::exec_output::StreamOutput::new(text.to_string()),
+                    aggregated_output: codex_protocol::exec_output::StreamOutput::new(
+                        text.to_string(),
+                    ),
                     ..Default::default()
                 }),
                 network_policy_decision: None,
@@ -228,6 +254,14 @@ struct Case {
     /// grant of network access (when `granted`) is read into it, then
     /// `after_handler` is committed before the orchestrator starts.
     handler: Option<Handler>,
+    /// #2820: what a denied run printed.
+    denial_text: Option<&'static str>,
+    /// #2820: the sandbox launcher (`codex_linux_sandbox_exe`).
+    sandbox_exe: Option<std::path::PathBuf>,
+    /// #2820: as `Probe::sandbox_approval_by_policy`.
+    sandbox_approval_by_policy: bool,
+    /// #2820: the `PATH` the command runs with (`local_search_path`).
+    search_path: Option<&'static str>,
 }
 
 struct Handler {
@@ -245,13 +279,32 @@ impl Default for Case {
             approval_policy: AskForApproval::OnRequest,
             additional: None,
             handler: None,
+            denial_text: None,
+            sandbox_exe: None,
+            sandbox_approval_by_policy: false,
+            search_path: None,
         }
     }
 }
 
 /// Runs the probe; the error is its message, or "sandbox denied".
 async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
-    let (session, turn, _events) = make_session_and_context_with_rx().await;
+    let (session, turn, _events, _home) = match case.sandbox_exe {
+        // #2820: a session whose sandbox launcher is `sandbox_exe`.
+        Some(sandbox_exe) => {
+            let home = tempfile::tempdir().expect("temporary Corbanu home");
+            let cwd = crate::session::tests::kept_test_cwd();
+            let mut config = crate::session::tests::build_test_config(home.path(), &cwd).await;
+            config.codex_linux_sandbox_exe = Some(sandbox_exe);
+            let (session, turn) =
+                crate::session::tests::make_session_and_context_for_config(config).await;
+            (Arc::new(session), Arc::new(turn), None, Some(home))
+        }
+        None => {
+            let (session, turn, events) = make_session_and_context_with_rx().await;
+            (session, turn, Some(events), None)
+        }
+    };
     let controller = initialize_policy(&session);
     let mut probe = Probe {
         session: Arc::clone(&session),
@@ -261,6 +314,10 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         while_running: case.while_running,
         sandbox_denies: case.sandbox_denies,
         asked: Vec::new(),
+        fresh: Vec::new(),
+        denial_text: case.denial_text,
+        sandbox_approval_by_policy: case.sandbox_approval_by_policy,
+        search_path: case.search_path,
         runs: 0,
         revocations: RevocationState::new(),
         level: SecurityLevel::Permissive,
@@ -556,4 +613,157 @@ async fn issue_1057_handler_window_controls() {
     assert_eq!(result, Ok(()));
     assert_eq!(probe.asked, vec![None]);
     assert_eq!(probe.runs, 1);
+}
+
+/// #2820: bubblewrap's message where it cannot set up a user namespace.
+#[cfg(target_os = "linux")]
+const UID_MAP_DENIED: &str = "bwrap: setting up uid map: Permission denied\n";
+
+/// #2820: a folder only the command's own `PATH` has.
+#[cfg(target_os = "linux")]
+const RUN_PATH_DIR: &str = "/corbanu-issue-2820-run-path";
+
+/// #2820: the `PATH` the command runs with.
+#[cfg(target_os = "linux")]
+const RUN_PATH: &str = "/usr/bin:/bin:/corbanu-issue-2820-run-path";
+
+/// #2820: a sandbox launcher stand-in in `dir`. One that `starts` runs the
+/// command after `--`, as a sandbox that starts does, when started with the
+/// command's `PATH` (where the helper finds the system bubblewrap; with any
+/// other it fails as below); the other fails as bubblewrap does without
+/// user namespaces, whatever the command.
+#[cfg(target_os = "linux")]
+fn fake_launcher(dir: &std::path::Path, starts: bool) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let (name, body) = if starts {
+        (
+            "launcher-starts",
+            format!(
+                "#!/bin/sh\ncase \":$PATH:\" in *:{RUN_PATH_DIR}:*) ;; *) printf '{UID_MAP_DENIED}' >&2; exit 1;; esac\nwhile [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n"
+            ),
+        )
+    } else {
+        (
+            "launcher-fails",
+            format!("#!/bin/sh\nprintf '{UID_MAP_DENIED}' >&2\nexit 1\n"),
+        )
+    };
+    let path = dir.join(name);
+    std::fs::write(&path, body).expect("write the launcher");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+        .expect("make the launcher executable");
+    path
+}
+
+/// #2820 (D747): a command that prints bubblewrap's startup failure and
+/// exits, in a sandbox that started, is an ordinary denial: approved before
+/// it ran under `OnRequest`, it is not retried outside the sandbox (nor
+/// asked about). (Under `UnlessTrusted` main retries any denial after an
+/// approval, as before; that is not decided by the text.)
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_printed_startup_failure_is_not_retried_outside_the_sandbox() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        sandbox_denies: vec![true],
+        approval_policy: AskForApproval::OnRequest,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ true)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.runs, 1, "not retried");
+}
+
+/// #2820 (D747): where the sandbox really failed to start (the launcher
+/// fails for any command), the retry outside it is asked about again, says
+/// why, is for a person only, once (no "don't ask again"), and runs only on
+/// that answer.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_sandbox_that_failed_to_start_is_asked_about_again() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    for approval_policy in [AskForApproval::OnRequest, AskForApproval::UnlessTrusted] {
+        let (probe, result) = run_probe(Case {
+            sandbox_denies: vec![true],
+            approval_policy,
+            denial_text: Some(UID_MAP_DENIED),
+            sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Ok(()), "{approval_policy:?}");
+        assert_eq!(
+            probe.asked,
+            vec![
+                None,
+                Some("sandbox failed to start; retry without sandbox?".to_string())
+            ],
+            "{approval_policy:?}"
+        );
+        assert_eq!(
+            probe.fresh,
+            vec![false, true],
+            "the retry is for a person, once: {approval_policy:?}"
+        );
+        assert_eq!(
+            probe.runs, 2,
+            "retried on the second answer: {approval_policy:?}"
+        );
+    }
+}
+
+/// #2820 (D747): with approvals off, a sandbox that failed to start is
+/// refused.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_sandbox_that_failed_to_start_is_refused_with_approvals_off() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        requirement: ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+        sandbox_denies: vec![true],
+        approval_policy: AskForApproval::Never,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 1, "not retried");
+}
+
+/// #2820 (D747): the probe runs with the command's own `PATH`: with any
+/// other the stand-in launcher fails to start, and a command that started
+/// and printed the text would wrongly count as a startup failure.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_the_probe_uses_the_commands_path() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        sandbox_denies: vec![true],
+        approval_policy: AskForApproval::UnlessTrusted,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ true)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        ..Case::default()
+    })
+    .await;
+    // An ordinary denial after an approval: retried unasked, as main does,
+    // not asked about as a sandbox that failed to start.
+    assert_eq!(result, Ok(()));
+    assert_eq!(probe.asked, vec![None]);
+    assert_eq!(probe.runs, 2);
 }
