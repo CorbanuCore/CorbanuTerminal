@@ -3167,13 +3167,24 @@ fn has_sandbox_startup_marker(sandbox: SandboxType, output: &ExecToolCallOutput)
     let text =
         format!("{}\n{}", output.stderr.text, output.aggregated_output.text).to_ascii_lowercase();
 
+    // #2820 follow-up: bubblewrap's own wordings, from its source. Where it
+    // may not create a user namespace it says "No permissions to creating
+    // new namespace" (0.11.x and earlier), "... to create a new namespace"
+    // (later, and the bundled copy) or, patched by Debian and Ubuntu (0.9.0
+    // on glitch), "... to create new namespace". Its loopback setup can also
+    // fail before the RTM_NEW* steps.
     const STARTUP_FAILURE_MARKERS: &[&str] = &[
         "bubblewrap is unavailable",
         "failed to exec bundled bubblewrap",
         "failed to exec system bubblewrap",
+        "loopback: failed to look up lo",
+        "loopback: failed to create netlink_route socket",
+        "loopback: failed to bind netlink_route socket",
         "loopback: failed rtm_newaddr",
         "loopback: failed rtm_newlink",
+        "no permissions to creating new namespace",
         "no permissions to create a new namespace",
+        "no permissions to create new namespace",
         "setting up uid map: permission denied",
         "creating new namespace failed",
         "cannot create user namespace",
@@ -3304,6 +3315,21 @@ mod tests {
             SandboxType::LinuxSeccomp,
             &denied_output(codex_sandboxing::BWRAP_UNAVAILABLE_MESSAGE),
         ));
+        // #2820 follow-up: bubblewrap's wordings where it may not create a
+        // user namespace, by version, and its earlier loopback steps.
+        for wording in [
+            "bwrap: No permissions to creating new namespace, likely because the kernel does not allow non-privileged user namespaces. On e.g. debian this can be enabled with 'sysctl kernel.unprivileged_userns_clone=1'.",
+            "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces. On e.g. debian this can be enabled with 'sysctl kernel.unprivileged_userns_clone=1'.",
+            "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces. See <https://deb.li/bubblewrap> or <file:///usr/share/doc/bubblewrap/README.Debian.gz>.",
+            "bwrap: loopback: Failed to look up lo: No such device",
+            "bwrap: loopback: Failed to create NETLINK_ROUTE socket: Operation not permitted",
+            "bwrap: loopback: Failed to bind NETLINK_ROUTE socket: Operation not permitted",
+        ] {
+            assert!(
+                has_sandbox_startup_marker(SandboxType::LinuxSeccomp, &denied_output(wording)),
+                "{wording}"
+            );
+        }
         assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("sandbox fails to start"),

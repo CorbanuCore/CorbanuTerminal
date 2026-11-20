@@ -734,18 +734,24 @@ const RUN_PATH: &str = "/usr/bin:/bin:/corbanu-issue-2820-run-path";
 /// user namespaces, whatever the command.
 #[cfg(target_os = "linux")]
 fn fake_launcher(dir: &std::path::Path, starts: bool) -> std::path::PathBuf {
+    fake_launcher_saying(dir, starts, UID_MAP_DENIED)
+}
+
+/// #2820 follow-up: [`fake_launcher`], failing with `message` (no `'`).
+#[cfg(target_os = "linux")]
+fn fake_launcher_saying(dir: &std::path::Path, starts: bool, message: &str) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let (name, body) = if starts {
         (
             "launcher-starts",
             format!(
-                "#!/bin/sh\ncase \":$PATH:\" in *:{RUN_PATH_DIR}:*) ;; *) printf '{UID_MAP_DENIED}' >&2; exit 1;; esac\nwhile [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n"
+                "#!/bin/sh\ncase \":$PATH:\" in *:{RUN_PATH_DIR}:*) ;; *) printf '{message}' >&2; exit 1;; esac\nwhile [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n"
             ),
         )
     } else {
         (
             "launcher-fails",
-            format!("#!/bin/sh\nprintf '{UID_MAP_DENIED}' >&2\nexit 1\n"),
+            format!("#!/bin/sh\nprintf '{message}' >&2\nexit 1\n"),
         )
     };
     let path = dir.join(name);
@@ -851,4 +857,86 @@ async fn issue_2820_a_sandbox_that_failed_to_start_is_refused_with_approvals_off
     assert_eq!(result, Err("sandbox denied".to_string()));
     assert_eq!(probe.asked, Vec::<Option<String>>::new());
     assert_eq!(probe.runs, 1, "not retried");
+}
+
+/// #2820 follow-up: bubblewrap's wordings where it may not create a user
+/// namespace at all: 0.11.x and earlier, later releases, and Debian's and
+/// Ubuntu's (bubblewrap 0.9.0 on glitch says this one).
+#[cfg(target_os = "linux")]
+const NO_NAMESPACE_WORDINGS: [&str; 3] = [
+    "bwrap: No permissions to creating new namespace, likely because the kernel does not allow non-privileged user namespaces.\n",
+    "bwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces.\n",
+    "bwrap: No permissions to create new namespace, likely because the kernel does not allow non-privileged user namespaces. See <https://deb.li/bubblewrap> or <file:///usr/share/doc/bubblewrap/README.Debian.gz>.\n",
+];
+
+/// #2820 follow-up: where the launcher itself fails with any of those
+/// wordings, the retry outside the sandbox is asked about again, once only.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_launcher_without_namespaces_is_asked_about_again() {
+    for wording in NO_NAMESPACE_WORDINGS {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (probe, result) = run_probe(Case {
+            sandbox_denies: vec![true],
+            keeps_denial_final: true,
+            approval_policy: AskForApproval::OnRequest,
+            denial_text: Some(wording),
+            sandbox_exe: Some(fake_launcher_saying(
+                dir.path(),
+                /*starts*/ false,
+                wording,
+            )),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Ok(()), "{wording}");
+        assert_eq!(
+            probe.asked,
+            vec![
+                first_prompt(),
+                Some("sandbox failed to start; retry without sandbox?".to_string())
+            ],
+            "{wording}"
+        );
+        assert_eq!(
+            probe.offered[1],
+            vec![
+                ReviewDecision::Approved,
+                ReviewDecision::denied("rejected by user"),
+                ReviewDecision::Abort,
+            ],
+            "once only: {wording}"
+        );
+        assert_eq!(probe.runs, 2, "retried on the second answer: {wording}");
+    }
+}
+
+/// #2820 follow-up: a command that prints those wordings itself, in a
+/// sandbox that started, is still an ordinary denial.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_printed_namespace_refusal_is_not_retried_outside_the_sandbox() {
+    for wording in NO_NAMESPACE_WORDINGS {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (probe, result) = run_probe(Case {
+            sandbox_denies: vec![true],
+            keeps_denial_final: true,
+            approval_policy: AskForApproval::OnRequest,
+            denial_text: Some(wording),
+            sandbox_exe: Some(fake_launcher_saying(
+                dir.path(),
+                /*starts*/ true,
+                wording,
+            )),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Err("sandbox denied".to_string()), "{wording}");
+        assert_eq!(probe.asked, vec![first_prompt()], "{wording}");
+        assert_eq!(probe.runs, 1, "not retried: {wording}");
+    }
 }
