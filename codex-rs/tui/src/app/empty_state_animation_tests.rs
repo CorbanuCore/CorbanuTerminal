@@ -14,7 +14,7 @@ fn has_blossom(tui: &tui::Tui) -> bool {
 }
 
 fn text(buffer: &Buffer) -> String {
-    let project = crate::test_support::test_path_display("/tmp/project");
+    let project = crate::chatwidget::tests::helpers::test_cwd_display();
     let normalized_project = format!("{:<width$}", "/tmp/project", width = project.len());
     buffer
         .content

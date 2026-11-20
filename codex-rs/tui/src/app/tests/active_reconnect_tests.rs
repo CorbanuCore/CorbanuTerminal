@@ -763,14 +763,10 @@ async fn reconnect_allows_slow_hydration_but_bounds_a_stalled_server() -> Result
             let history = &history[history.find("• This conversation is unavailable").unwrap()..];
             assert_snapshot!(
                 "unavailable_conversation",
-                format!(
+                crate::chatwidget::tests::helpers::normalize_snapshot_paths(format!(
                     "{history}\n{}",
                     render_bottom_popup(&app.chat_widget, /*width*/ 80)
-                )
-                .replace(
-                    &test_path_buf("/tmp/project").display().to_string(),
-                    "/tmp/project"
-                )
+                ))
             );
             session.shutdown().await?;
             assert!((15..120).contains(&elapsed), "{elapsed}");
