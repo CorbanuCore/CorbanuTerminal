@@ -25,6 +25,19 @@ use rmcp::model::InitializeRequestParams;
 use rmcp::model::ProtocolVersion;
 use serde_json::json;
 
+// The startup budget is not only a hang guard: for `DiscoverLocalStdio`,
+// `watch_discovery` derives the `legacy-silent` probe deadline from it (3 s clamped
+// to [limit / 2, limit - limit / 4]), so it also sets that case's runtime. 12 s is
+// more than twice the old 5 s handshake budget and yields a 6 s probe, twice the old
+// 3 s probe, while keeping the test inside nextest's slow window.
+const STARTUP_BUDGET: Duration = Duration::from_secs(/*secs*/ 12);
+// The `-late` fixtures deliberately delay their discovery replies; keep the previous
+// 30 s startup budget for those modes.
+const LATE_STARTUP_BUDGET: Duration = Duration::from_secs(/*secs*/ 30);
+// Tool calls against the local fixture are expected to succeed; this only prevents a
+// hung test on a loaded runner.
+const TOOL_HANG_GUARD: Duration = Duration::from_secs(/*secs*/ 30);
+
 async fn exercise_stdio_server(
     server_mode: &str,
     protocol_mode: McpProtocolMode,
@@ -79,6 +92,11 @@ async fn exercise_stdio_server(
     let elicitation_count = Arc::new(AtomicUsize::new(0));
     let observed_elicitations = Arc::clone(&elicitation_count);
     let legacy_session = server_mode.starts_with("legacy");
+    let startup_budget = if server_mode.ends_with("-late") {
+        LATE_STARTUP_BUDGET
+    } else {
+        STARTUP_BUDGET
+    };
     let initialized = client
         .initialize(
             InitializeRequestParams::new(
@@ -86,11 +104,7 @@ async fn exercise_stdio_server(
                 Implementation::new("codex-mcp-client", "0.0.0-test"),
             )
             .with_protocol_version(ProtocolVersion::V_2025_06_18),
-            Some(Duration::from_secs(if server_mode.ends_with("-late") {
-                30
-            } else {
-                5
-            })),
+            Some(startup_budget),
             Box::new(move |_request_id, request| {
                 let observed_elicitations = Arc::clone(&observed_elicitations);
                 async move {
@@ -160,7 +174,7 @@ async fn exercise_stdio_server(
         })
     );
     let tools = client
-        .list_tools(/*params*/ None, Some(Duration::from_secs(5)))
+        .list_tools(/*params*/ None, Some(TOOL_HANG_GUARD))
         .await?;
     assert_eq!(
         tools
@@ -175,7 +189,7 @@ async fn exercise_stdio_server(
             "echo".to_owned(),
             Some(json!({"message": "hello stdio"})),
             |_| Ok(None),
-            Some(Duration::from_secs(5)),
+            Some(TOOL_HANG_GUARD),
         )
         .await?;
     assert_eq!(
