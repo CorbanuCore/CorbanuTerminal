@@ -28,6 +28,9 @@ struct Fixture {
     program: PathBuf,
     workspace: PathBuf,
     home: PathBuf,
+    /// The child's `USERPROFILE` on Windows (see [`Fixture::command`]).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    profile: PathBuf,
     marker: PathBuf,
     path: OsString,
 }
@@ -62,6 +65,8 @@ impl Fixture {
         if std::fs::hard_link(&source, &program).is_err() {
             copy_executable(&source, &program)?;
         }
+        let profile = root.path().join("profile");
+        std::fs::create_dir_all(profile.join("AppData").join("Local"))?;
         let workspace = root.path().join("workspace");
         let bin = workspace.join("node_modules/.bin");
         let marker = root.path().join("helper-ran");
@@ -110,6 +115,7 @@ wire_api = "responses"
             program,
             workspace,
             home,
+            profile,
             marker,
             path,
         })
@@ -148,6 +154,15 @@ wire_api = "responses"
             .env("TERM", "dumb")
             .env("ZELLIJ", "0")
             .timeout(Duration::from_secs(/*secs*/ 45));
+        // The Windows sandbox keeps its records of possibly planted folders
+        // under the LocalAppData known folder, which Windows resolves from
+        // `USERPROFILE` (`LOCALAPPDATA` alone doesn't move it). Point both at
+        // the fixture so the host's records (unreadable on CI runners after
+        // sandbox tests) can't decide whether project config loads (#2728).
+        #[cfg(windows)]
+        command
+            .env("USERPROFILE", &self.profile)
+            .env("LOCALAPPDATA", self.profile.join("AppData").join("Local"));
         Ok(command)
     }
 }
@@ -413,6 +428,75 @@ fn doctor_reports_only_safe_config_error_metadata() -> Result<()> {
         }
         std::fs::remove_file(config_file)?;
     }
+    Ok(())
+}
+
+/// #2728: with the sandbox's records of planted folders unreadable, the
+/// project's `.codex` folder still counts as planted (fail closed): its
+/// config isn't loaded, so its error doesn't fail the load, and a warning
+/// says why. This is the state CI runners' own records were in; it also
+/// shows the fixture's records location is the one the CLI reads.
+#[cfg(windows)]
+#[test]
+fn doctor_keeps_project_config_unloaded_when_planted_records_are_unreadable() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let user_config_file = fixture.home.join("config.toml");
+    let project_key = toml::Value::String(project_trust_key(&fixture.workspace));
+    let user_config = format!(
+        "{}\n[projects.{project_key}]\ntrust_level = \"trusted\"\n",
+        std::fs::read_to_string(&user_config_file)?
+    );
+    std::fs::write(&user_config_file, user_config)?;
+    let project_config_dir = fixture.workspace.join(".codex");
+    std::fs::create_dir(&project_config_dir)?;
+    std::fs::write(
+        project_config_dir.join("config.toml"),
+        "custom_header = \"doctor-test-credential\" trailing\n",
+    )?;
+    let records = fixture
+        .profile
+        .join(r"AppData\Local\CorbanuTerminalSandbox\integrity-labels");
+    std::fs::create_dir_all(&records)?;
+    let planted = records.join("planted-metadata.json");
+    std::fs::write(&planted, r#"{"entries":[],"confirmed":[]}"#)?;
+    // Deny reading its data to everyone; deleting it stays allowed.
+    let icacls = |args: &[&str]| -> Result<()> {
+        let status = std::process::Command::new("icacls")
+            .arg(&planted)
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .status()?;
+        anyhow::ensure!(status.success(), "icacls {args:?} failed: {status}");
+        Ok(())
+    };
+    icacls(&["/deny", "*S-1-1-0:(RD)"])?;
+    anyhow::ensure!(
+        std::fs::read(&planted).is_err(),
+        "the records must be unreadable for this test"
+    );
+
+    let output = fixture.command()?.args(["doctor", "--json"]).output()?;
+    icacls(&["/remove:d", "*S-1-1-0"])?;
+    let report: Value = serde_json::from_slice(&output.stdout)?;
+    let check = &report["checks"]["config.load"];
+    assert_eq!(check["summary"], "config loaded", "{check}");
+    let warnings: Vec<&str> = match &check["details"]["startup warning"] {
+        Value::String(warning) => vec![warning.as_str()],
+        Value::Array(warnings) => warnings.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    };
+    let project_warning = format!(
+        "Possibly planted project folder not loaded: {}. The records of project folders that Windows sandbox commands may have planted can't be read (read {}: ",
+        project_config_dir.display(),
+        planted.display()
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.starts_with(&project_warning)),
+        "expected a warning starting {project_warning:?}: {check}"
+    );
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("doctor-test-credential"));
     Ok(())
 }
 
