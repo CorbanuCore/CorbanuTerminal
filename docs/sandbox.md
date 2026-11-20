@@ -549,6 +549,21 @@ Terminal from the console or Remote Desktop session instead.
 Your organization's managed requirements may allow only the non-admin sandbox.
 In that case the warning still appears so you know the limits.
 
+## Windows MXC sandbox
+
+With `[windows] sandbox = "mxc"` (or `features.prefer_mxc = true`), commands run
+in Microsoft's MXC sandbox. Two things work differently there (#2797):
+
+- `%TEMP%` and `%LOCALAPPDATA%` are private to each command and aren't kept
+  between commands: Windows gives every command its own new temporary folder
+  and removes it when the command ends. Keep files a later command needs in
+  the project folder.
+- When Corbanu Terminal runs over SSH, MXC can't start PowerShell or other
+  programs that load Windows' user-interface libraries (they fail with error
+  `0xC0000142`); `cmd` still runs. This fails closed: the command doesn't
+  start, and nothing runs outside the sandbox. Start Corbanu Terminal from
+  the console or Remote Desktop to run them.
+
 This page documents the shipped capability "existing general sandboxing" from
 the [product specification](corbanu-product-spec.md) heading "Shipping MVP —
 LIVE": "The shipping MVP already has a wallet, vault, scoped signing, approvals,
