@@ -15,6 +15,7 @@ use codex_sandboxing::SandboxCommand;
 use codex_sandboxing::SandboxDirectSpawnTransformRequest;
 use codex_sandboxing::SandboxExecRequest;
 use codex_sandboxing::SandboxManager;
+use codex_sandboxing::SandboxTransformError;
 use codex_sandboxing::SandboxTransformRequest;
 use codex_sandboxing::SandboxType;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -102,6 +103,18 @@ impl FileSystemSandboxRunner {
         &self,
         sandbox: &FileSystemSandboxContext,
     ) -> Result<SandboxExecRequest, JSONRPCErrorError> {
+        self.sandbox_command_with(sandbox, spawn_transform)
+    }
+
+    /// [`Self::sandbox_command`] with the final transform step supplied
+    /// (#2858): tests that check the prepared request use the transform
+    /// without the Windows direct-spawn wrapper, which needs this machine's
+    /// sandbox setup and leaves the request's permission profile unchanged.
+    fn sandbox_command_with(
+        &self,
+        sandbox: &FileSystemSandboxContext,
+        spawn: SpawnTransform,
+    ) -> Result<SandboxExecRequest, JSONRPCErrorError> {
         let cwd = sandbox_cwd(sandbox)?;
         let native_workspace_roots = sandbox
             .workspace_roots
@@ -140,7 +153,7 @@ impl FileSystemSandboxRunner {
             &file_system_policy,
             network_policy,
         );
-        self.sandbox_exec_request(&permission_profile, &cwd, workspace_roots, sandbox)
+        self.sandbox_exec_request_with(&permission_profile, &cwd, workspace_roots, sandbox, spawn)
     }
 
     fn sandbox_exec_request(
@@ -149,6 +162,23 @@ impl FileSystemSandboxRunner {
         cwd: &SandboxCwd,
         workspace_roots: &[AbsolutePathBuf],
         sandbox_context: &FileSystemSandboxContext,
+    ) -> Result<SandboxExecRequest, JSONRPCErrorError> {
+        self.sandbox_exec_request_with(
+            permission_profile,
+            cwd,
+            workspace_roots,
+            sandbox_context,
+            spawn_transform,
+        )
+    }
+
+    fn sandbox_exec_request_with(
+        &self,
+        permission_profile: &PermissionProfile,
+        cwd: &SandboxCwd,
+        workspace_roots: &[AbsolutePathBuf],
+        sandbox_context: &FileSystemSandboxContext,
+        spawn: SpawnTransform,
     ) -> Result<SandboxExecRequest, JSONRPCErrorError> {
         let helper = &self.runtime_paths.codex_self_exe;
         let sandbox_manager = SandboxManager::for_file_system_helpers()
@@ -191,8 +221,9 @@ impl FileSystemSandboxRunner {
             managed_network: None,
             additional_permissions: None,
         };
-        let mut request = sandbox_manager
-            .transform_for_direct_spawn(SandboxDirectSpawnTransformRequest {
+        let mut request = spawn(
+            &sandbox_manager,
+            SandboxDirectSpawnTransformRequest {
                 workspace_roots,
                 windows_sandbox_proxy_settings_mode:
                     codex_sandboxing::WindowsSandboxProxySettingsMode::Preserve,
@@ -213,11 +244,26 @@ impl FileSystemSandboxRunner {
                     windows_sandbox_level: windows_sandbox_level
                         .unwrap_or(WindowsSandboxLevel::Disabled),
                 },
-            })
-            .map_err(|err| invalid_request(format!("failed to prepare fs sandbox: {err}")))?;
+            },
+        )
+        .map_err(|err| invalid_request(format!("failed to prepare fs sandbox: {err}")))?;
         request.sandbox_override = sandbox_context.sandbox_override;
         Ok(request)
     }
+}
+
+/// The last step of preparing a filesystem helper's sandboxed request.
+type SpawnTransform = for<'a> fn(
+    &SandboxManager,
+    SandboxDirectSpawnTransformRequest<'a>,
+) -> Result<SandboxExecRequest, SandboxTransformError>;
+
+/// The real one: the transform plus, on Windows, the direct-spawn wrapper.
+fn spawn_transform(
+    manager: &SandboxManager,
+    request: SandboxDirectSpawnTransformRequest<'_>,
+) -> Result<SandboxExecRequest, SandboxTransformError> {
+    manager.transform_for_direct_spawn(request)
 }
 
 fn sandbox_cwd(sandbox: &FileSystemSandboxContext) -> Result<SandboxCwd, JSONRPCErrorError> {
@@ -939,10 +985,18 @@ mod tests {
         };
         selected.close().expect("remove selected directory");
 
+        // #2858: every step of `sandbox_command` but the Windows direct-spawn
+        // wrapper, which needs this machine's sandbox setup (its account, or
+        // the setup helper beside the test binary to create one) and leaves
+        // the request's permission profile as the transform made it.
         let request = runner
-            .sandbox_command(&sandbox_context)
+            .sandbox_command_with(&sandbox_context, |manager, request| {
+                manager.transform(request.transform)
+            })
             .expect("sandbox command");
 
+        assert_eq!(request.sandbox, SandboxType::WindowsRestrictedToken);
+        assert_eq!(request.windows_sandbox_level, WindowsSandboxLevel::Elevated);
         assert_eq!(
             request
                 .permission_profile
