@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_core::ForkSnapshot;
@@ -943,15 +944,23 @@ async fn symlinked_writable_root_grants_its_real_location_without_session_corrup
         .await?,
         b"public"
     );
-    assert!(
-        fs.read_file(
+    let denial = fs
+        .read_file(
             &PathUri::from_abs_path(&private_file),
             Default::default(),
             Some(&sandbox),
         )
         .await
-        .is_err(),
-        "granting the real writable root must preserve the explicit read denial"
+        .err()
+        .context("granting the real writable root must preserve the explicit read denial")?;
+    // A refusal, not an unrelated failure (the sandboxed helper reports
+    // denials as invalid requests).
+    assert!(
+        matches!(
+            denial.kind(),
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::InvalidInput
+        ) && !denial.to_string().contains("configured runtime paths"),
+        "{denial:?}"
     );
     Ok(())
 }
