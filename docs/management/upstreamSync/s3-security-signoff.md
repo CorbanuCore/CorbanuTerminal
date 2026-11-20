@@ -17,7 +17,7 @@ Terms used below:
 3. **Moved boundaries.** Every place where sync had to re-implement or move a protection has a regression test. Each row says one of three things:
    - its test failed before the fix and passes after;
    - **test-only**: the test pins behaviour that never broke;
-   - **no fail-before here**: new code, a port or a cherry-pick. The reason is given, and the evidence is in the PR. See the [fail-before/pass-after table](#fail-beforepass-after-for-moved-boundaries).
+   - **no fail-before here, or not restated here**: new code, a port or a cherry-pick. The PR holds the evidence. See the [fail-before/pass-after table](#fail-beforepass-after-for-moved-boundaries).
 4. **Lanes.** On the exact candidate, these must all pass on all three platforms ([run record](#run-record)):
    - the required security lanes;
    - the Linux sandbox tests on glitch;
@@ -68,8 +68,8 @@ All runs use sync head `ab557d87af` unless stated otherwise. CI runs were starte
 | `credential-boundary-canary` | Linux, macOS, Windows | [44628453033](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628453033) | success, 3/3 (Linux, macOS, Windows PF-13 credential qualification) | [44590975298](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44590975298) at `08a23b091a`: success, 3/3 |
 | `windows-security-probes` | Windows | [44628458553](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628458553) | success (`pf_27_s06 probes`, incl. the elevated launch-contract, D324/#1648 medium-session and broker-pipe probes) | [44614770168](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44614770168) at `4c527065f1`: success |
 | `windows-integration-tests` (supporting) | Windows | [44629804537](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629804537) | codex-core: 2,398 passed (1 flaky, 1 leaky), **3 failed** (the D742 `agent_message_wake` cases, same as the reference), 103 skipped. codex-app-server: 1,569/1,569 passed, 95 skipped. Other selected packages pass | Sync-base reference: run 44594161347, at #2779 head `0f997c8c21`; 3 `agent_message_wake` failures (D742) |
-| Linux sandbox: `codex-linux-sandbox`, `codex-sandboxing` | glitch (Ubuntu, kernel 6.8, bwrap 0.9.0) | local | `codex-sandboxing` 117/0. `codex-linux-sandbox` lib 255/0; integration first run 118/**1**/3 ignored (`a_command_without_bubblewrap_keeps_its_terminal`: “outlived its terminal's hangup”, a parallel-fork race its own comment describes), then 3/3 alone and the full integration rerun 119/0/3 | main `15415856d7` on glitch: `codex-sandboxing` 94/0; `codex-linux-sandbox` lib 182/0; integration first run 80/**1** (the **same** `a_command_without_bubblewrap…` race), rerun 81/0. Earlier sync run: sync-main8 at #2450, 117 / 255 + 119 |
-| macOS Seatbelt: `codex-sandboxing` lib, `codex-exec` `suite::seatbelt` | this Mac (aarch64), `-j6` | local | `codex-sandboxing` 173/0/3 ignored; `codex-exec` `suite::seatbelt` 15/15. Memory stayed at 24–27% free | main `15415856d7` on this Mac: `codex-sandboxing` 127/**2** (two Seatbelt argument-builder tests trip on this machine's TMPDIR path; sync passes them); `codex-exec` `suite::sandbox` (main's name for the Seatbelt suite) 5/5. Earlier sync run: astra-syncmac2 at `12d90cce4a` (a sync-side head), 15/15 Seatbelt |
+| Linux sandbox: `codex-linux-sandbox`, `codex-sandboxing` | glitch (Ubuntu, kernel 6.8, bwrap 0.9.0) | local | `codex-sandboxing` 117/0. `codex-linux-sandbox` lib 255/0; integration first run 118/**1**/3 ignored (`a_command_without_bubblewrap_keeps_its_terminal`: “outlived its terminal's hangup”, a parallel-fork race its own comment describes), then 3/3 alone and the full integration rerun 119/0/3 | main `15415856d7` on glitch (worker-reported; logs copied to `$HOME/.corbanu-workers/sg2-evidence-logs/`): `codex-sandboxing` 94/0; `codex-linux-sandbox` lib 182/0; integration first run 80/**1** (the **same** `a_command_without_bubblewrap…` race), rerun 81/0. Earlier sync run: sync-main8 at #2450, 117 / 255 + 119 |
+| macOS Seatbelt: `codex-sandboxing` lib, `codex-exec` `suite::seatbelt` | this Mac (aarch64), `-j6` | local | `codex-sandboxing` 173/0/3 ignored; `codex-exec` `suite::seatbelt` 15/15. Memory stayed at 24–27% free | main `15415856d7` on this Mac: `codex-sandboxing` 127/**2** (two Seatbelt argument-builder tests fail on this Mac; not investigated; sync passes its versions). Main has no `suite::seatbelt`: those 15 tests are sync-only (upstream). The suite both branches share, `codex-exec` `suite::sandbox`, passes 5/5 on main and 5/5 on sync. Earlier sync run: astra-syncmac2 at `12d90cce4a` (a sync-side head), 15/15 Seatbelt |
 | Windows sandbox: `codex-windows-sandbox`, `codex-exec-server` `windows_sandbox` | DESKTOP-UJS3HC4, `C:\CorbanuQA\sg2-evidence`, MSVC | local, over SSH (not the interactive session) | `codex-windows-sandbox` lib 608/**5**/14 ignored, bins and `helper_manifest` pass. The 5 failures are environmental: main `15415856d7` fails the **same 5** in the same session (441/5/11): ConPTY `d730_legacy_tty…` and `legacy_command_tools…`, `sec_win_345_*` ×2 (non-interactive window station) and the D324 race (CI runs it from a medium session after recording setup; see #1800). `codex-exec-server` `windows_sandbox` 4/**5**: all 5 are MXC cases with no main counterpart ([#2797](https://github.com/CorbanuCore/CorbanuTerminal/issues/2797)) | main `15415856d7` in the same SSH session: `codex-windows-sandbox` 441/5/11 with the **same 5** failures; main's one exec-server `windows_sandbox` test passes (main has no MXC) |
 
 S0 reference: at baseline `23be0b3883`, core security tests passed 1,613 on Linux and 1,678 on macOS ([baseline](baseline-23be0b3883b1.md)).
@@ -78,7 +78,7 @@ On the sync branch, `blocking-ci` still skips `rust-ci`, `bazel` and `sdk` (temp
 
 ## Security levels: the contract being checked
 
-- **Permissive:** exactly main's behaviour, except the listed differences. No Permissive difference weakens a protection main has. The Direction column of the Δ table classifies each one: stricter, neutral, availability-only, or a sync-only feature under a named decision.
+- **Permissive:** exactly main's behaviour, except the listed differences. No Permissive difference weakens a protection main has. The Direction column of the Δ table says how each one compares with main.
 - **Moderate:** main's Moderate protections. These are untrusted-content gates (PF-23/PF-30), protected reads and writes, the credential broker on by default, and network approval.
 - **Aggressive:** main's Aggressive controls. These are read-only or workspace sandbox, approvals always on, no network by default, no vault access, and `corbanu vault` forbidden. Under strict rules, any script the reader cannot read asks, or is refused when approvals are off (D553/D691).
 
@@ -131,7 +131,7 @@ None is a known failure. Each is coverage that has not run yet on that platform.
 | Δ15 | After global zsh startup, `AUTH_HEADER` stays as startup set it, the same as a broker-off run; brokered keys are still restored | macOS zsh, broker on | One upstream test row dropped | D726(a) (#2708) |
 | Δ16 | Upstream positive tests for unsupported host/credential contracts are replaced by fail-closed and hardened-engine matrices | Tests | Coverage, not behaviour | D682 (#2498) |
 | Δ17 | Disabled managed daemon self-update: the 12 updater tests assert refusal | All | Corbanu policy kept | D564, D736 (#2769) |
-| Δ18 | A fork request's `windows` table can replace the server's other Windows settings, such as `sandbox_private_desktop` | Windows, forks | Upstream behaviour; #2684 did not widen it | **For SG2.** Recommendation: leave it |
+| Δ18 | A fork request's `windows` table can replace the server's other Windows settings, such as `sandbox_private_desktop` | Windows, forks | Upstream behaviour; #2684 did not widen it. Not checked here whether main's `thread/fork` behaves the same | **For SG2.** Recommendation: leave it |
 | Δ19 | A stricter sandbox asked for through the deprecated `features.*windows_sandbox*` flags is ignored when the server pins a mode. In experimental prediction mode the start-up mode is not applied; the parent floor still holds | Windows, forks | Upstream behaviour | **For SG2.** Recommendation: accept |
 | Δ20 | An app-server config write that would leave an unbrokerable credential provider is refused. Option (b) would refuse only writes that add one | All levels | Stricter, fail closed (#2784) | **For SG2.** Recommendation: (a), keep it |
 
@@ -150,7 +150,13 @@ Main changes after `717fcfa246` (#2682–#2785) are carried by main merge #13 (#
 
 ## Fail-before/pass-after for moved boundaries
 
-Merges are into `sync/upstream-rust-v0.167.0`. The table covers security-path PRs from the S3b carry work (about November 16) through `ab557d87af`. Earlier ones are mapped in the ledgers and in the reconciliation PR #2565. "Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row had an independent Opus 5.5 High APPROVE on its exact head. Every row except #2774 also has a corbanu-security approval whose commit is that head (checked through the GitHub reviews API on 2026-11-19). #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
+Merges are into `sync/upstream-rust-v0.167.0`. **Cutoff:** the table covers every security-path PR merged after the reconciliation PR #2565 (`2b8c26811e`, November 17, 20:06Z) through `ab557d87af`. It also has earlier rows that a Δ depends on. Earlier PRs are mapped in #2565 and the ledgers.
+
+Checked after the cutoff and left out because they move no boundary:
+- #2736: formatting;
+- #2680: a test expectation;
+- #2596: docs;
+- #2677 and #2582: main merges #12 and #11. Their security carries appear as their own rows. "Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row had an independent Opus 5.5 High APPROVE on its exact head. Every row except #2774 also has a corbanu-security approval whose commit is that head (checked through the GitHub reviews API on 2026-11-19). #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
 
 | Boundary | PR (merge) | Before | After |
 | --- | --- | --- | --- |
@@ -207,6 +213,13 @@ Merges are into `sync/upstream-rust-v0.167.0`. The table covers security-path PR
 | D641/D653 failed shell snapshot stays masked | #2397 (`ee8d1d4aa8`) | `failed_capture_falls_back_masked` fails before the fix | Pass |
 | Main 13: zsh tied credential alias | #2648 (`daeb0b13ce`) | Test-only (passes with the secret-name check removed, since a second check also drops it) | Mac zsh 53/53, 32/32 |
 | D355 Windows sandbox fixtures | #2742 (`c3f1a896b1`) | Test-only (fixtures) | windows-integration |
+| D639 sandbox denial stays terminal (fixture) | #2472 (`5578dcd268`) | Test-only (aligns the fixture with D639) | Linux pass; macOS disputed by #2808 |
+| D377 TEMP grants wait for the private folder | #2687 (`390c99a7c8`) | No fail-before restated here; see the PR (#2686) | Pass |
+| D725 command temp map is authoritative | #2673 (`f15e21c68b`) | No fail-before restated here; the main twin is #2681 | Pass |
+| D696 exact spelling in partial host lookup | #2679 (`32b2e1da46`) | Partial lookup admitted allow rules without the exact-spelling check (#2678) | Pass |
+| `list_models` on the protected surface | #2606 (`e900945479`) | No fail-before restated here; new test in `protected_surface_tests.rs` | Pass |
+| Windows integrity-lease error names its cause | #2587 (`248df33f4c`) | No fail-before here: a cherry-pick of main #2586 (diagnostics) | Pass |
+| Windows permission-confirmation watcher | #2772 (`b1c4878ef3`) | `ancestor_content_change_does_not_notify_existing_child_watch` fails before the fix (Mac) | Pass |
 | Memory v2 privacy | #2774 (`672d02e593`) | Test-only (fixtures) | Four cases on v2 + v1 |
 
 #2562's 43 carry rows are mapped there row by row. 42 are resolved with sync-head evidence; S3b 562 (D608) waits for #1800.
@@ -218,7 +231,7 @@ Merges are into `sync/upstream-rust-v0.167.0`. The table covers security-path PR
 | Windows desktop checklist | D396/D416/D448 plus step 4b/#1803; #1800, #1798, #1851 drafts; D608 | Travis (scheduling); coordinator | No, if deferred under Δ4 |
 | PF-23-S04 case 11 | Blocked until a Windows guest exists (D673); cases 7/8 dispositions (D671/D672) and the Linux leg (D669) are historical | Coordinator / QA | Final gate 5: needs an explicit disposition |
 | D685 | Implemented on both branches (#2501, #2522, #2675/#2676, #2719/#2721); known limits listed in the summary | Travis | For Travis at SG2 (not yet signed) |
-| [#2734](https://github.com/CorbanuCore/CorbanuTerminal/issues/2734) | `pwsh.evil.exe`, `pwsh.bat` (and `bash.exe:x.exe` on Windows) are read as the shell from the file stem. Rated Medium by its reviewer; shared with main | Security owner | Not decided; listed for SG2 |
+| [#2734](https://github.com/CorbanuCore/CorbanuTerminal/issues/2734) | `pwsh.evil.exe`, `pwsh.bat` (and `bash.exe:x.exe` on Windows) are read as the shell from the file stem. Rated Medium by its reviewer; shared with main | Security owner | No, since main has the same gap. Travis decides at SG2 whether it must be fixed first |
 | Δ18 (D721 leftover) | A fork request's `windows` table can replace the server's other Windows settings, such as `sandbox_private_desktop` (upstream behaviour; #2684 did not widen it) | Travis (decision), security owner | For SG2. Worker recommends leaving it |
 | Δ19 (D721 leftover) | Stricter requests through the deprecated `features.*windows_sandbox*` flags are ignored when the server pins a mode. Separately, in experimental prediction mode the start-up mode is not applied; the parent floor still holds | Travis (decision) | For SG2. Worker recommends accepting both |
 | Δ20 (D612 follow-up) | Config writes that would leave an unbrokerable provider are refused: (a) keep that, or (b) refuse only writes that add one | Travis (decision) | For SG2. Worker recommends (a) |
