@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -1179,6 +1181,15 @@ where
         .mount(server)
         .await;
     response_mock
+}
+
+/// Matches only while the switch is on; turning it off retires the mock at once.
+pub struct WhileActive(pub Arc<AtomicBool>);
+
+impl wiremock::Match for WhileActive {
+    fn matches(&self, _request: &wiremock::Request) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
 }
 
 fn base_mock() -> (MockBuilder, ResponseMock) {

@@ -58,6 +58,7 @@ use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::user_input::UserInput;
 use core_test_support::fs_wait;
+use core_test_support::responses::WhileActive;
 use core_test_support::responses::assert_parent_turn;
 use core_test_support::responses::assert_root_turn;
 use core_test_support::responses::ev_assistant_message;
@@ -90,6 +91,9 @@ use serde_json::json;
 use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tempfile::TempDir;
 use test_case::test_case;
@@ -1512,11 +1516,18 @@ async fn guardian_refreshes_missing_default_reviewer_once(
     let release_response = response_gate.clone();
     let refresh_started = Arc::new(tokio::sync::Notify::new());
     let started = Arc::clone(&refresh_started);
-    let recovery = Mock::given(method("GET"))
+    let recovery_active = Arc::new(AtomicBool::new(true));
+    let recovery_requests = Arc::new(AtomicUsize::new(0));
+    let recovery_requests_in_responder = Arc::clone(&recovery_requests);
+    // wiremock 0.6.5 deactivates scoped mocks by registration index after
+    // sorting them by priority. Retire this mock with a matcher switch instead.
+    Mock::given(method("GET"))
+        .and(WhileActive(Arc::clone(&recovery_active)))
         .and(path_regex(".*/models$"))
         .respond_with(move |_: &wiremock::Request| {
+            recovery_requests_in_responder.fetch_add(1, Ordering::SeqCst);
+            started.notify_one();
             if scenario == "cancel_prewarm" {
-                started.notify_one();
                 // Wiremock runs on its own thread; keep the response held until cancellation.
                 futures::executor::block_on(response_gate.cancelled());
             }
@@ -1524,9 +1535,9 @@ async fn guardian_refreshes_missing_default_reviewer_once(
         })
         .with_priority(6) // Lower priority than the initial mock's default of 5.
         .expect(expected_refreshes as u64)
-        .mount_as_scoped(&server)
+        .mount(&server)
         .await;
-    // Unblock the responder before its mock is dropped, including on assertion failure.
+    // Unblock the responder before the server is dropped, including on assertion failure.
     let release_response = release_response.drop_guard();
     let catalog_url = format!("{}/v1/models", server.uri());
     let configured_catalog = initial_catalog.clone();
@@ -1589,7 +1600,7 @@ async fn guardian_refreshes_missing_default_reviewer_once(
         // Manual resume without an opaque checkpoint must not fetch Guardian's catalog.
         test.codex =
             super::guardian_checkpoint_migration::resume(&test, &test.codex, Vec::new()).await?;
-        assert!(recovery.received_requests().await.is_empty());
+        assert_eq!(recovery_requests.load(Ordering::SeqCst), 0);
         test.config.approvals_reviewer = ApprovalsReviewer::AutoReview;
         test.codex =
             super::guardian_checkpoint_migration::resume(&test, &test.codex, history).await?;
@@ -1619,7 +1630,7 @@ async fn guardian_refreshes_missing_default_reviewer_once(
         drop(release_response);
     }
     if stalled {
-        recovery.wait_until_satisfied().await;
+        refresh_started.notified().await;
     }
     let mut events = Vec::new();
     for call_id in ["first-action", "second-action"] {
@@ -1714,6 +1725,7 @@ async fn guardian_refreshes_missing_default_reviewer_once(
     }
     test.codex.shutdown_and_wait().await?;
     server.verify().await;
+    recovery_active.store(false, Ordering::SeqCst);
     Ok(())
 }
 
