@@ -1192,7 +1192,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     use std::os::unix::fs::PermissionsExt;
 
     fn source_metadata(
@@ -1319,20 +1319,13 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
 
         let refresh_executable = directory.path().join("must-not-refresh");
         let refresh_marker = directory.path().join("unexpected-refresh-side-effect");
-        std::fs::write(
+        write_fake_claude(
             &refresh_executable,
-            format!(
+            &format!(
                 "#!/bin/sh\nprintf invoked > '{}'\n",
                 refresh_marker.display()
             ),
-        )
-        .expect("write forbidden refresh fixture");
-        let mut permissions = std::fs::metadata(&refresh_executable)
-            .expect("forbidden refresh fixture metadata")
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&refresh_executable, permissions)
-            .expect("make forbidden refresh fixture executable");
+        );
         let error = with_verified_claude_login_authority(&selection, Some(&drifted), || async {
             Command::new(&refresh_executable)
                 .status()
