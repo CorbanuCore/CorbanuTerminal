@@ -1197,10 +1197,10 @@ impl Session {
             // The parent can request another review as soon as it receives this event.
             self.send_event(turn_context.as_ref(), event).await;
         }
-        // Follow-up submission returns below without running the pending-work idle check.
-        // Keep its notification here; the no-follow-up path emits only after checking for
-        // pending work, so a completed turn never reports the same idle boundary twice.
-        if cleared_active_turn && !follow_up_input.is_empty() {
+        // D742 (a): report the idle boundary before pending-work discovery, as upstream
+        // does, and only here, so a completed turn reports it once. A queue-only wake
+        // still reserves before discovery (D663), so Interrupt can cancel it there.
+        if cleared_active_turn {
             self.emit_thread_idle_lifecycle_if_idle(idle_cause).await;
         }
         // Private reviewers already flushed the terminal event before delivering it.
@@ -1217,7 +1217,6 @@ impl Session {
         }
         if cleared_active_turn {
             self.maybe_start_turn_for_pending_work().await;
-            self.emit_thread_idle_lifecycle_if_idle(idle_cause).await;
         }
     }
 
