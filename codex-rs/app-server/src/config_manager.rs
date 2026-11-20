@@ -497,9 +497,9 @@ impl ConfigManager {
                 .iter()
                 .any(|id| id.as_str() == provider)
         });
+        // Every configured provider has a setup entry; fail closed if not.
         let active = match entry {
-            // Providers without a setup entry cannot be deactivated.
-            None => true,
+            None => false,
             Some(entry) => codex_provider_auth::ProviderEligibilityStore::new(&self.codex_home)
                 .load()
                 .is_ok_and(|eligibility| {
@@ -619,12 +619,13 @@ impl ConfigManager {
                 .map(str::to_owned)
         });
         // Resolve the selection before the saved provider is applied as a resume override.
-        let current_provider = self
+        // The home's own configuration, without this request's overrides: it
+        // defines the current selection and which providers D738 may admit.
+        let current = self
             .load_latest_config(typesafe_overrides.cwd.clone().or_else(|| cwd.clone()))
-            .await
-            .map(|config| config.model_provider_id);
-        // Filled by validation: the current selection and the providers to admit.
-        let mut admission: Option<(String, [String; 2])> = None;
+            .await;
+        // Filled by validation: the home's configuration and the providers to admit.
+        let mut admission: Option<(Config, [String; 2])> = None;
         let config = self
             .load_with_validation(
                 &self.current_cli_overrides(),
@@ -665,7 +666,7 @@ impl ConfigManager {
                         }
                     }
                     admission = Some((
-                        current_provider?,
+                        current?,
                         [
                             saved_provider.unwrap_or(requested_provider).to_owned(),
                             requested_provider.to_owned(),
@@ -678,14 +679,18 @@ impl ConfigManager {
         config.validate_windows_mxc_requirement()?;
         // D738 (#555/PF55): resume on the thread's own provider when this home
         // configures it and it is active, not only on the saved default.
-        let Some((current_provider, providers)) = admission else {
+        let Some((current, providers)) = admission else {
             return Err(std::io::Error::other(
                 "resume provider validation did not run",
             ));
         };
         for provider in &providers {
-            if provider != &current_provider {
-                self.admit_retained_provider(provider, &current_provider, &config.model_providers)?;
+            if provider != &current.model_provider_id {
+                self.admit_retained_provider(
+                    provider,
+                    &current.model_provider_id,
+                    &current.model_providers,
+                )?;
             }
         }
         Ok(config)

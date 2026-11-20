@@ -266,6 +266,74 @@ base_url = "{}/v1"
     Ok(())
 }
 
+/// D738: with managed provider definitions but no required selection, a thread
+/// keeps its provider after the user's saved default changes, and no request
+/// reaches the new default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn managed_definitions_keep_retained_provider_after_default_change() -> Result<()> {
+    let gateway = MockServer::start().await;
+    let other = MockServer::start().await;
+    let home = TempDir::new()?;
+    MockResponsesConfig::new(gateway.uri()).write(home.path())?;
+    std::fs::write(
+        home.path().join("requirements.toml"),
+        format!(
+            r#"
+[model_providers.gateway]
+name = "Gateway"
+base_url = "{}/v1"
+[model_providers.other]
+name = "Other"
+base_url = "{}/v1"
+"#,
+            gateway.uri(),
+            other.uri(),
+        ),
+    )?;
+    let path = home.path().join("config.toml");
+    let config = std::fs::read_to_string(&path)?;
+    std::fs::write(&path, config.replace("mock_provider", "gateway"))?;
+    let mut server = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized()
+        .await?;
+    let started = server.start_thread(ThreadStartParams::default()).await?;
+    assert_eq!(started.model_provider, "gateway");
+    let requests = responses::mount_sse_repeating(
+        &gateway,
+        responses::sse(vec![responses::ev_completed("retained")]),
+    )
+    .await;
+    let config = std::fs::read_to_string(&path)?;
+    std::fs::write(
+        &path,
+        config.replace("model_provider = \"gateway\"", "model_provider = \"other\""),
+    )?;
+    let id = server
+        .send_turn_start_request(TurnStartParams {
+            thread_id: started.thread.id.clone(),
+            input: vec![UserInput::Text {
+                text: "Continue on the managed provider.".into(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let _: TurnStartResponse = server.read_response(id).await?;
+    server
+        .read_stream_until_notification_message("turn/completed")
+        .await?;
+    assert_eq!(requests.requests().len(), 1);
+    assert!(
+        other
+            .received_requests()
+            .await
+            .expect("recorded requests")
+            .is_empty()
+    );
+    Ok(())
+}
+
 /// D738 (#555/PF55): after the saved default moves to another provider, an
 /// existing thread keeps running on its own configured, active provider. It
 /// becomes read-only only while this home deactivates that provider.

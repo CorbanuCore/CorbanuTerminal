@@ -476,3 +476,37 @@ async fn resume_admits_only_configured_active_retained_provider() -> Result<()> 
     );
     Ok(())
 }
+
+/// Resume admits only providers the home's own configuration defines: a
+/// provider the resume request itself defines is still not configured here.
+#[tokio::test]
+async fn resume_does_not_admit_a_provider_defined_only_by_the_request() -> Result<()> {
+    let home = tempdir()?;
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
+    let manager = ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
+    let error = manager
+        .load_for_resume(
+            Some("gateway"),
+            Some(HashMap::from([(
+                "model_providers".to_string(),
+                serde_json::json!({"gateway": {"name": "Gateway"}}),
+            )])),
+            ConfigOverrides {
+                model_provider: Some("gateway".into()),
+                ..Default::default()
+            },
+            Some(home.path().to_path_buf()),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderNotConfigured {
+            model_provider: "gateway".into(),
+        })
+    );
+    Ok(())
+}
