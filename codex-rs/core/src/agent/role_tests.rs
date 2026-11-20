@@ -559,6 +559,13 @@ async fn apply_role_preserves_existing_service_tier_without_override() {
 async fn apply_user_role_permissions_only_tighten() {
     // D526 (a), provisional: a role's permission settings can't loosen the parent's;
     // `allow_login_shell = false` tightens, the rest keeps the parent's values.
+    // `[windows] sandbox` does nothing off Windows; on Windows a stronger one than the
+    // parent's is refused (`apply_user_role_refuses_stricter_permissions_it_cannot_apply`).
+    let windows_sandbox = if cfg!(windows) {
+        ""
+    } else {
+        "\n[windows]\nsandbox = \"unelevated\"\n"
+    };
     for (allow_login_shell, expected) in [(false, false), (true, true)] {
         let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
         let role_path = write_role_config(
@@ -569,10 +576,7 @@ async fn apply_user_role_permissions_only_tighten() {
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 allow_login_shell = {allow_login_shell}
-
-[windows]
-sandbox = "unelevated"
-"#
+{windows_sandbox}"#
             ),
         )
         .await;
@@ -617,7 +621,11 @@ async fn apply_user_role_refuses_stricter_permissions_it_cannot_apply() {
         "[sandbox_workspace_write]\nexclude_slash_tmp = true",
         "[shell_environment_policy]\ninherit = \"none\"",
         "profile = \"strict\"",
-    ] {
+    ]
+    .into_iter()
+    // On Windows, a stronger Windows sandbox than the parent's (none here).
+    .chain(cfg!(windows).then_some("[windows]\nsandbox = \"unelevated\""))
+    {
         let (home, mut config) = test_config_with_cli_overrides(vec![
             (
                 "sandbox_mode".to_string(),

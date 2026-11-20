@@ -1,0 +1,21 @@
+{
+ "phase": "downgrade",
+ "checks": {
+  "tui_reports_foreign_migrations": true,
+  "state_db_refused_and_unmodified": true
+ },
+ "observations": {
+  "exec": {
+   "exit": 0,
+   "completed_turn": true,
+   "mentions_foreign_migrations": true
+  },
+  "state_db_refused_and_unmodified": {
+   "threads": [
+    4,
+    4
+   ]
+  }
+ },
+ "version": "corbanu 0.1.49"
+}

@@ -1859,8 +1859,8 @@ async fn brokered_snapshot_drops_secret_and_provider_names_case_insensitively() 
 /// non-login capture reads) exports a brokered GitHub token and ties the
 /// secret-named array `deploy_token` to `DEPLOY_TOKEN`, a copy of it. Core's
 /// secret-name filter drops the export (its value check would too), and the
-/// capture still records `DEPLOY_TOKEN` as an alias of the brokered token
-/// instead of bailing on it (`invalid_export`): the snapshot is written, the
+/// capture does not bail on `DEPLOY_TOKEN` (`invalid_export`); since D732 the
+/// broker removes it as a copy of the brokered token: the snapshot is written, the
 /// alias reaches neither the file nor a replay of it, and a brokered child that
 /// inherited the token and the alias gets neither the alias nor any copy of the
 /// token (D640: no placeholders for aliases). A non-secret export in the same
@@ -1880,6 +1880,19 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
              export KEEP_ME_VISIBLE=plainvaluethree\n"
         ),
     )?;
+    // Control: without the broker, the startup file ties `DEPLOY_TOKEN` to a
+    // copy of the token, so the capture below has an alias to drop.
+    let tied = Command::new("/bin/zsh")
+        .arg("-c")
+        .arg("printf '%s' \"${DEPLOY_TOKEN-unset}\"")
+        .env_clear()
+        .env("ZDOTDIR", dir.path())
+        .output()?;
+    assert!(tied.status.success(), "{tied:?}");
+    assert_eq!(
+        String::from_utf8(tied.stdout)?,
+        format!("prefix:Bearer {SECRET}")
+    );
     let started_proxy = credential_snapshot_proxy().await?;
     let shell = Shell {
         shell_type: ShellType::Zsh,
@@ -1913,11 +1926,22 @@ async fn zsh_secret_named_tied_credential_alias_is_dropped_without_bailing() -> 
     for hidden in ["DEPLOY_TOKEN", "deploy_token", SECRET, "Bearer"] {
         assert!(!snapshot.contains(hidden), "{hidden} reached the file");
     }
+    // D732 (#2719): the broker now removes `DEPLOY_TOKEN` (a copy of the
+    // brokered token) from the captured environment before alias detection,
+    // so it is no longer recorded as an alias (earlier: an unauthorized one).
+    let captured = credentials
+        .as_ref()
+        .context("control: the brokered capture returned its credentials")?;
     assert!(
-        credentials
-            .as_ref()
-            .is_some_and(|credentials| credentials.fail_open_aliases.contains_key("DEPLOY_TOKEN")),
-        "control: the capture saw DEPLOY_TOKEN as an alias of the brokered token"
+        !captured.fail_open_aliases.contains_key("DEPLOY_TOKEN"),
+        "the capture recorded DEPLOY_TOKEN as an alias"
+    );
+    assert!(
+        captured
+            .credential_env
+            .iter()
+            .all(|(key, value)| key != "DEPLOY_TOKEN" && !value.contains(SECRET)),
+        "the capture kept a copy of the brokered token"
     );
     let replay = Command::new("/bin/zsh")
         .arg("-f")

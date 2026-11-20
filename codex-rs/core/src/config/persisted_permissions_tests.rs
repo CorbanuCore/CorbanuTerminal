@@ -138,9 +138,12 @@ async fn materialized_workspace_write_with_extra_root_beats_full_access_default(
 }
 
 // Temporary directories are excluded so the fixture paths, which live under
-// them, are writable only through workspace roots.
+// them, are writable only through workspace roots. A Windows sandbox is named
+// because Windows without one runs workspace-write as read-only
+// (`effective_sandbox_mode`); the setting does nothing elsewhere.
 const WORKSPACE_WRITE_WITHOUT_TEMP_DIRS: &str = "sandbox_mode = \"workspace-write\"\n\n\
-    [sandbox_workspace_write]\nexclude_tmpdir_env_var = true\nexclude_slash_tmp = true\n";
+    [sandbox_workspace_write]\nexclude_tmpdir_env_var = true\nexclude_slash_tmp = true\n\n\
+    [windows]\nsandbox = \"unelevated\"\n";
 
 fn workspace_write_without_temp_dirs(roots: &[AbsolutePathBuf]) -> PermissionProfile {
     PermissionProfile::workspace_write_with(
@@ -288,7 +291,7 @@ async fn resume_with_config(
 }
 
 const WORKSPACE_WRITE_WITH_NETWORK: &str = "sandbox_mode = \"workspace-write\"\n\n\
-    [sandbox_workspace_write]\nnetwork_access = true\n";
+    [sandbox_workspace_write]\nnetwork_access = true\n\n[windows]\nsandbox = \"unelevated\"\n";
 
 #[tokio::test]
 async fn saved_external_profile_without_network_removes_current_network() -> anyhow::Result<()> {

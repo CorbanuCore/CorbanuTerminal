@@ -175,6 +175,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
             "@echo off\r\n",
             "echo CHILD-TEMP:%TEMP%\r\n",
             "echo allowed>\"%TEMP%\\allowed.txt\"\r\n",
+            "if exist \"%TEMP%\\allowed.txt\" echo TEMP-WRITABLE\r\n",
             "echo modified>%COMMAND_TEMP_FILE%\r\n",
             "echo modified>%OUTSIDE_FILE%\r\n",
             "exit /b 0\r\n",
@@ -277,9 +278,16 @@ async fn tmpdir_uses_command_environment_over_rpc(
     );
     let actual_temp = std::path::PathBuf::from(
         stdout
+            .lines()
+            .next()
+            .context("child TEMP line")?
             .trim()
             .strip_prefix("CHILD-TEMP:")
             .context("child TEMP output")?,
+    );
+    assert!(
+        stdout.lines().any(|line| line.trim() == "TEMP-WRITABLE"),
+        "child could not write its TEMP {actual_temp:?}; stdout={stdout:?} stderr={stderr:?}"
     );
     if selection == WindowsSandboxSelection::Elevated {
         // D377: only the private session subfolder is writable, never the
@@ -296,11 +304,61 @@ async fn tmpdir_uses_command_environment_over_rpc(
         );
         assert_eq!(std::fs::read_to_string(&command_temp_file)?, "original");
     } else {
-        assert_eq!(actual_temp, command_temp);
         assert_eq!(
             std::fs::read_to_string(&command_temp_file)?.trim_end(),
             "modified"
         );
+        if actual_temp != command_temp {
+            // #2797: Windows gives an AppContainer child its own
+            // `%LOCALAPPDATA%\Packages\<container>\AC\Temp` as TEMP and TMP,
+            // whatever the supplied environment says (natively on Windows 11
+            // build 26200). MXC makes a new `sandbox.{GUID}` container per
+            // launch and removes it when the command ends, so the folder is
+            // private to this command. The command's TEMP stays the only temp
+            // folder we grant (D725, checked above).
+            let packages = actual_temp.ancestors().nth(3);
+            let container = actual_temp
+                .ancestors()
+                .nth(2)
+                .and_then(std::path::Path::file_name)
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            let local_app_data = std::fs::canonicalize(
+                std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is missing")?,
+            )?;
+            assert!(
+                actual_temp.ends_with(r"AC\Temp")
+                    && container.len() > "sandbox.{}".len()
+                    && container.to_ascii_lowercase().starts_with("sandbox.{")
+                    && container.ends_with('}')
+                    && packages
+                        .and_then(std::path::Path::file_name)
+                        .is_some_and(|name| name.eq_ignore_ascii_case("Packages"))
+                    && packages
+                        .and_then(std::path::Path::parent)
+                        .map(std::fs::canonicalize)
+                        .transpose()?
+                        .is_some_and(|parent| parent == local_app_data),
+                "unexpected MXC child TEMP {actual_temp:?}"
+            );
+            // Removal can lag the exit slightly; a folder left behind would
+            // keep the command's temp files.
+            let container_dir = actual_temp
+                .ancestors()
+                .nth(2)
+                .context("container folder")?
+                .to_path_buf();
+            let deadline = std::time::Instant::now() + Duration::from_secs(/*secs*/ 20);
+            while container_dir.exists() && std::time::Instant::now() < deadline {
+                tokio::time::sleep(Duration::from_millis(/*millis*/ 100)).await;
+            }
+            assert!(
+                !container_dir.exists(),
+                "MXC container folder outlived the command: {container_dir:?}"
+            );
+            assert_eq!(std::fs::read_to_string(&outside)?, "original");
+            return Ok(());
+        }
     }
     assert_eq!(
         (

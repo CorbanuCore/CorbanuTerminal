@@ -1,4 +1,7 @@
 //! Exercises approval scope across a sandbox denial reported by a fake executor.
+//! D639(a) (#2808): the denial stays final. The Guardian's approval of the
+//! sandboxed attempt is not turned into a retry outside the sandbox, so no
+//! retry is reviewed or started.
 
 use super::PushedExecScenario;
 use super::accept_initialized_exec_server;
@@ -29,7 +32,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn guardian_rechecks_unsandboxed_retry_after_sandboxed_approval() -> Result<()> {
+async fn guardian_approval_of_sandboxed_attempt_does_not_retry_unsandboxed() -> Result<()> {
     let server = start_mock_server().await;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let exec_server_url = format!("ws://{}", listener.local_addr()?);
@@ -70,7 +73,8 @@ async fn guardian_rechecks_unsandboxed_retry_after_sandboxed_approval() -> Resul
                     let process_id = &request["params"]["processId"];
                     // Report completion before acknowledging start, so collecting the
                     // initial result cannot race the tool's yield deadline. A retry
-                    // would succeed, making an approval bypass observable below.
+                    // would succeed, making a retry outside the sandbox observable
+                    // below.
                     let denied = starts.len() == 1;
                     for message in [
                         json!({"method": "process/exited", "params": {
@@ -117,13 +121,6 @@ async fn guardian_rechecks_unsandboxed_retry_after_sandboxed_approval() -> Resul
                 ev_assistant_message("initial-review", r#"{"outcome":"allow"}"#),
                 ev_completed("initial-review"),
             ]),
-            sse(vec![
-                ev_assistant_message(
-                    "retry-review",
-                    r#"{"outcome":"deny","rationale":"The unsandboxed retry is not authorized."}"#,
-                ),
-                ev_completed("retry-review"),
-            ]),
             sse(vec![ev_completed("parent-done")]),
         ],
     )
@@ -167,11 +164,7 @@ async fn guardian_rechecks_unsandboxed_retry_after_sandboxed_approval() -> Resul
     let output = responses
         .function_call_output_text("sandbox-retry")
         .context("tool result")?;
-    assert_eq!(
-        starts.len(),
-        1,
-        "the denied retry must not reach the executor: {output}"
-    );
+    assert_eq!(starts.len(), 1, "no retry may reach the executor: {output}");
     assert!(
         starts[0]["sandbox"].is_object(),
         "the first attempt must be sandboxed"
@@ -198,12 +191,8 @@ async fn guardian_rechecks_unsandboxed_retry_after_sandboxed_approval() -> Resul
         "cwd": test.config.cwd.to_string_lossy(), "tty": false,
         "sandbox_permissions": "use_default",
     });
-    let mut retry = action.clone();
-    retry["sandbox_permissions"] = json!("require_escalated");
-    assert_eq!(actions, vec![action, retry]);
-    assert!(
-        output.contains("The unsandboxed retry is not authorized."),
-        "{output}"
-    );
+    // Only the sandboxed attempt was reviewed: no retry was put to review.
+    assert_eq!(actions, vec![action]);
+    assert!(output.contains("Process exited with code 1"), "{output}");
     Ok(())
 }

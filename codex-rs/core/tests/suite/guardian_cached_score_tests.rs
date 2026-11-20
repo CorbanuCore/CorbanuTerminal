@@ -365,6 +365,12 @@ async fn delayed_score_only_covers_the_tool_call_it_classified() -> Result<()> {
     Ok(())
 }
 
+// D604/D605 (#2562, #2729): background scoring is off on Corbanu and a serving
+// `requires_review: false` no longer skips review, so every exec action gets one
+// synchronous review and no classifier (`gpt-5.6-luna`) request is sent. The
+// `*_low` cases therefore expect one review per action, and the `*_uses_async`
+// and hook-rewrite cases keep their names but no longer score in the
+// background. Restore upstream's expectations with the scoring gate (#2729).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ProbeCase {
     Standard,
@@ -375,9 +381,9 @@ enum ProbeCase {
     IncompleteAuthorization,
 }
 
-#[test_case::test_case(Some(false), false, "probe-item", ProbeCase::Standard, 0; "direct_low")]
+#[test_case::test_case(Some(false), false, "probe-item", ProbeCase::Standard, 1; "direct_low")]
 #[test_case::test_case(Some(true), false, "probe-item", ProbeCase::Standard, 1; "direct_review")]
-#[test_case::test_case(Some(false), true, "probe-item", ProbeCase::Standard, 0; "code_cell_low")]
+#[test_case::test_case(Some(false), true, "probe-item", ProbeCase::Standard, 2; "code_cell_low")]
 #[test_case::test_case(Some(true), true, "probe-item", ProbeCase::Standard, 2; "code_cell_review")]
 #[test_case::test_case(None, false, "probe-item", ProbeCase::Standard, 1; "missing_uses_async")]
 #[test_case::test_case(Some(false), false, "other-item", ProbeCase::Standard, 1; "mismatched_uses_async")]
@@ -386,7 +392,7 @@ enum ProbeCase {
 #[test_case::test_case(Some(false), true, "probe-item", ProbeCase::Rewrite, 2; "nested_hook_rewrite")]
 #[test_case::test_case(Some(true), false, "probe-item", ProbeCase::Interrupted, 1; "interrupted_direct_review")]
 #[test_case::test_case(Some(true), true, "probe-item", ProbeCase::Interrupted, 2; "interrupted_cell_review")]
-#[test_case::test_case(Some(false), false, "probe-item", ProbeCase::CatalogPolicy, 0; "catalog_low_without_legacy_flag")]
+#[test_case::test_case(Some(false), false, "probe-item", ProbeCase::CatalogPolicy, 1; "catalog_low_without_legacy_flag")]
 #[test_case::test_case(Some(true), false, "probe-item", ProbeCase::CatalogPolicy, 1; "catalog_review_without_legacy_flag")]
 #[test_case::test_case(Some(false), false, "probe-item", ProbeCase::IncompleteAuthorization, 1; "incomplete_authorization_still_reviews")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -460,29 +466,15 @@ async fn serving_assessment_replaces_async_scoring(
         ],
     )
     .await;
-    let uses_async = requires_review.is_none()
-        || assessed_item != "probe-item"
-        || scenario == ProbeCase::Rewrite;
-    let expected_scores = if uses_async {
-        1..=if code_mode { 2 } else { 1 }
-    } else {
-        0..=0
-    };
+    // D604: no background classifier request, whatever the serving assessment.
     Mock::given(method("POST"))
         .and(body_partial_json(json!({"model": "gpt-5.6-luna"})))
         .respond_with(responses::sse_response(sse(vec![
-            ev_assistant_message(
-                "score",
-                if scenario == ProbeCase::Interrupted {
-                    "low"
-                } else {
-                    "high"
-                },
-            ),
+            ev_assistant_message("score", "high"),
             ev_completed("score"),
         ])))
         .with_priority(/*p*/ 1)
-        .expect(expected_scores)
+        .expect(0)
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -598,27 +590,6 @@ async fn serving_assessment_replaces_async_scoring(
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
-    if uses_async {
-        timeout(Duration::from_secs(30), async {
-            loop {
-                if server
-                    .received_requests()
-                    .await
-                    .unwrap_or_default()
-                    .iter()
-                    .any(|request| {
-                        request
-                            .body_json::<serde_json::Value>()
-                            .is_ok_and(|body| body["model"] == "gpt-5.6-luna")
-                    })
-                {
-                    break;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await?;
-    }
     test.codex.shutdown_and_wait().await?;
     let requests = parent.requests();
     assert_eq!(requests.len(), 2);

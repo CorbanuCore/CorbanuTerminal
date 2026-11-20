@@ -228,6 +228,15 @@ impl Sandboxable for UnifiedExecRuntime<'_> {
     fn escalate_on_failure(&self) -> bool {
         true
     }
+
+    /// D639(a) (#2808): a command the sandbox denied stays refused. Unified
+    /// exec reports a denial to the orchestrator only when the command exits
+    /// within its early-exit grace period (often under Seatbelt, rarely under
+    /// bubblewrap), so without this the same command was retried outside the
+    /// sandbox on macOS and refused on Linux.
+    fn keeps_sandbox_denial_final(&self) -> bool {
+        true
+    }
 }
 
 impl Approvable<UnifiedExecRequest<'_>> for UnifiedExecRuntime<'_> {
@@ -967,6 +976,13 @@ mod tests {
             }
             other => panic!("expected timeout-or-cancellation expiration, got {other:?}"),
         }
+    }
+
+    /// D639(a) (#2808): unified exec keeps an ordinary sandbox denial final.
+    #[test]
+    fn unified_exec_keeps_sandbox_denial_final() {
+        let manager = UnifiedExecProcessManager::default();
+        assert!(UnifiedExecRuntime::new(&manager).keeps_sandbox_denial_final());
     }
 
     #[tokio::test]

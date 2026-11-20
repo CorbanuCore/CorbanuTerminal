@@ -4,6 +4,8 @@ use anyhow::Result;
 use codex_core::TurnInputRequest;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::permissions::FileSystemAccessMode;
+use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::user_input::UserInput;
@@ -23,16 +25,26 @@ use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use test_case::test_case;
 
-#[test_case(false; "freeform")]
-#[test_case(true; "shell interception")]
+/// Corbanu #606 (main's rule): the approval check refuses a case alias of
+/// protected metadata only for a policy that denies reads (Moderate and
+/// Aggressive); without denied paths it keeps today's answer and Seatbelt,
+/// which matches those names in any case, refuses the write. Either way the
+/// metadata file is unchanged.
+#[test_case(false, false; "freeform")]
+#[test_case(true, false; "shell interception")]
+#[test_case(false, true; "freeform with denied reads")]
+#[test_case(true, true; "shell interception with denied reads")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn case_variant_metadata_patch_cannot_write_without_approval(shell: bool) -> Result<()> {
+async fn case_variant_metadata_patch_cannot_write_without_approval(
+    shell: bool,
+    denies_reads: bool,
+) -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
     skip_if_remote!(Ok(()), "exercises native macOS case aliases");
     let server = start_mock_server().await;
     let test = test_codex()
-        .with_config(|config| {
+        .with_config(move |config| {
             config.workspace_roots = vec![config.cwd.clone()];
             config
                 .permissions
@@ -43,9 +55,20 @@ async fn case_variant_metadata_patch_cannot_write_without_approval(shell: bool) 
                 .approval_policy
                 .set(AskForApproval::Never)
                 .expect("disable approvals in the regression");
+            let profile = if denies_reads {
+                let (mut file_system, network) =
+                    PermissionProfile::workspace_write().to_runtime_permissions();
+                file_system.entries.push(FileSystemSandboxEntry::new(
+                    config.cwd.join("denied").into(),
+                    FileSystemAccessMode::Deny,
+                ));
+                PermissionProfile::from_runtime_permissions(&file_system, network)
+            } else {
+                PermissionProfile::workspace_write()
+            };
             config
                 .permissions
-                .set_permission_profile(PermissionProfile::workspace_write())
+                .set_permission_profile(profile)
                 .expect("set workspace permissions");
         })
         .build_with_auto_env(&server)
@@ -101,9 +124,20 @@ async fn case_variant_metadata_patch_cannot_write_without_approval(shell: bool) 
         request.custom_tool_call_output_content_and_success("protected")
     }
     .expect("protected patch output");
-    assert!(output.expect("patch rejection text").contains(
-        "patch rejected: writing outside of the project; rejected by user approval settings"
-    ));
+    let output = output.expect("patch rejection text");
+    if denies_reads {
+        assert!(
+            output.contains(
+                "patch rejected: writing outside of the project; rejected by user approval settings"
+            ),
+            "{output}"
+        );
+    } else {
+        assert!(
+            output.contains("Failed to write file") && output.contains(".GIT/config"),
+            "{output}"
+        );
+    }
     Ok(())
 }
 
