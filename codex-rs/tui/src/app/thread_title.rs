@@ -33,6 +33,24 @@ const THREAD_TITLE_MODEL: &str = "gpt-5.6-luna";
 pub(super) const THREAD_TITLE_PROMPT_MAX_BYTES: usize = 960;
 const THREAD_TITLE_RECENT_MESSAGES: usize = 8;
 
+/// D740: `[tui] automatic_thread_titles` wins when set; otherwise automatic
+/// titles run only on plan or subscription accounts, never on pay-per-token,
+/// wallet-funded, local or undeclared providers.
+pub(super) fn automatic_thread_titles_enabled(
+    setting: Option<bool>,
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+    has_chatgpt_account: bool,
+) -> bool {
+    setting.unwrap_or_else(|| {
+        codex_model_provider_info::is_plan_account(
+            provider_id,
+            provider,
+            has_chatgpt_account.then_some(codex_protocol::auth::AuthMode::Chatgpt),
+        )
+    })
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GeneratedThreadTitle {
@@ -60,6 +78,17 @@ impl App {
         });
     }
 
+    /// D740: whether this session names new threads automatically.
+    pub(super) fn automatic_thread_titles_enabled(&self) -> bool {
+        let config = self.chat_widget.config_ref();
+        automatic_thread_titles_enabled(
+            config.tui_automatic_thread_titles,
+            &config.model_provider_id,
+            &config.model_provider,
+            self.chat_widget.has_chatgpt_account(),
+        )
+    }
+
     /// Start a hidden title-generation thread without blocking the UI loop.
     pub(super) fn generate_thread_title(
         &mut self,
@@ -68,6 +97,13 @@ impl App {
         destination: ThreadTitleDestination,
         prompt: String,
     ) {
+        // D740: an automatic title is an extra model request on the session's
+        // provider; it runs by default only on plan or subscription accounts.
+        if matches!(destination, ThreadTitleDestination::Automatic)
+            && !self.automatic_thread_titles_enabled()
+        {
+            return;
+        }
         if app_server.thread_params_mode().settings_owner() == ThreadSettingsOwner::Server {
             if let ThreadTitleDestination::RenameSuggestion { request_id } = destination {
                 self.chat_widget

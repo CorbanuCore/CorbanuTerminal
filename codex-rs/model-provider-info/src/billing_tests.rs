@@ -337,3 +337,58 @@ fn billing_override_under_the_real_id_wins_over_an_alias() {
         );
     }
 }
+
+/// D740: plan and subscription accounts are told apart from wallet-funded,
+/// pay-per-token, local and undeclared providers.
+#[test]
+fn plan_accounts_are_subscription_sessions_and_corbanu_plans() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let plan = |id: &str, auth_mode| is_plan_account(id, &providers[id], auth_mode);
+    // Plan and subscription accounts.
+    assert!(plan(OPENAI_PROVIDER_ID, Some(AuthMode::Chatgpt)));
+    assert!(plan(CLAUDE_PLAN_PROVIDER_ID, None));
+    assert!(plan(PFTERMINAL_PLAN_PROVIDER_ID, None));
+    assert!(plan(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, None));
+    assert!(is_plan_account(
+        crate::CORBANU_PLAN_PROVIDER_ID,
+        &providers[PFTERMINAL_PLAN_PROVIDER_ID],
+        None
+    ));
+    assert!(plan(KIMI_CODE_PROVIDER_ID, None));
+    assert!(plan(ZAI_ANTHROPIC_PROVIDER_ID, None));
+    // Pay-per-token API keys and wallet-funded providers.
+    assert!(!plan(OPENAI_PROVIDER_ID, Some(AuthMode::ApiKey)));
+    assert!(!plan(OPENAI_PROVIDER_ID, None));
+    for id in [
+        ANTHROPIC_PROVIDER_ID,
+        AMBIENT_PROVIDER_ID,
+        ZAI_PROVIDER_ID,
+        OPENROUTER_PROVIDER_ID,
+        DEEPSEEK_PROVIDER_ID,
+        AMAZON_BEDROCK_PROVIDER_ID,
+    ] {
+        assert!(!plan(id, None), "{id}");
+    }
+    // Local and undeclared routes (for example a rented GPU) are not plans.
+    assert!(!plan(OLLAMA_OSS_PROVIDER_ID, None));
+    let rented = ModelProviderInfo {
+        base_url: Some("https://203.0.113.7:8000/v1".into()),
+        ..providers[DEEPSEEK_PROVIDER_ID].clone()
+    };
+    assert!(!is_plan_account("rented-gpu", &rented, None));
+    // A billing basis the user declared wins either way.
+    let declared_plan = ModelProviderInfo {
+        billing: Some(Subscription),
+        ..rented.clone()
+    };
+    assert!(is_plan_account("rented-gpu", &declared_plan, None));
+    let declared_metered = ModelProviderInfo {
+        billing: Some(PayPerUse),
+        ..providers[OPENAI_PROVIDER_ID].clone()
+    };
+    assert!(!is_plan_account(
+        OPENAI_PROVIDER_ID,
+        &declared_metered,
+        Some(AuthMode::Chatgpt)
+    ));
+}

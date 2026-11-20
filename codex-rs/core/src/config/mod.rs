@@ -1118,6 +1118,10 @@ pub struct Config {
     /// Own the fullscreen transcript when the alternate screen is enabled.
     pub tui_fullscreen_transcript: bool,
 
+    /// D740: automatic thread titles. `None` runs them only on plan or
+    /// subscription accounts; `Some` forces them on or off.
+    pub tui_automatic_thread_titles: Option<bool>,
+
     /// Mouse wheel speed multiplier for transcript scrolling; defaults to one row per event.
     pub tui_mouse_scroll_speed: Option<f64>,
 
@@ -6296,6 +6300,10 @@ impl Config {
                 .tui
                 .as_ref()
                 .is_none_or(|tui| tui.fullscreen_transcript),
+            tui_automatic_thread_titles: cfg
+                .tui
+                .as_ref()
+                .and_then(|tui| tui.automatic_thread_titles),
             tui_mouse_scroll_speed: cfg.tui.as_ref().and_then(|tui| tui.mouse_scroll_speed),
             tui_copy_on_select: cfg
                 .tui

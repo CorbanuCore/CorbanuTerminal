@@ -102,6 +102,8 @@ async fn cloud_conversations_skip_tui_generated_titles() {
         codex_app_server_client::AppServerClient::Cloud(client),
         crate::app_server_session::ThreadParamsMode::Cloud,
     );
+    // Past the D740 provider gate, so only the cloud rule decides.
+    app.chat_widget.config.tui_automatic_thread_titles = Some(true);
 
     app.generate_thread_title(
         &app_server,
@@ -273,6 +275,8 @@ async fn check_thread_title_generation(scenario: TitleScenario) -> color_eyre::R
         base_url: Some(format!("{}/v1", server.uri())),
         request_max_retries: Some(0),
         stream_max_retries: Some(0),
+        // D740: automatic titles run on plan or subscription accounts.
+        billing: Some(codex_model_provider_info::BillingBasis::Subscription),
         ..ModelProviderInfo::default()
     };
 
@@ -851,5 +855,92 @@ async fn failed_thread_title_requests_are_removed() -> color_eyre::Result<()> {
     .await?;
     assert!(app.pending_thread_titles.is_empty());
     app_server.shutdown().await?;
+    Ok(())
+}
+
+/// D740: automatic titles follow `[tui] automatic_thread_titles` when it is
+/// set, and otherwise run only on plan or subscription accounts.
+#[test]
+fn automatic_thread_titles_default_to_plan_accounts_only() {
+    let providers =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
+    let enabled = |setting, id: &str, chatgpt| {
+        super::automatic_thread_titles_enabled(setting, id, &providers[id], chatgpt)
+    };
+    // Plan and subscription accounts: ChatGPT plan, Claude Plan, Corbanu Plan.
+    assert!(enabled(None, "openai", /*chatgpt*/ true));
+    assert!(enabled(None, "claude-plan", /*chatgpt*/ false));
+    assert!(enabled(None, "pfterminal-plan", /*chatgpt*/ false));
+    assert!(enabled(
+        None,
+        "pfterminal-plan-anthropic",
+        /*chatgpt*/ false
+    ));
+    // Pay-per-token API keys and wallet-funded providers.
+    for id in [
+        "openai",
+        "anthropic",
+        "ambient",
+        "zai",
+        "openrouter",
+        "deepseek",
+    ] {
+        assert!(!enabled(None, id, /*chatgpt*/ false), "{id}");
+    }
+    // Local models are no plan either.
+    assert!(!enabled(None, "ollama", /*chatgpt*/ false));
+    // The setting turns them on for any provider, or off for a plan.
+    assert!(enabled(Some(true), "zai", /*chatgpt*/ false));
+    assert!(enabled(Some(true), "anthropic", /*chatgpt*/ false));
+    assert!(!enabled(Some(false), "openai", /*chatgpt*/ true));
+    assert!(!enabled(Some(false), "claude-plan", /*chatgpt*/ false));
+}
+
+/// D740: on a pay-per-token provider no automatic title request starts unless
+/// the setting asks for it; an explicit rename suggestion still runs.
+#[tokio::test]
+async fn automatic_thread_title_skips_pay_per_token_provider_unless_enabled()
+-> color_eyre::Result<()> {
+    let mut app = make_test_app().await;
+    app.chat_widget.config.model_provider_id = "anthropic".to_string();
+    app.chat_widget.config.model_provider =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)["anthropic"]
+            .clone();
+    let app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
+    let thread_id = ThreadId::new();
+
+    app.generate_thread_title(
+        &app_server,
+        thread_id,
+        ThreadTitleDestination::Automatic,
+        thread_title_prompt("Fix the login timeout"),
+    );
+    assert!(app.pending_thread_titles.is_empty());
+
+    let suggestion = ThreadTitleDestination::RenameSuggestion {
+        request_id: uuid::Uuid::new_v4(),
+    };
+    app.generate_thread_title(
+        &app_server,
+        thread_id,
+        suggestion,
+        thread_title_prompt("Fix the login timeout"),
+    );
+    assert!(
+        app.pending_thread_titles
+            .contains_key(&(thread_id, suggestion))
+    );
+
+    app.chat_widget.config.tui_automatic_thread_titles = Some(true);
+    app.generate_thread_title(
+        &app_server,
+        thread_id,
+        ThreadTitleDestination::Automatic,
+        thread_title_prompt("Fix the login timeout"),
+    );
+    assert!(
+        app.pending_thread_titles
+            .contains_key(&(thread_id, ThreadTitleDestination::Automatic))
+    );
     Ok(())
 }
