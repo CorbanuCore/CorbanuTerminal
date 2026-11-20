@@ -157,12 +157,11 @@ Checked after the cutoff and left out because they move no boundary:
 - #2680: a test expectation;
 - #2596: docs;
 - #2677 and #2582: main merges #12 and #11. Their security carries appear as their own rows;
-- #2750: config load reads the GPU overlay without opening the state runtime; no boundary;
-- test-only or build-only changes on owned paths: #2715, #2654, #2664, #2683, #2689, #2666, #2618, #2545.
+- test-only or build-only changes on owned paths: #2715, #2654, #2664, #2683, #2689, #2666, #2618, #2545 and #2712 (a one-line test import removal).
 
 The check matched every first-parent merge after the cutoff against the `@corbanu-security` paths in `.github/CODEOWNERS`.
 
-"Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row except #2774 has a corbanu-security approval whose commit is that PR's head (checked through the GitHub reviews API on 2026-11-19/20). By the security approval rule, each one follows an independent Opus 5.5 High APPROVE on that head. #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
+"Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row except #2774 has a corbanu-security approval whose commit is that PR's head (checked through the GitHub reviews API on 2026-11-19/20). The security approval rule requires each one to follow an independent Opus 5.5 High APPROVE on that head. This record infers the Opus approval from that rule; it did not check each one separately. #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
 
 | Boundary | PR (merge) | Before | After |
 | --- | --- | --- | --- |
@@ -228,7 +227,8 @@ The check matched every first-parent merge after the cutoff against the `@corban
 | Windows permission-confirmation watcher | #2772 (`b1c4878ef3`) | `ancestor_content_change_does_not_notify_existing_child_watch` fails before the fix (Mac) | Pass |
 | `corbanu model` nested launch treated as a credentials launch | #2588 (`b6c74bc2d6`), port of the #2567 cooldown work | No fail-before restated here; see the PR | Pass |
 | Unapproved publishing workflows disabled; corbanu-security owns them | #2646 (`d99b21cba8`), D480/D717/D718 | No fail-before here: workflow and CODEOWNERS change, with a reconciliation test | Pass |
-| Sandbox carries from main (#2563) | #2609 (`c9ab537636`) | No fail-before restated here; new `windows_sandbox_settings_tests` | Pass |
+| Sandbox carries from main (#2563) | #2609 (`c9ab537636`) | No fail-before restated here; `windows_sandbox_settings_tests` newly wired in | Pass |
+| GPU rental token: HTTPS-or-loopback re-check at config load; refuse a state database with a foreign migration | #2750 (`5936e8ff71`) | No fail-before restated here: defence-in-depth re-checks of the write-side rule (#2723) | Pass |
 | Memory v2 privacy | #2774 (`672d02e593`) | Test-only (fixtures) | Four cases on v2 + v1 |
 
 #2562's 43 carry rows are mapped there row by row. 42 are resolved with sync-head evidence; S3b 562 (D608) waits for #1800.
@@ -281,7 +281,7 @@ The check matched every first-parent merge after the cutoff against the `@corban
    - Mac: `-p codex-sandboxing` and `-p codex-exec --test all -- suite::seatbelt` at `-j6`, with at least 25% memory free;
    - desktop: `-p codex-windows-sandbox` and `-p codex-exec-server --test exec_process -- windows_sandbox`.
 3. Close the matrix gaps from the full final CI, or keep them listed by name.
-4. Add rows for any security-path PR merged after `ab557d87af` (including #2791's carries) to the fail-before/pass-after table. Then run this check from the repository root. It lists every first-parent merge after the cutoff that touches a `@corbanu-security` path in `.github/CODEOWNERS` but is not named in this record. It must print `missing 0`. Set `HEAD_SHA` to the candidate:
+4. Add rows for any security-path PR merged after `ab557d87af` (including #2791's carries) to the fail-before/pass-after table. Then run this check from the repository root. It lists every first-parent merge after the cutoff that touches a `@corbanu-security` path in `.github/CODEOWNERS` but is not named in this record. It must print `missing 0`. Run it on a checkout of the candidate, since it reads `.github/CODEOWNERS` and this record from the working tree. Set `HEAD_SHA` to the candidate:
    ```sh
    HEAD_SHA=<candidate> python3 - <<'EOF'
    import fnmatch, os, re, subprocess
@@ -291,7 +291,9 @@ The check matched every first-parent merge after the cutoff against the `@corban
    def is_owned(path):
        for p in owned:
            if p.endswith("/") and path.startswith(p): return True
-           if "*" in p and (fnmatch.fnmatch(path, p) or fnmatch.fnmatch(path, p + "/*")): return True
+           # CODEOWNERS "**/" also matches zero directories; fnmatch does not.
+           if "*" in p and any(fnmatch.fnmatch(path, q) or fnmatch.fnmatch(path, q + "/*")
+                               for q in (p, p.replace("**/", ""))): return True
            if "*" not in p and (path == p or path.startswith(p + "/")): return True
        return False
    doc = open("docs/management/upstreamSync/s3-security-signoff.md").read()
