@@ -66,6 +66,18 @@ fn account_local_app_data_matches_the_shell_for_an_unchanged_environment() {
     assert_eq!(local_app_data(), Some(shell_local_app_data()));
 }
 
+/// The fallback when the shell's value can't be expanded: the account's
+/// profile folder, which gives the shell's default where Local AppData
+/// isn't registered elsewhere (as on CI runners).
+#[test]
+fn profile_fallback_gives_the_shells_default_folder() {
+    let token = AccountToken::open().expect("process token");
+    assert_eq!(
+        profile_dir(&token).map(|profile| profile.join(r"AppData\Local")),
+        Some(shell_local_app_data())
+    );
+}
+
 /// A changed `USERPROFILE`/`LOCALAPPDATA` no longer moves the records (the
 /// shell's lookup followed `USERPROFILE` to `<fake>\AppData\Local`).
 #[test]
