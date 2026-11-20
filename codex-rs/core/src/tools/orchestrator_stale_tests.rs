@@ -262,6 +262,8 @@ struct Case {
     sandbox_approval_by_policy: bool,
     /// #2820: the `PATH` the command runs with (`local_search_path`).
     search_path: Option<&'static str>,
+    /// #2820: the turn requires strict automatic review.
+    strict_auto_review: bool,
 }
 
 struct Handler {
@@ -283,6 +285,7 @@ impl Default for Case {
             sandbox_exe: None,
             sandbox_approval_by_policy: false,
             search_path: None,
+            strict_auto_review: false,
         }
     }
 }
@@ -305,6 +308,15 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
             (session, turn, Some(events), None)
         }
     };
+    if case.strict_auto_review {
+        let active = crate::state::ActiveTurn::default();
+        active
+            .turn_state
+            .lock()
+            .await
+            .enable_strict_auto_review(session.services.authority_marker());
+        *session.active_turn.lock().await = Some(active);
+    }
     let controller = initialize_policy(&session);
     let mut probe = Probe {
         session: Arc::clone(&session),
@@ -766,4 +778,30 @@ async fn issue_2820_the_probe_uses_the_commands_path() {
     assert_eq!(result, Ok(()));
     assert_eq!(probe.asked, vec![None]);
     assert_eq!(probe.runs, 2);
+}
+
+/// #2820 (D747): where the turn requires strict automatic review, nobody is
+/// asked about a retry after the sandbox failed to start: it is refused.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2820_a_sandbox_that_failed_to_start_is_refused_under_strict_auto_review() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        requirement: ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+        sandbox_denies: vec![true],
+        approval_policy: AskForApproval::UnlessTrusted,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        strict_auto_review: true,
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err(STARTUP_RETRY_NEEDS_PERSON.to_string()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 1, "not retried");
 }
