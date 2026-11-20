@@ -7,9 +7,11 @@
 - New commands from upstream: `corbanu agents` opens the agent command center
   to browse and switch sessions; `corbanu queue` queues a message for an
   existing session; `corbanu migrate-rollouts` inspects or migrates legacy local
-  sessions to paginated thread history; and the experimental
+  sessions to paginated thread history; the experimental
   `corbanu migrate-nfs-db` switches the configured SQLite databases to DELETE
-  journal mode in place.
+  journal mode in place; and on Windows, `corbanu sandbox uninstall` removes the
+  legacy Windows sandbox's machine-wide accounts and network rules without
+  touching your Corbanu home.
 - Removed: `corbanu mcp-server`, which ran Corbanu Terminal as a stdio MCP
   server. Upstream removed the command (D275). Configuring the MCP servers
   Corbanu uses (`corbanu mcp …`) is unchanged.

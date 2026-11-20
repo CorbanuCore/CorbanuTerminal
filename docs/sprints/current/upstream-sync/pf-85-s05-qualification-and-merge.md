@@ -51,7 +51,7 @@ updated: 2026-11-19
 Pre-merge gates (all on the exact final candidate):
 
 - [ ] Final main carry no more than 48 hours before landing; apply #2801 (CI mode and CODEOWNERS) with coordinator approval; full run with no expected-red exception; SG1 re-run, #2799 fixed; SG3 security-path diff from the SG2-signed SHA.
-- [ ] Rollback/compatibility: vault files open in the last released binary (D319). State DB: 0.1.49 refuses the upgraded DB (`MIGRATIONS.md`), so restore from backup unless Travis decides otherwise; backup/upgrade/restore evidence on the candidate.
+- [ ] Rollback/compatibility: vault files open in the last released binary (D319). State DB: 0.1.49 refuses the upgraded DB (`MIGRATIONS.md`), so restore from backup unless Travis decides otherwise. Collect backup/upgrade/restore evidence on the candidate, including a 0.1.49 (0001–0053 + 0070) upgrade fixture (#2812).
 - [ ] Functional qualification, Windows human checklist and release dry run (landing plan gates 4–6); code-blind design frozen first.
 - [ ] Final independent review (up to 8 rounds, D307), matching corbanu-security approval and Travis's final approval.
 

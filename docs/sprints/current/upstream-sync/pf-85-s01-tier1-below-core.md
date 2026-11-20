@@ -51,9 +51,9 @@ updated: 2026-11-19
 - [x] Three isolated discovery-budget regressions passed, covering differing budgets, equivalent/default/capped budgets and ready reuse (nextest `b763c88a-413b-4f12-8ca4-062e3ff98b39`). An initial test compilation failed on a missing `mut`; corrected and freshly rerun.
 - [x] Internal connection-lifecycle scope: code-blind TUI design is not applicable to this slice; PF-85-S05 retains final sync functional qualification.
 - [x] S3a Tier 1 sandbox crates resolved (with all of S3a, 2026-11-14; see PF-85-S02 and #1628).
-- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): every Tier 1 ledger row is resolved (S1a 80, S1b 102, S1c 849, S1d 493). #2101 merged into sync on 2026-11-14 with its process-lifecycle tests and ledger attribution.
+- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): every Tier 1 ledger row is resolved (S1a 80, S1b 102, S1c 849, S1d 493). #2101 merged into sync on 2026-11-14 (`f5fa123c8e`) after independent Opus review, keeping its process-lifecycle tests and ledger attribution. Tier 1 security-path rows (S3a) were resolved with security review (#1628).
 - [x] D319 fixtures from `main` `18fa372a` were committed before any `age`/`zip` change (#1712); the security owner decided D345/D346.
-- [x] Migration renumbering (0054–0069, `codex-rs/state/MIGRATIONS.md`); `tests/state_db_upgrade.rs` upgrades the 0.1.48 release DB and a `main` 1–53 DB (0.1.49's schema). Rollback evidence belongs to PF-85-S05.
+- [x] Migration renumbering (0054–0069, `codex-rs/state/MIGRATIONS.md`); `tests/state_db_upgrade.rs` upgrades the 0.1.48 release DB and a `main` 1–53 DB. There is no 0.1.49 fixture yet (1–53 + 0070, #2812); upgrade and rollback evidence belong to PF-85-S05.
 - [x] Non-user-facing N/A: Tier 1 crates have no TUI flow of their own; PF-85-S05 keeps the final functional qualification.
 
 ## Remaining

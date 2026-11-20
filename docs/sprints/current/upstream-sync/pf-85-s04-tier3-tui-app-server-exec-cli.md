@@ -49,7 +49,7 @@ updated: 2026-11-19
 
 - [x] Sprint record created and linked to one plan feature.
 
-- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): S4a 179/179, S4b 226/226, S4d 16/16 and S4e 41/41 ledger rows resolved. The obsolete `mcp-server` remnants were closed after CLI #2274 merged (`dacadfcc4a`). S4c is 112/112: the app-server CLI tail closed in the same reconciliation, with a current-head three-platform run where all 14 former CLI exclusions pass.
+- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): S4a 179/179, S4b 226/226, S4d 16/16 and S4e 41/41 ledger rows resolved. The obsolete `mcp-server` remnants were closed after CLI #2274 merged (`dacadfcc4a`). S4c is 112/112: the app-server CLI tail closed in the same reconciliation, with a current-head run where all 14 former CLI exclusions pass on Linux and macOS (Windows doesn't compile them; its suite has 0 failures).
 - [x] CLI #2274 merged. The app-server suite reached 0 failures on all three platforms after #2754/#2758 (#2277). At `91efec006d`, Linux and Windows are still at 0; macOS shows 2 non-CLI failures, now on #2277.
 - [x] CI-mode revert prepared as held draft #2801 (`voice-host` stays excluded, D316). Applied only on the final candidate.
 
