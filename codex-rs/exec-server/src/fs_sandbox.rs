@@ -996,8 +996,15 @@ mod tests {
             })
             .expect("sandbox command");
 
-        assert_eq!(request.sandbox, SandboxType::WindowsRestrictedToken);
-        assert_eq!(request.windows_sandbox_level, WindowsSandboxLevel::Elevated);
+        // The transform's choice; the wrapper would then record its own.
+        assert_eq!(
+            request.sandbox,
+            codex_sandboxing::SandboxType::WindowsRestrictedToken
+        );
+        assert_eq!(
+            request.windows_sandbox_level,
+            codex_protocol::config_types::WindowsSandboxLevel::Elevated
+        );
         assert_eq!(
             request
                 .permission_profile
