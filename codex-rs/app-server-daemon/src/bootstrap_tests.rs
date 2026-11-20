@@ -1,4 +1,5 @@
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -16,12 +17,18 @@ use super::RemoteControlMode;
 use super::backend;
 use super::settings::DaemonSettings;
 
-/// Whether the updater is still reported as starting or running after a short grace.
+/// Whether the updater survived: its pid file is still there, or it is still reported
+/// as starting or running after a short grace.
 ///
-/// A stopped updater can read as `Starting` for a moment: the pid file is gone, but a
-/// process forked by a parallel test still holds a duplicate of the reservation-lock
-/// descriptor until it execs. A real survivor (the fixture sleeps 30 s) stays reported.
-async fn updater_outlives_grace(updater: &backend::PidBackend) -> Result<bool> {
+/// A completed stop removes the pid file before it returns. Without the file, the
+/// updater can still read as `Starting` for a moment: a process forked elsewhere in
+/// the test binary holds a duplicate of the reservation-lock descriptor until it
+/// execs. Only that state gets the grace; the fixture sleeps 30 s, so a real survivor
+/// stays reported.
+async fn updater_outlives_grace(updater: &backend::PidBackend, pid_file: &Path) -> Result<bool> {
+    if tokio::fs::try_exists(pid_file).await? {
+        return Ok(true);
+    }
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
         if !updater.is_starting_or_running().await? {
@@ -100,7 +107,7 @@ async fn lifecycle_stops_old_updater_even_when_managed_binary_is_missing() -> Re
                 .await
                 .map(|_| ()),
         };
-        let still_running = updater_outlives_grace(&updater).await?;
+        let still_running = updater_outlives_grace(&updater, &daemon.update_pid_file).await?;
         updater.stop().await?;
         observed.push((format!("{operation:?}"), still_running, result.is_ok()));
     }
@@ -195,7 +202,7 @@ async fn bootstrap_stops_old_updater_without_relaunching_and_keeps_daemon_workin
             })
             .await?;
         let version = daemon.run(LifecycleCommand::Version).await?;
-        let updater_running = updater_outlives_grace(&updater).await?;
+        let updater_running = updater_outlives_grace(&updater, &daemon.update_pid_file).await?;
         Ok::<_, anyhow::Error>((output, version, updater_running))
     })
     .await;
