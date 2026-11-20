@@ -295,7 +295,9 @@ fn resolves_to_batch_file(program: &str, env: &HashMap<String, String>, cwd: &Pa
 /// The entries of a PATH-style list as cmd reads them (checked natively on
 /// Windows 11, #2783): a `;` inside quotes doesn't split, every quote is
 /// dropped, and the spaces around an entry are kept (`"C:\bin" ` and
-/// `C:\bin ` both search a folder named `bin `).
+/// `C:\bin ` both search a folder named `bin `). An unclosed quote runs to
+/// the end of the value (checked natively on build 26200, #2793): cmd
+/// searches no entry after it, so `"C:\a;C:\bin ` doesn't search `bin `.
 fn cmd_list_entries(value: &str) -> Vec<String> {
     let mut entries = vec![String::new()];
     let mut quoted = false;
