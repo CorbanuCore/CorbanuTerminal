@@ -142,3 +142,22 @@ Windows it needs GStreamer 1.28 (`gstreamer` 0.25 with `v1_28`) through `pkg-con
   in the tree, and decide separately whether Corbanu ships voice; if it does, adopt upstream's
   `cargo_voice_inputs` job in S5 with an Actions cache instead of BuildBuddy. The skeleton puts `voice-host` in the
   workspace `exclude` list.
+
+## Final gate 1 re-run (2026-11-19, sync `91efec006d`)
+
+Landing plan final gate 1, run by sync-integrator on sync `91efec006dfee045e4d0878d5ee8072553f4ff0d` (main merge #13, [#2791](https://github.com/CorbanuCore/CorbanuTerminal/pull/2791)). Main at `15415856d7c0d77ba82bdb234924884e8464cc1b` is fully contained (`git rev-list sync..main` is empty). This is a pre-candidate run. It has to be repeated on the exact final candidate, after the temporary CI mode is removed ([#2801](https://github.com/CorbanuCore/CorbanuTerminal/pull/2801), held).
+
+| Check | Result |
+|---|---|
+| Pinned upstream ancestry | `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a` (= `rust-v0.167.0`) is an ancestor. None of the 47 later upstream tags (`rust-v0.168.0*` onward, peeled commits from `git ls-remote`) is in the history. |
+| Two-parent history | The skeleton merge `1d2e8ca07d` has parents main base `781b935ff7` and `086ccc833b`, and arrives through #1690 on sync's first-parent chain. All 690 sync merges since then have exactly two parents; there are no octopus merges. `origin/main` is an ancestor. |
+| Conflict markers | `git grep` over the whole tree for lines beginning `<<<<<<< `, `>>>>>>> `, `\|\|\|\|\|\|\| ` or exactly `=======`: none. No tracked `*.orig`/`*.rej` or `_BASE_`/`_LOCAL_`/`_REMOTE_` files. |
+| Locked metadata | `cargo metadata --locked` (Rust 1.99.1, glitch) and `pnpm install --frozen-lockfile --lockfile-only` pass. `MODULE.bazel.lock` is qualified by the Bazel lane (#2645), not here. |
+| cargo-deny (0.19.0, checksum-verified, `--all-features --locked check`, fresh advisory DB) | bans, licenses and sources **ok**; advisories **FAILED**: RUSTSEC-2026-0544 (`libz-sys` 1.1.31, **sync only**, via upstream's `curl-sys`; fix ≥ 1.1.33) and RUSTSEC-2026-0543 (`chrono` unmaintained, also on main, #2518). Tracked in [#2799](https://github.com/CorbanuCore/CorbanuTerminal/issues/2799). The PR-mode check on #2791 passed earlier the same day because the DB did not contain these yet. |
+| GitHub advisories (Dependabot, not in RustSec) | Sync clears main's `gix*`, `quinn-proto` and `actix-http` alerts. It still locks main's versions of `aws-smithy-json` (high), `serde_with`, `cmov`, `tar` and `jsonwebtoken`; dispositions are needed (#2799). |
+| npm | `pnpm audit`: sync = main, 3 moderate dev/build-only (`@hono/node-server`, `glob`, `minimatch`), production 0. #2305's earlier low is gone. |
+| Packages (`sg1_lockdiff.py origin/main HEAD`) | Cargo third-party crates 1,154 → 1,154 (44 added, 44 removed, 77 changed). New git sources: `CorbanuCore/rusty_v8`, `hyperium/h3`, `microsoft/mxc` and `openai-oss-forks/crossterm` at its newer rev, all pinned to full revisions and allowed by `deny.toml`. pnpm packages 580 → 599 (+20/−1). |
+| V8 provenance | `[patch.crates-io] v8` and `MODULE.bazel` `v8_crate_152_2_0` both point at `CorbanuCore/rusty_v8@350c5a859a9b`. `git ls-remote` shows the protected branch and annotated tag still resolve to that commit. The archive's SHA-256 today is `e2e7f996…52feab`, unchanged. The trust root `third_party/v8/rusty_v8_152_2_0_release_manifests.sha256` and `rusty_v8_152_2_0.sha256` are identical to upstream's pin. `verify_rusty_v8.py` passes for `aarch64-apple-darwin` on the Mac. `.github/actions/setup-rusty-v8` differs from upstream only by curl retries; the checks are unchanged. |
+| CODEOWNERS / security paths | `ci_mode.py codeowners drift` failed: main's newest D318 patterns were missing from the sync block and `security_paths.txt`. Fixed by [#2800](https://github.com/CorbanuCore/CorbanuTerminal/pull/2800). |
+
+**SG1 is not yet passable:** #2799's `libz-sys` bump must land, and the advisory dispositions must be recorded. Both are needed before the final candidate.

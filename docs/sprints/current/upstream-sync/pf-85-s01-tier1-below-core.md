@@ -14,7 +14,7 @@ branch: "maint/contrib-2101-1111"
 base_commit: "787027b83ffa53875f49e40a2886284d26557075"
 depends_on: "PF-85-S00"
 created: 2026-11-07
-updated: 2026-11-14
+updated: 2026-11-19
 ---
 
 # PF-85-S01 — Tier 1: crates below core
@@ -51,21 +51,21 @@ updated: 2026-11-14
 - [x] Three isolated discovery-budget regressions passed, covering differing budgets, equivalent/default/capped budgets and ready reuse (nextest `b763c88a-413b-4f12-8ca4-062e3ff98b39`). An initial test compilation failed on a missing `mut`; corrected and freshly rerun.
 - [x] Internal connection-lifecycle scope: code-blind TUI design is not applicable to this slice; PF-85-S05 retains final sync functional qualification.
 - [x] S3a Tier 1 sandbox crates resolved (with all of S3a, 2026-11-14; see PF-85-S02 and #1628).
+- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): every Tier 1 ledger row is resolved (S1a 80, S1b 102, S1c 849, S1d 493). #2101 merged into sync on 2026-11-14 with its process-lifecycle tests and ledger attribution.
+- [x] D319 fixtures from `main` `18fa372a` were committed before any `age`/`zip` change (#1712); the security owner decided D345/D346.
+- [x] Migration renumbering (0054–0069, `codex-rs/state/MIGRATIONS.md`); `tests/state_db_upgrade.rs` upgrades the 0.1.48 release DB and a `main` 1–53 DB (0.1.49's schema). Rollback evidence belongs to PF-85-S05.
+- [x] Non-user-facing N/A: Tier 1 crates have no TUI flow of their own; PF-85-S05 keeps the final functional qualification.
 
 ## Remaining
 
-Current mechanical assignment is limited to #2101; later slice items below stay queued.
+The #2101 allocation is finished. The one open item is #2122's MCP helper qualification. Re-allocating S01 to #2122's worktree, or recording it under PF-85-S05, is the coordinator's call (plan `implementation_worktrees`).
 
-- [ ] Preserve contributor process-lifecycle tests, ledger attribution and independent final review.
-- [ ] Slice PRs per the ledger; security-owner review on security paths.
-- [ ] D319 fixtures (plan §6 S1) generated from `main` and committed before any `age`/`zip` change; then the security owner's decision.
-- [ ] Migration renumbering with an upgrade test from the latest released state DB.
-- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
+- [ ] #2122 (full CLI helpers for `codex-mcp`/`codex-rmcp-client`) qualified on all three platforms, reviewed and merged (owner: sync test-isolation maintainer).
 
 ## Verification
 
-- [ ] Isolated `just test -p codex-mcp` and `just test -p codex-rmcp-client` on the final #2101 tree; later Tier 1 crates retain their platform/check/clippy gates.
-- [ ] TUI applicability: none.
+- [ ] Isolated `just test -p codex-mcp` and `just test -p codex-rmcp-client` with full CLI helpers on all three platforms (#2122; four MCP cases were CLI-blocked until #2274). Later Tier 1 crates keep their platform/check/clippy gates.
+- [x] TUI applicability: none.
 
 ## Exit evidence
 

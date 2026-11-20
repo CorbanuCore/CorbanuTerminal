@@ -1,14 +1,14 @@
 # Landing rust-v0.167.0 on main
 
-Status: **not ready to land**. Evidence cut: **2026-11-17 06:30 UTC** (November 16 in Arizona). Finish the contributor-held CLI, settle seven owner decisions, reconcile the ledgers, then qualify one final candidate on all three platforms. Travis retains **“Sprint 3 security sign-off and the final sync merge.”** This document authorizes neither.
+Status: **not ready to land**. Evidence cut for the ledger, release-note, SG1 and sprint-record sections: **2026-11-19 23:40 UTC** (November 19 in Arizona), sync `91efec006d`. Test-baseline tables keep their own dated revisions. CLI #2274 has merged and D679–D685 are implemented. Before one final candidate can be qualified on all three platforms, three things must be finished: the residual failures (#2728, #2729/D742), Bazel (#2645) and SG1's advisory fix (#2799). Travis retains **“Sprint 3 security sign-off and the final sync merge.”** This document authorizes neither.
 
 This is a routine planning update under [the existing program plan](../upstreamSyncPlan.md), [governed plan](../../plans/active/upstream-sync-rust-v0.167.0.md), and PF-85-S03/S04/S05. Product specification, **Product principles**: “Maintain continuous Codex parity without removing Corbanu-specific behavior.” Tracking: [#1532](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532), [#1628](https://github.com/CorbanuCore/CorbanuTerminal/issues/1628), [S3](https://github.com/CorbanuCore/CorbanuTerminal/issues/1630), [S4](https://github.com/CorbanuCore/CorbanuTerminal/issues/1631), [S5](https://github.com/CorbanuCore/CorbanuTerminal/issues/1632).
 
 ## Current state
 
-The inspected sync head is `4d1defcb34a4f938765c5e9d61bf103f2da9d13a` (#2471). Main is `2da8deea6252093fd01aaf51f30751c56b7a80fe`. The pinned upstream target remains `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; do not advance it during landing.
+The inspected sync head is `91efec006dfee045e4d0878d5ee8072553f4ff0d` (main merge #13, #2791). Main is `15415856d7c0d77ba82bdb234924884e8464cc1b` and is fully contained in sync. The pinned upstream target remains `086ccc833bc9cf01024ad2dd6af7dbd421b6bf9a`; do not advance it during landing.
 
-Main merge #9, [#2457](https://github.com/CorbanuCore/CorbanuTerminal/pull/2457), carried main through `ef6b1ca9abe30a06431da59634a3a36e411102f8`. Main has since merged #2456, #2459, #2478, #2492 and #2439. They need the next carry, especially the command-wrapper protections in #2459/#2478 and Windows test scheduling in #2439. Main PR #2493 implements accepted D676–D678; carry it when merged. Recheck both branches before assigning work.
+Main merges #9–#13 carried main through `15415856d7` (most recently [#2791](https://github.com/CorbanuCore/CorbanuTerminal/pull/2791)). The next carry happens only when main moves again, and the final carry must be no more than 48 hours before landing (gate 7). Recheck both branches before assigning work.
 
 ### Measured test baselines
 
@@ -16,6 +16,8 @@ The fresh astra-synccore7 Linux measurements below began on **November 17, 2026*
 
 | Suite / platform | Passed | Failed | Ignored / excluded | Revision and dated source |
 | --- | ---: | ---: | --- | --- |
+| Core library / `all`, Linux, CLI helpers built (first post-#2274 run) | 5,040 / 3,206 | 4 / 16 | 11 / 26 ignored; no CLI exclusions | `91efec006dfee045e4d0878d5ee8072553f4ff0d`, sync-integrator [sync-package-ci](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44638261040/job/135962453732), November 19 |
+| App-server lib / `all`, Linux · macOS · Windows, CLI helpers built | 469/1,659 · 470/1,654 · 465/1,568 | 0 · 2 · 0 | 87 · 86 · 95 ignored; 14 former CLI exclusions run (pass on Linux and macOS) | Same head, [run 44638253403](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44638253403), November 19; macOS failures on #2277 |
 | Core `all`, Linux | 3,169 | 24 | 24 ignored; 24 CLI exclusions | `101e9ff5845f67b419edcf1e28658768f1d0b99e`, astra-synccore7 round 4, November 17 |
 | Core library, Linux | 4,876 | 0 | 10 ignored | `51dc00e7067b3e32d167e0fcb681cd9249209f22`, astra-synccore7 round 1, November 17 |
 | App-server suite, Linux | 1,725 | 1 | 2 ignored; 13 CLI exclusions | Same round 1; remaining selected-capability-stack case depends on #2274 |
@@ -188,24 +190,46 @@ This PR deliberately does **not** execute the revert. The checklist is separate 
 
 ### Ledger and release-note completeness
 
-The November 17 reconciliation in [#2565](https://github.com/CorbanuCore/CorbanuTerminal/pull/2565), against sync source `5b5c85143884c903cdcceecca276c06f6f9eee94`, records **3,749 rows: 3,670 resolved and 79 open** after audit. Preview ledgers are excluded. These are row counts, not unique defects. The earlier cut had 3,679 rows; 70 resolved entries were added subsequently, then this audit resolved 17 of the 96 previously open rows. Each remaining row has a dated disposition and owner: 10 are held by #2274 and 69 are tracked in [#2562](https://github.com/CorbanuCore/CorbanuTerminal/issues/2562), [#2563](https://github.com/CorbanuCore/CorbanuTerminal/issues/2563) and [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564). These counts do not establish SG2/SG3 or sprint completion.
+**Ledger recount — 2026-11-19 at sync `91efec006d` (sync-integrator).** All nine non-preview ledgers, including `-s3b`, the three main-merge files and the re-apply/migration rows, hold **4,317 rows: 4,315 resolved and 2 open**. These are row counts, not unique defects. Since #2565's 3,749/79 cut, later work added main-merge #10–#13 and compile-pass rows, and #2562/#2563/#2564 and their PRs closed 71 of the 79. This reconciliation closes six more:
+
+- The five `codex-rs/mcp-server/*` orphan rows (`.tsv`). The files went in #2614; the CLI references astra-2564 saw were in a conflict-marked skeleton and are gone since #2274's S4e merge. The CLI builds and packages on this tree.
+- The app-server CLI tail (`-compile.tsv`). The former 14 exclusions run and pass (#2754, #2758, [run](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44545749531)). The current-head [rerun](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44638253403) confirms this on Linux and macOS (Windows doesn't compile them); Linux and Windows have 0 failures. macOS has 2 unrelated failures: `multi_agent_v2_tools_emit_collaborator_analytics` and a guardian-v2 'active writer' race. They are on #2277, not in this row.
 
 | Ledger suffix after `ledger-rust-v0.167.0` | Resolved | Open |
 | --- | ---: | ---: |
-| `.tsv` | 5 | 25 |
+| `.tsv` | 30 | 0 |
 | `-resolved.tsv` | 1,006 | 0 |
 | `-s1c.tsv` | 202 | 0 |
-| `-s3b.tsv` | 547 | 27 |
+| `-s3b.tsv` | 573 | 1 |
 | `-s4a.tsv` | 136 | 0 |
-| `-compile.tsv` | 192 | 7 |
-| `-main-merges.tsv` | 643 | 11 |
-| `-main-merges-2.tsv` | 939 | 9 |
+| `-compile.tsv` | 201 | 1 |
+| `-main-merges.tsv` | 654 | 0 |
+| `-main-merges-2.tsv` | 1,129 | 0 |
+| `-main-merges-3.tsv` | 384 | 0 |
 
-The integrator and security owner must finish the **79 dispositioned open rows**, linking implementation and current-head test/review evidence before closure. Work includes the CLI/MXC row and obsolete MCP-server remnants; S3b guardian/disclosure, sandbox/credential and Windows audit/ACL rows; old core/session/test ports; Telegram notification handling; D525 EMA/config/role documentation; remote MCP discovery coverage; and the 20 remaining main-carry rows. A later passing suite alone does not resolve a documented boundary-review obligation. Audit migration renumbering and preserved released checksums too. Preserve split ledgers and the blob-size limit.
+Open rows, owners and the evidence each needs:
 
-There are **152 Markdown release-note fragments** (plus `.gitkeep`) on the reconciled sync source. Check and preview pass; [#2564](https://github.com/CorbanuCore/CorbanuTerminal/issues/2564) records the coverage, sprint-record and migration/rollback gaps. Presence is not completeness. Audit user-visible removals, provider/auth behavior, security changes, doctor/CLI changes and D679–D685 outcomes against fragments, then run `release_notes.py check` and `preview`. Never recreate `RELEASE_NOTES.md`. Main merge #9 deliberately omitted the duplicate #2443 fragment because sync's D659–D664 fragment already covers it; preserve that explanation. Finish app-server/config guidance, the upgrade/compatibility record, footprint dispositions and sprint evidence. Do not mark S3/S4/S5 complete from ledger counts alone.
+| Row | Owner | Evidence needed to close |
+| --- | --- | --- |
+| `-s3b.tsv:562` `windows-sandbox-rs/src/token.rs` (D608, #2562) | sync security owner | Restrict cross-command elevated process reads in `set_elevated_default_dacl` and add the native Windows probe. Coordinate with #1800/#1803; no human-gate pass is claimed. |
+| `-compile.tsv:178` core snapshot group (#2296, #2563) | sync core maintainer | The first post-#2274 Linux run with helpers ([job](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44638261040/job/135962453732)) still fails three snapshots in this group: `astra_settings_release_check_tool_shapes`, `catalog_denied_reads_follow_selected_model` and `remote_credential_masking`. Review them against the #2563 family mapping, then get a green three-platform run. A focused unit pass does not close it. |
 
-**Sprint records also block handoff; owner: the integrator.** At the cut, main's PF-85-S01–S05 records are `draft` with no implementation worktree assigned. On sync, S01 is `in_progress`, while S02–S05 remain `draft` and unassigned. Reconcile each record with its actual authorized worktree, completed work and final-tree evidence; do not relabel them complete merely because code merged. S03 must record Travis's exact-head SG2 sign-off on the dedicated **“needs security sign-off”** PR. Complete and archive S01–S04 when their gates are met. S05 must accurately separate pre-merge gates from its later merge/canary tasks; complete and archive it only after those tasks finish. Run `python3 docs/sprints/check.py` on the reconciled records.
+A later passing suite alone does not resolve a documented boundary-review obligation. Preserve split ledgers and the blob-size limit; the largest file, `-main-merges-2.tsv`, is 477,591 bytes.
+
+**Release notes — 2026-11-19 audit.** There are 66 fragments; `release_notes.py check` and `preview` pass. Main's 0.1.49 release assembled main's fragments into `qa/release/0.1.49/RELEASE_NOTES.md`. Of main's 21 current fragments, sync carries 20; #2722's shell-escalation stopwatch note is deliberately not added because that code doesn't exist on sync (main merge #13 ledger). Changes in this audit:
+
+- **Added:** an "Upgrading from 0.1.49" fragment (state DB migrations 0054–0069 plus memory/queue/thread-history migrations; 0.1.49 refuses the upgraded DB; restore the whole-home backup). Also an "Upstream Codex rust-v0.167.0" fragment covering the new `agents`, `queue`, `migrate-rollouts` and experimental `migrate-nfs-db` commands and the removed `mcp-server` command (D275). `docs/security-moderate.md` no longer lists `mcp-server`.
+- **Duplicates of 0.1.49 removed or reworded as changes since 0.1.49:**
+  - `2568-powershell-command-line.md` is deleted; it was an older copy of a shipped entry.
+  - `2015`, `2062` and `2553` now describe only the `thread/fork` and `canonical_matching` differences.
+- **Consistency:** six `## Fixed` headings joined `## Fixes`, and #2101's note moved under `## Fixes`.
+- **Decisions covered:**
+  - D620 (`2274-doctor-…`), D681 (`sync-cursor-…`), D684 (`1532-skill-catalog-…`), the copied-key protections D685/D690 (#2501/#2522, `sync-snapshot-brokered-copies`), D727 (#2676, `2675-…`) and D732 (#2721, `1632-proxy-…`), D711/D721 (`2015-…`), D612 (`2629-…`) and D737 (`2728-…`).
+  - D679, D680 and D683 (#2496/#2497), D682 (#2498) and D726 (#2708) are test-only and keep 0.1.49's behavior, so they need no fragment.
+  - D714/D715 keep upstream behavior that is new relative to 0.1.49 (Unix-socket inheritance for an unset controller setting, MXC loopback). Their user-facing note belongs with the MXC/network-proxy documentation owner before landing.
+- **Still open:** a check that upstream's excluded voice host (D316) isn't surfaced in user-facing UI. The release worker re-runs the audit on the final candidate, where `assemble` will refuse any heading 0.1.49 already has.
+
+**Sprint records — 2026-11-19.** On sync, PF-85-S01, S02, S04 and S05 now record their landed work and current-head evidence; S03 belongs to sg2-evidence and is coordinated on #1632. None is marked complete. S01 keeps one item (#2122) and its finished #2101 allocation; whether to re-allocate it is the coordinator's call. S05 separates pre-merge gates from Travis's merge and canary. Main's copies of PF-85-S00–S06 are unchanged since the merge base, so the landing takes sync's versions without conflict. Editing them on main now would only create conflicts at the next carry. `python3 docs/sprints/check.py` passes.
 
 ## Sequence and effort
 

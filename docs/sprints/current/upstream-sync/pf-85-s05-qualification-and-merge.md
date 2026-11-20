@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S03, PF-85-S04"
 created: 2026-11-07
-updated: 2026-11-10
+updated: 2026-11-19
 ---
 
 # PF-85-S05 — Qualification and merge to main
@@ -44,12 +44,20 @@ updated: 2026-11-10
 
 - [x] Sprint record created and linked to one plan feature.
 
+- [x] 2026-11-19 at sync `91efec006d` (sync-integrator): SG1 structural checks recorded in [sg1-supply-chain.md](../../../management/upstreamSync/sg1-supply-chain.md). RUSTSEC-2026-0544 (`libz-sys`, #2799) is still open. CI-mode and CODEOWNERS restoration is prepared as held draft #2801.
+
 ## Remaining
 
-- [ ] Main merge #4 (the last one); revert the CODEOWNERS block; full run; SG1 re-run; SG3.
-- [ ] Rollback: synced-build vault files and the upgraded state DB open in the last released binary (D319; state-DB upgrade test from S1c).
-- [ ] Final review (up to 8 rounds, D307); merge; 48-hour merge hold on `main` (D306) and canary.
-- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
+Pre-merge gates (all on the exact final candidate):
+
+- [ ] Final main carry no more than 48 hours before landing; apply #2801 (CI mode and CODEOWNERS) with coordinator approval; full run with no expected-red exception; SG1 re-run, #2799 fixed; SG3 security-path diff from the SG2-signed SHA.
+- [ ] Rollback/compatibility: vault files open in the last released binary (D319). State DB: 0.1.49 refuses the upgraded DB (`MIGRATIONS.md`), so restore from backup unless Travis decides otherwise; backup/upgrade/restore evidence on the candidate.
+- [ ] Functional qualification, Windows human checklist and release dry run (landing plan gates 4–6); code-blind design frozen first.
+- [ ] Final independent review (up to 8 rounds, D307), matching corbanu-security approval and Travis's final approval.
+
+After Travis's approval:
+
+- [ ] Travis's guarded merge; 48-hour merge hold on `main` (D306) and Mac/Windows canary; then complete and archive this record.
 
 ## Verification
 
