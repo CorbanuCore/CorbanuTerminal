@@ -25,8 +25,10 @@
   "api_key_login_present": true,
   "second_start_completed": true,
   "second_start_adds_no_migration": true,
+  "fresh_candidate_home_has_same_databases": true,
   "schemas_match_fresh_candidate_home": true,
-  "no_clear_text_credentials": true
+  "no_clear_text_credentials": true,
+  "config_original_lines_kept": true
  },
  "observations": {
   "resume_exec_0_completed": {
@@ -123,7 +125,43 @@
   "second_start_completed": {
    "exit": 0
   },
-  "schemas_match_fresh_candidate_home": {}
+  "fresh_candidate_home_has_same_databases": {
+   "exit": 0,
+   "upgraded": [
+    "pfterminal_goals_1.sqlite",
+    "pfterminal_logs_2.sqlite",
+    "pfterminal_memories_1.sqlite",
+    "pfterminal_queue_1.sqlite",
+    "pfterminal_state_5.sqlite",
+    "pfterminal_thread_history_1.sqlite"
+   ],
+   "fresh": [
+    "pfterminal_goals_1.sqlite",
+    "pfterminal_logs_2.sqlite",
+    "pfterminal_memories_1.sqlite",
+    "pfterminal_queue_1.sqlite",
+    "pfterminal_state_5.sqlite",
+    "pfterminal_thread_history_1.sqlite"
+   ]
+  },
+  "schemas_match_fresh_candidate_home": {
+   "compared": [
+    "pfterminal_goals_1.sqlite",
+    "pfterminal_logs_2.sqlite",
+    "pfterminal_memories_1.sqlite",
+    "pfterminal_queue_1.sqlite",
+    "pfterminal_state_5.sqlite",
+    "pfterminal_thread_history_1.sqlite"
+   ],
+   "differences": {}
+  },
+  "config_original_lines_kept": {
+   "added_lines": [
+    "service_tier = \"default\"",
+    "[tui]",
+    "screen_reader_detection_done = true"
+   ]
+  }
  },
  "version": "corbanu 0.1.48",
  "binary_sha256": "76dcdba0e9d2116bc18d422160f82ef45145c7a9ec7e3bdd6b488453c08fb1fb",
@@ -623,24 +661,24 @@
    ],
    "threads": [
     [
-     "01a1f705-6adc-7240-a5d8-2dcb309cbed2",
+     "01a1f70c-de23-78a3-8f28-6d6ac20b0c70",
      "Reply for baseline exec 1",
      1,
-     "/work/os-home/.corbanu/archived_sessions/rollout-2026-11-20T03-34-49-01a1f705-6adc-7240-a5d8-2dcb309cbed2.jsonl",
+     "/work/os-home/.corbanu/archived_sessions/rollout-2026-11-20T03-42-58-01a1f70c-de23-78a3-8f28-6d6ac20b0c70.jsonl",
      "release-fixture"
     ],
     [
-     "01a1f705-6b74-7970-889c-0452a769e220",
+     "01a1f70c-dec5-7060-a1c3-a6f383ffe9c7",
      "Reply for baseline exec 2",
      0,
-     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-49-01a1f705-6b74-7970-889c-0452a769e220.jsonl",
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-dec5-7060-a1c3-a6f383ffe9c7.jsonl",
      "release-fixture"
     ],
     [
-     "01a1f705-6cc4-7d90-8e5c-7151e4e16a41",
+     "01a1f70c-e02e-7b30-9445-5a9548877825",
      "Reply for baseline tui",
      0,
-     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-50-01a1f705-6cc4-7d90-8e5c-7151e4e16a41.jsonl",
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-e02e-7b30-9445-5a9548877825.jsonl",
      "release-fixture"
     ]
    ],
@@ -667,6 +705,5 @@
   }
  },
  "secret_scan_hits": [],
- "config_changed": true,
  "requests": 6
 }

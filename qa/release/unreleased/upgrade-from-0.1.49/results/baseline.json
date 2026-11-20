@@ -38,15 +38,15 @@
   },
   "three_sessions": [
    [
-    "01a1f705-6adc-7240-a5d8-2dcb309cbed2",
+    "01a1f70c-de23-78a3-8f28-6d6ac20b0c70",
     0
    ],
    [
-    "01a1f705-6b74-7970-889c-0452a769e220",
+    "01a1f70c-dec5-7060-a1c3-a6f383ffe9c7",
     0
    ],
    [
-    "01a1f705-6cc4-7d90-8e5c-7151e4e16a41",
+    "01a1f70c-e02e-7b30-9445-5a9548877825",
     0
    ]
   ],
@@ -69,7 +69,7 @@
   "api_key_login_present": {
    "exit": 0,
    "text": [
-    "Logged in using an API key - API key configured (fingerprint 54ac7be2d496)"
+    "Logged in using an API key - API key configured (fingerprint 0ce6df5b3797)"
    ]
   }
  },
@@ -452,24 +452,24 @@
    ],
    "threads": [
     [
-     "01a1f705-6adc-7240-a5d8-2dcb309cbed2",
+     "01a1f70c-de23-78a3-8f28-6d6ac20b0c70",
      "Reply for baseline exec 1",
      1,
-     "/work/os-home/.corbanu/archived_sessions/rollout-2026-11-20T03-34-49-01a1f705-6adc-7240-a5d8-2dcb309cbed2.jsonl",
+     "/work/os-home/.corbanu/archived_sessions/rollout-2026-11-20T03-42-58-01a1f70c-de23-78a3-8f28-6d6ac20b0c70.jsonl",
      "release-fixture"
     ],
     [
-     "01a1f705-6b74-7970-889c-0452a769e220",
+     "01a1f70c-dec5-7060-a1c3-a6f383ffe9c7",
      "Reply for baseline exec 2",
      0,
-     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-49-01a1f705-6b74-7970-889c-0452a769e220.jsonl",
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-dec5-7060-a1c3-a6f383ffe9c7.jsonl",
      "release-fixture"
     ],
     [
-     "01a1f705-6cc4-7d90-8e5c-7151e4e16a41",
+     "01a1f70c-e02e-7b30-9445-5a9548877825",
      "Reply for baseline tui",
      0,
-     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-34-50-01a1f705-6cc4-7d90-8e5c-7151e4e16a41.jsonl",
+     "/work/os-home/.corbanu/sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-e02e-7b30-9445-5a9548877825.jsonl",
      "release-fixture"
     ]
    ],
@@ -497,15 +497,15 @@
  },
  "threads": [
   [
-   "01a1f705-6adc-7240-a5d8-2dcb309cbed2",
+   "01a1f70c-de23-78a3-8f28-6d6ac20b0c70",
    1
   ],
   [
-   "01a1f705-6b74-7970-889c-0452a769e220",
+   "01a1f70c-dec5-7060-a1c3-a6f383ffe9c7",
    0
   ],
   [
-   "01a1f705-6cc4-7d90-8e5c-7151e4e16a41",
+   "01a1f70c-e02e-7b30-9445-5a9548877825",
    0
   ]
  ],
@@ -514,15 +514,15 @@
  "backup_files": 89,
  "file_count": 89,
  "files_checked": {
-  "archived_sessions/rollout-2026-11-20T03-34-49-01a1f705-6adc-7240-a5d8-2dcb309cbed2.jsonl": "7bbe1bf644311698488e42eadaf03873e0c54c38b10c8094c262f69a4bc4d7b0",
-  "auth.json": "b61fe02b1d381344f1f95bf15a838bd16ec4bc6c3c9e56de2d97f245c5a21e85",
+  "archived_sessions/rollout-2026-11-20T03-42-58-01a1f70c-de23-78a3-8f28-6d6ac20b0c70.jsonl": "18ea62132526a1daf04b8c12e7db62363a2823815900e34489c81429bf95cf52",
+  "auth.json": "e2a14fda37657937f59fe0821e9105fa0173f087540ae9efb29fd2fc20b9ffec",
   "config.toml": "722997513bb557c6b21bebd982a26436704d78a3598adb1ab268a4741c34ab0d",
-  "history.jsonl": "efcce18956fa67dac77a972d7d9dcf9eb064288ec1979d963c3987a0651f2a65",
+  "history.jsonl": "7f2183ee91dd56be66aae59c896db5ee0f6ce6e8c16a816b9688008c6ad7cd50",
   "memories/MEMORY.md": "0d046b95cbd489e6f3aec36012914f459546d98ebdb876c9de7c879896a78339",
   "memories/memory_summary.md": "8aa2bd43b98b0c48de35e503908bb08e08bc8987565315205aeb9ca29b9ec1e9",
-  "secrets/keyring-fallback/a3abe5df53fc38b213e41d2b63af893d1a45ce81e3ca85489563dba7ec31b779.key": "d6596365beeeaf48d0e20d3ea3ae41b1bf527d53d26af85876989c7d738d1841",
-  "secrets/local.age": "5f2a42b45e62638b5b03a9f1209a78946a350429ce45db44412e7971efb4bcd6",
-  "sessions/2026/11/20/rollout-2026-11-20T03-34-49-01a1f705-6b74-7970-889c-0452a769e220.jsonl": "662fa331f252ad17dd605f5c15d2fbd1d5b8a22eaf7c7addbd49d1ee1b33b22d",
-  "sessions/2026/11/20/rollout-2026-11-20T03-34-50-01a1f705-6cc4-7d90-8e5c-7151e4e16a41.jsonl": "e6a0c20ada686ae698265a6307b2407326e36d416d6e6deebf9e9e8111875729"
+  "secrets/keyring-fallback/a3abe5df53fc38b213e41d2b63af893d1a45ce81e3ca85489563dba7ec31b779.key": "e6623465660cb0bcf9d008c2c9cadf879b785963c222cbaddcacce17610e224c",
+  "secrets/local.age": "48fd5f0c41ac276c737dc9e3d68ffe068e747cbfa68bba85e6f231299a5dacdb",
+  "sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-dec5-7060-a1c3-a6f383ffe9c7.jsonl": "2b59d0d774cdf4fc55d209cb565683dde9e536cf523384996b293b27b775cdb2",
+  "sessions/2026/11/20/rollout-2026-11-20T03-42-58-01a1f70c-e02e-7b30-9445-5a9548877825.jsonl": "aff78f9ead34eccc279beb9d742e97940ebd598e2aefca5222835d627e8f4b28"
  }
 }

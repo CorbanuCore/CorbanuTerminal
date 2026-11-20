@@ -3,11 +3,15 @@
 # Usage: run.sh <workdir> <phase>
 # <workdir> holds old/ (released package: bin/, codex-resources/, codex-path/),
 # new/ (candidate package, same layout) and upgrade_from_release.py.
-# Image: ubuntu:24.04 with python3, tmux, ca-certificates, libssl3t64, libsqlite3-0.
+# Phases, in order: baseline upgrade downgrade rollback summarize.
+# Image: the Dockerfile beside this script (built on first use), or UPGRADE_QA_IMAGE.
 set -euo pipefail
 workdir="$(cd "$1" && pwd)"
 phase="$2"
-image="${UPGRADE_QA_IMAGE:-corbanu-astra-rel149-qa:latest}"
+image="${UPGRADE_QA_IMAGE:-corbanu-upgrade-qa:ubuntu-24.04}"
+if ! docker image inspect "$image" > /dev/null 2>&1; then
+  docker build -q -t "$image" "$(dirname "$0")" > /dev/null
+fi
 exec docker run --rm \
   --network none --cap-drop ALL --security-opt no-new-privileges \
   --memory 4g --pids-limit 256 \

@@ -11,9 +11,13 @@ Runs inside an isolated container (no network, no host home, no keyring) with
             second start, and a schema comparison with a fresh candidate home.
   downgrade old binary on a copy of the upgraded home: expected refusal.
   rollback  restore the backup, old binary: sessions, vault, accounts, DBs.
+  summarize write the committed results/<phase>.json from evidence/, after
+            checking that no fixture credential value appears in them.
 
 Every credential is a synthetic fixture string generated here; values are only
-compared in memory, never printed. Results go to /work/evidence/<phase>.json.
+compared in memory, never printed. Raw results go to /work/evidence/<phase>.json
+(with TUI screen captures; the vault value is typed into the TUI, so keep
+evidence/ out of the repository).
 """
 import hashlib
 import json
@@ -294,7 +298,8 @@ def credential_checks(binary, values, prefix):
     for value in values.values():
         assert value not in listing.stdout
     status = run(binary, "login", "status")
-    check(f"{prefix}api_key_login_present", status.returncode == 0 and "API key" in (status.stdout + status.stderr),
+    check(f"{prefix}api_key_login_present",
+          status.returncode == 0 and "Logged in using an API key" in (status.stdout + status.stderr),
           {"exit": status.returncode, "text": (status.stdout + status.stderr).strip().splitlines()[-1:]})
     for value in values.values():
         assert value not in status.stdout + status.stderr
@@ -386,7 +391,11 @@ def upgrade():
         after = rollout_for(target).read_bytes()
         check(f"resumed_rollout_{n}_extends_old_prefix", after.startswith(prefix) and len(after) > len(prefix))
     # Interactive resume of the TUI session through the picker-free path.
-    tmux_session(NEW, ["resume", "--last"], [("Reply in upgraded tui", "UPGRADE_REPLY_upgrade")], "tui")
+    # The old transcript is on screen before the new turn.
+    tmux_session(NEW, ["resume", "--last"], [
+        (None, "Reply for baseline tui"),
+        ("Reply in upgraded tui", "UPGRADE_REPLY_upgrade"),
+    ], "tui")
 
     dbs = databases()
     RESULT["databases"] = dbs
@@ -435,17 +444,26 @@ def upgrade():
     (fresh_os / ".corbanu").mkdir(exist_ok=True)
     (fresh_os / ".corbanu" / "config.toml").write_text(CONFIG)
     env = dict(ENV, HOME=str(fresh_os))
-    subprocess.run([NEW, "exec", "--skip-git-repo-check", "fresh"], env=env, cwd=WORKSPACE,
-                   capture_output=True, text=True, timeout=120)
+    proc = subprocess.run([NEW, "exec", "--skip-git-repo-check", "fresh"], env=env, cwd=WORKSPACE,
+                          capture_output=True, text=True, timeout=120)
+    upgraded_dbs = sorted(db.name for db in HOME.glob("*.sqlite"))
+    fresh_dbs = sorted(db.name for db in (fresh_os / ".corbanu").glob("*.sqlite"))
+    check("fresh_candidate_home_has_same_databases", proc.returncode == 0 and upgraded_dbs == fresh_dbs,
+          {"exit": proc.returncode, "upgraded": upgraded_dbs, "fresh": fresh_dbs})
     diffs = {}
-    for db in sorted(HOME.glob("*.sqlite")):
-        fresh_db = fresh_os / ".corbanu" / db.name
-        if fresh_db.exists() and schema(db) != schema(fresh_db):
-            diffs[db.name] = sorted(set(map(tuple, schema(db))) ^ set(map(tuple, schema(fresh_db))))
-    check("schemas_match_fresh_candidate_home", not diffs, diffs)
+    for name in upgraded_dbs:
+        fresh_db = fresh_os / ".corbanu" / name
+        if not fresh_db.exists() or schema(HOME / name) != schema(fresh_db):
+            diffs[name] = sorted(set(map(tuple, schema(HOME / name))) ^ set(map(tuple, schema(fresh_db))))
+    check("schemas_match_fresh_candidate_home", not diffs, {"compared": upgraded_dbs, "differences": diffs})
     RESULT["secret_scan_hits"] = secret_scan(values)
     check("no_clear_text_credentials", not RESULT["secret_scan_hits"])
-    RESULT["config_changed"] = sha(HOME / "config.toml") != before_files["config.toml"]
+    # Config: every original line kept; record what the candidate added.
+    old_lines = (BACKUP / "config.toml").read_text().splitlines()
+    new_lines = (HOME / "config.toml").read_text().splitlines()
+    added = [line for line in new_lines if line not in old_lines]
+    check("config_original_lines_kept", all(line in new_lines for line in old_lines),
+          {"added_lines": [line for line in added if line.strip()]})
     RESULT["requests"] = len(REQUESTS)
 
 
@@ -468,8 +486,12 @@ def downgrade():
     RESULT["version"] = run(OLD, "--version").stdout.strip()
     # Interactive start: the refusal the user sees.
     startup = tmux_session(OLD, [], [], "tui", os_home=copy)
+    flat = "".join(startup.split())
     check("tui_reports_foreign_migrations",
-          "different Codex/Corbanu Terminal distribution" in startup or "damaged" in startup.lower())
+          "appears to be damaged" in startup
+          and "differentCodex/CorbanuTerminaldistribution" in flat
+          and all(f"version{v}(checksum" in flat for v in range(54, 70))
+          and "version70(checksum" not in flat)
     # Non-interactive start.
     env = dict(ENV, HOME=str(copy), RUST_LOG="warn")
     proc = subprocess.run([OLD, "exec", "--skip-git-repo-check", "Reply after downgrade"], env=env, cwd=WORKSPACE,
@@ -508,13 +530,38 @@ def rollback():
     check("archived_session_still_archived", [a for _, a in thread_ids()] == [a for _, a in base["threads"]])
 
 
+def summarize():
+    """Committed results: raw phase results minus the bulk file list."""
+    values = json.loads(FIXTURE.read_text()).values()
+    out = ROOT / "results"
+    out.mkdir(exist_ok=True)
+    keep = ("secrets/", "memories/", "archived_sessions/", "sessions/")
+    for phase in ("baseline", "upgrade", "downgrade", "rollback"):
+        raw = json.loads((EVIDENCE / f"{phase}.json").read_text())
+        files = raw.pop("files", None)
+        if files is not None:
+            raw["file_count"] = len(files)
+            raw["files_checked"] = {
+                k: v for k, v in files.items() if k.startswith(keep) or k in ("auth.json", "config.toml", "history.jsonl")
+            }
+        for db in raw.get("databases", {}).values():
+            for row in db.get("migrations", []):
+                row[2] = row[2][:16]  # checksum prefix
+        text = json.dumps(raw, indent=1) + "\n"
+        assert not any(value in text for value in values), phase
+        (out / f"{phase}.json").write_text(text)
+        check(f"{phase}_passed", raw["checks"] and all(raw["checks"].values()) and not raw.get("error"))
+
+
 try:
-    {"baseline": baseline, "upgrade": upgrade, "downgrade": downgrade, "rollback": rollback}[PHASE]()
+    {"baseline": baseline, "upgrade": upgrade, "downgrade": downgrade, "rollback": rollback,
+     "summarize": summarize}[PHASE]()
 except Exception as exc:  # recorded, then the phase fails
     RESULT["error"] = f"{type(exc).__name__}: {exc}"
 finally:
     SERVER.shutdown()
-    (EVIDENCE / f"{PHASE}.json").write_text(json.dumps(RESULT, indent=2) + "\n")
+    if PHASE != "summarize":
+        (EVIDENCE / f"{PHASE}.json").write_text(json.dumps(RESULT, indent=2) + "\n")
 
 failed = [k for k, v in RESULT["checks"].items() if not v]
 print(json.dumps({"phase": PHASE, "version": RESULT.get("version"), "failed": failed, "error": RESULT.get("error")}))
