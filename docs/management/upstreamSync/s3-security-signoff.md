@@ -281,6 +281,28 @@ The check matched every first-parent merge after the cutoff against the `@corban
    - Mac: `-p codex-sandboxing` and `-p codex-exec --test all -- suite::seatbelt` at `-j6`, with at least 25% memory free;
    - desktop: `-p codex-windows-sandbox` and `-p codex-exec-server --test exec_process -- windows_sandbox`.
 3. Close the matrix gaps from the full final CI, or keep them listed by name.
-4. Add rows for any security-path PR merged after `ab557d87af` (including #2791's carries) to the fail-before/pass-after table.
+4. Add rows for any security-path PR merged after `ab557d87af` (including #2791's carries) to the fail-before/pass-after table. Then run this check from the repository root. It lists every first-parent merge after the cutoff that touches a `@corbanu-security` path in `.github/CODEOWNERS` but is not named in this record. It must print `missing 0`. Set `HEAD_SHA` to the candidate:
+   ```sh
+   HEAD_SHA=<candidate> python3 - <<'EOF'
+   import fnmatch, os, re, subprocess
+   run = lambda *a: subprocess.check_output(a, text=True)
+   owned = [l.split()[0].lstrip("/") for l in open(".github/CODEOWNERS")
+            if "@corbanu-security" in l and not l.startswith("#")]
+   def is_owned(path):
+       for p in owned:
+           if p.endswith("/") and path.startswith(p): return True
+           if "*" in p and (fnmatch.fnmatch(path, p) or fnmatch.fnmatch(path, p + "/*")): return True
+           if "*" not in p and (path == p or path.startswith(p + "/")): return True
+       return False
+   doc = open("docs/management/upstreamSync/s3-security-signoff.md").read()
+   missing = 0
+   for c in run("git", "rev-list", "--first-parent", "2b8c26811e.." + os.environ["HEAD_SHA"]).split():
+       m = re.search(r"pull request #(\d+)", run("git", "log", "-1", "--format=%s", c))
+       files = run("git", "diff", "--name-only", c + "^1", c).split()
+       if m and any(is_owned(f) for f in files) and not re.search("#" + m.group(1) + r"\b", doc):
+           missing += 1; print("missing #" + m.group(1), c[:10])
+   print("missing", missing)
+   EOF
+   ```
 5. Update the Δ table with Travis's answers to the For SG2 items. Then mark this PR ready for his signature on its exact head.
 6. After he signs, record the approval (both SHAs) in the PF-85-S03 sprint record, as the landing plan requires.
