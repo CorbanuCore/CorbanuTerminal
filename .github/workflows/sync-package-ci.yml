@@ -4,6 +4,9 @@
 # used: GitHub only dispatches workflows whose file also exists on the default branch.
 # Packages and platforms come from .github/sync-package-ci.json at that commit, for example
 #   {"packages": ["codex-core"], "platforms": ["linux", "macos", "windows"], "test": true}
+# "test": true builds the helper binaries the tests start and runs nextest with codex-rs/.config/nextest.toml,
+# like the other test lanes (per-test timeouts; one process per test). Clippy runs by default only when
+# "test" is false; set "clippy": true to run both (#2814).
 name: sync-package-ci
 
 on:
@@ -24,6 +27,7 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       packages: ${{ steps.plan.outputs.packages }}
       test: ${{ steps.plan.outputs.test }}
+      clippy: ${{ steps.plan.outputs.clippy }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -44,13 +48,15 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"matrix={json.dumps({'include': include})}\n")
               out.write(f"packages={' '.join('-p ' + p for p in pkgs)}\n")
-              out.write(f"test={'true' if cfg.get('test', True) else 'false'}\n")
+              test = bool(cfg.get("test", True))
+              out.write(f"test={'true' if test else 'false'}\n")
+              out.write(f"clippy={'true' if cfg.get('clippy', not test) else 'false'}\n")
 
   package:
     needs: plan
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
@@ -99,8 +105,34 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - name: cargo clippy (packages, --tests, -D warnings)
+        if: ${{ needs.plan.outputs.clippy == 'true' }}
         # PACKAGES is validated by the plan job (names only) and intentionally word-split.
         run: cargo clippy --locked --target "${{ matrix.target }}" $PACKAGES --all-targets -- -D warnings
-      - name: cargo test (packages)
+      # Helper binaries that codex-core and app-server tests start (#2277, #2814).
+      - name: Build helper binaries
         if: ${{ needs.plan.outputs.test == 'true' }}
-        run: cargo test --locked --target "${{ matrix.target }}" $PACKAGES
+        run: |
+          extra=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            extra=(-p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher)
+          fi
+          cargo build --locked --target "${{ matrix.target }}" "${extra[@]}" \
+            -p codex-cli --bin codex \
+            -p codex-code-mode-host --bin codex-code-mode-host \
+            -p codex-exec --bin codex-exec \
+            -p codex-rmcp-client --bin test_stdio_server --bin test_streamable_http_server
+      - if: ${{ needs.plan.outputs.test == 'true' }}
+        uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
+        with:
+          tool: nextest@0.9.111
+      - name: cargo nextest run (packages)
+        if: ${{ needs.plan.outputs.test == 'true' }}
+        # PACKAGES is word-split on purpose, as for clippy.
+        run: cargo nextest run --locked --target "${{ matrix.target }}" $PACKAGES --no-fail-fast --final-status-level fail
+      - name: Upload nextest JUnit report
+        if: ${{ always() && needs.plan.outputs.test == 'true' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: sync-package-ci-junit-${{ matrix.target }}
+          path: codex-rs/target/nextest/default/junit.xml
+          if-no-files-found: ignore
