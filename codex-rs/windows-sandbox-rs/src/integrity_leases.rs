@@ -281,34 +281,31 @@ impl Drop for TestLocalAppData {
 }
 
 /// The helper receives this thread's private deny path in its payload.
-/// Production known-folder lookup stays unchanged.
+/// Production lookup never reads it.
 #[cfg(test)]
 pub(crate) fn use_test_local_app_data(path: &Path) -> TestLocalAppData {
     TestLocalAppData(TEST_LOCAL_APP_DATA.with(|slot| slot.replace(Some(path.to_path_buf()))))
 }
 
+/// #2819: debug builds only (release ignores it), for integration tests that
+/// run the real CLI against private records.
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+pub(crate) const DEBUG_LOCAL_APP_DATA_ENV_VAR: &str = "CORBANU_TEST_SANDBOX_LOCAL_APP_DATA";
+
+/// The account's LocalAppData (#2819): found from the process token, so a
+/// changed `USERPROFILE` or `LOCALAPPDATA` doesn't move the records.
 fn local_app_data() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(path) = TEST_LOCAL_APP_DATA.with(|slot| slot.borrow().clone()) {
         return Some(path);
     }
-    use windows_sys::Win32::System::Com::CoTaskMemFree;
-    use windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData;
-    use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
-    let mut path: *mut u16 = std::ptr::null_mut();
-    // SAFETY: `path` receives a string the call allocates, freed below.
-    let status = unsafe { SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, 0, &mut path) };
-    let result = (status == 0 && !path.is_null()).then(|| {
-        // SAFETY: a NUL-terminated string from the call.
-        let len = (0..).take_while(|&i| unsafe { *path.add(i) } != 0).count();
-        // SAFETY: as above.
-        PathBuf::from(String::from_utf16_lossy(unsafe {
-            std::slice::from_raw_parts(path, len)
-        }))
-    });
-    // SAFETY: allocated by SHGetKnownFolderPath (null is allowed).
-    unsafe { CoTaskMemFree(path.cast()) };
-    result
+    #[cfg(debug_assertions)]
+    if let Some(path) =
+        std::env::var_os(DEBUG_LOCAL_APP_DATA_ENV_VAR).filter(|path| !path.is_empty())
+    {
+        return Some(PathBuf::from(path));
+    }
+    crate::account_folder::local_app_data()
 }
 
 /// Labels `roots` (canonical paths) Low for a session, until the lease is
