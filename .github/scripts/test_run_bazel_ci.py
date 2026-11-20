@@ -176,6 +176,86 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertIn("--keep_going", args)
             self.assertNotIn("--config=windows-native-tests", args)
 
+    def test_local_ci_resource_limits_preserve_other_callers(self) -> None:
+        script = Path(__file__).with_name("run-bazel-ci.sh")
+        cases = (
+            ("Linux", "true", False, 0, True),
+            ("Linux", "true", False, 3, True),
+            ("Linux", "true", True, 0, False),
+            ("Linux", "false", False, 0, False),
+            ("Linux", None, False, 0, False),
+            ("Windows", "true", False, 0, True),
+            ("Windows", "true", False, 3, True),
+            ("Windows", "false", False, 0, False),
+            ("Windows", "true", True, 0, False),
+            ("macOS", "true", False, 0, False),
+        )
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            capture_path = temp_path / "bazel-args.json"
+            fake_bazel = temp_path / "bazel"
+            fake_bazel.write_text(
+                """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
+    json.dumps(sys.argv[1:]), encoding="utf-8"
+)
+sys.exit(int(os.environ["BAZEL_TEST_EXIT_CODE"]))
+""",
+                encoding="utf-8",
+            )
+            fake_bazel.chmod(0o755)
+            for runner_os, github_actions, remote, exit_code, limited in cases:
+                with self.subTest(
+                    runner_os=runner_os,
+                    github_actions=github_actions,
+                    remote=remote,
+                    exit_code=exit_code,
+                ):
+                    env = os.environ.copy()
+                    env.pop("BUILDBUDDY_API_KEY", None)
+                    env.pop("GITHUB_ACTIONS", None)
+                    env.update(
+                        {
+                            "BAZEL_ARGS_CAPTURE": str(capture_path),
+                            "BAZEL_TEST_EXIT_CODE": str(exit_code),
+                            "CODEX_BAZEL_BIN": str(fake_bazel),
+                            "CODEX_BAZEL_WINDOWS_PATH": "/usr/bin",
+                            "RUNNER_OS": runner_os,
+                        }
+                    )
+                    if github_actions is not None:
+                        env["GITHUB_ACTIONS"] = github_actions
+                    if remote:
+                        env["BUILDBUDDY_API_KEY"] = "test-buildbuddy-key"
+                    result = subprocess.run(
+                        ["bash", str(script), "--", "test", "--", "//..."],
+                        cwd=script.parents[2],
+                        env=env,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    args = json.loads(capture_path.read_text(encoding="utf-8"))
+                    limits = [
+                        arg
+                        for arg in args
+                        if arg.startswith(("--local_resources=", "--jobs="))
+                    ]
+                    expected = (
+                        ["--local_resources=memory=HOST_RAM*.6", "--jobs=8"]
+                        if limited
+                        else []
+                    )
+                    self.assertEqual(limits, expected)
+                    self.assertEqual(args[-2:], ["--", "//..."])
+
     def run_with_exit_codes(
         self, exit_codes: list[int]
     ) -> tuple[subprocess.CompletedProcess[str], int]:
