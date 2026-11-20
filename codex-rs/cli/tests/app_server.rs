@@ -329,7 +329,9 @@ async fn print_startup_config_is_independent_of_a_locked_history_database() -> R
         .env_remove("OPENAI_WORKLOAD_IDENTITY_CONTEXT")
         .args(["app-server", "--print-startup-config"])
         .kill_on_drop(true);
-    let baseline = timeout(Duration::from_secs(10), command.output()).await??;
+    let started = std::time::Instant::now();
+    let baseline = timeout(Duration::from_secs(60), command.output()).await??;
+    let baseline_elapsed = started.elapsed();
     assert!(baseline.status.success());
     let path = sqlite.path().join("pfterminal_state_5.sqlite");
     let sqlite_config = codex_state::SqliteConfig::new_for_testing(
@@ -345,6 +347,10 @@ async fn print_startup_config_is_independent_of_a_locked_history_database() -> R
         .open_read_only_pool(&path, Some(Duration::ZERO))
         .await?;
     let mut reader = readers.acquire().await?;
+    // Read the file before taking the lock: on Unix, closing any descriptor
+    // of the file releases this process's POSIX locks on it, so reading it
+    // under the lock let the command run against an unlocked database.
+    let before = std::fs::read(&path)?;
     database.execute("BEGIN EXCLUSIVE").await?;
     assert!(
         reader
@@ -352,9 +358,24 @@ async fn print_startup_config_is_independent_of_a_locked_history_database() -> R
             .await
             .is_err()
     );
-    let before = std::fs::read(&path)?;
-    let output = timeout(Duration::from_secs(10), command.output()).await??;
+    // How long one wait of the overlay's 2 s busy timeout really takes here:
+    // opening a reader waits once (SQLite's sleeps overshoot on Windows).
+    let started = std::time::Instant::now();
+    let waiting = sqlite_config
+        .open_read_only_pool(&path, Some(Duration::from_secs(2)))
+        .await?;
+    let one_wait = started.elapsed();
+    waiting.close().await;
+    let started = std::time::Instant::now();
+    let output = timeout(Duration::from_secs(60), command.output()).await??;
+    let locked_elapsed = started.elapsed();
     assert!(output.status.success());
+    // #2728: each configuration load (this command makes two) waits for the
+    // lock once; before, twice (on open and in the migration check).
+    assert!(
+        locked_elapsed < baseline_elapsed + one_wait.mul_f32(3.0),
+        "the locked run took {locked_elapsed:?}, the unlocked one {baseline_elapsed:?}, one wait {one_wait:?}"
+    );
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&output.stdout)?,
         serde_json::from_slice::<serde_json::Value>(&baseline.stdout)?

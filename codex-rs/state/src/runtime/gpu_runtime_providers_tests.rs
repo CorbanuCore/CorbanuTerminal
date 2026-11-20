@@ -328,8 +328,9 @@ async fn read_only_overlay_reader_matches_runtime_and_refuses_foreign_databases(
 }
 
 /// #2728: while another connection holds the state database's write lock,
-/// the read-only overlay reader (including its migration check) waits at most
-/// its own `busy_timeout`, not SQLite's default 5 s per configuration load.
+/// the read-only overlay reader waits at most its own `busy_timeout` in all:
+/// not SQLite's default 5 s per step, nor a full timeout for each of its steps
+/// (open, migration check, read).
 #[tokio::test]
 async fn read_only_overlay_reader_waits_only_its_busy_timeout_for_a_locked_database() {
     let home = tempfile::tempdir().expect("temp dir");
@@ -355,24 +356,37 @@ async fn read_only_overlay_reader_waits_only_its_busy_timeout_for_a_locked_datab
         .await
         .expect("take write lock");
 
+    let busy_timeout = std::time::Duration::from_secs(1);
+    // How long one wait of `busy_timeout` really takes here: opening a reader
+    // waits once. SQLite's sleeps overshoot on Windows (about 1.8 s for 1 s).
     let started = std::time::Instant::now();
-    let result = sqlite
-        .read_gpu_runtime_providers(std::time::Duration::from_millis(200))
-        .await;
+    let reader = sqlite
+        .open_read_only_pool(&path, Some(busy_timeout))
+        .await
+        .expect("open a reader");
+    let one_wait = started.elapsed();
+    reader.close().await;
+    assert!(
+        one_wait >= busy_timeout.mul_f32(0.9),
+        "opening a reader did not wait for the write lock: {one_wait:?}"
+    );
+
+    let started = std::time::Instant::now();
+    let result = sqlite.read_gpu_runtime_providers(busy_timeout).await;
     let elapsed = started.elapsed();
     assert!(
         result.is_err(),
         "the locked database cannot be read: {result:?}"
     );
-    // The read waited for the lock (at least one busy timeout) and gave up
-    // within its own bound (about two: the open and the first query).
+    // The read waited for the lock and gave up after one wait, not one per
+    // step (two before the fix: the open and the migration check).
     assert!(
-        elapsed >= std::time::Duration::from_millis(200),
+        elapsed >= busy_timeout.mul_f32(0.9),
         "the read did not wait for the write lock: {elapsed:?}, {result:?}"
     );
     assert!(
-        elapsed < std::time::Duration::from_secs(3),
-        "waited {elapsed:?} for the write lock"
+        elapsed < one_wait.mul_f32(1.5),
+        "waited {elapsed:?} for the write lock, more than one wait ({one_wait:?})"
     );
 
     sqlx::query("ROLLBACK")
