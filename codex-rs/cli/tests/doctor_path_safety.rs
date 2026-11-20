@@ -28,7 +28,7 @@ struct Fixture {
     program: PathBuf,
     workspace: PathBuf,
     home: PathBuf,
-    /// The child's `USERPROFILE` on Windows (see [`Fixture::command`]).
+    /// The child's stand-in profile on Windows (see [`Fixture::command`]).
     #[cfg_attr(not(windows), allow(dead_code))]
     profile: PathBuf,
     marker: PathBuf,
@@ -155,14 +155,15 @@ wire_api = "responses"
             .env("ZELLIJ", "0")
             .timeout(Duration::from_secs(/*secs*/ 45));
         // The Windows sandbox keeps its records of possibly planted folders
-        // under the LocalAppData known folder, which Windows resolves from
-        // `USERPROFILE` (`LOCALAPPDATA` alone doesn't move it). Point both at
-        // the fixture so the host's records (unreadable on CI runners after
-        // sandbox tests) can't decide whether project config loads (#2728).
+        // under the account's LocalAppData, which the environment doesn't
+        // move (#2819). Debug builds take it from this test variable instead,
+        // so the host's records (unreadable on CI runners after sandbox
+        // tests) can't decide whether project config loads (#2728).
         #[cfg(windows)]
-        command
-            .env("USERPROFILE", &self.profile)
-            .env("LOCALAPPDATA", self.profile.join("AppData").join("Local"));
+        command.env(
+            "CORBANU_TEST_SANDBOX_LOCAL_APP_DATA",
+            self.profile.join("AppData").join("Local"),
+        );
         Ok(command)
     }
 }
