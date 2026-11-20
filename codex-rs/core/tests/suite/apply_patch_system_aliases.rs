@@ -101,9 +101,13 @@ async fn case_variant_metadata_patch_cannot_write_without_approval(shell: bool) 
         request.custom_tool_call_output_content_and_success("protected")
     }
     .expect("protected patch output");
-    assert!(output.expect("patch rejection text").contains(
-        "patch rejected: writing outside of the project; rejected by user approval settings"
-    ));
+    let output = output.expect("patch rejection text");
+    assert!(
+        output.contains(
+            "patch rejected: writing outside of the project; rejected by user approval settings"
+        ),
+        "{output}"
+    );
     Ok(())
 }
 
