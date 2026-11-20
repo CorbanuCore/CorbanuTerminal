@@ -1528,8 +1528,15 @@ impl ToolOrchestrator {
                     );
                     return Err(ToolError::Codex(err));
                 }
-                let sandbox_startup_failure =
-                    is_sandbox_startup_failure(initial_sandbox, output.as_ref());
+                // #2820: decided by the launcher, never by what the command
+                // printed (`sandbox_failed_to_start`).
+                let sandbox_startup_failure = sandbox_failed_to_start(
+                    &initial_attempt,
+                    tool.local_search_path(req),
+                    tool.command_cwd(req).map(PathUri::from),
+                    output.as_ref(),
+                )
+                .await;
                 // D639(a) (#2808): an ordinary denial stays final for a tool
                 // that keeps it so (unified exec): the approval does not turn
                 // it into a retry outside the sandbox, however fast the
@@ -1568,8 +1575,9 @@ impl ToolOrchestrator {
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
                 // surface a concise sandbox denial that preserves the original
                 // output. Exception: if the platform sandbox itself failed to
-                // start after an explicit OnRequest approval, the approval is
-                // enough to retry unsandboxed when doing so would not drop
+                // start after an explicit OnRequest approval, the person may be
+                // asked again (#2820: never retried on that approval alone)
+                // to retry unsandboxed when doing so would not drop
                 // denied-read enforcement, nor (#540) leave a kept sandbox
                 // outside a protected action's fresh approval
                 // (`retry_may_leave_sandbox`).
@@ -1647,15 +1655,14 @@ impl ToolOrchestrator {
                                 | ApprovalResolutionSource::Hook
                         )
                     );
+                // #2820 (b): a sandbox that failed to start is never retried
+                // outside it on an earlier approval: the person is asked
+                // again, once only.
                 let bypass_retry_approval = !human_once
                     && !strict_auto_review
                     && post_taint.is_none()
-                    && (tool.should_bypass_approval(approval_policy, retry_preapproved)
-                        || allow_on_request_sandbox_startup_retry(
-                            approval_policy,
-                            retry_preapproved,
-                            sandbox_startup_failure,
-                        ))
+                    && !sandbox_startup_failure
+                    && tool.should_bypass_approval(approval_policy, retry_preapproved)
                     && network_approval_context.is_none();
                 // D50: a retry due on an approval from before a security
                 // transition (one committed while the first attempt ran) is
@@ -1697,9 +1704,21 @@ impl ToolOrchestrator {
                         *sandbox_permissions = SandboxPermissions::RequireEscalated;
                         *additional_permissions = None;
                     }
+                    // #2820 (b): only a person answers, for this run only (no
+                    // "don't ask again", nothing remembered); refused where no
+                    // person can be asked (approvals off, automatic review).
+                    let startup_requirement;
+                    let retry_requirement = if sandbox_startup_failure {
+                        startup_requirement = ExecApprovalRequirement::NeedsHumanApproval {
+                            reason: approval_reason.clone(),
+                        };
+                        &startup_requirement
+                    } else {
+                        &requirement
+                    };
                     let approval_ctx = approval_context(
                         tool_ctx,
-                        &requirement,
+                        retry_requirement,
                         strict_auto_review,
                         approval_reason,
                         Some(match &post_taint {
@@ -1725,13 +1744,15 @@ impl ToolOrchestrator {
                             .await,
                         )?;
                     }
+                    // #2820 (b): nor (patches) remembered for the session.
+                    let fresh_human_authority = post_taint.is_some() || sandbox_startup_failure;
                     let retry_approved_by = approval_source(
                         resolve_tool_action_approval::<Rq, Out, T>(
                             tool,
                             action,
                             approval_ctx,
                             tool_ctx,
-                            /*fresh_human_authority*/ post_taint.is_some(),
+                            fresh_human_authority,
                             DeclineRecord::Here,
                             /*asked_again*/ false,
                         )
@@ -1740,8 +1761,9 @@ impl ToolOrchestrator {
                     if let Some(action) = &post_taint {
                         post_taint_recheck(action, tool_ctx)?;
                     }
-                    // Issue #540: leaving the sandbox here takes a person.
-                    if keeps_sandbox
+                    // Issue #540: leaving the sandbox here takes a person;
+                    // #2820 (b): so does any retry after it failed to start.
+                    if (keeps_sandbox || sandbox_startup_failure)
                         && unsandboxed_allowed
                         && retry_approved_by != Some(ApprovalResolutionSource::User)
                     {
@@ -3052,7 +3074,89 @@ fn allow_on_request_sandbox_startup_retry(
         && sandbox_startup_failure
 }
 
-fn is_sandbox_startup_failure(sandbox: SandboxType, output: &ExecToolCallOutput) -> bool {
+/// #2820: the longest the launcher probe may take.
+const SANDBOX_START_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// #2820 (coordinator, 2026-11-20, option (c)): whether the platform sandbox
+/// itself failed to start for `attempt`. A command can print a startup
+/// failure's text and exit, so its output only says where to look: the
+/// launcher is then run once more, as the command's run started it (the same
+/// sandbox, the `PATH` it finds the system bubblewrap on, the folder) but
+/// with a command that prints nothing (`true`), and the sandbox failed to
+/// start only when that probe fails with a startup failure's text too, which
+/// only the launcher can have written. Anything else (the probe ran, timed
+/// out or could not be prepared, or the run's `PATH` is unknown, as for a
+/// patch or a remote run, which never has this sandbox here) is an ordinary
+/// denial; so is a probe that needs the managed network proxy it is not
+/// given. Linux (bubblewrap) only.
+async fn sandbox_failed_to_start(
+    attempt: &SandboxAttempt<'_>,
+    search_path: Option<&str>,
+    command_cwd: Option<PathUri>,
+    output: &ExecToolCallOutput,
+) -> bool {
+    if !has_sandbox_startup_marker(attempt.sandbox, output) {
+        return false;
+    }
+    let Some(search_path) = search_path else {
+        return false;
+    };
+    let Some(probe) = probe_sandbox_start(attempt, search_path, command_cwd).await else {
+        return false;
+    };
+    let failed = probe.exit_code != 0 && has_sandbox_startup_marker(attempt.sandbox, &probe);
+    tracing::info!(
+        probe_exit_code = probe.exit_code,
+        failed,
+        "#2820: sandbox startup probe after a startup failure's text"
+    );
+    failed
+}
+
+/// #2820: runs `true` through `attempt`'s sandbox launcher, started with
+/// only `search_path` as its `PATH` in `command_cwd` (else the sandbox's
+/// folder); its output, or `None` when the probe could not be prepared, did
+/// not finish or found no `true` to run.
+async fn probe_sandbox_start(
+    attempt: &SandboxAttempt<'_>,
+    search_path: &str,
+    command_cwd: Option<PathUri>,
+) -> Option<ExecToolCallOutput> {
+    let program = ["/usr/bin/true", "/bin/true"]
+        .into_iter()
+        .find(|program| std::path::Path::new(program).is_file())?;
+    let command = codex_sandboxing::SandboxCommand {
+        program: program.into(),
+        args: Vec::new(),
+        cwd: command_cwd.unwrap_or_else(|| attempt.sandbox_cwd.clone()),
+        env: std::collections::HashMap::from([("PATH".to_string(), search_path.to_string())]),
+        managed_network: None,
+        additional_permissions: None,
+    };
+    let options = crate::sandboxing::ExecOptions {
+        expiration: crate::exec::ExecExpiration::Timeout(SANDBOX_START_PROBE_TIMEOUT),
+        capture_policy: crate::exec::ExecCapturePolicy::ShellTool,
+    };
+    let request = attempt
+        .env_for(
+            command, options, /*network*/ None, /*environment_id*/ None,
+        )
+        .await
+        .ok()?;
+    match crate::sandboxing::execute_env(request, /*stdout_stream*/ None).await {
+        Ok(output) => Some(output),
+        Err(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
+                Some(output.as_ref().clone())
+            }
+            _ => None,
+        },
+    }
+}
+
+/// Whether `output` carries a bubblewrap startup failure's text. Never
+/// enough on its own (#2820): the command may have printed it.
+fn has_sandbox_startup_marker(sandbox: SandboxType, output: &ExecToolCallOutput) -> bool {
     if sandbox != SandboxType::LinuxSeccomp {
         return false;
     }
@@ -3186,36 +3290,36 @@ mod tests {
 
     #[test]
     fn linux_sandbox_startup_failure_is_classified_narrowly() {
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
         ));
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bubblewrap is unavailable: no system bwrap was found"),
         ));
         // #563: the helper's refusal when no bubblewrap is found.
         #[cfg(target_os = "linux")]
-        assert!(is_sandbox_startup_failure(
+        assert!(has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output(codex_sandboxing::BWRAP_UNAVAILABLE_MESSAGE),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("sandbox fails to start"),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &output_with_streams(
                 "command ran before failing",
                 "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
             ),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::LinuxSeccomp,
             &denied_output("bash: ./script.sh: Permission denied"),
         ));
-        assert!(!is_sandbox_startup_failure(
+        assert!(!has_sandbox_startup_marker(
             SandboxType::None,
             &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
         ));
