@@ -942,13 +942,19 @@ async fn approve_reading_gate(
         // On Linux the prompt before the run carries the Aggressive notice
         // for what the command touches (a protected path, a user namespace)
         // as its reason instead; a sandbox retry carries neither.
+        // #2796: or both, the D691 reason then the Linux note (joined by a
+        // space, #2455).
+        const D691_REASON: &str = "a prompt-user or forbidden rule could match the command it runs";
+        const USER_NAMESPACES_NOTE: &str = "On Linux, security level Aggressive blocks creating \
+                                            user namespaces for agent commands: if you approve, \
+                                            the command runs";
         let gate = approval.reason.as_deref().is_none_or(|reason| {
-            reason.ends_with("a prompt-user or forbidden rule could match the command it runs")
+            reason.ends_with(D691_REASON)
                 || reason.starts_with("Security level Aggressive blocked access to `")
-                || reason.starts_with(
-                    "On Linux, security level Aggressive blocks creating user namespaces \
-                     for agent commands: if you approve, the command runs",
-                )
+                || reason.starts_with(USER_NAMESPACES_NOTE)
+                || reason
+                    .split_once(&format!("{D691_REASON} "))
+                    .is_some_and(|(_, note)| note.starts_with(USER_NAMESPACES_NOTE))
         });
         gate_prompts += usize::from(gate);
         let decision = if level == SecurityLevel::Aggressive && gate {
