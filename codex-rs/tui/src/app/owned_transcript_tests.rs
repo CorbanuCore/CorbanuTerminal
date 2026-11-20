@@ -8,7 +8,6 @@ use crate::chatwidget::tests::helpers::normalize_snapshot_paths;
 use crate::history_cell::HistoryCell;
 use crate::history_cell::UserHistoryCell;
 use crate::session_state::ThreadSessionState;
-use crate::test_support::test_path_buf;
 use codex_app_server_protocol::AskForApproval;
 use codex_config::types::ApprovalsReviewer;
 use codex_config::types::CopyOnSelect;
@@ -48,7 +47,8 @@ pub(in crate::app) fn attach_thread(app: &mut App, thread_id: ThreadId) {
         approvals_reviewer: ApprovalsReviewer::User,
         permission_profile: PermissionProfile::read_only(),
         active_permission_profile: None,
-        cwd: test_path_buf("/tmp/project").abs(),
+        // Keep the session cwd identical to the widget fixture, including its display width.
+        cwd: app.config.cwd.clone(),
         runtime_workspace_roots: Vec::new(),
         instruction_source_paths: Vec::new(),
         reasoning_effort: None,

@@ -478,6 +478,10 @@ async fn guardian_approved_request_permissions_renders_request_summary() {
 async fn guardian_approved_requests_stay_in_history() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;
+    let expected_patch_approval = format!(
+        "✔ Request approved for apply_patch touching {}",
+        test_path_buf("/tmp/project/report.md").display()
+    );
     for (action, expected) in [
         (
             GuardianAssessmentAction::NetworkAccess {
@@ -503,7 +507,7 @@ async fn guardian_approved_requests_stay_in_history() {
                 cwd: test_path_buf("/tmp/project").abs().into(),
                 files: vec![test_path_buf("/tmp/project/report.md").abs().into()],
             },
-            "✔ Request approved for apply_patch touching /tmp/project/report.md",
+            expected_patch_approval.as_str(),
         ),
         (
             GuardianAssessmentAction::RequestPermissions {

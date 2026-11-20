@@ -62,12 +62,12 @@ async fn issue822_refused_command_preserves_reason_and_never_claims_execution() 
         );
         insta::assert_snapshot!(
             format!("issue822_refused_{name}"),
-            format!(
+            normalize_snapshot_paths(format!(
                 "display:\n{}transcript:\n{}narrow:\n{}",
                 lines_to_single_string(&display),
                 lines_to_single_string(&transcript),
                 lines_to_single_string(&cell.display_lines(/*width*/ 32)),
-            )
+            ))
         );
     }
 }
