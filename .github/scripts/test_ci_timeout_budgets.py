@@ -746,18 +746,25 @@ class NightlyHeavyJobsTest(unittest.TestCase):
 
     def test_cold_linux_bazel_jobs_are_gated(self) -> None:
         bazel = self.workflow("bazel.yml")
+        self.assertIn("BAZEL_COLD_INPUT: ${{ toJSON(inputs.cold_bazel) }}", bazel)
+        self.assertIn("run_cold: ${{ steps.lanes.outputs.run_cold }}", bazel)
         for job in ("test", "clippy", "verify-release-build"):
             with self.subTest(job=job):
-                self.assertRegex(
-                    bazel,
-                    rf"(?m)^  {re.escape(job)}:\n    if: \$\{{\{{ inputs\.cold_bazel \}}\}}$",
+                gate = "needs.select.outputs.run_cold == 'true'"
+                if job != "test":
+                    gate += " && needs.select.outputs.run_full == 'true'"
+                self.assertIn(
+                    f"  {job}:\n    needs: select\n    if: ${{{{ {gate} }}}}\n", bazel
                 )
 
     def test_native_windows_main_is_nightly(self) -> None:
         self.assertRegex(
             self.workflow("bazel.yml"),
             r"(?ms)^  test-windows-native-main:\n(?:    #.*?\n)*"
-            r"    if: \$\{\{ inputs\.cold_bazel \}\}\n    timeout-minutes: 360$",
+            r"    needs: select\n"
+            r"    if: \$\{\{ needs\.select\.outputs\.run_cold == 'true'"
+            r" && needs\.select\.outputs\.run_full == 'true' \}\}\n"
+            r"    timeout-minutes: 360$",
         )
 
     def test_blocking_ci_leaves_heavy_jobs_off(self) -> None:
