@@ -931,6 +931,11 @@ pub struct Tui {
     #[serde(default = "default_true")]
     pub fullscreen_transcript: bool,
 
+    /// Name new threads automatically with one extra model request on the session's provider.
+    /// Unset runs it only on plan or subscription accounts (a ChatGPT plan, Claude Plan or Corbanu
+    /// Plan); `true` also runs it on pay-per-token and wallet-funded providers; `false` turns it off.
+    pub automatic_thread_titles: Option<bool>,
+
     /// Mouse wheel speed multiplier for transcript scrolling, based on one row per event.
     /// Defaults to `1.0`. Positive fractional values slow scrolling; values above `1.0` speed it up.
     #[serde(default, deserialize_with = "crate::tui_mouse_scroll::deserialize")]

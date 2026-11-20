@@ -49,6 +49,7 @@ pub use billing::BillingCredential;
 pub use billing::BillingDeclaration;
 pub use billing::built_in_basis;
 pub use billing::declared_billing;
+pub use billing::is_plan_account;
 pub use billing::not_declared_next_step;
 pub use billing::route_basis;
 pub use model_routes::ModelRoute;
