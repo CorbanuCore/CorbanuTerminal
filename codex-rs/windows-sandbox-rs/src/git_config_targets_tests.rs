@@ -595,6 +595,10 @@ fn unread(states: &[TargetState]) -> Vec<PathBuf> {
 #[test]
 fn share_reads_wait_until_the_deadline_only() {
     let soon = || Instant::now() + Duration::from_millis(200);
+    // Reads that end on their own get an ample deadline: on a loaded runner
+    // the reader thread can start more than 200 ms late (#2842), and only a
+    // hung read should run into its deadline here.
+    let ample = || Instant::now() + Duration::from_secs(/*secs*/ 30);
     let path = Path::new("//server/share/.gitconfig");
     let (release, hung) = std::sync::mpsc::channel::<()>();
     let started = Instant::now();
@@ -604,20 +608,23 @@ fn share_reads_wait_until_the_deadline_only() {
     });
     let waited = started.elapsed();
     let started = Instant::now();
-    let again = read_by(path, soon(), || Ok(b"x".to_vec()));
+    let again = read_by(path, ample(), || Ok(b"x".to_vec()));
     let refused_at_once = started.elapsed() < Duration::from_millis(100);
     release.send(()).expect("release");
+    // The released read must end (and stop holding the path) before the
+    // next look succeeds; under load that can take seconds (#2842).
+    let give_up = Instant::now() + Duration::from_secs(/*secs*/ 30);
     let mut after = Err(());
-    for _ in 0..100 {
-        after = read_by(path, soon(), || Ok(b"x".to_vec()));
+    while Instant::now() < give_up {
+        after = read_by(path, ample(), || Ok(b"x".to_vec()));
         if after.is_ok() {
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
     }
     // `ERROR_FILE_NOT_FOUND` / `ENOENT`; `ERROR_BAD_NETPATH` / `EACCES`.
-    let missing = read_by(path, soon(), || Err(std::io::Error::from_raw_os_error(2)));
-    let unreachable = read_by(path, soon(), || {
+    let missing = read_by(path, ample(), || Err(std::io::Error::from_raw_os_error(2)));
+    let unreachable = read_by(path, ample(), || {
         Err(std::io::Error::from_raw_os_error(if cfg!(windows) {
             53
         } else {
@@ -631,7 +638,7 @@ fn share_reads_wait_until_the_deadline_only() {
         let _ = hung.recv();
         Ok(b"late".to_vec())
     });
-    let still_waiting = read_by(other, soon(), || Ok(b"x".to_vec()));
+    let still_waiting = read_by(other, ample(), || Ok(b"x".to_vec()));
     finish.send(()).expect("finish");
     assert_eq!(
         (
