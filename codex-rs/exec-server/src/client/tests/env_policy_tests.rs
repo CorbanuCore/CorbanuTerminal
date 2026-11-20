@@ -14,6 +14,7 @@ use tokio::net::TcpListener;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
+use super::super::CONNECT_TIMEOUT;
 use super::super::LazyRemoteExecServerClient;
 use super::accept_websocket;
 use super::complete_websocket_initialize;
@@ -106,7 +107,7 @@ async fn start_against(
         exec
     });
     let client = LazyRemoteExecServerClient::new(
-        ExecServerTransportParams::websocket_url(websocket_url, Duration::from_secs(1)),
+        ExecServerTransportParams::websocket_url(websocket_url, CONNECT_TIMEOUT),
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
     )
     .get()
