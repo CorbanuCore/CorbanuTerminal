@@ -161,6 +161,29 @@ doesn't change (through a dependency) shows up on `main`.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
 
+## npm Staging Fixture
+
+Full npm staging in `repo-checks` (main pushes, manual runs and PRs that change
+a packaging input) downloads the six native target artifacts from one pinned,
+successful upstream `rust-release` run. The run is pinned in
+`.github/npm-staging-fixture.json` with its tag, head SHA and artifact expiry.
+Those artifacts expire, so the weekly `npm-staging-fixture` workflow runs
+`.github/scripts/npm_staging_fixture.py refresh` with only `contents: read`:
+when a required target is missing, expired or expires within 21 days, it picks
+the newest successful `rust-release` run (of the last 20) whose six targets
+pass the same check. Targets are picked with staging's own signed /
+`-unsigned` rule. The candidate pin and a verification summary are uploaded as
+the `npm-staging-fixture-candidate` artifact, and a second job, the only one
+with `issues: write`, opens or updates one bot-owned tracking issue (found by
+a marker in its body) with the proposed `.github/npm-staging-fixture.json`,
+the run, tag, head SHA, earliest artifact expiry and the workflow-run link. A
+maintainer applies the proposal in a normal PR and closes the issue from it;
+the pin is a packaging input, so that PR runs full staging. The workflow
+never opens PRs: the repository setting "Allow GitHub Actions to create and
+approve pull requests" stays disabled. A healthy pin opens no issue, and if
+no run passes, the job fails and the pin stays. Check the pin by hand with
+`python3 .github/scripts/npm_staging_fixture.py check` (#2515).
+
 ## Actions Cache
 
 The repository's Actions cache is limited to 10 GB and GitHub evicts the least

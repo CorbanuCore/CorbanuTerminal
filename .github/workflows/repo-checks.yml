@@ -95,6 +95,7 @@ jobs:
           while IFS= read -r f; do
             case "$f" in
               codex-cli/* | scripts/stage_npm_packages.py \
+                | .github/npm-staging-fixture.json | .github/scripts/npm_staging_fixture.py \
                 | package.json | pnpm-lock.yaml | pnpm-workspace.yaml | .npmrc \
                 | .github/workflows/repo-checks.yml | .github/workflows/blocking-ci.yml \
                 | .github/actions/*)
@@ -129,7 +130,10 @@ jobs:
           # cross-platform native payload required by the npm package layout.
           # Passing the workflow URL directly avoids relying on old rust-v*
           # branches remaining discoverable via `gh run list --branch ...`.
-          WORKFLOW_URL="https://github.com/openai/codex/actions/runs/44008150412"
+          # The run is pinned in .github/npm-staging-fixture.json; the weekly
+          # npm-staging-fixture workflow proposes a replacement in a tracking
+          # issue before the run's artifacts expire (#2515).
+          WORKFLOW_URL="$(python3 .github/scripts/npm_staging_fixture.py url)"
           OUTPUT_DIR="${RUNNER_TEMP}"
           python3 ./scripts/stage_npm_packages.py \
             --release-version "$CODEX_VERSION" \

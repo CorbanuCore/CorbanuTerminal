@@ -13,7 +13,7 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Sequence
+from typing import Iterable, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -235,19 +235,31 @@ def select_target_artifacts(
     artifacts_by_name = {
         artifact.name: artifact for artifact in list_workflow_artifacts(workflow_id)
     }
-    selected_artifacts: list[WorkflowArtifact] = []
+    return [
+        artifacts_by_name[name]
+        for name in select_target_artifact_names(artifacts_by_name).values()
+    ]
+
+
+def select_target_artifact_names(available_names: Iterable[str]) -> dict[str, str]:
+    """Map each of BINARY_TARGETS to the artifact name staging downloads.
+
+    The signed artifact wins; `<target>-unsigned` is the fallback. A missing
+    target fails closed. `.github/scripts/npm_staging_fixture.py` uses the same
+    rule to vet the pinned fixture run (#2515).
+    """
+    available = set(available_names)
+    selected: dict[str, str] = {}
     for target in BINARY_TARGETS:
         for artifact_name in [target, f"{target}-unsigned"]:
-            artifact = artifacts_by_name.get(artifact_name)
-            if artifact is not None:
-                selected_artifacts.append(artifact)
+            if artifact_name in available:
+                selected[target] = artifact_name
                 break
         else:
             raise FileNotFoundError(
                 f"Expected workflow artifact not found for target {target}"
             )
-
-    return selected_artifacts
+    return selected
 
 
 def list_workflow_artifacts(workflow_id: str) -> list[WorkflowArtifact]:
