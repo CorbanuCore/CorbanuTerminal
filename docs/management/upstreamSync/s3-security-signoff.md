@@ -4,11 +4,20 @@
 
 Plan: [landing plan](landing-plan-v0.167.0.md), step 5 and final gate 2. Tracking: [#1630](https://github.com/CorbanuCore/CorbanuTerminal/issues/1630) (S3), [#2562](https://github.com/CorbanuCore/CorbanuTerminal/issues/2562) (security carry rows), [#1532](https://github.com/CorbanuCore/CorbanuTerminal/issues/1532). Owner decisions are cited by D-number from the [management handoff](../managementHandoff.html), section 9 and the dated decision boxes.
 
+Terms used below:
+- **glitch** is Corbanu's Linux test machine.
+- **“61/1/3”** means passed/failed/ignored.
+- **Δn** is a numbered difference from main.
+- **sync** means the `sync/upstream-rust-v0.167.0` branch.
+
 ## What Travis is signing
 
-1. **Scope.** The sync branch rebuilds Corbanu's security on upstream's unified exec. That covers classifier and approval decisions, the three security levels, sandbox selection, vault and broker isolation, and taint/provenance. Upstream's shell handlers, `shell-escalation` and the zsh backend are gone (D275).
-2. **Parity claim.** At every security level, each tool path behaves as it does on main, on Linux, macOS and Windows. The exceptions are the differences in [Differences from main](#differences-from-main) below. Each has an accepted owner decision, except the four marked **For SG2**.
-3. **Moved boundaries.** Every place where sync had to re-implement or move a protection has a regression test. Each test failed before its fix and passes after, or is listed as test-only (it pins behaviour that never broke). See the [fail-before/pass-after table](#fail-beforepass-after-for-moved-boundaries).
+1. **Scope.** The sync branch rebuilds Corbanu's security on upstream's unified exec. That covers classifier and approval decisions, the three security levels, sandbox selection, vault and broker isolation, browser-backend isolation, and taint/provenance. Upstream's shell handlers, `shell-escalation` and the zsh backend are gone (D275).
+2. **Parity claim.** At every security level, each tool path behaves as it does on main, on Linux, macOS and Windows. The exceptions are the differences in [Differences from main](#differences-from-main) below. Each has an accepted owner decision, except the items marked **For SG2**. No difference weakens a protection main has.
+3. **Moved boundaries.** Every place where sync had to re-implement or move a protection has a regression test. Each row says one of three things:
+   - its test failed before the fix and passes after;
+   - **test-only**: the test pins behaviour that never broke;
+   - **no fail-before here**: new code, a port or a cherry-pick. The reason is given, and the evidence is in the PR. See the [fail-before/pass-after table](#fail-beforepass-after-for-moved-boundaries).
 4. **Lanes.** On the exact candidate, these must all pass on all three platforms ([run record](#run-record)):
    - the required security lanes;
    - the Linux sandbox tests on glitch;
@@ -16,11 +25,19 @@ Plan: [landing plan](landing-plan-v0.167.0.md), step 5 and final gate 2. Trackin
    - the native Windows sandbox tests.
 
    This preliminary run is not all green yet: see #2796, #2797 and #2808. Anything not green is listed with its owner.
-5. **What stays open.** The [open residuals](#open-residuals-and-owners) do not block landing, but Travis should see them. The **For SG2** items need his explicit choice:
+5. **What stays open.** The [open residuals](#open-residuals-and-owners) table says which items block landing. The **For SG2** items need his explicit choice:
    - **Δ1:** accept upstream's retired known-safe list. Commands under `untrusted`, and Windows without its sandbox with approvals off, now ask or are refused more often than on main. This is stricter, not weaker.
    - **Δ2, D741:** memory v2 as the default for new profiles.
    - **Δ3, D738:** resume on the recorded provider. A product fix would need its own security sign-off.
    - **Δ4, Windows desktop checklist:** #1800/#1798/#1851 and D608 stay out of this landing. They wait for the checklist; their protections are not claimed as shipped.
+   - **D685 (copied-credential filtering):** the landing plan reserves this for Travis. It is built on both branches. Its known limits:
+     - matching is literal, so base64- or URL-encoded copies are missed;
+     - keys under 8 bytes are skipped;
+     - if the check cannot run, copies stay in place and model requests are refused;
+     - the vault-backed OpenAI routes (no production caller yet) are not covered;
+     - the scanner does not zeroize its fingerprint key.
+   - **#2808 (only if not fixed first):** accept a macOS exception to Δ5.
+   - **Small leftovers with no decision recorded** (Δ18–Δ20): D721's three fork edge cases and D612's config-write strictness. The workers recommend keeping each as it is.
 6. **Not signed here.** This does not cover:
    - SG3: the security-path diff from the signed SHA to the final head;
    - the final merge;
@@ -30,7 +47,7 @@ Plan: [landing plan](landing-plan-v0.167.0.md), step 5 and final gate 2. Trackin
 
    A security-path change after the SG2 SHA needs SG3 re-signing.
 
-**Signature line (Travis only):** SG2 approved on candidate SHA `________________________________________` — date ________.
+**Signature line (Travis only):** SG2 approved on sync candidate SHA `________________________________________` and this PR's head `________________________________________` — date ________.
 
 ## Run record
 
@@ -38,16 +55,20 @@ All runs use sync head `ab557d87af` unless stated otherwise. CI runs were starte
 
 | Lane | Platform | Sync run (`ab557d87af`) | Result | Main comparison (`15415856d7` unless noted) |
 | --- | --- | --- | --- | --- |
-| `rust-ci-core-security` | Linux | [44628428629](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628428629) | **failure** ([#2796](https://github.com/CorbanuCore/CorbanuTerminal/issues/2796)). security:: 1,006/0/7 twice; pf_23_s01 + pf_25_s01 61/1 (`issue_1472…`: the test's reason matcher, prompt is raised). Later steps did not run in CI; on glitch at the same head, #902 suites 13/0 and #2477 fixtures 16/0 | [44629087005](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629087005) success: security:: 1,001 ×2; pf_23_s01 + pf_25_s01 62 ×2; #902 13; #2477 16 (all 0 failed) |
-| `rust-ci-core-security` | macOS | [44628433573](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628433573) | **cancelled at the 60-minute job limit** (cold cache: the build took 37 minutes). Completed steps pass: security:: 1,006/0/7 ×2; pf_23_s01 + pf_25_s01 83/0. The TMPDIR=/tmp repeat, #902 and #2477 steps did not run. **Attempt 2 failed:** security:: 1,006/0/7 ×2 and pf_23/25 83/0 ×2 pass. In the #902 suites, 17 passed and 1 failed: `issue_747…` wrote outside the sandbox on Permissive Retry ([#2808](https://github.com/CorbanuCore/CorbanuTerminal/issues/2808)). The #2477 step did not run. A local Mac run of these steps is **not counted**: its harness was broken (wiremock and broker-URL errors in 81 unrelated cases) | postmerge [44615159759](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44615159759), job 135881769742: security:: 1,001 ×2; pf_23/25 83 ×2; #902 18 ×2; #2477 5 (all 0 failed) |
+| `rust-ci-core-security` | Linux | [44628428629](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628428629) | **failure** ([#2796](https://github.com/CorbanuCore/CorbanuTerminal/issues/2796)): security:: 1,006/0/7 ×2; pf_23_s01 + pf_25_s01 61/1. The prompt is raised, but the test's checks that the home was not moved aside or planted never ran, so the #1472 protection is **not exercised** on Linux at this head | [44629087005](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629087005) success: security:: 1,001 ×2; pf_23/25 62 ×2; #902 13; #2477 16 (all 0 failed) |
+| `rust-ci-core-security`, steps not reached | Linux | glitch, same head | #902 suites 13/0; #2477 fixtures 16/0 (`ulimit -Sn 1024`) | as above |
+| `rust-ci-core-security`, attempt 1 | macOS | [44628433573](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628433573) | **cancelled at the 60-minute job limit** (cold cache; the build took 37 minutes). security:: 1,006/0/7 ×2 and pf_23/25 83/0 passed first | postmerge [44615159759](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44615159759), job 135881769742: security:: 1,001 ×2; pf_23/25 83 ×2; #902 18 ×2; #2477 5 (all 0 failed) |
+| `rust-ci-core-security`, attempt 2 | macOS | same run, job 135962108176 | **failure**: security:: 1,006/0/7 ×2 and pf_23/25 83/0 ×2 pass. #902 suites 17/1: `issue_747…` wrote outside the sandbox on Permissive Retry ([#2808](https://github.com/CorbanuCore/CorbanuTerminal/issues/2808)). #2477 did not run | as above |
+| `rust-ci-core-security`, attempt 3 | macOS | same run | Rerun of the failed job, still running when this was written. Its result is posted as a comment on this PR. The final candidate run replaces it | as above |
+| Local Mac run of the same steps | macOS | this Mac | **Not counted**: the harness was broken (wiremock and broker-URL errors in 81 unrelated cases) | — |
 | `security-platform-contract` | Linux, macOS, Windows | [44628438679](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628438679) | success, 3/3 jobs | [44629093135](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629093135) success |
 | `security-ingress-contract` | Linux, macOS, Windows | [44628445968](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628445968) | success, 3/3 jobs | [44629098304](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629098304) success |
 | `credential-boundary-canary` | Linux, macOS, Windows | [44628453033](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628453033) | success, 3/3 (Linux, macOS, Windows PF-13 credential qualification) | [44590975298](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44590975298) at `08a23b091a`: success, 3/3 |
 | `windows-security-probes` | Windows | [44628458553](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44628458553) | success (`pf_27_s06 probes`, incl. the elevated launch-contract, D324/#1648 medium-session and broker-pipe probes) | [44614770168](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44614770168) at `4c527065f1`: success |
-| `windows-integration-tests` (supporting) | Windows | [44629804537](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629804537) | codex-core: 2,398 passed, **3 failed** (the D742 `agent_message_wake` cases, same as the reference), 103 skipped. codex-app-server: 1,569/1,569 passed, 95 skipped. Other selected packages pass | Sync-base reference: run 44594161347, at #2779 head `0f997c8c21`; 3 `agent_message_wake` failures (D742) |
-| Linux sandbox: `codex-linux-sandbox`, `codex-sandboxing` | glitch (Ubuntu, kernel 6.8, bwrap 0.9.0) | local | `codex-sandboxing` 117/0. `codex-linux-sandbox` lib 255/0; integration first run 118/**1**/3 ignored (`a_command_without_bubblewrap_keeps_its_terminal`: “outlived its terminal's hangup”, a parallel-fork race its own comment describes), then 3/3 alone and the full integration rerun 119/0/3 | sync-main8 at #2450: 117 / 255 + 119 |
-| macOS Seatbelt: `codex-sandboxing` lib, `codex-exec` `suite::seatbelt` | this Mac (aarch64), `-j6` | local | `codex-sandboxing` 173/0/3 ignored; `codex-exec` `suite::seatbelt` 15/15. Memory stayed at 24–27% free | astra-syncmac2 at `12d90cce4a`: exec integration incl. 15/15 Seatbelt |
-| Windows sandbox: `codex-windows-sandbox`, `codex-exec-server` `windows_sandbox` | DESKTOP-UJS3HC4, `C:\CorbanuQA\sg2-evidence`, MSVC | local, over SSH (not the interactive session) | `codex-windows-sandbox` lib 608/**5**/14 ignored, bins and `helper_manifest` pass. The 5 failures are environmental: main `15415856d7` fails the **same 5** in the same session (441/5/11): ConPTY `d730_legacy_tty…` and `legacy_command_tools…`, `sec_win_345_*` ×2 (non-interactive window station) and the D324 race (CI runs it from a medium session after recording setup; see #1800). `codex-exec-server` `windows_sandbox` 4/**5**: all 5 are MXC cases with no main counterpart ([#2797](https://github.com/CorbanuCore/CorbanuTerminal/issues/2797)) | sec-2562b/c, sec-2718, sync-win2729b runs on earlier heads |
+| `windows-integration-tests` (supporting) | Windows | [44629804537](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44629804537) | codex-core: 2,398 passed (1 flaky, 1 leaky), **3 failed** (the D742 `agent_message_wake` cases, same as the reference), 103 skipped. codex-app-server: 1,569/1,569 passed, 95 skipped. Other selected packages pass | Sync-base reference: run 44594161347, at #2779 head `0f997c8c21`; 3 `agent_message_wake` failures (D742) |
+| Linux sandbox: `codex-linux-sandbox`, `codex-sandboxing` | glitch (Ubuntu, kernel 6.8, bwrap 0.9.0) | local | `codex-sandboxing` 117/0. `codex-linux-sandbox` lib 255/0; integration first run 118/**1**/3 ignored (`a_command_without_bubblewrap_keeps_its_terminal`: “outlived its terminal's hangup”, a parallel-fork race its own comment describes), then 3/3 alone and the full integration rerun 119/0/3 | main `15415856d7` on glitch: `codex-sandboxing` 94/0; `codex-linux-sandbox` lib 182/0; integration first run 80/**1** (the **same** `a_command_without_bubblewrap…` race), rerun 81/0. Earlier sync run: sync-main8 at #2450, 117 / 255 + 119 |
+| macOS Seatbelt: `codex-sandboxing` lib, `codex-exec` `suite::seatbelt` | this Mac (aarch64), `-j6` | local | `codex-sandboxing` 173/0/3 ignored; `codex-exec` `suite::seatbelt` 15/15. Memory stayed at 24–27% free | main `15415856d7` on this Mac: `codex-sandboxing` 127/**2** (two Seatbelt argument-builder tests trip on this machine's TMPDIR path; sync passes them); `codex-exec` `suite::sandbox` (main's name for the Seatbelt suite) 5/5. Earlier sync run: astra-syncmac2 at `12d90cce4a` (a sync-side head), 15/15 Seatbelt |
+| Windows sandbox: `codex-windows-sandbox`, `codex-exec-server` `windows_sandbox` | DESKTOP-UJS3HC4, `C:\CorbanuQA\sg2-evidence`, MSVC | local, over SSH (not the interactive session) | `codex-windows-sandbox` lib 608/**5**/14 ignored, bins and `helper_manifest` pass. The 5 failures are environmental: main `15415856d7` fails the **same 5** in the same session (441/5/11): ConPTY `d730_legacy_tty…` and `legacy_command_tools…`, `sec_win_345_*` ×2 (non-interactive window station) and the D324 race (CI runs it from a medium session after recording setup; see #1800). `codex-exec-server` `windows_sandbox` 4/**5**: all 5 are MXC cases with no main counterpart ([#2797](https://github.com/CorbanuCore/CorbanuTerminal/issues/2797)) | main `15415856d7` in the same SSH session: `codex-windows-sandbox` 441/5/11 with the **same 5** failures; main's one exec-server `windows_sandbox` test passes (main has no MXC) |
 
 S0 reference: at baseline `23be0b3883`, core security tests passed 1,613 on Linux and 1,678 on macOS ([baseline](baseline-23be0b3883b1.md)).
 
@@ -55,7 +76,7 @@ On the sync branch, `blocking-ci` still skips `rust-ci`, `bazel` and `sdk` (temp
 
 ## Security levels: the contract being checked
 
-- **Permissive:** exactly main's behaviour. The only exceptions are the listed differences. Every Permissive difference below makes sync stricter, never looser.
+- **Permissive:** exactly main's behaviour, except the listed differences. No Permissive difference weakens a protection main has. The Direction column of the Δ table classifies each one: stricter, neutral, availability-only, or a sync-only feature under a named decision.
 - **Moderate:** main's Moderate protections. These are untrusted-content gates (PF-23/PF-30), protected reads and writes, the credential broker on by default, and network approval.
 - **Aggressive:** main's Aggressive controls. These are read-only or workspace sandbox, approvals always on, no network by default, no vault access, and `corbanu vault` forbidden. Under strict rules, any script the reader cannot read asks, or is refused when approvals are off (D553/D691).
 
@@ -69,7 +90,8 @@ Each row is a tool path. The level columns say how sync compares with main. The 
 | apply_patch / file tools | Same | Same: protected reads/writes, PF-23 denies, D537 | Same | Lane core security (protected_reads/writes, issue_2222); #2647 path-uri | Lane core security macOS; astra-syncmac2 core lib 5,026/0 | #2741 (issue_1976/2049/2050, 5/5 native; 4 fail before); #2639, #2649, #2652, #2779 native; windows-integration codex-core |
 | MCP | Same | Same: D491/D522 discovery refusals, D654 old-executor refusal, D525 project roles | Same | #2626 (4/4 glitch); core mcp_sandbox_tests in core `all` | Lane core security macOS (security:: only). The 14 executor-MCP app-server cases are excluded (CLI-dependent): **gap** | windows-integration codex-core. The **gap** is the same: #2122's four MCP cases are CLI-blocked |
 | Web / network proxy | Same, except D715 (local MXC loopback, Permissive only) and D612 (sync-only config check) | Same; D612 also refuses unbrokerable providers at load and write; D714 | Same | network-proxy lib (#2630: 470/0; #2721: 478; #2763: 482); #2784; #2672 | `seatbelt_network_tests` in the Seatbelt run; #2672 2/2 on Mac | windows-security-probes (#1805, launch contract); proxy lib not run natively on sync: **gap** until the final full CI |
-| Credentials / vault / broker | Same; D733: no copy filtering when the broker is off, as on main | Same; D685/D690/D727/D732 copy removal is on both branches; D726 | Same | Lane credential canary (Linux); lane platform contract (secret-broker); #2501, #2522, #2676, #2721, #2624; sec-smq2 real-broker runs | Lane canary (macOS); platform contract; #2708 zsh rows; #2663 | Lane canary (Windows); platform contract; windows-security-probes (PF-27-S06/S07/S08/S09 broker over named pipes, credential watch) |
+| Credentials / vault / broker | Same; D733 (broker-off copies): no copy filtering when the broker is off, as on main | Same; D685/D690/D727/D732 copy removal is on both branches; D726 | Same | Lane credential canary (Linux); lane platform contract (secret-broker); #2501, #2522, #2676, #2721, #2624; sec-smq2 real-broker runs | Lane canary (macOS); platform contract; #2708 zsh rows; #2663 | Lane canary (Windows); platform contract; windows-security-probes (PF-27-S06/S07/S08/S09 broker over named pipes, credential watch) |
+| Browser backend isolation | Same | Same | Same | Lane core security (`security::browser_isolation`, 3 tests ×2); `codex-browser-isolation` on glitch: 20/0 (main 20/0) | Lane core security macOS (`security::browser_isolation`) | Not run natively on sync: **gap** |
 | Hooks | Same | Same; D523 hook origin through deferral and readmission | Same | #2631 (4/4; history 37/37); core `hooks*` suites | Core lib on Mac (astra-syncmac2) | windows-integration codex-core |
 | Named accounts | Same; D737 (credential-only commands skip the pair check) is on both branches | Same; D657 separate named-account network policy | Same | #2441; #2770 (`codex-cli --test login` 10/0); #2789 | Not run natively on sync: **gap** | #2788/#2789 PR CI; native worktree case recorded by sync-cli4: **partial** |
 | Remote executors / MXC | Same, except D715 | Same; D616 (remote MXC needs explicit `allow_local_binding`); D522 (MXC counts as no sandbox); D541 (MXC refused without Corbanu protections) | Same | #2628; #2274 D541 unit + real-config tests; #2698/#2739 Windows-executor reading on a Linux host (60 + 120 cases fail before) | #2274 D541 tests on macOS | #2274 D541 real-binary test; #2741 (remote `view_image` now refused; reached the executor before) |
@@ -79,7 +101,7 @@ Each row is a tool path. The level columns say how sync compares with main. The 
 **Matrix gaps to close on the candidate** (owner: integrator, through the final full CI):
 - The MCP executor cases need the CLI helpers (#2122).
 - Native macOS runs are still missing for named accounts and memory.
-- Native Windows runs are still missing for the network proxy and memory.
+- Native Windows runs are still missing for the network proxy, memory and browser isolation.
 - The 22 CLI-dependent core/app failures and the 24 core / 13 app exclusions in the landing plan must be rerun now that the CLI builds.
 
 None is a known failure. Each is coverage that has not run yet on that platform.
@@ -99,7 +121,7 @@ None is a known failure. Each is coverage that has not run yet on that platform.
 | Δ7 | Local MXC keeps upstream's loopback default under Permissive. A remote MXC executor needs `allow_local_binding = true` set explicitly | Permissive / Windows, remote executors | Sync-only feature | D715(a), D616 (#2628, #2672) |
 | Δ8 | MXC is refused without Corbanu's protections. `use_mxc=false` never selects MXC | Windows | Sync-only feature | D541(a) (#2274) |
 | Δ9 | A network-proxy credential provider naming a variable Corbanu doesn't broker fails config load and app-server config writes | All levels when providers are in use | Sync-only setting, fail closed | D612 (#2630, #2763, #2784) |
-| Δ10 | Guardian v2: background scoring stays off, the model's self-assessed "no review" is ignored, and the Decisions comparison sampler is removed. 85 app-server cases that need live scoring are ignored with the D604 reason | Moderate/Aggressive with automatic review | Upstream feature restricted | D604, D605, D606 (#2621) |
+| Δ10 | Guardian v2: background scoring stays off, the model's self-assessed "no review" is ignored, and the Decisions comparison sampler is removed. 85 app-server cases and 2 core Guardian tests (#2748) that need live scoring are ignored with the D604 reason | Moderate/Aggressive with automatic review | Upstream feature restricted | D604, D605, D606 (#2621) |
 | Δ11 | A forced automatic review is never labelled as the person's. After a requirements reload it cannot answer a post-taint permissions request alone | Moderate/Aggressive | Stricter | D625(a) (#2637, #2644) |
 | Δ12 | Detached review is replaced by thread/fork. A fork never runs below the parent's level or Windows sandbox, and keeps a stricter sandbox it asked for. Explicit overrides are uncapped above the floor. A non-running parent uses history plus the stored level | All levels | Main's fork gap is fixed on sync only | D711(a), D720, D721, D722, D724 (#2659, #2684) |
 | Δ13 | An unset controller Unix-socket setting inherits the owner's allow-all grant | Network proxy, Linux/macOS | Upstream behaviour, pinned | D714(a) (#2672) |
@@ -110,7 +132,7 @@ None is a known failure. Each is coverage that has not run yet on that platform.
 
 Hardening that landed on **both** main and sync is parity, not a difference:
 - D713/D734 shell reader;
-- D729/D733 PowerShell allowlist;
+- D729 PowerShell allowlist, option (b) (labelled D733 in #2709);
 - D730/D735 cmd serializer;
 - D731 module autoload;
 - #2699 stream names;
@@ -119,21 +141,21 @@ Hardening that landed on **both** main and sync is parity, not a difference:
 - #2401 URL passwords;
 - D737 credential-command pair check.
 
-Main changes after `717fcfa246` (#2682–#2785) are carried by main merge #13 (#2791). Any of them on a security path need a carry row and are covered by SG3.
+Main changes after `717fcfa246` (#2682–#2785) are carried by main merge #13 (#2791), which lands before the SG2 candidate. Their security-path rows are added to this record in refresh step 4. SG3 covers only changes after the signed SHA.
 
 ## Fail-before/pass-after for moved boundaries
 
-Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row had an independent Opus 5.5 High APPROVE on its exact head. Every row except #2774 also has a corbanu-security approval whose commit is that head (checked through the GitHub reviews API on 2026-11-19). #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
+Merges are into `sync/upstream-rust-v0.167.0`. The table covers security-path PRs from the S3b carry work (about November 16) through `ab557d87af`. Earlier ones are mapped in the ledgers and in the reconciliation PR #2565. "Before" names what failed with only the fix reverted (or on the base); "After" is the recorded pass. Every row had an independent Opus 5.5 High APPROVE on its exact head. Every row except #2774 also has a corbanu-security approval whose commit is that head (checked through the GitHub reviews API on 2026-11-19). #2774 changes only TUI test fixtures, outside the corbanu-security paths; its Opus APPROVE is a PR comment. "Test-only" means no product code changed, so there is no failing old path to show.
 
 | Boundary | PR (merge) | Before | After |
 | --- | --- | --- | --- |
 | #1976/#2050 Windows refusals for file tools and typing | #2741 (`c84351f0e5`) | 4 of 5 refusal tests fail natively; remote `view_image` reached the executor | 5/5 native; windows-integration 75 failures, all within the allowed base 80 |
 | Local PowerShell PATH lookup (6 sync-only extras) | #2749 (`a861f61440`) | pf_30_s01 + 5 pf_23_s01 dotenv Aggressive fail on base run 44504190140 | The 6 pass; native exec_policy 261 passed |
-| D729/D733 allowlist port | #2755 (`c638f505dd`) | New design (no PowerShell before approval); Round 1 found a Medium issue, which was fixed | Native 245 and 264 passed; CI codex-core failures ⊂ base 80 |
+| D729 allowlist port, option (b) | #2755 (`c638f505dd`) | No fail-before here: a new design (no PowerShell starts before approval). Review round 1 found a Medium issue, which was fixed | Native 245 and 264 passed; CI codex-core failures ⊂ base 80 |
 | #2699 NTFS-stream / 8.3 PowerShell names | #2739 (`227a6218ca`) | 60 forms ran unasked with always-allow; 120 sync-only cases | All pass on glitch |
 | #2718 nested cmd/start/PATHEXT batch | #2737 (`9113d71956`) | Native tests fail with the injection marker written (old `command_line.rs`) | 13/13 unit + legacy/elevated native |
 | D730 cmd `/C` serializer | #2720 (`d020dcdac3`) | Native tests fail on main's old quoting; the marker is written | 29 hostile arguments arrive byte-identical, both backends |
-| #2745 trailing dot/space PATHEXT | #2786 (`f9ab6a7371`) | Documented: cmd does not trim, so nothing to fix; new refusal test | Sync CI green |
+| #2745 trailing dot/space PATHEXT | #2786 (`f9ab6a7371`) | No fail-before here: native test showed cmd does not trim, so the lookup is documented and a new refusal test added | Sync CI green |
 | D612 unbrokerable providers at load | #2763 (`fb3467e25b`) | With the check reverted, the load test and 4 configured-provider cases fail | network-proxy lib 482 |
 | D612 config writes | #2784 (`7748025d1d`) | Without the check, the new test and `provider_remapping_validates…` fail | 5 write forms refused, file unchanged |
 | D612 raw built-in token named by a provider | #2630 (`49848881ad`) | `main_engine_withholds_unmasked_builtin_configured_sources` fails | 470/0 |
@@ -141,7 +163,7 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
 | #2778 startup login gates | #2789 (`ab557d87af`) | Gates read the server provider's status | 2 new tests; Opus r1 |
 | D377 temp spelling | #2779 (`ee1399d04f`) | New unit test fails natively (HashMap order) | Passes; codex-core down to 3 (D742) |
 | D604/D605/D606 Guardian | #2621 (`042b4baf43`) | Three tests fail with gate `true` / old fast path | 27 pass, 85 ignored (D604) |
-| D618/D522/D525/D617 | #2622 (`fc761044af`) | d522, project-role EMA and 2 TUI tests fail; D618 hung | All pass |
+| D618/D522/D525/D617 | #2622 (`fc761044af`) | d522, project-role enterprise-auth (EMA) trust and 2 TUI tests fail; D618 hung | All pass |
 | D491/D522 discovery refusals | #2626 (`d4b3e124a5`) | Check-level and V2 tests fail | 4/4 |
 | D616 remote MXC loopback | #2628 (`22335b562a`) | Both new core tests fail | Pass |
 | D523 hook origin | #2631 (`4b1fcc4c6c`) | First three fail (inject/hook_runtime reverted); readmission fails (handlers reverted) | 4/4; history 37/37 |
@@ -158,19 +180,28 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
 | D721 stricter fork sandbox | #2684 (`aedd8191e2`) | 3 unit tests fail; native end-to-end fails | Native and glitch pass |
 | D685/D727 broker copies | #2676 (`1fc8cd020e`) | Real-broker run on glitch: the copy reaches commands | Copy absent |
 | D732 proxy broker copies | #2721 (`67573a6632`) | 3 of 5 new tests fail | 478 passed |
-| D685 / D690 snapshot copies | #2501 (`978c223c9d`), #2522 (`d87085a43d`) | See PRs | See PRs |
+| D685 / D690 snapshot copies | #2501 (`978c223c9d`), #2522 (`d87085a43d`) | No fail-before restated here; see the PRs | See the PRs |
 | D726 AUTH_HEADER rows | #2708 (`b591b61a23`) | Mutation: removing the restore fails the new test | bash/sh/zsh pass on Mac |
 | MSM-2 broker-off hang | #2663 (`626e520cdd`) | Killed by signal 9 after 27 s | Exits 1 in 2.26 s (Mac) |
-| D713 shell reader | #2713 (`96dc713dbd`) | n/a (precision change; reproducers still ask) | bash 13.1%, zsh 23.9% |
+| D713 shell reader | #2713 (`96dc713dbd`) | No fail-before here: a precision change; every reproducer still asks | bash 13.1%, zsh 23.9% |
 | #2704 cmd scripts under strict rules | #2711 (`11546af5c6`) | `cmd /c "git push"` ran unasked under a forbidden rule | Asks |
-| D731 module autoload | #2732 (`cd6c2f4c1c`) | Cherry-pick of #2710 | Native 234 passed |
-| #2556/#2583/#2599 unread PowerShell | #2633 (`d47ac6204a`) | Revert: 6/7 new core unit tests fail | Native 211/211 |
-| #2548/#2585 default-deny scripts | #2640 (`a979c4c9ba`) | See #2613 rounds | Pass |
-| #2594/#2597/#2601 rebinding; .NET case folding | #2656 (`78bb5bb914`), #2692 (`2e7006ae31`) | Off-Windows `Skip` with amendment under forbidden | Asks/refused in every mode |
-| #2671 Windows-executor PowerShell names | #2698 (`da8a329cb9`) | Respellings read as unknown programs | Ask/refuse on any host |
-| #2401/#2604 URL passwords | #2624 (`b9b8497aee`) | #2603 evasion fixtures | 400-case property test |
-| D541 MXC selection | #2274 (`dacadfcc4a`) | n/a (new code) | Linux, macOS unit; Windows real binary |
-| D657 named-account network policy | #2441 (`2198b0f0ef`) | See PR | See PR |
+| D731 module autoload | #2732 (`cd6c2f4c1c`) | No fail-before here: a cherry-pick of main #2710 | Native 234 passed |
+| #2556/#2583/#2599 unread PowerShell | #2633 (`d47ac6204a`) | Revert check in the PR body: 6 of 7 new core unit tests fail | Native 211/211 |
+| #2548/#2585 default-deny scripts | #2640 (`a979c4c9ba`) | No fail-before here: a port of main #2613, whose review rounds hold the evidence | Pass |
+| #2594/#2597/#2601 rebinding; .NET case folding | #2656 (`78bb5bb914`), #2692 (`2e7006ae31`) | On macOS/Linux, `pwsh -Command 'git push'` ran unasked under a forbidden rule; Windows name rebinding (`Set-Alias`, `Invoke-Expression`) ran unasked | Asks or is refused in every mode |
+| #2671 Windows-executor PowerShell names | #2698 (`da8a329cb9`) | For a Windows executor checked from another host, respelled PowerShell names were not read as PowerShell (main's twin #2697 showed a forbidden `git push` running unasked with always-allow) | Ask or refuse on any host |
+| #2401/#2604 URL passwords | #2624 (`b9b8497aee`) | With main's code restored, all 5 new regression tests fail | #2603 fixtures pass; 400-case property test |
+| D541 MXC selection | #2274 (`dacadfcc4a`) | No fail-before here: new code | Linux, macOS unit; Windows real binary |
+| D657 named-account network policy | #2441 (`2198b0f0ef`) | No fail-before restated here; see the PR | See the PR |
+| #2568 PowerShell command lines read as PowerShell does | #2598 (`c75a41adbf`) | No fail-before restated here; see the PR | Unread lines ask |
+| #2543 quoted words hiding script commands | #2575 (`76ce4f9cb6`) | No fail-before restated here; see the PR | Unread scripts fail closed |
+| #2546 policy never starts the command's own PowerShell | #2569 (`98f06fb8be`) | Test-only | Pass |
+| D696 Windows allow rules match the exact spelling | #2574 (`66ebd5ab49`) | No fail-before restated here; see the PR | Pass |
+| D691 + #2519 human decision for unread wrappers | #2528 (`499982cc58`) | No fail-before restated here; see the PR | Pass |
+| #2506/D677 prompt-user through the xargs check | #2517 (`ce03e49824`) | No fail-before restated here; see the PR | Pass |
+| D641/D653 failed shell snapshot stays masked | #2397 (`ee8d1d4aa8`) | `failed_capture_falls_back_masked` fails before the fix | Pass |
+| Main 13: zsh tied credential alias | #2648 (`daeb0b13ce`) | Test-only (passes with the secret-name check removed, since a second check also drops it) | Mac zsh 53/53, 32/32 |
+| D355 Windows sandbox fixtures | #2742 (`c3f1a896b1`) | Test-only (fixtures) | windows-integration |
 | Memory v2 privacy | #2774 (`672d02e593`) | Test-only (fixtures) | Four cases on v2 + v1 |
 
 #2562's 43 carry rows are mapped there row by row. 42 are resolved with sync-head evidence; S3b 562 (D608) waits for #1800.
@@ -181,7 +212,12 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
 | --- | --- | --- | --- |
 | Windows desktop checklist | D396/D416/D448 plus step 4b/#1803; #1800, #1798, #1851 drafts; D608 | Travis (scheduling); coordinator | No, if deferred under Δ4 |
 | PF-23-S04 case 11 | Blocked until a Windows guest exists (D673); cases 7/8 dispositions (D671/D672) and the Linux leg (D669) are historical | Coordinator / QA | Final gate 5: needs an explicit disposition |
-| D685 | Implemented on both branches (#2501, #2522, #2675/#2676, #2719/#2721). The landing plan asks for Travis's sign-off; this record is it | Travis at SG2 | Signed here |
+| D685 | Implemented on both branches (#2501, #2522, #2675/#2676, #2719/#2721); known limits listed in the summary | Travis | For Travis at SG2 (not yet signed) |
+| [#2734](https://github.com/CorbanuCore/CorbanuTerminal/issues/2734) | `pwsh.evil.exe`, `pwsh.bat` (and `bash.exe:x.exe` on Windows) are read as the shell from the file stem. Rated Medium by its reviewer; shared with main | Security owner | Not decided; listed for SG2 |
+| Δ18 (D721 leftover) | A fork request's `windows` table can replace the server's other Windows settings, such as `sandbox_private_desktop` (upstream behaviour; #2684 did not widen it) | Travis (decision), security owner | For SG2. Worker recommends leaving it |
+| Δ19 (D721 leftover) | Stricter requests through the deprecated `features.*windows_sandbox*` flags are ignored when the server pins a mode. Separately, in experimental prediction mode the start-up mode is not applied; the parent floor still holds | Travis (decision) | For SG2. Worker recommends accepting both |
+| Δ20 (D612 follow-up) | Config writes that would leave an unbrokerable provider are refused: (a) keep that, or (b) refuse only writes that add one | Travis (decision) | For SG2. Worker recommends (a) |
+| D612 residual | Short or re-encoded copies of a built-in key that the engine cannot mask (for example `GH_ENTERPRISE_TOKEN` without `GH_HOST`) are covered only by the run-time guard | Security owner | No |
 | #2783 | PATHEXT lookup trims PATH entries; check the untrimmed spelling too (low) | sec-followups successor | No |
 | #2743, #2756 | Remote PATH program can shadow a module cmdlet; D729 follow-ups (missing PATH, pipeline binding, `-EncodedCommand`, mapped drives) — all low | Security owner | No |
 | #2780 | Main port of the D377 TEMP-spelling fix (#2779) | Windows maintainer | No (main-only) |
@@ -192,11 +228,11 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
 | #2122 | Four MCP cases CLI-blocked; helper build now possible | Test-isolation maintainer | Coverage gap (matrix) |
 | #2728 | Remaining CLI/TUI failures; two TUI cases wait on D738 | Sync TUI maintainer | For green CI |
 | #2670 | One app-server-client shutdown failure on Windows; diagnostics only | Windows maintainer | No |
-| [#2796](https://github.com/CorbanuCore/CorbanuTerminal/issues/2796) | Linux `rust-ci-core-security` red: `pf_23_s01::issue_1472…` does not recognise the Aggressive prompt whose reason joins D691's rule reason and the user-namespace note. The prompt is raised and nothing runs unasked; the test's matcher needs fixing (and the joined notes lack a sentence break) | Sync security owner | Yes: the lane must be green on the candidate |
+| [#2796](https://github.com/CorbanuCore/CorbanuTerminal/issues/2796) | Linux `rust-ci-core-security` red: `pf_23_s01::issue_1472…` does not recognise the Aggressive prompt whose reason joins D691's rule reason and the user-namespace note. The prompt is raised, but the move-aside and planted checks never ran, so the protection is not exercised at this head. The test's matcher needs fixing (and the joined notes lack a sentence break) | Sync security owner | Yes: the lane must be green on the candidate |
 | [#2808](https://github.com/CorbanuCore/CorbanuTerminal/issues/2808) | On macOS CI, `issue_747`'s Permissive Retry row wrote outside the sandbox after one approval. D639(a) expects no retry outside. This matches main's old behaviour, so nothing is weaker than main, but Δ5 may not hold on macOS. One occurrence; rerun pending | Sync security owner | Yes: fix it, or Travis accepts a macOS exception at SG2 |
 | [#2797](https://github.com/CorbanuCore/CorbanuTerminal/issues/2797) | 5 MXC `exec-server` `windows_sandbox` cases fail natively over SSH (`0xC0000142`; MXC TEMP is the package folder). Not yet shown to be environmental; no main counterpart | Windows/MXC maintainer | Yes, until run in the interactive session or CI |
 | Windows SSH-session failures | 5 `codex-windows-sandbox` tests fail over SSH on sync **and** main alike (ConPTY, window station, D324 race from a high-integrity session); `windows-security-probes` covers them from a medium session | — (parity; the D324 race itself is #1721, addressed by draft #1800) | No |
-| Linux sandbox flake | See run record: `a_command_without_bubblewrap_keeps_its_terminal` failed once in the full run, then passed 3/3 alone and in the full rerun | Security owner (file if it recurs) | No |
+| Linux sandbox flake | `a_command_without_bubblewrap_keeps_its_terminal` failed once in the first full run on **both** sync and main, then passed on rerun (sync: 3/3 alone and the full rerun; main: the full rerun). It is a race the test's own comment describes | Security owner (file it if it recurs) | No |
 
 ## Refreshing for the final candidate
 
@@ -220,3 +256,4 @@ Merges are into `sync/upstream-rust-v0.167.0`. "Before" names what failed with o
 3. Close the matrix gaps from the full final CI, or keep them listed by name.
 4. Add rows for any security-path PR merged after `ab557d87af` (including #2791's carries) to the fail-before/pass-after table.
 5. Update the Δ table with Travis's answers to the For SG2 items. Then mark this PR ready for his signature on its exact head.
+6. After he signs, record the approval (both SHAs) in the PF-85-S03 sprint record, as the landing plan requires.
