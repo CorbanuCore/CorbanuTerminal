@@ -395,7 +395,7 @@ async fn reload_user_config_inner(config_manager: &ConfigManager, thread_manager
         for attempt in 0..4 {
             let current_config = thread.config().await;
             let next_config = match config_manager
-                .load_latest_config_for_thread_runtime(&current_config)
+                .load_latest_config_for_thread_runtime(&thread, &current_config)
                 .await
             {
                 Ok(config) => config,
