@@ -379,7 +379,7 @@ fn plan_accounts_are_subscription_sessions_and_corbanu_plans() {
     // A billing basis the user declared wins either way.
     let declared_plan = ModelProviderInfo {
         billing: Some(Subscription),
-        ..rented.clone()
+        ..rented
     };
     assert!(is_plan_account("rented-gpu", &declared_plan, None));
     let declared_metered = ModelProviderInfo {

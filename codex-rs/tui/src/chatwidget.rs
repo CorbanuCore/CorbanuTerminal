@@ -2209,6 +2209,11 @@ impl ChatWidget {
     }
 
     #[cfg(test)]
+    pub(crate) fn config_mut_for_tests(&mut self) -> &mut Config {
+        &mut self.config
+    }
+
+    #[cfg(test)]
     pub(crate) fn status_line_text(&self) -> Option<String> {
         self.status_line_content()
             .cloned()

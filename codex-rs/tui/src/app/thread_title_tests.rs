@@ -103,7 +103,9 @@ async fn cloud_conversations_skip_tui_generated_titles() {
         crate::app_server_session::ThreadParamsMode::Cloud,
     );
     // Past the D740 provider gate, so only the cloud rule decides.
-    app.chat_widget.config.tui_automatic_thread_titles = Some(true);
+    app.chat_widget
+        .config_mut_for_tests()
+        .tui_automatic_thread_titles = Some(true);
 
     app.generate_thread_title(
         &app_server,
@@ -902,8 +904,8 @@ fn automatic_thread_titles_default_to_plan_accounts_only() {
 async fn automatic_thread_title_skips_pay_per_token_provider_unless_enabled()
 -> color_eyre::Result<()> {
     let mut app = make_test_app().await;
-    app.chat_widget.config.model_provider_id = "anthropic".to_string();
-    app.chat_widget.config.model_provider =
+    app.chat_widget.config_mut_for_tests().model_provider_id = "anthropic".to_string();
+    app.chat_widget.config_mut_for_tests().model_provider =
         codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)["anthropic"]
             .clone();
     let app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
@@ -931,7 +933,9 @@ async fn automatic_thread_title_skips_pay_per_token_provider_unless_enabled()
             .contains_key(&(thread_id, suggestion))
     );
 
-    app.chat_widget.config.tui_automatic_thread_titles = Some(true);
+    app.chat_widget
+        .config_mut_for_tests()
+        .tui_automatic_thread_titles = Some(true);
     app.generate_thread_title(
         &app_server,
         thread_id,
