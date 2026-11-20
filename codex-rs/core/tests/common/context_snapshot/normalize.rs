@@ -225,6 +225,13 @@ impl Normalizer {
                     .enumerate()
                     .map(|(index, path)| (path.clone(), format!("<WORKSPACE_ROOT {}>", index + 1))),
             )
+            // macOS: `/var` and `/tmp` are symlinks into `/private`. Writable roots are
+            // reported canonicalized while `<cwd>` keeps the temp dir's own spelling.
+            .flat_map(|(path, label)| {
+                let canonical = (path.starts_with("/var/") || path.starts_with("/tmp/"))
+                    .then(|| (format!("/private{path}"), label.clone()));
+                std::iter::once((path, label)).chain(canonical)
+            })
             .collect::<Vec<_>>();
         aliases.sort_by_key(|(path, _)| std::cmp::Reverse(path.len()));
         aliases

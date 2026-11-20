@@ -784,6 +784,29 @@ fn normalization_labels_distinct_working_directories_and_retains_permissions() {
 }
 
 #[test]
+fn macos_private_spelling_of_the_cwd_uses_the_cwd_label() {
+    let render = |root: &str| {
+        let permissions = format!(
+            "<permissions instructions>\nPolicy\n The writable root is `{root}`.\n</permissions instructions>"
+        );
+        let body = json!({"input": [
+            {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": permissions}]},
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<environment_context>\n<cwd>/var/folders/x/T/.tmpAbc</cwd>\n</environment_context>"}]}
+        ]});
+        captured(&body)
+    };
+    assert_eq!(
+        render("/private/var/folders/x/T/.tmpAbc"),
+        render("/var/folders/x/T/.tmpAbc")
+    );
+    assert!(
+        render("/private/var/folders/x/T/.tmpAbc/sub")
+            .contains("The writable root is `<CWD>/sub`.")
+    );
+    assert!(!render("/private/var/folders/x/T/.tmpAbcd").contains("The writable root is `<CWD>"));
+}
+
+#[test]
 fn skill_paths_are_stable_across_hosts_without_rewriting_uris() {
     let path =
         "<skill>\n<path>/tmp/fixture/plugins/cache/test/agenda/SKILL.md</path>\nAgenda\n</skill>";
