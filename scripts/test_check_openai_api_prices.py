@@ -1,9 +1,13 @@
 from contextlib import redirect_stdout
 from decimal import Decimal
 from io import StringIO
+import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
+from scripts import check_openai_api_prices
 from scripts.check_openai_api_prices import compare, standard_table
 
 PAGE = Path(__file__).resolve().parent / "fixtures/openai-pricing-20261119-trimmed.html"
@@ -67,9 +71,72 @@ class MissingDatedRowTests(unittest.TestCase):
             lines,
         )
         # An undated row that is not on the page keeps the plain line.
+        # gpt-5.3-codex is in models.json; it is absent here only because the
+        # trimmed fixture leaves it out.
         self.assertIn(
             f"gpt-5.3-codex: not on the page; catalogue states {codex}", lines
         )
+
+
+class CatalogueDatedTests(unittest.TestCase):
+    MODELS = [
+        {
+            "slug": "dated-api-key",
+            "orchestration": {
+                "provider_id": "openai",
+                "billing": {
+                    "kind": "auth_dependent",
+                    "api_key_input_milli_usd_per_million_tokens": 4000,
+                    "api_key_output_milli_usd_per_million_tokens": 20000,
+                    "api_key_valid_through_utc": "2026-11-29T23:59:59.999Z",
+                },
+            },
+        },
+        {
+            "slug": "undated",
+            "orchestration": {
+                "provider_id": "openai",
+                "billing": {
+                    "kind": "metered",
+                    "input_milli_usd_per_million_tokens": 1750,
+                    "output_milli_usd_per_million_tokens": 14000,
+                },
+            },
+        },
+        {
+            "slug": "other-provider",
+            "orchestration": {
+                "provider_id": "anthropic",
+                "billing": {
+                    "kind": "metered",
+                    "input_milli_usd_per_million_tokens": 3000,
+                    "output_milli_usd_per_million_tokens": 15000,
+                    "valid_through_utc": "2026-11-29T23:59:59.999Z",
+                },
+            },
+        },
+        {
+            "slug": "unpriced-dated",
+            "orchestration": {
+                "provider_id": "openai",
+                "billing": {
+                    "kind": "auth_dependent",
+                    "api_key_valid_through_utc": "2026-11-29T23:59:59.999Z",
+                },
+            },
+        },
+        {"slug": "no-billing", "orchestration": {"provider_id": "openai"}},
+    ]
+
+    def test_only_priced_openai_rows_with_an_end_date_are_dated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            catalogue = Path(tmp) / "models.json"
+            catalogue.write_text(json.dumps({"models": self.MODELS}))
+            with mock.patch.object(check_openai_api_prices, "CATALOGUE", catalogue):
+                with redirect_stdout(StringIO()):
+                    prices, dated = check_openai_api_prices.catalogue_prices()
+        self.assertEqual(dated, {"dated-api-key"})
+        self.assertEqual(set(prices), {"dated-api-key", "undated", "no-billing"})
 
 
 if __name__ == "__main__":
