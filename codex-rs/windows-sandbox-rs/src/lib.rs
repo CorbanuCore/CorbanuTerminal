@@ -57,6 +57,8 @@ pub struct WindowsSandboxProvisioningSettings {
 }
 
 #[cfg(target_os = "windows")]
+mod account_folder;
+#[cfg(target_os = "windows")]
 mod acl;
 #[cfg(target_os = "windows")]
 mod allow;
