@@ -1837,8 +1837,10 @@ mod tests {
     use tracing_subscriber::filter::filter_fn;
     use tracing_subscriber::prelude::*;
 
+    use super::CONNECT_TIMEOUT;
     use super::ExecServerClient;
     use super::ExecServerClientConnectOptions;
+    use super::INITIALIZE_TIMEOUT;
     use super::LazyRemoteExecServerClient;
     use crate::EnvironmentObservedStatus;
     use crate::ProcessId;
@@ -2104,7 +2106,7 @@ mod tests {
                 cwd: None,
             },
             client_name: "stdio-test-client".to_string(),
-            initialize_timeout: Duration::from_secs(1),
+            initialize_timeout: INITIALIZE_TIMEOUT,
             resume_session_id: None,
         })
         .await
@@ -2189,7 +2191,7 @@ mod tests {
                 cwd: None,
             },
             client_name: "stdio-test-client".to_string(),
-            initialize_timeout: Duration::from_secs(1),
+            initialize_timeout: INITIALIZE_TIMEOUT,
             resume_session_id: None,
         })
         .await
@@ -2548,8 +2550,8 @@ mod tests {
         let client = LazyRemoteExecServerClient::new(
             ExecServerTransportParams::WebSocketUrl {
                 websocket_url,
-                connect_timeout: Duration::from_secs(1),
-                initialize_timeout: Duration::from_secs(1),
+                connect_timeout: CONNECT_TIMEOUT,
+                initialize_timeout: INITIALIZE_TIMEOUT,
             },
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         );
@@ -2658,8 +2660,8 @@ mod tests {
         let client = LazyRemoteExecServerClient::new(
             ExecServerTransportParams::WebSocketUrl {
                 websocket_url,
-                connect_timeout: Duration::from_secs(1),
-                initialize_timeout: Duration::from_secs(1),
+                connect_timeout: CONNECT_TIMEOUT,
+                initialize_timeout: INITIALIZE_TIMEOUT,
             },
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         );
@@ -2757,8 +2759,8 @@ mod tests {
             ExecServerClient::connect_websocket(RemoteExecServerConnectArgs {
                 websocket_url,
                 client_name: "test-client".to_string(),
-                connect_timeout: Duration::from_secs(5),
-                initialize_timeout: Duration::from_secs(5),
+                connect_timeout: CONNECT_TIMEOUT,
+                initialize_timeout: INITIALIZE_TIMEOUT,
                 resume_session_id: Some("session-1".to_string()),
                 http_client_factory: codex_http_client::HttpClientFactory::new(
                     codex_http_client::OutboundProxyPolicy::ReqwestDefault,
@@ -2802,8 +2804,8 @@ mod tests {
         let client = LazyRemoteExecServerClient::new(
             ExecServerTransportParams::WebSocketUrl {
                 websocket_url,
-                connect_timeout: Duration::from_secs(1),
-                initialize_timeout: Duration::from_secs(1),
+                connect_timeout: CONNECT_TIMEOUT,
+                initialize_timeout: INITIALIZE_TIMEOUT,
             },
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         );
@@ -2921,8 +2923,8 @@ mod tests {
         let client = LazyRemoteExecServerClient::new(
             ExecServerTransportParams::WebSocketUrl {
                 websocket_url,
-                connect_timeout: Duration::from_secs(1),
-                initialize_timeout: Duration::from_secs(1),
+                connect_timeout: CONNECT_TIMEOUT,
+                initialize_timeout: INITIALIZE_TIMEOUT,
             },
             HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
         );
