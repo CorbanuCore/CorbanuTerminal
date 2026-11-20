@@ -105,6 +105,8 @@ struct Probe {
     /// #2820: asks for a retry outside the sandbox where unified exec does
     /// (by the approval policy), not under every policy.
     sandbox_approval_by_policy: bool,
+    /// #2820: the `PATH` it runs with, if known.
+    search_path: Option<&'static str>,
     runs: usize,
 }
 
@@ -165,6 +167,10 @@ impl crate::tools::sandboxing::Sandboxable for Probe {
 impl ToolRuntime<Req, ()> for Probe {
     fn turn_environment<'a>(&self, req: &'a Req) -> &'a TurnEnvironment {
         &req.environment
+    }
+
+    fn local_search_path<'a>(&self, _req: &'a Req) -> Option<&'a str> {
+        self.search_path
     }
 
     async fn run(
@@ -242,6 +248,8 @@ struct Case {
     sandbox_exe: Option<std::path::PathBuf>,
     /// #2820: as `Probe::sandbox_approval_by_policy`.
     sandbox_approval_by_policy: bool,
+    /// #2820: the `PATH` the command runs with (`local_search_path`).
+    search_path: Option<&'static str>,
 }
 
 struct Handler {
@@ -263,6 +271,7 @@ impl Default for Case {
             denial_text: None,
             sandbox_exe: None,
             sandbox_approval_by_policy: false,
+            search_path: None,
         }
     }
 }
@@ -352,6 +361,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         keeps_denial_final: case.keeps_denial_final,
         denial_text: case.denial_text,
         sandbox_approval_by_policy: case.sandbox_approval_by_policy,
+        search_path: case.search_path,
         runs: 0,
     };
     let tool_ctx = ToolCtx {
@@ -709,17 +719,28 @@ async fn issue_1057_handler_window_controls() {
 #[cfg(target_os = "linux")]
 const UID_MAP_DENIED: &str = "bwrap: setting up uid map: Permission denied\n";
 
+/// #2820: a folder only the command's own `PATH` has.
+#[cfg(target_os = "linux")]
+const RUN_PATH_DIR: &str = "/corbanu-issue-2820-run-path";
+
+/// #2820: the `PATH` the command runs with.
+#[cfg(target_os = "linux")]
+const RUN_PATH: &str = "/usr/bin:/bin:/corbanu-issue-2820-run-path";
+
 /// #2820: a sandbox launcher stand-in in `dir`. One that `starts` runs the
-/// command after `--`, as a sandbox that starts does; the other fails as
-/// bubblewrap does without user namespaces, whatever the command.
+/// command after `--`, as a sandbox that starts does, when started with the
+/// command's `PATH` (where the helper finds the system bubblewrap; with any
+/// other it fails as below); the other fails as bubblewrap does without
+/// user namespaces, whatever the command.
 #[cfg(target_os = "linux")]
 fn fake_launcher(dir: &std::path::Path, starts: bool) -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let (name, body) = if starts {
         (
             "launcher-starts",
-            "#!/bin/sh\nwhile [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n"
-                .to_string(),
+            format!(
+                "#!/bin/sh\ncase \":$PATH:\" in *:{RUN_PATH_DIR}:*) ;; *) printf '{UID_MAP_DENIED}' >&2; exit 1;; esac\nwhile [ \"$#\" -gt 0 ] && [ \"$1\" != \"--\" ]; do shift; done\nshift\nexec \"$@\"\n"
+            ),
         )
     } else {
         (
@@ -749,6 +770,7 @@ async fn issue_2820_a_printed_startup_failure_is_not_retried_outside_the_sandbox
             denial_text: Some(UID_MAP_DENIED),
             sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ true)),
             sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
             ..Case::default()
         })
         .await;
@@ -777,6 +799,7 @@ async fn issue_2820_a_sandbox_that_failed_to_start_is_asked_about_again() {
             denial_text: Some(UID_MAP_DENIED),
             sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
             sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
             ..Case::default()
         })
         .await;
@@ -821,6 +844,7 @@ async fn issue_2820_a_sandbox_that_failed_to_start_is_refused_with_approvals_off
         denial_text: Some(UID_MAP_DENIED),
         sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
         sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
         ..Case::default()
     })
     .await;

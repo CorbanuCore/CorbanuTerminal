@@ -1530,8 +1530,13 @@ impl ToolOrchestrator {
                 }
                 // #2820: decided by the launcher, never by what the command
                 // printed (`sandbox_failed_to_start`).
-                let sandbox_startup_failure =
-                    sandbox_failed_to_start(&initial_attempt, output.as_ref()).await;
+                let sandbox_startup_failure = sandbox_failed_to_start(
+                    &initial_attempt,
+                    tool.local_search_path(req),
+                    tool.command_cwd(req).map(PathUri::from),
+                    output.as_ref(),
+                )
+                .await;
                 // D639(a) (#2808): an ordinary denial stays final for a tool
                 // that keeps it so (unified exec): the approval does not turn
                 // it into a retry outside the sandbox, however fast the
@@ -3075,19 +3080,28 @@ const SANDBOX_START_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::fr
 /// #2820 (coordinator, 2026-11-20, option (c)): whether the platform sandbox
 /// itself failed to start for `attempt`. A command can print a startup
 /// failure's text and exit, so its output only says where to look: the
-/// launcher is then run once more, with the same sandbox and a command that
-/// prints nothing (`true`), and the sandbox failed to start only when that
-/// probe fails with a startup failure's text too, which only the launcher
-/// can have written. Anything else (the probe ran, timed out or could not be
-/// prepared) is an ordinary denial. Linux (bubblewrap) only.
+/// launcher is then run once more, as the command's run started it (the same
+/// sandbox, the `PATH` it finds the system bubblewrap on, the folder) but
+/// with a command that prints nothing (`true`), and the sandbox failed to
+/// start only when that probe fails with a startup failure's text too, which
+/// only the launcher can have written. Anything else (the probe ran, timed
+/// out or could not be prepared, or the run's `PATH` is unknown, as for a
+/// patch or a remote run, which never has this sandbox here) is an ordinary
+/// denial; so is a probe that needs the managed network proxy it is not
+/// given. Linux (bubblewrap) only.
 async fn sandbox_failed_to_start(
     attempt: &SandboxAttempt<'_>,
+    search_path: Option<&str>,
+    command_cwd: Option<PathUri>,
     output: &ExecToolCallOutput,
 ) -> bool {
     if !has_sandbox_startup_marker(attempt.sandbox, output) {
         return false;
     }
-    let Some(probe) = probe_sandbox_start(attempt).await else {
+    let Some(search_path) = search_path else {
+        return false;
+    };
+    let Some(probe) = probe_sandbox_start(attempt, search_path, command_cwd).await else {
         return false;
     };
     let failed = probe.exit_code != 0 && has_sandbox_startup_marker(attempt.sandbox, &probe);
@@ -3099,18 +3113,23 @@ async fn sandbox_failed_to_start(
     failed
 }
 
-/// #2820: runs `true` through `attempt`'s sandbox launcher; its output, or
-/// `None` when the probe could not be prepared, did not finish or found no
-/// `true` to run.
-async fn probe_sandbox_start(attempt: &SandboxAttempt<'_>) -> Option<ExecToolCallOutput> {
+/// #2820: runs `true` through `attempt`'s sandbox launcher, started with
+/// only `search_path` as its `PATH` in `command_cwd` (else the sandbox's
+/// folder); its output, or `None` when the probe could not be prepared, did
+/// not finish or found no `true` to run.
+async fn probe_sandbox_start(
+    attempt: &SandboxAttempt<'_>,
+    search_path: &str,
+    command_cwd: Option<PathUri>,
+) -> Option<ExecToolCallOutput> {
     let program = ["/usr/bin/true", "/bin/true"]
         .into_iter()
         .find(|program| std::path::Path::new(program).is_file())?;
     let command = codex_sandboxing::SandboxCommand {
         program: program.into(),
         args: Vec::new(),
-        cwd: attempt.sandbox_cwd.clone(),
-        env: std::collections::HashMap::new(),
+        cwd: command_cwd.unwrap_or_else(|| attempt.sandbox_cwd.clone()),
+        env: std::collections::HashMap::from([("PATH".to_string(), search_path.to_string())]),
         managed_network: None,
         additional_permissions: None,
     };
