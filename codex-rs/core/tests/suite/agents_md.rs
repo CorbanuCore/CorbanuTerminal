@@ -1,4 +1,3 @@
-use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_core::ForkSnapshot;
@@ -870,6 +869,7 @@ async fn denied_project_instructions_fail_thread_creation() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn symlinked_writable_root_grants_its_real_location_without_session_corruption() -> Result<()>
 {
+    use anyhow::Context as _;
     use codex_exec_server::FileSystemSandboxContext;
 
     let server = start_mock_server().await;

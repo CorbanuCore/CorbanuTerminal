@@ -44,7 +44,7 @@ async fn case_variant_metadata_patch_cannot_write_without_approval(
     skip_if_remote!(Ok(()), "exercises native macOS case aliases");
     let server = start_mock_server().await;
     let test = test_codex()
-        .with_config(|config| {
+        .with_config(move |config| {
             config.workspace_roots = vec![config.cwd.clone()];
             config
                 .permissions
