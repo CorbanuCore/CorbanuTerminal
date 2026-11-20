@@ -37,7 +37,9 @@ Terms used below:
      - the vault-backed OpenAI routes (no production caller yet) are not covered;
      - the scanner does not zeroize its fingerprint key.
    - **#2808 (only if not fixed first):** accept a macOS exception to Δ5.
-   - **Small leftovers with no decision recorded** (Δ18–Δ20): D721's three fork edge cases and D612's config-write strictness. The workers recommend keeping each as it is.
+   - **Small leftovers with no decision recorded:**
+     - Δ18–Δ20: D721's three fork edge cases and D612's config-write strictness. The workers recommend keeping each as it is.
+     - #2734: the shell is read from the file stem, a Medium issue shared with main.
 6. **Not signed here.** This does not cover:
    - SG3: the security-path diff from the signed SHA to the final head;
    - the final merge;
@@ -129,6 +131,9 @@ None is a known failure. Each is coverage that has not run yet on that platform.
 | Δ15 | After global zsh startup, `AUTH_HEADER` stays as startup set it, the same as a broker-off run; brokered keys are still restored | macOS zsh, broker on | One upstream test row dropped | D726(a) (#2708) |
 | Δ16 | Upstream positive tests for unsupported host/credential contracts are replaced by fail-closed and hardened-engine matrices | Tests | Coverage, not behaviour | D682 (#2498) |
 | Δ17 | Disabled managed daemon self-update: the 12 updater tests assert refusal | All | Corbanu policy kept | D564, D736 (#2769) |
+| Δ18 | A fork request's `windows` table can replace the server's other Windows settings, such as `sandbox_private_desktop` | Windows, forks | Upstream behaviour; #2684 did not widen it | **For SG2.** Recommendation: leave it |
+| Δ19 | A stricter sandbox asked for through the deprecated `features.*windows_sandbox*` flags is ignored when the server pins a mode. In experimental prediction mode the start-up mode is not applied; the parent floor still holds | Windows, forks | Upstream behaviour | **For SG2.** Recommendation: accept |
+| Δ20 | An app-server config write that would leave an unbrokerable credential provider is refused. Option (b) would refuse only writes that add one | All levels | Stricter, fail closed (#2784) | **For SG2.** Recommendation: (a), keep it |
 
 Hardening that landed on **both** main and sync is parity, not a difference:
 - D713/D734 shell reader;
