@@ -156,10 +156,7 @@ async fn load_refresh_config(
     config_manager: &ConfigManager,
 ) -> io::Result<Config> {
     config_manager
-        .load_latest_config_with_session_layers(
-            &current_config.config_layer_stack,
-            &current_config.cwd,
-        )
+        .load_latest_config_for_thread_runtime(current_config)
         .await
 }
 

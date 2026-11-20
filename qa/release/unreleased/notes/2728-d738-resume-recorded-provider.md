@@ -7,3 +7,6 @@
   configured and active; it stays read-only when the provider is no longer
   configured, has been deactivated in `/providers`, or your organization
   requires a different provider.
+  While such a conversation runs, `/mcp`, apps, the model catalog and config
+  reloads keep its provider and model instead of reloading your new default
+  (#2853).
