@@ -274,7 +274,7 @@ async fn managed_definitions_keep_retained_provider_after_default_change() -> Re
     let gateway = MockServer::start().await;
     let other = MockServer::start().await;
     let home = TempDir::new()?;
-    MockResponsesConfig::new(gateway.uri()).write(home.path())?;
+    MockResponsesConfig::new(&gateway.uri()).write(home.path())?;
     std::fs::write(
         home.path().join("requirements.toml"),
         format!(
