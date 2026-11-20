@@ -588,6 +588,37 @@ fn batch_files_in_untrimmed_path_entries_are_refused() {
     );
 }
 
+/// #2793: an unclosed quote in PATH runs to the end of the value (checked
+/// natively on Windows 11 build 26200). Where cmd does find a batch file in
+/// a folder whose name ends in a space (`C:\e;"C:\sp ` and `C:\e;C:\sp "`
+/// ran `sp \x.cmd` there), it is refused.
+#[test]
+fn batch_files_after_an_unclosed_path_quote_are_refused() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let cwd = root.path().join("work");
+    let empty = root.path().join("empty");
+    let spaced = root.path().join("sp ");
+    for dir in [&cwd, &empty, &spaced] {
+        std::fs::create_dir_all(verbatim(dir)).expect("mkdir");
+    }
+    std::fs::write(verbatim(&spaced).join("npm.cmd"), "@echo off\r\n").expect("write");
+    for path in [
+        format!("{};\"{}", empty.display(), spaced.display()),
+        format!("{};{}\"", empty.display(), spaced.display()),
+    ] {
+        let env = HashMap::from([("PATH".to_string(), path.clone())]);
+        let error = format!(
+            "{:#}",
+            sandbox_command_line(&argv(&["cmd", "/c", "npm", "a&b"]), &env, &cwd)
+                .expect_err("must be refused")
+        );
+        assert!(
+            error.contains("resolves to a batch file"),
+            "{path:?}: {error}"
+        );
+    }
+}
+
 #[test]
 fn batch_files_found_through_pathext_are_refused_with_metacharacters() {
     let root = tempfile::tempdir().expect("tempdir");
