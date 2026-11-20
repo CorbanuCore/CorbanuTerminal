@@ -99,8 +99,37 @@ jobs:
         with:
           target: ${{ matrix.target }}
       - name: cargo clippy (packages, --tests, -D warnings)
-        # PACKAGES is validated by the plan job (names only) and intentionally word-split.
+        if: false
         run: cargo clippy --locked --target "${{ matrix.target }}" $PACKAGES --all-targets -- -D warnings
-      - name: cargo test (packages)
-        if: ${{ needs.plan.outputs.test == 'true' }}
-        run: cargo test --locked --target "${{ matrix.target }}" $PACKAGES
+      # sync-integrator scratch branch (copied from sync-winapp #2277): helper binaries the tests start.
+      - name: Build helper binaries
+        run: |
+          extra=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            extra=(-p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher)
+          fi
+          cargo build --locked --target "${{ matrix.target }}" "${extra[@]}" \
+            -p codex-cli --bin codex \
+            -p codex-code-mode-host --bin codex-code-mode-host \
+            -p codex-exec --bin codex-exec \
+            -p codex-rmcp-client --bin test_stdio_server --bin test_streamable_http_server
+      # ds-lane scratch (D709): stress three macOS app-server one-off failures (#2814 / sync-integrator).
+      - name: stress three app-server tests
+        run: |
+          T1=suite::v2::analytics::multi_agent_v2_tools_emit_collaborator_analytics
+          T2=suite::v2::guardian_v2::sync_sessions::managed_reviewers_reuse_fork_and_resume_after_parent_shutdown
+          T3=suite::v2::app_installed::installed_apps_failed_force_refresh_retains_previous_snapshot
+          cargo test --locked --target "${{ matrix.target }}" -p codex-app-server --test all --no-run
+          fails=0
+          for i in $(seq 1 40); do
+            if ! cargo test --locked --target "${{ matrix.target }}" -p codex-app-server --test all -- "$T1" "$T2" "$T3" > "iso-$i.log" 2>&1; then
+              fails=$((fails+1)); echo "::warning::isolated iteration $i failed"; grep -E "^test .* FAILED|panicked at|^---- " "iso-$i.log" | head -20
+            fi
+          done
+          echo "isolated failures: $fails/40"
+          for i in 1 2 3; do
+            if ! cargo test --locked --target "${{ matrix.target }}" -p codex-app-server --test all --no-fail-fast > "full-$i.log" 2>&1; then
+              echo "::warning::full run $i had failures"; grep -E "^test .* FAILED|^test result" "full-$i.log" | head -30
+            fi
+            grep -E "^test ($T1|$T2|$T3).* (ok|FAILED)" "full-$i.log" | sort | uniq -c
+          done
