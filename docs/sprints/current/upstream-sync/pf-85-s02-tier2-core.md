@@ -11,7 +11,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-85-S01"
 created: 2026-11-07
-updated: 2026-11-14
+updated: 2026-11-19
 ---
 
 # PF-85-S02 — Tier 2: core
@@ -49,11 +49,15 @@ updated: 2026-11-14
   Its core tests ran, or were only type-checked, on scratch builds (codex-core tests don't build on the branch
   yet); the compile pass reruns them.
 
+- [x] Reconciled 2026-11-19 at sync `91efec006d` (sync-integrator): slices S2a 389/390, S2b 42/42 and S2c 131/131 ledger rows resolved. The open S2a row is the #2296 snapshot group (`-compile.tsv`), held for the final core run after #2274.
+- [x] Main merge #3 (S2 exit) and later carries through #13 (#2791). Main is fully contained in sync at `15415856d7`.
+- [x] Core library: Linux 4,876/0 at `51dc00e706` (astra-synccore7) and macOS 5,026/0 at `12d90cce4a` (astra-syncmac2; landing plan tables). Windows `codex-core` integration is down to the three D742 `agent_message_wake` cases ([run](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/44594161347/job/135808168280), #2729).
+
 ## Remaining
 
-- [ ] Slice PRs S2a, S2b and S2c (S3a core paths: done, see `Done`).
-- [ ] Security-owner approval of `turn.rs`/`client.rs` call sites.
-- [ ] Main merge #3 (S2 exit).
+- [ ] S2a #2296 snapshot-group row: close it on a post-#2274 core run (owner: sync core maintainer; #2563).
+- [ ] Security-owner approval of `turn.rs`/`client.rs` call sites, or a link to the S3b rows that record it.
+- [ ] D742 decision and fix for `agent_message_wake` (#2729).
 - [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification
