@@ -281,6 +281,10 @@ async fn check_thread_title_generation(scenario: TitleScenario) -> color_eyre::R
         billing: Some(codex_model_provider_info::BillingBasis::Subscription),
         ..ModelProviderInfo::default()
     };
+    // The chat widget projects the thread's provider from this map.
+    app.config
+        .model_providers
+        .insert(provider_id.to_string(), app.config.model_provider.clone());
 
     let mut tui = crate::tui::test_support::make_test_tui()?;
     let mut app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
