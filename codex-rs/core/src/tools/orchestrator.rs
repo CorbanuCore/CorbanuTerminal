@@ -2957,19 +2957,13 @@ fn has_sandbox_startup_marker(sandbox: SandboxType, output: &ExecToolCallOutput)
         return false;
     }
 
-    let text =
-        format!("{}\n{}", output.stderr.text, output.aggregated_output.text).to_ascii_lowercase();
-
     // #2820 follow-up: bubblewrap's own wordings, from its source. Where it
     // may not create a user namespace it says "No permissions to creating
     // new namespace" (0.11.x and earlier), "... to create a new namespace"
     // (later, and the bundled copy) or, patched by Debian and Ubuntu (0.9.0
     // on glitch), "... to create new namespace". Its loopback setup can also
     // fail before the RTM_NEW* steps.
-    const STARTUP_FAILURE_MARKERS: &[&str] = &[
-        "bubblewrap is unavailable",
-        "failed to exec bundled bubblewrap",
-        "failed to exec system bubblewrap",
+    const BWRAP_STARTUP_FAILURES: &[&str] = &[
         "loopback: failed to look up lo",
         "loopback: failed to create netlink_route socket",
         "loopback: failed to bind netlink_route socket",
@@ -2980,12 +2974,38 @@ fn has_sandbox_startup_marker(sandbox: SandboxType, output: &ExecToolCallOutput)
         "no permissions to create new namespace",
         "setting up uid map: permission denied",
         "creating new namespace failed",
+    ];
+    // What Corbanu's own sandbox helper writes at a line's start when it
+    // cannot start bubblewrap (the last two are older wordings, kept).
+    const HELPER_STARTUP_FAILURES: &[&str] = &[
+        "bubblewrap is unavailable",
+        "failed to exec bundled bubblewrap",
+        "failed to exec system bubblewrap",
         "cannot create user namespace",
     ];
 
-    STARTUP_FAILURE_MARKERS
-        .iter()
-        .any(|marker| text.contains(marker))
+    // Bubblewrap writes each of its errors as one line that starts with
+    // "bwrap: " (utils.c, every release since 0.3.0). Only a line that starts
+    // with that prefix and then the wording counts: the launcher may echo
+    // text the command chose (a folder name, say) inside its own message,
+    // and such text must not count (#2820 follow-up).
+    [&output.stderr.text, &output.aggregated_output.text]
+        .into_iter()
+        .flat_map(|text| text.lines())
+        .any(|line| match line.strip_prefix("bwrap: ") {
+            Some(message) => {
+                let message = message.to_ascii_lowercase();
+                BWRAP_STARTUP_FAILURES
+                    .iter()
+                    .any(|wording| message.starts_with(wording))
+            }
+            None => {
+                let line = line.to_ascii_lowercase();
+                HELPER_STARTUP_FAILURES
+                    .iter()
+                    .any(|wording| line.starts_with(wording))
+            }
+        })
 }
 
 #[cfg(test)]
@@ -3112,6 +3132,39 @@ mod tests {
             SandboxType::None,
             &denied_output("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"),
         ));
+    }
+
+    /// #2820 follow-up: only a line that starts with bubblewrap's "bwrap: "
+    /// and then a startup failure's wording counts, so text the launcher
+    /// echoes from the command (a folder name, say) does not.
+    #[test]
+    fn linux_sandbox_startup_failure_needs_a_bwrap_line() {
+        for echoed in [
+            "bwrap: Can't chdir to /work/No permissions to create a new namespace: No such file or directory",
+            "bwrap: Can't find source path /tmp/bwrap: setting up uid map: Permission denied: No such file or directory",
+            "bwrap: execvp ./loopback: Failed RTM_NEWADDR: No such file or directory",
+            "bash: cd: /work/bwrap: No permissions to create new namespace: No such file or directory",
+            "echo bwrap: Creating new namespace failed",
+            " bwrap: No permissions to create a new namespace",
+            "cd: /work/bubblewrap is unavailable: No such file or directory",
+            "panicked: /work/failed to exec bundled bubblewrap",
+        ] {
+            assert!(
+                !has_sandbox_startup_marker(SandboxType::LinuxSeccomp, &denied_output(echoed)),
+                "{echoed}"
+            );
+        }
+        for genuine in [
+            "some earlier warning\nbwrap: No permissions to create a new namespace, likely because the kernel does not allow non-privileged user namespaces.",
+            "bwrap: setting up uid map: Permission denied\r\n",
+            "bwrap: Creating new namespace failed: Operation not permitted",
+            "thread 'main' panicked at linux-sandbox/src/bundled_bwrap.rs:136:9:\nfailed to exec bundled bubblewrap /usr/libexec/bwrap via /proc/self/fd/3: Permission denied",
+        ] {
+            assert!(
+                has_sandbox_startup_marker(SandboxType::LinuxSeccomp, &denied_output(genuine)),
+                "{genuine}"
+            );
+        }
     }
 
     #[test]
