@@ -156,6 +156,7 @@ impl FileSystemSandboxRunner {
         self.sandbox_exec_request_with(&permission_profile, &cwd, workspace_roots, sandbox, spawn)
     }
 
+    #[cfg(test)]
     fn sandbox_exec_request(
         &self,
         permission_profile: &PermissionProfile,
