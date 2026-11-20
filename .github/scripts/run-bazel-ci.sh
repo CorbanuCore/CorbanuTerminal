@@ -418,7 +418,13 @@ else
   if [[ "${GITHUB_ACTIONS:-}" == "true" &&
     ( "${RUNNER_OS:-}" == "Linux" || "${RUNNER_OS:-}" == "Windows" ) ]]; then
     # Leave headroom for the runner and Bazel while large Rust actions overlap.
-    bazel_run_args+=("--local_resources=memory=HOST_RAM*.6" --jobs=8)
+    bazel_run_args+=("--local_resources=memory=HOST_RAM*.6")
+    if [[ "${RUNNER_OS}" == "Linux" ]]; then
+      # Linux clippy exhausted swap at eight jobs; Windows keeps its tested limit.
+      bazel_run_args+=(--jobs=4)
+    else
+      bazel_run_args+=(--jobs=8)
+    fi
   fi
   if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 0 ]]; then
     # Keep the Windows test skip list that `ci-windows` would have applied.
