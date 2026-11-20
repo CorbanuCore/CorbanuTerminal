@@ -108,19 +108,26 @@ jobs:
         if: ${{ needs.plan.outputs.clippy == 'true' }}
         # PACKAGES is validated by the plan job (names only) and intentionally word-split.
         run: cargo clippy --locked --target "${{ matrix.target }}" $PACKAGES --all-targets -- -D warnings
-      # Helper binaries that codex-core and app-server tests start (#2277, #2814).
+      # Helper binaries the tested packages' tests start, from the same map as
+      # rust-ci-changed-crate-tests.yml (#2277, #2814); on Windows also the
+      # sandbox helpers that codex-core and app-server tests launch.
       - name: Build helper binaries
         if: ${{ needs.plan.outputs.test == 'true' }}
         run: |
-          extra=()
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            extra=(-p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher)
+          read -r -a words <<< "$PACKAGES"
+          names=()
+          for word in "${words[@]}"; do
+            if [ "$word" != "-p" ]; then names+=("$word"); fi
+          done
+          read -r -a helpers <<< "$(python3 ../.github/scripts/changed_crate_test_packages.py --helpers "${names[@]}")"
+          if [ "$RUNNER_OS" = "Windows" ] && printf '%s\n' "${names[@]}" | grep -qxE 'codex-core|codex-app-server'; then
+            helpers+=(-p codex-windows-sandbox --bin codex-windows-sandbox-setup --bin codex-command-runner --bin codex-conpty-launcher)
           fi
-          cargo build --locked --target "${{ matrix.target }}" "${extra[@]}" \
-            -p codex-cli --bin codex \
-            -p codex-code-mode-host --bin codex-code-mode-host \
-            -p codex-exec --bin codex-exec \
-            -p codex-rmcp-client --bin test_stdio_server --bin test_streamable_http_server
+          if (( ${#helpers[@]} == 0 )); then
+            echo "No helpers needed."
+            exit 0
+          fi
+          cargo build --locked --target "${{ matrix.target }}" "${helpers[@]}"
       - if: ${{ needs.plan.outputs.test == 'true' }}
         uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
