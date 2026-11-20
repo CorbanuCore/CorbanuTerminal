@@ -703,7 +703,13 @@ fn auto_daemon_start_failure_runs_without_the_background_server() -> Result<()> 
         ],
     )?;
     terminal.wait_for_startup()?;
+    // Startup warnings sit behind the footer's count, in the F2 warnings view.
+    terminal.wait_for_screen("1 warning")?;
+    terminal.write_input(b"\x1bOQ")?;
     terminal.wait_for_screen("could not start its background server")?;
+    // Keep the warning and leave the view.
+    terminal.write_input(b"k")?;
+    terminal.wait_for_screen("Ask Corbanu Terminal")?;
     terminal.write_input(b"/status")?;
     terminal.wait_for_screen("show current session configuration")?;
     terminal.read_output(Duration::from_millis(/*millis*/ 200))?;
