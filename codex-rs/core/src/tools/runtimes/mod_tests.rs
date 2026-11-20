@@ -841,7 +841,14 @@ async fn snapshot_wrapper_replays_dummy_and_preserves_unbrokered_credentials() -
     ]);
     proxy.apply_to_env(&mut env);
     let dummy = env["OPENAI_API_KEY"].clone();
-    let dummy_alias = env["AUTH_HEADER"].clone();
+    // D732 (#2719): a copy of a held key under another name (`Bearer <key>`)
+    // is removed from the command environment, not replaced by a dummy alias.
+    assert_eq!(env.get("AUTH_HEADER"), None);
+    assert!(
+        env.values()
+            .all(|value| !value.contains("sk-proj-abcdefghijklmnopqrstuvwxyz")),
+        "a copy of the brokered key reached the command environment: {env:?}"
+    );
     prepare_brokered_shell_snapshot_env(&mut env, Some(&snapshot), &shell);
     assert!(!env.contains_key("BASH_ENV"));
     assert_eq!(env.get("ENV"), Some(&startup.display().to_string()));
@@ -1231,7 +1238,7 @@ async fn snapshot_wrapper_replays_dummy_and_preserves_unbrokered_credentials() -
             &RuntimePathPrepends::default(),
         );
         assert!(!rewritten[2].contains(&dummy));
-        assert!(!rewritten[2].contains(&dummy_alias));
+        assert!(!rewritten[2].contains("Bearer"));
         assert_eq!(rewritten[1], "-lfc");
         let output = Command::new(&rewritten[0])
             .args(&rewritten[1..])

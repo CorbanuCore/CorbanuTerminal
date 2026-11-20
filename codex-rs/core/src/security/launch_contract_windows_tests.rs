@@ -148,16 +148,33 @@ async fn pf_27_s06_elevated_launch_cannot_read_protected_files_or_core_memory() 
     .join(" & ");
     // Positive control: without the contract's profile the sandbox user
     // reads these files, so the denials below come from the contract.
-    let control = run_sandboxed(
-        vec!["cmd.exe".into(), "/D".into(), "/C".into(), script.clone()],
-        HashMap::new(),
-        &base,
-        &cwd,
-    )
-    .await;
+    // Upstream's elevated setup grants read roots from a background read-ACL
+    // helper, so the first launches can run before CODEX_HOME's grant lands
+    // (#2814: no sandbox ACE yet right after setup). Wait for it, bounded.
+    let readable = ["VAULT", "AUTH", "CONFIG", "SQLITE", "NOTES"];
+    let mut attempts = 0;
+    let control = loop {
+        let control = run_sandboxed(
+            vec!["cmd.exe".into(), "/D".into(), "/C".into(), script.clone()],
+            HashMap::new(),
+            &base,
+            &cwd,
+        )
+        .await;
+        attempts += 1;
+        if attempts >= 90
+            || readable
+                .iter()
+                .all(|label| control.contains(&format!("{label}-READ")))
+        {
+            break control;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    };
+    eprintln!("pf27s06 elevated file probes, base-profile attempts: {attempts}");
     eprintln!("pf27s06 elevated file probes, script: {script}");
     eprintln!("pf27s06 elevated file probes, base profile: {control}");
-    for readable in ["VAULT", "AUTH", "CONFIG", "SQLITE", "NOTES"] {
+    for readable in readable {
         assert!(
             control.contains(&format!("{readable}-READ")),
             "{readable}: {control}"
