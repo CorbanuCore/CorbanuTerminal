@@ -1,0 +1,3 @@
+## Security
+
+- Linux: a command can no longer get itself rerun outside the sandbox by printing bubblewrap's "sandbox failed to start" text. Corbanu now checks with the sandbox launcher itself whether the sandbox really failed to start. When it did, running the command outside the sandbox always needs a new answer from you, for that one run. An earlier approval is not enough, no "don't ask again" option is offered, and with approvals off (or where automatic review is required) the command is refused. This also covers hosts where bubblewrap reports "No permissions to create new namespace" (for example Debian and Ubuntu).
