@@ -450,7 +450,9 @@ impl ConfigManager {
         Ok(CloudStartupConfig { bootstrap, config })
     }
 
-    /// Admits resumed threads and input only on the currently selected provider.
+    /// Admits resumed threads and input on the currently selected provider, or
+    /// (D738, #555/PF55) on the thread's own provider when this home still
+    /// configures it and has not deactivated it.
     pub(crate) async fn check_thread_model_provider_for_input(
         &self,
         current: &Config,
@@ -460,11 +462,57 @@ impl ConfigManager {
             .load_latest_config(Some(current.cwd.to_path_buf()))
             .await?;
         if current.model_provider_id != configured.model_provider_id {
+            self.admit_retained_provider(
+                &current.model_provider_id,
+                &configured.model_provider_id,
+                &configured.model_providers,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// D738: a thread may keep a provider other than the saved default only
+    /// while this home configures that provider and its provider entry is not
+    /// deactivated. Anything else keeps upstream's refusals: an unconfigured
+    /// provider, or a read-only chat when the provider is inactive or its
+    /// activation state cannot be read.
+    fn admit_retained_provider(
+        &self,
+        provider: &str,
+        current_provider: &str,
+        model_providers: &HashMap<String, codex_model_provider_info::ModelProviderInfo>,
+    ) -> std::io::Result<()> {
+        if !model_providers.contains_key(provider) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                ModelProviderError::ModelProviderNotConfigured {
+                    model_provider: provider.to_owned(),
+                },
+            ));
+        }
+        let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(model_providers);
+        let entry = catalog.entries().iter().find(|entry| {
+            entry
+                .runtime_provider_ids
+                .iter()
+                .any(|id| id.as_str() == provider)
+        });
+        let active = match entry {
+            // Providers without a setup entry cannot be deactivated.
+            None => true,
+            Some(entry) => codex_provider_auth::ProviderEligibilityStore::new(&self.codex_home)
+                .load()
+                .is_ok_and(|eligibility| {
+                    eligibility.policy_for(entry)
+                        == codex_provider_auth::ProviderActivationPolicy::Active
+                }),
+        };
+        if !active {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 ModelProviderError::ModelProviderMismatch {
-                    model_provider: current.model_provider_id.clone(),
-                    current_model_provider: configured.model_provider_id,
+                    model_provider: provider.to_owned(),
+                    current_model_provider: current_provider.to_owned(),
                 },
             ));
         }
@@ -575,67 +623,72 @@ impl ConfigManager {
             .load_latest_config(typesafe_overrides.cwd.clone().or_else(|| cwd.clone()))
             .await
             .map(|config| config.model_provider_id);
-        self.load_with_validation(
-            &self.current_cli_overrides(),
-            request_overrides,
-            typesafe_overrides,
-            cwd,
-            |config, _overrides, layers| {
-                let requested_provider = requested_provider
-                    .as_deref()
-                    .or(config.model_provider.as_deref())
-                    .unwrap_or("openai");
-                // Validate the saved route even when a client sends a provider override.
-                for provider in [
-                    saved_provider.unwrap_or(requested_provider),
-                    requested_provider,
-                ] {
-                    if let Some(required) = layers.required_model_provider()
-                        && required != provider
-                    {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::PermissionDenied,
-                            ModelProviderError::ModelProviderPolicyConflict {
-                                model_provider: provider.to_owned(),
-                                required_model_provider: required.to_owned(),
-                            },
-                        ));
+        // Filled by validation: the current selection and the providers to admit.
+        let mut admission: Option<(String, [String; 2])> = None;
+        let config = self
+            .load_with_validation(
+                &self.current_cli_overrides(),
+                request_overrides,
+                typesafe_overrides,
+                cwd,
+                |config, _overrides, layers| {
+                    let requested_provider = requested_provider
+                        .as_deref()
+                        .or(config.model_provider.as_deref())
+                        .unwrap_or("openai");
+                    // Validate the saved route even when a client sends a provider override.
+                    for provider in [
+                        saved_provider.unwrap_or(requested_provider),
+                        requested_provider,
+                    ] {
+                        if let Some(required) = layers.required_model_provider()
+                            && required != provider
+                        {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::PermissionDenied,
+                                ModelProviderError::ModelProviderPolicyConflict {
+                                    model_provider: provider.to_owned(),
+                                    required_model_provider: required.to_owned(),
+                                },
+                            ));
+                        }
+                        if !config.model_providers.contains_key(provider)
+                            && !built_in_model_providers(config.openai_base_url.clone())
+                                .contains_key(provider)
+                        {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                ModelProviderError::ModelProviderNotConfigured {
+                                    model_provider: provider.to_owned(),
+                                },
+                            ));
+                        }
                     }
-                    if !config.model_providers.contains_key(provider)
-                        && !built_in_model_providers(config.openai_base_url.clone())
-                            .contains_key(provider)
-                    {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            ModelProviderError::ModelProviderNotConfigured {
-                                model_provider: provider.to_owned(),
-                            },
-                        ));
-                    }
-                }
-                let current_provider = current_provider?;
-                for provider in [
-                    saved_provider.unwrap_or(requested_provider),
-                    requested_provider,
-                ] {
-                    if provider != current_provider {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            ModelProviderError::ModelProviderMismatch {
-                                model_provider: provider.to_owned(),
-                                current_model_provider: current_provider,
-                            },
-                        ));
-                    }
-                }
-                Ok(())
-            },
-        )
-        .await
-        .and_then(|config| {
-            config.validate_windows_mxc_requirement()?;
-            Ok(config)
-        })
+                    admission = Some((
+                        current_provider?,
+                        [
+                            saved_provider.unwrap_or(requested_provider).to_owned(),
+                            requested_provider.to_owned(),
+                        ],
+                    ));
+                    Ok(())
+                },
+            )
+            .await?;
+        config.validate_windows_mxc_requirement()?;
+        // D738 (#555/PF55): resume on the thread's own provider when this home
+        // configures it and it is active, not only on the saved default.
+        let Some((current_provider, providers)) = admission else {
+            return Err(std::io::Error::other(
+                "resume provider validation did not run",
+            ));
+        };
+        for provider in &providers {
+            if provider != &current_provider {
+                self.admit_retained_provider(provider, &current_provider, &config.model_providers)?;
+            }
+        }
+        Ok(config)
     }
 
     /// Reload sources using the task's session flags before materializing config.

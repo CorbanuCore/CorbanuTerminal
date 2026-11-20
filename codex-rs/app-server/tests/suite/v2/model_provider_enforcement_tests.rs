@@ -42,7 +42,6 @@ use wiremock::MockServer;
 
 #[test_case("other"; "selection_changes")]
 #[test_case("gateway"; "definition_changes")]
-#[test_case("default"; "default_selection_changes")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn provider_requirement_changes_reject_inputs_to_existing_threads(
     required_selection: &str,
@@ -79,17 +78,7 @@ base_url = "{}/v1"
         other.uri(),
     );
     let requirements_path = home.path().join("requirements.toml");
-    if required_selection == "default" {
-        std::fs::write(
-            &requirements_path,
-            requirements.replace("model_provider = \"gateway\"", ""),
-        )?;
-        let path = home.path().join("config.toml");
-        let config = std::fs::read_to_string(&path)?;
-        std::fs::write(path, config.replace("mock_provider", "gateway"))?;
-    } else {
-        std::fs::write(&requirements_path, &requirements)?;
-    }
+    std::fs::write(&requirements_path, &requirements)?;
     let mut server = TestAppServer::builder()
         .with_codex_home(home.path())
         .with_json_logging("warn")
@@ -136,24 +125,15 @@ base_url = "{}/v1"
     } else {
         requirements.replace(gateway.uri(), &other.uri())
     };
-    let provider_error = if required_selection == "default" {
-        let path = home.path().join("config.toml");
-        let config = std::fs::read_to_string(&path)?;
-        std::fs::write(
-            path,
-            config.replace("model_provider = \"gateway\"", "model_provider = \"other\""),
-        )?;
-        codex_app_server_protocol::ModelProviderError::ModelProviderMismatch {
-            model_provider: "gateway".into(),
-            current_model_provider: "other".into(),
-        }
-    } else {
-        std::fs::write(requirements_path, updated)?;
+    // D738 (#555/PF55): a new saved default alone no longer blocks the thread
+    // (see `retained_provider_survives_default_change_until_deactivated`);
+    // managed requirement changes still do.
+    std::fs::write(requirements_path, updated)?;
+    let provider_error =
         codex_app_server_protocol::ModelProviderError::ModelProviderPolicyConflict {
             model_provider: "gateway".into(),
             required_model_provider: required_selection.into(),
-        }
-    };
+        };
     let expected_error = JSONRPCErrorError {
         code: -32600,
         message: provider_error.to_string(),
@@ -286,8 +266,11 @@ base_url = "{}/v1"
     Ok(())
 }
 
+/// D738 (#555/PF55): after the saved default moves to another provider, an
+/// existing thread keeps running on its own configured, active provider. It
+/// becomes read-only only while this home deactivates that provider.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn provider_selection_can_be_restored_for_existing_threads() -> Result<()> {
+async fn retained_provider_survives_default_change_until_deactivated() -> Result<()> {
     let provider = MockServer::start().await;
     let home = TempDir::new()?;
     MockResponsesConfig::new(&provider.uri()).write(home.path())?;
@@ -298,9 +281,9 @@ async fn provider_selection_can_be_restored_for_existing_threads() -> Result<()>
         .build_initialized()
         .await?;
     let started = server.start_thread(ThreadStartParams::default()).await?;
-    let requests = responses::mount_sse_once(
+    let requests = responses::mount_sse_repeating(
         &provider,
-        responses::sse(vec![responses::ev_completed("restored")]),
+        responses::sse(vec![responses::ev_completed("retained")]),
     )
     .await;
     std::fs::write(
@@ -319,6 +302,38 @@ async fn provider_selection_can_be_restored_for_existing_threads() -> Result<()>
         ..Default::default()
     };
     let id = server.send_turn_start_request(params.clone()).await?;
+    let _: TurnStartResponse = server.read_response(id).await?;
+    server
+        .read_stream_until_notification_message("turn/completed")
+        .await?;
+    assert_eq!(requests.requests().len(), 1);
+
+    let config = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .fallback_cwd(Some(home.path().to_path_buf()))
+        .build()
+        .await?;
+    let catalog =
+        codex_provider_auth::ProviderCatalog::from_runtime_providers(&config.model_providers);
+    let entry = catalog
+        .entries()
+        .iter()
+        .find(|entry| {
+            entry
+                .runtime_provider_ids
+                .iter()
+                .any(|id| id.as_str() == "mock_provider")
+        })
+        .expect("mock provider catalog entry")
+        .clone();
+    let store = codex_provider_auth::ProviderEligibilityStore::new(home.path());
+    let mut eligibility = store.load()?;
+    eligibility.set_policy(
+        &entry,
+        codex_provider_auth::ProviderActivationPolicy::Inactive,
+    );
+    store.save(&eligibility)?;
+    let id = server.send_turn_start_request(params.clone()).await?;
     let error = server
         .read_stream_until_error_message(RequestId::Integer(id))
         .await?;
@@ -331,7 +346,7 @@ async fn provider_selection_can_be_restored_for_existing_threads() -> Result<()>
             }
         )?)
     );
-    assert!(requests.requests().is_empty());
+    assert_eq!(requests.requests().len(), 1);
     let id = server
         .send_raw_request(
             "thread/read",
@@ -340,13 +355,18 @@ async fn provider_selection_can_be_restored_for_existing_threads() -> Result<()>
         .await?;
     let read: codex_app_server_protocol::ThreadReadResponse = server.read_response(id).await?;
     assert_eq!(read.thread.model_provider, "mock_provider");
-    std::fs::write(path, original)?;
+
+    eligibility.set_policy(
+        &entry,
+        codex_provider_auth::ProviderActivationPolicy::Active,
+    );
+    store.save(&eligibility)?;
     let id = server.send_turn_start_request(params).await?;
     let _: TurnStartResponse = server.read_response(id).await?;
     server
         .read_stream_until_notification_message("turn/completed")
         .await?;
-    assert_eq!(requests.requests().len(), 1);
+    assert_eq!(requests.requests().len(), 2);
     Ok(())
 }
 
