@@ -1,9 +1,0 @@
----
-source: tui/tests/suite/focus_palette.rs
-assertion_line: 484
-expression: failure.trim()
----
-Error: daemon executable not found at [CODEX_HOME]/packages/app-server-daemon/current/bin/codex; repair the existing installation, or run `corbanu app-server daemon start` from a Corbanu Terminal installation to install a missing daemon
-
-Install or update Corbanu Terminal itself using the instructions at https://github.com/CorbanuCore/CorbanuTerminal#install.
-To work without the background server, rerun the same command with --no-daemon (including resume or fork and its arguments).
