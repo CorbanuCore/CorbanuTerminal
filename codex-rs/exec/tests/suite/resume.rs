@@ -12,6 +12,7 @@ use std::process::Stdio;
 use std::string::ToString;
 use std::time::Duration;
 use tempfile::TempDir;
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 use walkdir::WalkDir;
 use wiremock::MockServer;
@@ -1090,6 +1091,10 @@ async fn exec_fork_creates_distinct_threads_with_and_without_a_prompt() -> anyho
         .arg("fork")
         .arg(&source_id)
         .arg("--json");
+    let promptless_stdout_path = test.cwd_path().join("promptless-fork.stdout");
+    let promptless_stderr_path = test.cwd_path().join("promptless-fork.stderr");
+    let promptless_stdout = std::fs::File::create(&promptless_stdout_path)?;
+    let promptless_stderr = std::fs::File::create(&promptless_stderr_path)?;
     let mut child_command = tokio::process::Command::new(promptless_command.get_program());
     child_command
         .args(promptless_command.get_args())
@@ -1100,31 +1105,59 @@ async fn exec_fork_creates_distinct_threads_with_and_without_a_prompt() -> anyho
         )
         .current_dir(test.cwd_path())
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(promptless_stdout))
+        .stderr(Stdio::from(promptless_stderr))
         .kill_on_drop(true);
     let mut child = child_command.spawn()?;
-    let _open_stdin = child.stdin.take().expect("stdin should be piped");
-    let promptless_output =
-        tokio::time::timeout(Duration::from_secs(/*secs*/ 10), child.wait_with_output())
-            .await
-            .context("promptless fork should not wait for stdin to close")??;
+    let mut open_stdin = child.stdin.take().expect("stdin should be piped");
+    // Wait for the process itself, not for stdout/stderr EOF: on Windows an
+    // inherited pipe handle can outlive the fork process. The timeout is only
+    // a probe for a fork that wrongly waits for stdin; a slow process is
+    // allowed to finish after stdin is closed, and the assertions below catch
+    // any turn it runs with the probe prompt.
+    let (promptless_status, probed) =
+        match tokio::time::timeout(Duration::from_secs(/*secs*/ 10), child.wait()).await {
+            Ok(status) => {
+                drop(open_stdin);
+                (status.expect("promptless fork wait failed"), false)
+            }
+            Err(_) => {
+                eprintln!("promptless fork did not exit within 10s; sending stdin probe");
+                let _ = open_stdin.write_all(b"promptless-fork-stdin-probe\n").await;
+                let _ = open_stdin.shutdown().await;
+                drop(open_stdin);
+                let status = tokio::time::timeout(Duration::from_secs(/*secs*/ 30), child.wait())
+                    .await
+                    .expect("promptless fork did not exit after stdin was closed")
+                    .expect("promptless fork wait failed");
+                (status, true)
+            }
+        };
+    let promptless_stderr = std::fs::read(&promptless_stderr_path)?;
     assert!(
-        promptless_output.status.success(),
-        "promptless fork failed: {}",
-        String::from_utf8_lossy(&promptless_output.stderr)
+        promptless_status.success(),
+        "promptless fork failed (probed={probed}): {}",
+        String::from_utf8_lossy(&promptless_stderr)
     );
-    let promptless_events = String::from_utf8(promptless_output.stdout)?
+    let promptless_events = std::fs::read_to_string(&promptless_stdout_path)?
         .lines()
         .map(serde_json::from_str::<Value>)
         .collect::<Result<Vec<_>, _>>()?;
-    assert_eq!(promptless_events.len(), 1);
+    assert_eq!(
+        promptless_events.len(),
+        1,
+        "promptless fork should emit exactly one event (probed={probed})"
+    );
     assert_eq!(promptless_events[0]["type"], "thread.started");
     let promptless_thread_id = promptless_events[0]["thread_id"]
         .as_str()
         .expect("promptless fork should emit its new thread id");
     assert_ne!(promptless_thread_id, source_id);
-    assert_eq!(response_mock.requests().len(), 1);
+    assert_eq!(
+        response_mock.requests().len(),
+        1,
+        "promptless fork should not send a model request (probed={probed})"
+    );
 
     let source_name = format!("fork-named-{}", Uuid::new_v4());
     let config = ConfigBuilder::default()

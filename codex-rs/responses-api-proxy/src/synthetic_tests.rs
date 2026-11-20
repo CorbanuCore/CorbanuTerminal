@@ -484,23 +484,85 @@ async fn data_and_raw_chunk_overflow_are_bounded_without_complete_response() {
 #[tokio::test]
 async fn disconnect_and_run_expiry_cancel_an_active_upstream() {
     for disconnect in [false, true] {
-        let case = Case::start(Limits {
-            run: Duration::from_millis(90),
-            ..quick()
-        })
-        .await;
-        let mut client = TcpStream::connect(case.address).await.unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_address = upstream.local_addr().unwrap();
+        let mut client = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
         client
             .write_all(request(PACKETS[0]).as_bytes())
             .await
             .unwrap();
-        let (mut upstream, _) = case.upstream.accept().await.unwrap();
-        received(&mut upstream).await;
+        let (stream, _) = listener.accept().await.unwrap();
+        let metrics = Arc::new(Metrics::default());
+        // Anchor the deadlines to a test-controlled instant far enough out to
+        // cover a scheduler stall. No deadline can fire before this synthetic
+        // accept instant; the assertion below proves the upstream was active
+        // before the window even started. The run-expiry branch keeps the
+        // original 90 ms duration.
+        let setup_window = Duration::from_secs(1);
+        let accepted = Instant::now() + setup_window;
+        let (run_end, limits) = if disconnect {
+            // Keep every deadline beyond the 2 s close bound so only the
+            // client disconnect can cancel the active upstream.
+            let far = Duration::from_secs(10);
+            (
+                accepted + far,
+                Limits {
+                    head: far,
+                    upload: far,
+                    exchange: far,
+                    run: far,
+                },
+            )
+        } else {
+            (
+                accepted + Duration::from_millis(90),
+                Limits {
+                    // Non-binding ceiling: it keeps the Connect/ResponseHead
+                    // deadlines from winning before the run deadline.
+                    head: setup_window + Duration::from_millis(120),
+                    ..quick()
+                },
+            )
+        };
+        let task = tokio::spawn(serve_one(
+            stream,
+            accepted,
+            run_end,
+            upstream_address,
+            limits,
+            metrics.clone(),
+        ));
+        let (mut upstream, _) = timeout(Duration::from_secs(2), upstream.accept())
+            .await
+            .expect("proxy expired before it connected upstream")
+            .unwrap();
+        let _ = timeout(Duration::from_secs(2), received(&mut upstream))
+            .await
+            .expect("proxy connected but never forwarded the request");
+        assert!(
+            Instant::now() <= accepted,
+            "upstream became active after the synthetic accept instant"
+        );
         if disconnect {
             drop(client);
         }
         closed(&mut upstream).await;
-        assert_eq!(case.finish().await.accepted, 1);
+        let outcome = timeout(Duration::from_secs(2), task)
+            .await
+            .expect("serve_one did not stop")
+            .unwrap();
+        assert_eq!(metrics.sockets.load(Ordering::SeqCst), 0);
+        if disconnect {
+            assert!(
+                !matches!(outcome, Outcome::Expired(_)),
+                "disconnect path used a deadline: {outcome:?}"
+            );
+        } else {
+            assert_eq!(outcome, Outcome::Expired(Stage::ResponseHead));
+        }
     }
 }
 
@@ -547,38 +609,105 @@ async fn full_owned_accept_queue_stalls_connect_and_scope_closes_it() {
     let upstream = socket.listen(1).unwrap();
     let address = upstream.local_addr().unwrap();
     let mut occupied = Vec::new();
-    let mut observed_pending = false;
+    let mut full = false;
     for _ in 0..32 {
         match timeout(Duration::from_millis(30), TcpStream::connect(address)).await {
-            Ok(result) => occupied.push(result.unwrap()),
+            Ok(Ok(stream)) => occupied.push(stream),
+            Ok(Err(error)) => {
+                // Linux and Windows drop the SYN once the queue is full, so
+                // the connect times out. macOS resets it immediately. Both
+                // prove the fixture has saturated the accept queue.
+                assert!(
+                    matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                    ),
+                    "unexpected connect error while filling the accept queue: {error}"
+                );
+                full = true;
+                break;
+            }
             Err(_) => {
-                observed_pending = true;
+                full = true;
                 break;
             }
         }
     }
+    assert!(full, "fixture failed to saturate the upstream accept queue");
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut client = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
+    client
+        .write_all(request(PACKETS[0]).as_bytes())
+        .await
+        .unwrap();
+    let (stream, _) = listener.accept().await.unwrap();
+    let metrics = Arc::new(Metrics::default());
+    // Buffer the request before the connection deadline starts, and use a
+    // synthetic accept instant so the incidental Head deadline cannot win the
+    // race. The Connect deadline still starts from the real clock.
+    let accepted = Instant::now() + Duration::from_secs(5);
+    let run_end = accepted + Duration::from_secs(10);
+    let outcome = timeout(
+        Duration::from_secs(2),
+        serve_one(stream, accepted, run_end, address, quick(), metrics.clone()),
+    )
+    .await
+    .expect("controller deadline: FAIL");
+    assert_eq!(metrics.sockets.load(Ordering::SeqCst), 0);
+    closed(&mut client).await;
+    #[cfg(target_os = "macos")]
+    // macOS resets a connect into a full accept queue instead of leaving the
+    // SYN pending, so the connect fails before its deadline. Either a reset
+    // or a pending SYN is correct product behaviour for a saturated queue.
     assert!(
-        observed_pending,
-        "fixture failed to establish an actual pending connect"
+        matches!(
+            outcome,
+            Outcome::Failed(_) | Outcome::Expired(Stage::Connect)
+        ),
+        "expected the saturated upstream connect to fail or expire, got {outcome:?}"
     );
+    #[cfg(not(target_os = "macos"))]
+    assert_eq!(outcome, Outcome::Expired(Stage::Connect));
+
+    // serve's run clock starts before serve_one can reach Connect, so this
+    // pass deliberately does not pin the expiry stage. It restores the
+    // serve-scope coverage: accept, run-end abort, join, downstream close,
+    // and the summary invariants previously checked through case.finish().
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let downstream = listener.local_addr().unwrap();
     let metrics = Arc::new(Metrics::default());
-    let case = Case {
-        address: downstream,
-        upstream,
-        metrics: metrics.clone(),
-        task: tokio::spawn(serve(listener, address, quick(), metrics)),
-    };
     let mut client = TcpStream::connect(downstream).await.unwrap();
     client
         .write_all(request(PACKETS[0]).as_bytes())
         .await
         .unwrap();
+    let case = Case {
+        address: downstream,
+        upstream,
+        metrics: metrics.clone(),
+        task: tokio::spawn(serve(
+            listener,
+            address,
+            Limits {
+                run: Duration::from_millis(150),
+                ..quick()
+            },
+            metrics,
+        )),
+    };
     closed(&mut client).await;
-    assert_eq!(
-        case.finish().await.outcomes,
-        vec![Outcome::Expired(Stage::Connect)]
+    let summary = case.finish().await;
+    assert_eq!(summary.accepted, 1);
+    assert!(
+        summary.outcomes.iter().all(|outcome| matches!(
+            outcome,
+            Outcome::Expired(_) | Outcome::Failed(_) | Outcome::Cancelled
+        )),
+        "unexpected scope outcomes: {:?}",
+        summary.outcomes
     );
     drop(occupied);
 }

@@ -307,6 +307,10 @@
 /.github/actions/windows-code-sign/ @corbanu-security
 /.github/actions/setup-akv-pkcs11-codesigning/ @corbanu-security
 /.github/scripts/macos-signing/ @corbanu-security
+/third_party/rama-dns/ @corbanu-security
+/.github/scripts/cargo_deny.py @corbanu-security
+/.github/scripts/test_cargo_deny.py @corbanu-security
+/.github/scripts/fixtures/cargo-deny-*.jsonl @corbanu-security
 /codex-rs/Cargo.toml @corbanu-security
 /codex-rs/Cargo.lock @corbanu-security
 /MODULE.bazel @corbanu-security
