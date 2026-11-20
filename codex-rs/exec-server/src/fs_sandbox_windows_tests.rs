@@ -34,6 +34,10 @@ use crate::protocol::FsReadFileResponse;
 #[cfg(windows)]
 use crate::protocol::FsWriteFileResponse;
 
+// `read_helper_response` is intentionally unbounded in production. This is only a
+// test hang guard; PowerShell cold start on a loaded Windows runner can exceed 2 s.
+const HELPER_RESPONSE_HANG_GUARD: Duration = Duration::from_secs(/*secs*/ 30);
+
 #[tokio::test(start_paused = true)]
 async fn filesystem_operation_is_not_limited_by_helper_response_deadline() {
     let (reader, mut writer) = tokio::io::duplex(/*max_buf_size*/ 256);
@@ -138,13 +142,10 @@ async fn helper_stderr_is_drained_before_the_response() {
     let stdout = child.stdout.take().expect("helper stdout");
     let stderr = drain_helper_stderr(&mut child);
 
-    let response = tokio::time::timeout(
-        Duration::from_secs(/*secs*/ 2),
-        read_helper_response(stdout),
-    )
-    .await
-    .expect("helper stderr must be drained before awaiting its response")
-    .expect("helper response");
+    let response = tokio::time::timeout(HELPER_RESPONSE_HANG_GUARD, read_helper_response(stdout))
+        .await
+        .expect("helper stderr must be drained before awaiting its response")
+        .expect("helper response");
 
     assert_eq!(response.trim_ascii_end(), b"completed after noisy stderr");
     reap_helper_after_response(child, stderr)
