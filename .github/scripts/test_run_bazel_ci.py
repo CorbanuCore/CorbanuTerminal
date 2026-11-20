@@ -249,7 +249,10 @@ sys.exit(int(os.environ["BAZEL_TEST_EXIT_CODE"]))
                         if arg.startswith(("--local_resources=", "--jobs="))
                     ]
                     expected = (
-                        ["--local_resources=memory=HOST_RAM*.6", "--jobs=8"]
+                        [
+                            "--local_resources=memory=HOST_RAM*.6",
+                            "--jobs=4" if runner_os == "Linux" else "--jobs=8",
+                        ]
                         if limited
                         else []
                     )
