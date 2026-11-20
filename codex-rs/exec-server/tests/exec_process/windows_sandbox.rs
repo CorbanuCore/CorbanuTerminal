@@ -175,6 +175,7 @@ async fn tmpdir_uses_command_environment_over_rpc(
             "@echo off\r\n",
             "echo CHILD-TEMP:%TEMP%\r\n",
             "echo allowed>\"%TEMP%\\allowed.txt\"\r\n",
+            "if exist \"%TEMP%\\allowed.txt\" echo TEMP-WRITABLE\r\n",
             "echo modified>%COMMAND_TEMP_FILE%\r\n",
             "echo modified>%OUTSIDE_FILE%\r\n",
             "exit /b 0\r\n",
@@ -277,9 +278,16 @@ async fn tmpdir_uses_command_environment_over_rpc(
     );
     let actual_temp = std::path::PathBuf::from(
         stdout
+            .lines()
+            .next()
+            .context("child TEMP line")?
             .trim()
             .strip_prefix("CHILD-TEMP:")
             .context("child TEMP output")?,
+    );
+    assert!(
+        stdout.lines().any(|line| line.trim() == "TEMP-WRITABLE"),
+        "child could not write its TEMP {actual_temp:?}; stdout={stdout:?} stderr={stderr:?}"
     );
     if selection == WindowsSandboxSelection::Elevated {
         // D377: only the private session subfolder is writable, never the
@@ -296,11 +304,30 @@ async fn tmpdir_uses_command_environment_over_rpc(
         );
         assert_eq!(std::fs::read_to_string(&command_temp_file)?, "original");
     } else {
-        assert_eq!(actual_temp, command_temp);
+        // #2797: Windows gives an AppContainer child its own
+        // `…\Packages\<container>\AC\Temp` as TEMP and TMP, whatever the
+        // supplied environment says (natively on Windows 11 build 26200; MXC
+        // makes a container per launch and removes it when the command
+        // ends). Accept that private folder or the command's TEMP. Either
+        // way the command's TEMP stays the only temp folder we grant (D725).
+        let container_temp = actual_temp.ends_with(r"AC\Temp")
+            && actual_temp
+                .ancestors()
+                .nth(3)
+                .and_then(std::path::Path::file_name)
+                .is_some_and(|name| name.eq_ignore_ascii_case("Packages"));
+        assert!(
+            actual_temp == command_temp || container_temp,
+            "unexpected MXC child TEMP {actual_temp:?}"
+        );
         assert_eq!(
             std::fs::read_to_string(&command_temp_file)?.trim_end(),
             "modified"
         );
+        // The container and its TEMP may already be gone; the child checked
+        // its own write above.
+        assert_eq!(std::fs::read_to_string(&outside)?, "original");
+        return Ok(());
     }
     assert_eq!(
         (
