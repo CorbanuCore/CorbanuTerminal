@@ -583,7 +583,14 @@ impl ConfigLayerStack {
         })
     }
 
-    pub fn with_session_plugins(mut self, plugins: TomlValue) -> std::io::Result<Self> {
+    pub fn with_session_plugins(self, plugins: TomlValue) -> std::io::Result<Self> {
+        self.with_session_value("plugins", plugins)
+    }
+
+    /// Sets top-level `key` in the highest enabled session-flags layer, adding
+    /// one when none exists, and removes it from lower session-flags layers so
+    /// this value wins.
+    pub fn with_session_value(mut self, key: &str, value: TomlValue) -> std::io::Result<Self> {
         let session_index = self.layers.iter().rposition(|layer| {
             layer.name == ConfigLayerSource::SessionFlags && !layer.is_disabled()
         });
@@ -600,8 +607,8 @@ impl ConfigLayerStack {
                     )
                 })?;
                 if index == session_index {
-                    table.insert("plugins".to_owned(), plugins.clone());
-                } else if table.remove("plugins").is_none() {
+                    table.insert(key.to_owned(), value.clone());
+                } else if table.remove(key).is_none() {
                     continue;
                 }
                 // D525 (#2052): a project-declared role's launch-flags layer keeps its
@@ -618,7 +625,7 @@ impl ConfigLayerStack {
                 index,
                 ConfigLayerEntry::new(
                     ConfigLayerSource::SessionFlags,
-                    TomlValue::Table([("plugins".to_owned(), plugins)].into_iter().collect()),
+                    TomlValue::Table([(key.to_owned(), value)].into_iter().collect()),
                 ),
             );
         }

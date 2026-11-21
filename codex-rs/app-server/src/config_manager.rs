@@ -330,6 +330,32 @@ impl ConfigManager {
         Ok(config)
     }
 
+    /// Reloads a live thread's config from the latest home layers while keeping
+    /// the thread's current runtime model and provider (#2853). Under D738/PF55
+    /// a thread can run on a provider other than the saved default; rebuilding
+    /// it from the saved default alone could select an incompatible
+    /// model/provider pair. The model and provider come from the thread's live
+    /// snapshot, which follows mid-session `/model` switches. A provider that
+    /// managed requirements require still overrides the kept one, and a pair
+    /// that no longer resolves fails closed as before.
+    pub(crate) async fn load_latest_config_for_thread_runtime(
+        &self,
+        thread: &codex_core::CodexThread,
+        thread_config: &Config,
+    ) -> std::io::Result<Config> {
+        let snapshot = thread.config_snapshot().await;
+        let session_layers = thread_config
+            .config_layer_stack
+            .clone()
+            .with_session_value(
+                "model_provider",
+                TomlValue::String(snapshot.model_provider_id),
+            )?
+            .with_session_value("model", TomlValue::String(snapshot.model))?;
+        self.load_latest_config_with_session_layers(&session_layers, &thread_config.cwd)
+            .await
+    }
+
     /// Refreshes global settings and managed requirements using already fetched session layers.
     pub(crate) async fn load_retained_session_config(
         &self,

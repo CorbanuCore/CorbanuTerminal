@@ -84,7 +84,7 @@ async fn reload_mcp_config_with_policy(
                 let current_config = target.config().await;
                 let mut target_load_error = None;
                 let next_config = if host_loaded {
-                    match load_refresh_config(&current_config, config_manager).await {
+                    match load_refresh_config(&target, &current_config, config_manager).await {
                         Ok(next_config) => next_config,
                         Err(err) => {
                             if matches!(policy, ReloadPolicy::BestEffort) {
@@ -152,14 +152,12 @@ fn disabled_enterprise_config(current_config: &Config) -> Config {
 }
 
 async fn load_refresh_config(
+    thread: &codex_core::CodexThread,
     current_config: &Config,
     config_manager: &ConfigManager,
 ) -> io::Result<Config> {
     config_manager
-        .load_latest_config_with_session_layers(
-            &current_config.config_layer_stack,
-            &current_config.cwd,
-        )
+        .load_latest_config_for_thread_runtime(thread, current_config)
         .await
 }
 
@@ -325,7 +323,7 @@ mod tests {
         let original_model = thread.config().await.model.clone();
 
         let current_config = thread.config().await;
-        let refresh_config = load_refresh_config(&current_config, &config_manager).await?;
+        let refresh_config = load_refresh_config(&thread, &current_config, &config_manager).await?;
         let _ = thread
             .refresh_mcp_config(current_config, refresh_config)
             .await;
@@ -370,7 +368,7 @@ enabled = false
         )?;
 
         let current_config = thread.config().await;
-        let refresh_config = load_refresh_config(&current_config, &config_manager).await?;
+        let refresh_config = load_refresh_config(&thread, &current_config, &config_manager).await?;
         let mut actual = refresh_config.mcp_servers.get().clone();
         actual.remove(codex_mcp::CODEX_APPS_MCP_SERVER_NAME);
         let expected = serde_json::from_value::<HashMap<String, McpServerConfig>>(json!({
