@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::pager_overlay::TranscriptHistoryState;
-use crate::test_support::test_path_display;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
@@ -355,10 +354,9 @@ async fn assert_transcript_close_repaints_inline_draft(mut app: Box<App>) -> Res
 
     insta::assert_snapshot!(
         "transcript_close_restores_inline_draft",
-        buffer_text(crate::custom_terminal::test_support::last_rendered_buffer(
-            &tui.terminal
+        crate::chatwidget::tests::helpers::normalize_snapshot_paths(buffer_text(
+            crate::custom_terminal::test_support::last_rendered_buffer(&tui.terminal)
         ))
-        .replace(&test_path_display("/tmp/project"), "/tmp/project")
     );
     Ok(())
 }

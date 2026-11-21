@@ -56,6 +56,8 @@ async fn modal_consumes_input_and_finishes_after_input_closes() -> color_eyre::R
         while rx.try_recv().is_ok() {}
         let mut tui = crate::tui::test_support::make_test_tui()?;
         tui.pause_events();
+        let set_screen_size =
+            crate::custom_terminal::test_support::screen_size_controller(&tui.terminal);
         let (finished_input, wait_for_input) = tokio::sync::oneshot::channel();
         let mut finished_input = Some(finished_input);
         let mut events = VecDeque::from([
@@ -70,6 +72,11 @@ async fn modal_consumes_input_and_finishes_after_input_closes() -> color_eyre::R
         ]);
         let events = stream::poll_fn(move |_| {
             if let Some(event) = events.pop_front() {
+                if let tui::TuiEvent::Resize(size) = &event {
+                    // Resize the fake backend at the event, preserving the initial 80x24 draw.
+                    // A later debounced backend sample must see the same geometry.
+                    set_screen_size(*size);
+                }
                 Poll::Ready(Some(event))
             } else {
                 if let Some(finished_input) = finished_input.take() {

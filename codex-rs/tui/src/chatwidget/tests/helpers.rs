@@ -30,12 +30,18 @@ pub(super) async fn test_config() -> (tempfile::TempDir, Config) {
 /// Display form of the chat widget's test cwd. On Windows it has the same
 /// width as `/tmp/project` (and the same `project` basename), so footers that
 /// overflow 80 columns truncate at the same place on every platform.
-pub(super) fn test_cwd_display() -> String {
+pub(crate) fn test_cwd_display() -> String {
     if cfg!(windows) {
         r"C:\t\project".to_string()
     } else {
         "/tmp/project".to_string()
     }
+}
+
+/// Keep elapsed time and the low-color blink at the existing snapshot's first frame.
+pub(crate) fn freeze_status_indicator_timer(chat: &mut ChatWidget) {
+    chat.bottom_pane
+        .reset_status_indicator_timer_for_tests(Instant::now() + Duration::from_secs(60));
 }
 
 pub(super) fn test_project_path() -> PathBuf {
