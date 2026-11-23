@@ -1335,7 +1335,8 @@ impl ToolOrchestrator {
             permissions: initial_attempt.permissions.clone(),
             exec_server_permissions: initial_attempt.exec_server_permissions.clone(),
             enforce_managed_network: initial_attempt.enforce_managed_network,
-            manager: initial_attempt.manager.clone(),
+            // A unit struct on main.
+            manager: SandboxManager::new(),
             sandbox_cwd: initial_attempt.sandbox_cwd.clone(),
             workspace_roots: initial_attempt.workspace_roots.to_vec(),
             codex_linux_sandbox_exe: initial_attempt.codex_linux_sandbox_exe.cloned(),
