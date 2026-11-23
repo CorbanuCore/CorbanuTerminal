@@ -318,8 +318,23 @@ pub(super) struct LateStartupFailure {
 /// How one start of an `exec_command` ended.
 enum ExecOnceError {
     Failed(UnifiedExecError),
-    LateStartupFailure(LateStartupFailure),
+    LateStartupFailure(Box<LateStartupFailure>),
 }
+
+/// D750 (#2851): a started session, and what a late sandbox startup failure
+/// of it is decided on.
+type StartedSession<P> = (
+    P,
+    Option<DeferredNetworkApproval>,
+    Option<Box<LateStartupRetry>>,
+);
+
+/// D750 (#2851): a late sandbox startup failure for the orchestrator to
+/// decide, and the run's denied output.
+type LateRetry = (
+    Box<LateStartupRetry>,
+    codex_protocol::exec_output::ExecToolCallOutput,
+);
 
 impl From<UnifiedExecError> for ExecOnceError {
     fn from(error: UnifiedExecError) -> Self {
@@ -332,11 +347,11 @@ impl From<UnifiedExecError> for ExecOnceError {
 fn late_denial(error: UnifiedExecError, plan: Option<Box<LateStartupRetry>>) -> ExecOnceError {
     match (plan, &error) {
         (Some(plan), UnifiedExecError::SandboxDenied { output, .. }) => {
-            ExecOnceError::LateStartupFailure(LateStartupFailure {
+            ExecOnceError::LateStartupFailure(Box::new(LateStartupFailure {
                 plan,
                 output: output.clone(),
                 error,
-            })
+            }))
         }
         _ => ExecOnceError::Failed(error),
     }
@@ -783,12 +798,12 @@ impl UnifiedExecProcessManager {
         request: &ExecCommandRequest,
         context: &UnifiedExecContext,
         mut completion: Option<&mut Completion<'_>>,
-        late_failure: Option<LateStartupFailure>,
+        late_failure: Option<Box<LateStartupFailure>>,
     ) -> Result<ExecCommandToolOutput, ExecOnceError> {
         let prepared = &request.prepared;
         let command = &prepared.resolved.command;
         let cwd = prepared.cwd.clone();
-        let (late_retry, late_error) = match late_failure {
+        let (late_retry, late_error) = match late_failure.map(|failure| *failure) {
             Some(LateStartupFailure {
                 plan,
                 output,
@@ -1057,16 +1072,15 @@ impl UnifiedExecProcessManager {
                     if !completion
                         .as_ref()
                         .is_some_and(|completion| completion.timed_out)
+                        && let Err(err) = process.check_for_sandbox_denial_with_text(&text).await
                     {
-                        if let Err(err) = process.check_for_sandbox_denial_with_text(&text).await {
-                            return Err(late_denial(
-                                err.with_output_collection_metadata(
-                                    original_token_count,
-                                    output_omitted_bytes,
-                                ),
-                                late_startup_retry.take(),
-                            ));
-                        }
+                        return Err(late_denial(
+                            err.with_output_collection_metadata(
+                                original_token_count,
+                                output_omitted_bytes,
+                            ),
+                            late_startup_retry.take(),
+                        ));
                     }
                     let metrics_sidecar = entry
                         .plugin_metrics_sidecar
@@ -1801,18 +1815,8 @@ impl UnifiedExecProcessManager {
         &self,
         request: &ExecCommandRequest,
         context: &UnifiedExecContext,
-        late_retry: Option<(
-            Box<LateStartupRetry>,
-            codex_protocol::exec_output::ExecToolCallOutput,
-        )>,
-    ) -> Result<
-        (
-            UnifiedExecAttempt,
-            Option<DeferredNetworkApproval>,
-            Option<Box<LateStartupRetry>>,
-        ),
-        StartFailure,
-    > {
+        late_retry: Option<LateRetry>,
+    ) -> Result<StartedSession<UnifiedExecAttempt>, StartFailure> {
         let prepared = &request.prepared;
         let shell_environment_policy = prepared.turn_environment.shell_environment_policy();
         // Issue #310: provider credentials stay out of the command's
