@@ -2183,6 +2183,126 @@ async fn permission_reload_preserves_active_runtime_despite_incompatible_saved_d
     Ok(())
 }
 
+/// #2853 (D738/PF55): a thread that keeps its recorded provider after the saved
+/// default moves to an incompatible model/provider pair still lists its MCP
+/// inventory; the reload keeps the thread's runtime model and provider. Unlike
+/// the test above, the thread's provider is the saved default at start, not a
+/// `-c` session flag.
+#[tokio::test]
+async fn thread_reload_keeps_retained_runtime_over_incompatible_saved_default() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("retained-runtime"),
+            responses::ev_assistant_message("retained-message", "retained runtime kept"),
+            responses::ev_completed("retained-runtime"),
+        ]),
+    )
+    .await;
+    let home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri()).write(home.path())?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized()
+        .await?;
+    let ThreadStartResponse {
+        thread,
+        model_provider,
+        ..
+    } = app.start_thread(ThreadStartParams::default()).await?;
+    assert_eq!(model_provider, "mock_provider");
+
+    let path = home.path().join("config.toml");
+    let mut saved: toml::Value = toml::from_str(&std::fs::read_to_string(&path)?)?;
+    saved["model"] = toml::Value::String("gpt-6-astra".into());
+    saved["model_provider"] = toml::Value::String("claude-plan".into());
+    std::fs::write(path, toml::to_string(&saved)?)?;
+    let _: TurnStartResponse = app
+        .request(|request_id| ClientRequest::TurnStart {
+            request_id,
+            params: TurnStartParams {
+                thread_id: thread.id.clone(),
+                input: vec![V2UserInput::Text {
+                    text: "keep the retained runtime".into(),
+                    text_elements: Vec::new(),
+                }],
+                ..Default::default()
+            },
+        })
+        .await?;
+    let completed: TurnCompletedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        app.read_notification("turn/completed"),
+    )
+    .await??;
+    assert_eq!(completed.turn.status, TurnStatus::Completed);
+    assert_eq!(response_mock.requests().len(), 1);
+    let inventory: codex_app_server_protocol::ListMcpServerStatusResponse = app
+        .request(|request_id| ClientRequest::McpServerStatusList {
+            request_id,
+            params: codex_app_server_protocol::ListMcpServerStatusParams {
+                cursor: None,
+                limit: None,
+                detail: None,
+                thread_id: Some(thread.id.clone()),
+                server_name: None,
+            },
+        })
+        .await?;
+    assert!(inventory.data.is_empty());
+    Ok(())
+}
+
+/// #2853: the reload keeps the thread's *current* model after a mid-session
+/// provider switch, not the model the thread started with. The stale start
+/// model (`gpt-6-astra`) paired with the switched-to provider (`claude-plan`)
+/// would not resolve, so `mcpServerStatus/list` would fail.
+#[tokio::test]
+async fn thread_reload_follows_a_mid_session_provider_switch() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri()).write(home.path())?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized()
+        .await?;
+    let ThreadStartResponse { thread, model, .. } = app
+        .start_thread(ThreadStartParams {
+            model: Some("gpt-6-astra".into()),
+            model_provider: Some("openai".into()),
+            ..Default::default()
+        })
+        .await?;
+    assert_eq!(model, "gpt-6-astra");
+    let _: codex_app_server_protocol::ThreadSettingsUpdateResponse = app
+        .request(|request_id| ClientRequest::ThreadSettingsUpdate {
+            request_id,
+            params: codex_app_server_protocol::ThreadSettingsUpdateParams {
+                thread_id: thread.id.clone(),
+                confirm: true,
+                model: Some("claude-opus-5-5-plan".into()),
+                model_provider: Some("claude-plan".into()),
+                ..Default::default()
+            },
+        })
+        .await?;
+    let inventory: codex_app_server_protocol::ListMcpServerStatusResponse = app
+        .request(|request_id| ClientRequest::McpServerStatusList {
+            request_id,
+            params: codex_app_server_protocol::ListMcpServerStatusParams {
+                cursor: None,
+                limit: None,
+                detail: None,
+                thread_id: Some(thread.id.clone()),
+                server_name: None,
+            },
+        })
+        .await?;
+    assert!(inventory.data.is_empty());
+    Ok(())
+}
+
 #[tokio::test]
 async fn turn_start_rejects_invalid_permission_selection_before_starting_turn() -> Result<()> {
     let codex_home = TempDir::new()?;
