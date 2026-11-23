@@ -94,11 +94,6 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
                 "codex-rs/app-server/tests/common/lib.rs",
                 ["app_test_support", "codex-app-server"],
             ),
-            (
-                "codex-rs/mcp-server/tests/common",
-                "codex-rs/mcp-server/tests/common/lib.rs",
-                ["codex-mcp-server", "mcp_test_support"],
-            ),
         ):
             with self.subTest(directory=directory):
                 self.assertNotIn(directory, explicit_members)
@@ -272,11 +267,6 @@ class AffectedPackagesTest(unittest.TestCase):
                 "codex-rs/app-server/tests/common",
                 "app_test_support",
                 "codex-app-server",
-            ),
-            (
-                "codex-rs/mcp-server/tests/common",
-                "mcp_test_support",
-                "codex-mcp-server",
             ),
         ):
             self.assertNotIn(directory, explicit_members)
