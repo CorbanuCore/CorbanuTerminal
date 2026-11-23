@@ -1178,6 +1178,9 @@ pub fn resolve_relative_paths_in_config_toml(
 /// `resolve_config_paths` are preserved, out of an abundance of caution.
 fn copy_shape_from_original(original: &TomlValue, resolved: &TomlValue) -> TomlValue {
     match (original, resolved) {
+        // JSON-backed fields can serialize a number as a private serde_json table.
+        // Path resolution cannot change a numeric leaf, so retain its TOML type.
+        (TomlValue::Integer(_) | TomlValue::Float(_), TomlValue::Table(_)) => original.clone(),
         (TomlValue::Table(original_table), TomlValue::Table(resolved_table)) => {
             let mut table = toml::map::Map::new();
             for (key, original_value) in original_table {
