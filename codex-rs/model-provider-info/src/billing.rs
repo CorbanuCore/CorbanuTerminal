@@ -278,6 +278,52 @@ pub fn declared_billing(
         .map_or(BillingDeclaration::NotDeclared, BillingDeclaration::BuiltIn)
 }
 
+/// Whether a session on `provider` (configured as `provider_id`) runs on a plan
+/// or subscription account (a ChatGPT plan, Claude Plan, a Corbanu Plan or
+/// another subscription route) rather than wallet-funded or pay-per-token
+/// usage. D740: optional extra model requests, such as automatic thread
+/// titles, are on by default only for these accounts.
+///
+/// A `billing` the user declared for the provider wins. Otherwise the route and
+/// credential the session would use decide, as for usage accounting, with the
+/// Corbanu Plan providers counted as plans. An undeclared or local route is
+/// not a plan account.
+pub fn is_plan_account(
+    provider_id: &str,
+    provider: &ModelProviderInfo,
+    auth_mode: Option<AuthMode>,
+) -> bool {
+    if let Some(basis) = provider.billing {
+        return basis == Subscription;
+    }
+    if matches!(
+        crate::canonical_provider_id(provider_id),
+        PFTERMINAL_PLAN_PROVIDER_ID | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+    ) {
+        return true;
+    }
+    let Ok(endpoint) = provider.to_api_provider(auth_mode).map(|api| api.base_url) else {
+        return false;
+    };
+    let at_built_in_route = crate::built_in_model_providers(/*openai_base_url*/ None)
+        .get(provider_id)
+        .is_some_and(|built_in| {
+            built_in.wire_api == provider.wire_api
+                && built_in
+                    .to_api_provider(auth_mode)
+                    .is_ok_and(|api| api.base_url == endpoint)
+        });
+    declared_billing(
+        provider_id,
+        provider,
+        BillingCredential::of(provider, auth_mode),
+        &endpoint,
+        at_built_in_route,
+    )
+    .basis()
+        == Some(Subscription)
+}
+
 /// What to tell a user whose route has no declared basis: the config key that
 /// declares it, and what happens until then.
 pub fn not_declared_next_step(provider_id: &str) -> String {

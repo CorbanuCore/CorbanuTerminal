@@ -7023,8 +7023,77 @@ async fn thread_resume_returns_provider_error_even_with_provider_override(
     Ok(())
 }
 
+/// Sets this home's activation policy for one runtime provider, as `/providers` does.
+async fn set_provider_activation(
+    home: &std::path::Path,
+    provider: &str,
+    policy: codex_provider_auth::ProviderActivationPolicy,
+) -> Result<()> {
+    let config = codex_core::config::ConfigBuilder::default()
+        .codex_home(home.to_path_buf())
+        .fallback_cwd(Some(home.to_path_buf()))
+        .build()
+        .await?;
+    let catalog =
+        codex_provider_auth::ProviderCatalog::from_runtime_providers(&config.model_providers);
+    let entry = catalog
+        .entries()
+        .iter()
+        .find(|entry| {
+            entry
+                .runtime_provider_ids
+                .iter()
+                .any(|id| id.as_str() == provider)
+        })
+        .expect("provider catalog entry");
+    let store = codex_provider_auth::ProviderEligibilityStore::new(home);
+    let mut eligibility = store.load()?;
+    eligibility.set_policy(entry, policy);
+    store.save(&eligibility)?;
+    Ok(())
+}
+
+/// D738 (#555/PF55): a chat resumes on its recorded provider when this home
+/// configures it and it is active, even though the saved default differs.
+#[tokio::test]
+async fn thread_resume_keeps_configured_active_recorded_provider() -> Result<()> {
+    let server = create_mock_responses_server_repeating_assistant("Done").await;
+    let home = TempDir::new()?;
+    mock_responses_config(&server.uri()).write(home.path())?;
+    let thread_id = create_fake_rollout(
+        home.path(),
+        "2025-01-05T12-00-00",
+        "2025-01-05T12:00:00Z",
+        "Saved history",
+        Some("old_provider"),
+        /*git_info*/ None,
+    )?;
+    let config_path = home.path().join("config.toml");
+    let config = std::fs::read_to_string(&config_path)?;
+    let server_uri = server.uri();
+    std::fs::write(
+        &config_path,
+        format!(
+            "{config}\n[model_providers.old_provider]\nname = 'Original provider'\nbase_url = '{server_uri}/v1'\n"
+        ),
+    )?;
+    let mut client = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized()
+        .await?;
+    let id = client
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id,
+            ..Default::default()
+        })
+        .await?;
+    let resumed: ThreadResumeResponse = client.read_response(id).await?;
+    assert_eq!(resumed.model_provider, "old_provider");
+    Ok(())
+}
+
 #[test_case::test_case(false; "missing_definition")]
-#[test_case::test_case(true; "provider_mismatch")]
+#[test_case::test_case(true; "inactive_provider")]
 #[tokio::test]
 async fn thread_resume_recovers_after_provider_configuration_is_restored(
     configured: bool,
@@ -7050,6 +7119,12 @@ async fn thread_resume_recovers_after_provider_configuration_is_restored(
                 "{config}\n[model_providers.old_provider]\nname = 'Original provider'\nbase_url = '{server_uri}/v1'\n"
             ),
         )?;
+        set_provider_activation(
+            home.path(),
+            "old_provider",
+            codex_provider_auth::ProviderActivationPolicy::Inactive,
+        )
+        .await?;
     }
     let mut client = TestAppServer::builder()
         .with_codex_home(home.path())
@@ -7104,16 +7179,17 @@ async fn thread_resume_recovers_after_provider_configuration_is_restored(
         .await?;
     let read: codex_app_server_protocol::ThreadReadResponse = client.read_response(id).await?;
     assert_eq!(read.thread.model_provider, "old_provider");
-    let config = std::fs::read_to_string(&config_path)?;
-    let restored = if configured {
-        config.replace(
-            "model_provider = \"mock_provider\"",
-            "model_provider = \"old_provider\"",
+    if configured {
+        set_provider_activation(
+            home.path(),
+            "old_provider",
+            codex_provider_auth::ProviderActivationPolicy::Active,
         )
+        .await?;
     } else {
-        config.replace("mock_provider", "old_provider")
-    };
-    std::fs::write(config_path, restored)?;
+        let config = std::fs::read_to_string(&config_path)?;
+        std::fs::write(config_path, config.replace("mock_provider", "old_provider"))?;
+    }
     let id = client.send_thread_resume_request(params).await?;
     let resumed: ThreadResumeResponse = client.read_response(id).await?;
     assert_eq!(resumed.model_provider, "old_provider");
