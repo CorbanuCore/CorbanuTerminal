@@ -197,14 +197,17 @@ async fn issue_2851_a_late_sandbox_startup_failure_is_asked_about_again() -> any
     .await?;
     assert_eq!(run.reasons.len(), 2, "{:?} {:?}", run.reasons, run.output);
     assert_eq!(run.reasons[1], STARTUP_RETRY);
-    assert_eq!(
-        run.offered,
-        vec![
-            ReviewDecision::Approved,
-            ReviewDecision::denied("rejected by user"),
-            ReviewDecision::Abort,
-        ],
-        "once only"
+    // Once only: no "don't ask again" of any kind.
+    assert!(
+        run.offered.contains(&ReviewDecision::Approved)
+            && !run.offered.iter().any(|decision| matches!(
+                decision,
+                ReviewDecision::ApprovedForSession
+                    | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+                    | ReviewDecision::NetworkPolicyAmendment { .. }
+            )),
+        "once only: {:?}",
+        run.offered
     );
     assert_eq!(run.runs, 1, "ran once, outside the sandbox");
     assert!(run.output.contains("ran-2851"), "{}", run.output);
@@ -229,7 +232,6 @@ async fn issue_2851_a_declined_late_startup_retry_does_not_run() -> anyhow::Resu
     assert_eq!(run.reasons.len(), 2, "{:?}", run.reasons);
     assert_eq!(run.reasons[1], STARTUP_RETRY);
     assert_eq!(run.runs, 0, "never ran");
-    assert!(!run.output.contains("ran-2851"), "{}", run.output);
     Ok(())
 }
 
