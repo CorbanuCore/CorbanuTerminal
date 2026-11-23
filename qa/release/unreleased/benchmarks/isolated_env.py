@@ -9,7 +9,7 @@ inherit provider keys from the runner's environment.
 Usage:
   isolated_env.py [--home NAME=DIR]... [--home-under NAME=BASE::KEYDIR]...
                   [--set NAME=VALUE]...
-                  [--set-rel NAME=FILE]... -- PROGRAM [ARG]...
+                  [--set-rel NAME=FILE]... [--unset NAME]... -- PROGRAM [ARG]...
 
 --home creates DIR (parents included) and exports NAME=DIR.
 --home-under NAME=BASE::KEYDIR creates BASE/run-<sha256(KEYDIR)[:16]>, exports
@@ -19,6 +19,7 @@ installed dependency environment instead of copying ~420 MB into every run.
 --set exports NAME=VALUE.
 --set-rel exports NAME as the absolute path of FILE relative to this script's
 directory, and fails if FILE does not exist.
+--unset removes NAME from the environment.
 """
 
 from __future__ import annotations
@@ -44,10 +45,16 @@ def main(argv: list[str]) -> int:
     if not program:
         raise SystemExit("missing program after --")
     if len(options) % 2:
-        raise SystemExit("every option needs exactly one NAME=VALUE argument")
+        raise SystemExit("every option needs exactly one argument")
     here = Path(__file__).resolve().parent
     updates: dict[str, str] = {}
+    removals: list[str] = []
     for flag, raw in zip(options[::2], options[1::2]):
+        if flag == "--unset":
+            if not raw or "=" in raw:
+                raise SystemExit(f"--unset expects NAME, got {raw!r}")
+            removals.append(raw)
+            continue
         name, value = split_assignment(flag, raw)
         if flag == "--home":
             path = Path(value).resolve()
@@ -74,6 +81,8 @@ def main(argv: list[str]) -> int:
             updates[name] = str(path)
         else:
             raise SystemExit(f"unknown option {flag!r}")
+    for name in removals:
+        os.environ.pop(name, None)
     os.environ.update(updates)
     os.execvp(program[0], program)
     return 127

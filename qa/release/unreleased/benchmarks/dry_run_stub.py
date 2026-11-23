@@ -25,7 +25,10 @@ import subprocess
 import sys
 
 STATE_VARS = (
+    "HOME",
     "CODEX_HOME",
+    "CORBANU_HOME",
+    "PFTERMINAL_HOME",
     "HERMES_HOME",
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",

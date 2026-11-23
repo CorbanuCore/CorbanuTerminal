@@ -78,15 +78,22 @@ def catalog_digests(runner: Any, tasks: list[dict[str, Any]]) -> dict[str, str]:
 
 def route_price(model: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
     billing = (model.get("orchestration") or {}).get("billing") or {}
-    if "off_peak" in billing:
-        billing = billing["off_peak"]
+    note = None
+    if "peak" in billing:
+        # Time-of-day schedule: estimate at the peak rate; actual spend uses the
+        # schedule in the catalogue row at each request's timestamp.
+        billing, note = billing["peak"], "peak rate of a time-of-day schedule"
     keys = ("input", "cached_input", "output")
     if billing.get("input_milli_usd_per_million_tokens") is not None:
-        price = {
-            key: (billing.get(f"{key}_milli_usd_per_million_tokens") or 0) / 1000
-            for key in keys
-        }
+        price: dict[str, Any] = {}
+        for key in keys:
+            raw = billing.get(f"{key}_milli_usd_per_million_tokens")
+            # A missing cached price stays None: run_cost then charges cached
+            # tokens at the full input price instead of treating them as free.
+            price[key] = None if raw is None else raw / 1000
         price["source"] = "catalogue"
+        if note:
+            price["note"] = note
         return price
     slug = model["slug"]
     if slug in fallback:
@@ -122,10 +129,7 @@ def refresh(freeze: dict[str, Any], models_path: Path) -> dict[str, Any]:
     routes = []
     for model in read_json(models_path)["models"]:
         orchestration = model.get("orchestration") or {}
-        if (
-            model.get("visibility") != "list"
-            or orchestration.get("status") != "eligible"
-        ):
+        if model.get("visibility") != "list":
             continue
         if model["slug"] in excluded:
             continue
@@ -138,6 +142,11 @@ def refresh(freeze: dict[str, Any], models_path: Path) -> dict[str, Any]:
                 "provider": provider,
                 "model": model["slug"],
                 "reasoning": model.get("default_reasoning_level"),
+                "reasoning_levels": [
+                    level.get("effort")
+                    for level in model.get("supported_reasoning_levels") or []
+                ],
+                "orchestration_status": orchestration.get("status"),
                 "capability": orchestration.get("capability"),
                 "billing_kind": ((orchestration.get("billing") or {}).get("kind")),
                 "required_env": env_by_provider.get(provider, []),
@@ -220,7 +229,13 @@ def corbanu_agent(
 ) -> dict[str, Any]:
     options = [
         "--home",
+        "HOME={result_dir}/home",
+        "--home",
         "CODEX_HOME={result_dir}/corbanu-home",
+        "--home",
+        "CORBANU_HOME={result_dir}/corbanu-home",
+        "--unset",
+        "PFTERMINAL_HOME",
         "--set",
         "CORBANU_TRACE_STREAM_TIMING=1",
         "--set",
@@ -283,7 +298,12 @@ def hermes_agent(
         "required_env": route["required_env"],
         "command": wrapped(
             helper,
-            ["--home-under", f"HERMES_HOME={hermes_root / 'profiles'}::{{result_dir}}"],
+            [
+                "--home",
+                "HOME={result_dir}/home",
+                "--home-under",
+                f"HERMES_HOME={hermes_root / 'profiles'}::{{result_dir}}",
+            ],
             argv,
         ),
         "stdin_prompt": False,
@@ -291,7 +311,7 @@ def hermes_agent(
 
 
 def kilo_agent(helper: Path, route: dict[str, Any]) -> dict[str, Any]:
-    options = []
+    options = ["--home", "HOME={result_dir}/home"]
     for var, sub in (
         ("XDG_CONFIG_HOME", "config"),
         ("XDG_DATA_HOME", "data"),

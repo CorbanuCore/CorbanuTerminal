@@ -7,7 +7,7 @@ spend, thresholds and model set, and the live task is frozen.
 ## 0. Variables (Mac)
 
 ```bash
-unset CORBANU_HOME CODEX_HOME
+unset CORBANU_HOME CODEX_HOME PFTERMINAL_HOME
 REPO=/path/to/CorbanuTerminal          # main at the candidate commit
 V=<candidate version>                  # e.g. 0.1.50
 CAND=<absolute path of the signed candidate corbanu binary>   # INSTALL.json launcher_target
@@ -66,24 +66,29 @@ OPENROUTER_API_KEY="$(corbanu vault auth-helper <openrouter-bench-label>)" \
 ```
 
 The canary must show, for all three harnesses: the route observed, usage
-recorded (Hermes `hermes.usage.json`), and the verifier ran. Fix wiring before
-continuing; a canary failure is not a benchmark result.
+recorded (Hermes `hermes.usage.json`), reasoning "high" in the request (Corbanu's
+`corbanu.*.request.json`), no user-level skills or instructions in the request,
+and the verifier ran. The dry run does not exercise the run flags or fresh-home
+sign-in, so this is their first test. Fix wiring before continuing; a canary
+failure is not a benchmark result.
 
 ## 4. Paid runs
 
-Use the dedicated OpenRouter key whose hard limit is 1.5 × the shared-route
-estimate (about $98). Every credential is fetched inside the consuming command;
-never export or print one.
+The shared-route campaigns use a dedicated OpenRouter key whose hard limit is
+1.5 × their estimate (about $98); the matrix's OpenRouter routes use a separate
+key. Every credential is fetched inside the consuming command; never export or
+print one.
 
 ```bash
 # Hermes efficiency: 99 runs, three concurrent lanes (est. $51.08)
 OPENROUTER_API_KEY="$(corbanu vault auth-helper <openrouter-bench-label>)" \
   python3 benchmarks/coding/runner.py --config "$OUT/configs/hermes-efficiency.json" run --confirm-paid-run
 
-# Coding matrix: 363 runs, one lane per provider (est. $242.98, $77.29 of it plan capacity)
+# Coding matrix: 440 runs, one lane per provider (est. $289.90, $77.29 of it plan capacity)
 OPENAI_API_KEY="$(corbanu vault auth-helper <openai-label>)" \
 ANTHROPIC_API_KEY="$(corbanu vault auth-helper <anthropic-label>)" \
-OPENROUTER_API_KEY="$(corbanu vault auth-helper <openrouter-bench-label>)" \
+CLAUDE_CODE_OAUTH_TOKEN="$(corbanu vault auth-helper <claude-plan-label>)" \
+OPENROUTER_API_KEY="$(corbanu vault auth-helper <openrouter-matrix-label>)" \
 ZAI_API_KEY="$(corbanu vault auth-helper zai_key_3)" \
 AI_GATEWAY_API_KEY="$(corbanu vault auth-helper <vercel-label>)" \
 AMBIENT_API_KEY="$(corbanu vault auth-helper <ambient-label>)" \
@@ -91,11 +96,13 @@ BASETEN_API_KEY="$(corbanu vault auth-helper <baseten-label>)" \
 DEEPSEEK_API_KEY="$(corbanu vault auth-helper <deepseek-label>)" \
 KIMI_API_KEY="$(corbanu vault auth-helper <kimi-code-label>)" \
 CORBANU_PLAN_API_KEY="$(corbanu vault auth-helper <corbanu-plan-label>)" \
+MODEL_API_KEY="$(corbanu vault auth-helper <meta-label>)" \
   python3 benchmarks/coding/runner.py --config "$OUT/configs/coding-matrix.json" run --confirm-paid-run
 ```
 
-The `claude-plan` routes use the operator's Claude plan login; confirm on the
-canary pattern (one task) that they authenticate from a fresh `CODEX_HOME`
+The `claude-plan` routes sign in with `CLAUDE_CODE_OAUTH_TOKEN` (a fresh home
+has no saved login, and the keychain must not prompt mid-run); confirm on the
+canary pattern (one task) that every provider authenticates from a fresh home
 before the matrix. If the cumulative calculated spend reaches 1.5 × the matrix
 estimate, stop the runner by its PID and record the cutoff.
 
@@ -110,12 +117,26 @@ repository's tests take longer, put them in the rubric verifier's own budget.
 
 **Website builder** (optional, est. $41): run `run_pair.py` as in
 `benchmarks/website-builder/README.md`, passing keys as
-`--corbanu-anthropic-key-file <(corbanu vault auth-helper <label-a>)` (likewise
+`--corbanu-anthropic-key-file <(corbanu vault auth-helper <label-a>)` (the
+helper runs inside the consuming command and nothing is written to disk; likewise
 for the Claude Code and OpenAI keys), and `--claude-bin` pointing at a wrapper
 that runs the real Claude Code under
 `sandbox-exec -p '(version 1)(allow default)(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd.xpc") (global-name "com.apple.securityd.systemkeychain"))'`.
 
-## 5. Scan, tally, decide
+## 5. Diffs, scan, tally, decide
+
+```bash
+python3 - "$OUT/configs" "$OUT/runs" <<'PY'
+import json, pathlib, subprocess, sys
+configs, runs = map(pathlib.Path, sys.argv[1:])
+baselines = {t["name"]: t["baseline"] for c in configs.glob("*.json") for t in json.loads(c.read_text())["tasks"]}
+for summary in runs.glob("*/results/*/*/*/summary.json"):
+    run = json.loads(summary.read_text())
+    out = subprocess.run(["diff", "-ruN", "-x", "__pycache__", baselines[run["task"]], run["workspace"]],
+                         capture_output=True, text=True).stdout
+    (summary.parent / "final.diff").write_text(out)
+PY
+```
 
 ```bash
 python3 benchmarks/scan_exact_keys.py --path benchmarks --path "$EVID" --path "$OUT" \
@@ -139,8 +160,8 @@ est = gm(ratios(list(pairs)))
 rng, names, boots = random.Random(2717), list(pairs), []
 for _ in range(10_000):
     boots.append(gm(ratios([rng.choice(names) for _ in names])))
-boots.sort(); lo, hi = boots[249], boots[9_749]
-# claim only if the correctness gate holds and hi <= 0.95; regression if lo > 1.05
+boots.sort(); lo, hi = boots[249], boots[9_750]   # 250th smallest / 250th largest
+# claim only if the correctness gate holds and hi <= 0.95; regression if lo > 1.05; otherwise no claim
 ```
 
 Write the per-pair table, component verdicts and final verdict under `$EVID`,
@@ -151,12 +172,12 @@ row in `benchmarks/README.md`.
 
 | Harness / part | Runs | Estimate |
 | --- | ---: | ---: |
-| Corbanu, coding matrix (33 routes) | 363 | $242.98 |
+| Corbanu, coding matrix (40 routes; `muse-spark-1.1` unpriced) | 440 | $289.90 |
 | Corbanu, shared route (efficiency + live) | 33 + 3 | $21.67 |
 | Hermes, shared route (efficiency + live) | 33 + 3 | $21.67 |
 | Kilo, shared route (efficiency + live) | 33 + 3 | $21.67 |
 | Website builder, Corbanu + Claude Code + judge | 6 | $41.00 |
-| **Total** | | **$348.99** |
+| **Total** | | **$395.91** |
 
 The Claude plan routes ($77.29 of the matrix) draw on plan capacity rather
 than cash.
@@ -169,19 +190,23 @@ SHA-256 `896684ea…d082f`), with no model or provider call:
 
 - `runner.py plan` on `all-tasks.example.json`: 11 tasks including QueueCraft;
   Corbanu, Hermes and Kilo all resolve when the pinned installs are on `PATH`.
-- `make_run_configs.py refresh --check`: current; 33 routes, 363 matrix runs.
+- `make_run_configs.py refresh --check`: current; 40 routes, 440 matrix runs.
 - Hermes-efficiency dry run: 99 runs (11 tasks × 3 waves × 3 harnesses), and
-  coding-matrix dry run: 363 runs (11 × 33). Every run: stub exit 0, per-run
-  home created (Hermes under `profiles/`, with OpenAI SDK 2.54.0 available),
-  source integrity held, visible and hidden verifiers executed and failed the
-  unsolved baselines, `summary.json` and `report.md` written. Versions seen:
-  corbanu 0.1.49, Hermes v0.23.3, Kilo 7.8.32.
+  coding-matrix dry run: 440 runs (11 × 40). Every run: stub exit 0; fresh
+  per-run `HOME` plus the harness's own home (Corbanu `CODEX_HOME` =
+  `CORBANU_HOME`, `PFTERMINAL_HOME` unset; Hermes under `profiles/`, with OpenAI
+  SDK 2.54.0 available; Kilo XDG directories and `KILO_CONFIG`), all created;
+  source integrity held; visible and hidden verifiers executed and failed the
+  unsolved baselines; `summary.json` and `report.md` written; the step 5 diff
+  script wrote `final.diff` for all 539 runs (diffs include the tests a
+  debugging packet's verifier restores). Versions seen: corbanu 0.1.49, Hermes
+  v0.23.3, Kilo 7.8.32.
 - Website builder dry run (stubs, dummy keys, Playwright 1.65.2 Chromium):
   route evidence verified for both lanes, the browser verifier wrote
   `verification.json` and three captures per lane and failed the unsolved
   baseline; the series stopped after wave 1 as designed. Real Claude Code was
   not run.
 - `scan_exact_keys.py` over `benchmarks/`, this directory and every dry-run
-  artifact (11,573 files, 54 MB) with the dummy keys, and again with the one
-  provider key present in the worker environment: 0 hits.
+  artifact (14,009 files, 69 MB) with the dummy keys and the one provider key
+  present in the worker environment: 0 hits.
 - `benchmarks/coding`, `benchmarks/website-builder` and scanner unit tests pass.
