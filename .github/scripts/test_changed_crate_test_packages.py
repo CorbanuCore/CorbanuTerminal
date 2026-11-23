@@ -78,6 +78,35 @@ class ChangedCrateTestPackagesTest(unittest.TestCase):
         )
         self.assertLessEqual(workspace_packages(ROOT).items(), packages.items())
 
+    def test_support_crate_changes_select_their_own_packages(self) -> None:
+        # #1989: a change confined to a test-support crate must select that
+        # crate itself even though Cargo.toml `[workspace].members` omits it.
+        explicit_members = workspace_packages(ROOT)
+        packages = tested_packages(ROOT)
+        for directory, changed_file, expected in (
+            (
+                "codex-rs/core/tests/common",
+                "codex-rs/core/tests/common/lib.rs",
+                ["codex-core", "core_test_support"],
+            ),
+            (
+                "codex-rs/app-server/tests/common",
+                "codex-rs/app-server/tests/common/lib.rs",
+                ["app_test_support", "codex-app-server"],
+            ),
+            (
+                "codex-rs/mcp-server/tests/common",
+                "codex-rs/mcp-server/tests/common/lib.rs",
+                ["codex-mcp-server", "mcp_test_support"],
+            ),
+        ):
+            with self.subTest(directory=directory):
+                self.assertNotIn(directory, explicit_members)
+                self.assertEqual(selected_packages([changed_file], packages), expected)
+        for unrelated in ("docs/ci.md", "README.md"):
+            with self.subTest(unrelated=unrelated):
+                self.assertEqual(selected_packages([unrelated], packages), [])
+
     def test_implicit_members_follow_cargo(self) -> None:
         manifests = {
             "Cargo.toml": (
@@ -214,6 +243,52 @@ class AffectedPackagesTest(unittest.TestCase):
         self.assertEqual(packages["codex-rs/core/tests/common"], "core_test_support")
         self.assertEqual(packages["codex-rs/app-server/tests/common"], "app_test_support")
         self.assertEqual(packages["codex-rs/mcp-server/tests/common"], "mcp_test_support")
+
+    def test_real_support_crate_changes_select_own_packages_via_cargo_metadata(
+        self,
+    ) -> None:
+        # #1989: exercise the production `cargo metadata --no-deps` path for
+        # confined changes to each implicit test-support crate, plus an
+        # unrelated-file control.
+        metadata = cargo_metadata(ROOT)
+        explicit_members = workspace_packages(ROOT)
+        member_count = len(metadata["workspace_members"])
+
+        for directory, support_package, parent_package in (
+            ("codex-rs/core/tests/common", "core_test_support", "codex-core"),
+            (
+                "codex-rs/app-server/tests/common",
+                "app_test_support",
+                "codex-app-server",
+            ),
+            (
+                "codex-rs/mcp-server/tests/common",
+                "mcp_test_support",
+                "codex-mcp-server",
+            ),
+        ):
+            self.assertNotIn(directory, explicit_members)
+            for filename in ("lib.rs", "Cargo.toml"):
+                changed_file = f"{directory}/{filename}"
+                with self.subTest(path=changed_file):
+                    affected = affected_packages([changed_file], metadata, ROOT)
+                    self.assertIn(support_package, affected)
+                    self.assertIn(parent_package, affected)
+                    # Also check without the 32-package full-suite cap: this
+                    # proves both that the support crate is in the dependency
+                    # closure and that its Cargo.toml is recognized by
+                    # `affected_packages`'s own directory map (not falling back
+                    # to full suite as an unrecognized manifest).
+                    unbounded = affected_packages(
+                        [changed_file], metadata, ROOT, limit=member_count
+                    )
+                    self.assertIn(support_package, unbounded)
+                    self.assertIn(parent_package, unbounded)
+                    self.assertLess(len(unbounded), member_count)
+
+        for unrelated in ("docs/ci.md", "README.md"):
+            with self.subTest(unrelated=unrelated):
+                self.assertEqual(affected_packages([unrelated], metadata, ROOT), [])
 
 
 class ChangedCrateTestsWorkflowTest(unittest.TestCase):
