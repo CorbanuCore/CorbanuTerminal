@@ -998,7 +998,7 @@ impl UnifiedExecProcessManager {
             )
             .await;
             self.release_process_id(request.process_id).await;
-            return Err(fail_process_with_message(process.as_ref(), message));
+            return Err(fail_process_with_message(process.as_ref(), message).into());
         }
         if let Some(message) = process.failure_message() {
             let finish_result = finish_deferred_network_approval_for_session(
@@ -1021,9 +1021,9 @@ impl UnifiedExecProcessManager {
             .await;
             self.release_process_id(request.process_id).await;
             if let Err(message) = finish_result {
-                return Err(fail_process_with_message(process.as_ref(), message));
+                return Err(fail_process_with_message(process.as_ref(), message).into());
             }
-            return Err(UnifiedExecError::process_failed(message));
+            return Err(UnifiedExecError::process_failed(message).into());
         }
         let process_id = request.process_id;
         let (response_process_id, exit_code) = if process_stored {
@@ -1050,7 +1050,7 @@ impl UnifiedExecProcessManager {
                         )
                         .await
                     {
-                        return Err(fail_process_with_message(entry.process.as_ref(), message));
+                        return Err(fail_process_with_message(entry.process.as_ref(), message).into());
                     }
                     if !completion
                         .as_ref()
@@ -1082,7 +1082,7 @@ impl UnifiedExecProcessManager {
                     (None, exit_code)
                 }
                 ProcessStatus::Unknown => {
-                    return Err(UnifiedExecError::UnknownProcessId { process_id });
+                    return Err(UnifiedExecError::UnknownProcessId { process_id }.into());
                 }
             }
         } else {
@@ -1108,7 +1108,7 @@ impl UnifiedExecProcessManager {
                 )
                 .await;
                 self.release_process_id(request.process_id).await;
-                return Err(fail_process_with_message(process.as_ref(), message));
+                return Err(fail_process_with_message(process.as_ref(), message).into());
             }
             let exit_code = process.exit_code();
             let exit = exit_code.unwrap_or(-1);
