@@ -3075,7 +3075,11 @@ where
         return denied(err);
     }
     // D50: nor on a policy that changed since the round was decided.
-    if tool_ctx.session.services.transition_since(plan.decided_under) {
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
         warn(tool_ctx, STALE_RETRY_NOTE).await;
         return denied(err);
     }
@@ -3118,7 +3122,11 @@ where
             "running outside the sandbox needs a person's approval here".to_string(),
         ));
     }
-    if tool_ctx.session.services.transition_since(plan.decided_under) {
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
         warn(tool_ctx, STALE_RETRY_NOTE).await;
         return denied(err);
     }

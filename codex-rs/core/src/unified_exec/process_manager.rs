@@ -837,7 +837,9 @@ impl UnifiedExecProcessManager {
                         )
                         .await
                     {
-                        return Err(fail_process_with_message(entry.process.as_ref(), message).into());
+                        return Err(
+                            fail_process_with_message(entry.process.as_ref(), message).into()
+                        );
                     }
                     if let Err(err) = process.check_for_sandbox_denial_with_text(&text).await {
                         return Err(late_denial(

@@ -420,15 +420,13 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
             .map(|_| ())
     }
     .await
-        .map_err(|err| match err {
-            ToolError::Rejected(message) | ToolError::Declined(message) => message,
-            ToolError::Codex(err) => match err.details() {
-                CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => {
-                    "sandbox denied".to_string()
-                }
-                _ => err.to_string(),
-            },
-        });
+    .map_err(|err| match err {
+        ToolError::Rejected(message) | ToolError::Declined(message) => message,
+        ToolError::Codex(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => "sandbox denied".to_string(),
+            _ => err.to_string(),
+        },
+    });
     (probe, result)
 }
 
