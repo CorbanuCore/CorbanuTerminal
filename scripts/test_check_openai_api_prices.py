@@ -78,6 +78,21 @@ class MissingDatedRowTests(unittest.TestCase):
         )
 
 
+class SavedPageTests(unittest.TestCase):
+    def test_the_saved_page_and_the_catalogue_give_no_warning(self):
+        rows = standard_table(PAGE.read_text())
+        with redirect_stdout(StringIO()):
+            catalogue, dated = check_openai_api_prices.catalogue_prices()
+        out = StringIO()
+        with redirect_stdout(out):
+            mismatches = compare(rows, catalogue, dated)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(mismatches, 0)
+        self.assertEqual([line for line in lines if "WARNING" in line], [])
+        sol = prices("4", "0.4", "5", "20")
+        self.assertIn(f"ok gpt-5.6-sol: {sol}", lines)
+
+
 class CatalogueDatedTests(unittest.TestCase):
     MODELS = [
         {
