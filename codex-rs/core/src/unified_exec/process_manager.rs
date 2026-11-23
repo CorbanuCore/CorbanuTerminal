@@ -262,8 +262,23 @@ pub(super) struct LateStartupFailure {
 /// How one start of an `exec_command` ended.
 enum ExecOnceError {
     Failed(UnifiedExecError),
-    LateStartupFailure(LateStartupFailure),
+    LateStartupFailure(Box<LateStartupFailure>),
 }
+
+/// D750 (#2851): a started session, and what a late sandbox startup failure
+/// of it is decided on.
+type StartedSession<P> = (
+    P,
+    Option<DeferredNetworkApproval>,
+    Option<Box<LateStartupRetry>>,
+);
+
+/// D750 (#2851): a late sandbox startup failure for the orchestrator to
+/// decide, and the run's denied output.
+type LateRetry = (
+    Box<LateStartupRetry>,
+    codex_protocol::exec_output::ExecToolCallOutput,
+);
 
 impl From<UnifiedExecError> for ExecOnceError {
     fn from(error: UnifiedExecError) -> Self {
@@ -276,11 +291,11 @@ impl From<UnifiedExecError> for ExecOnceError {
 fn late_denial(error: UnifiedExecError, plan: Option<Box<LateStartupRetry>>) -> ExecOnceError {
     match (plan, &error) {
         (Some(plan), UnifiedExecError::SandboxDenied { output, .. }) => {
-            ExecOnceError::LateStartupFailure(LateStartupFailure {
+            ExecOnceError::LateStartupFailure(Box::new(LateStartupFailure {
                 plan,
                 output: output.clone(),
                 error,
-            })
+            }))
         }
         _ => ExecOnceError::Failed(error),
     }
@@ -622,10 +637,10 @@ impl UnifiedExecProcessManager {
         &self,
         request: &ExecCommandRequest,
         context: &UnifiedExecContext,
-        late_failure: Option<LateStartupFailure>,
+        late_failure: Option<Box<LateStartupFailure>>,
     ) -> Result<ExecCommandToolOutput, ExecOnceError> {
         let cwd = request.cwd.clone();
-        let (late_retry, late_error) = match late_failure {
+        let (late_retry, late_error) = match late_failure.map(|failure| *failure) {
             Some(LateStartupFailure {
                 plan,
                 output,
@@ -1425,18 +1440,8 @@ impl UnifiedExecProcessManager {
         request: &ExecCommandRequest,
         cwd: PathUri,
         context: &UnifiedExecContext,
-        late_retry: Option<(
-            Box<LateStartupRetry>,
-            codex_protocol::exec_output::ExecToolCallOutput,
-        )>,
-    ) -> Result<
-        (
-            UnifiedExecProcess,
-            Option<DeferredNetworkApproval>,
-            Option<Box<LateStartupRetry>>,
-        ),
-        StartFailure,
-    > {
+        late_retry: Option<LateRetry>,
+    ) -> Result<StartedSession<UnifiedExecProcess>, StartFailure> {
         let shell_policy = &context.turn.config.permissions.shell_environment_policy;
         let provider_env_keys = provider_env_keys(&context.turn.config);
         let local_policy_env = create_shell_tool_env(
