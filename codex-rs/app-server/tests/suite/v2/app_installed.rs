@@ -46,6 +46,7 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use serde_json::json;
 use tempfile::TempDir;
 use tokio::net::TcpListener;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
@@ -404,7 +405,9 @@ async fn installed_apps_failed_force_refresh_retains_previous_snapshot() -> Resu
     let mut app_server = start_app_server(codex_home.path()).await?;
 
     let committed = send_installed_request(&mut app_server, /*force_refresh*/ true).await?;
+    assert_eq!(fixture.list_tools_calls(), 1);
     fixture.fail_next_list_tools();
+    fixture.park_followup_list_tools();
     let request_id = app_server
         .send_apps_installed_request(AppsInstalledParams {
             thread_id: None,
@@ -420,7 +423,16 @@ async fn installed_apps_failed_force_refresh_retains_previous_snapshot() -> Resu
 
     let retained = send_installed_request(&mut app_server, /*force_refresh*/ false).await?;
     assert_eq!(retained, committed);
+    // A failed startup can schedule a background reconnect that lists tools again.
+    // park_followup_list_tools parks those follow-up calls before they are counted so
+    // this assertion covers only the successful and failed request-driven refreshes.
     assert_eq!(fixture.list_tools_calls(), 2);
+    let parked = fixture.parked_list_tools_calls();
+    assert!(
+        parked <= 1,
+        "at most one tools/list call should be parked: repeat reconnects on the same client reuse the single in-flight attempt `reconnect_in_flight`, while a wrong network refresh from the non-force request would add another; parked = {parked}"
+    );
+    fixture.release_followup_list_tools();
     Ok(())
 }
 
@@ -506,8 +518,21 @@ impl ServerHandler for InstalledAppsMcpServer {
     {
         let state = Arc::clone(&self.state);
         async move {
-            state.list_tools_calls.fetch_add(1, Ordering::SeqCst);
             let should_fail = state.fail_next.swap(false, Ordering::SeqCst);
+            if !should_fail {
+                let mut gate = state.followup_list_tools_gate.subscribe();
+                let mut counted_as_parked = false;
+                while *gate.borrow_and_update() {
+                    if !counted_as_parked {
+                        state.parked_list_tools_calls.fetch_add(1, Ordering::SeqCst);
+                        counted_as_parked = true;
+                    }
+                    if gate.changed().await.is_err() {
+                        break;
+                    }
+                }
+            }
+            state.list_tools_calls.fetch_add(1, Ordering::SeqCst);
             if should_fail {
                 return Err(rmcp::ErrorData::internal_error(
                     "injected tools/list failure",
@@ -529,8 +554,10 @@ impl ServerHandler for InstalledAppsMcpServer {
 struct InstalledAppsServerState {
     tools: Mutex<Vec<Tool>>,
     list_tools_calls: AtomicUsize,
+    parked_list_tools_calls: AtomicUsize,
     directory_calls: AtomicUsize,
     fail_next: AtomicBool,
+    followup_list_tools_gate: watch::Sender<bool>,
 }
 
 struct InstalledAppsFixture {
@@ -563,8 +590,10 @@ impl InstalledAppsFixture {
                 synthetic_link,
             ]),
             list_tools_calls: AtomicUsize::new(0),
+            parked_list_tools_calls: AtomicUsize::new(0),
             directory_calls: AtomicUsize::new(0),
             fail_next: AtomicBool::new(false),
+            followup_list_tools_gate: watch::channel(false).0,
         });
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let address = listener.local_addr()?;
@@ -610,6 +639,10 @@ impl InstalledAppsFixture {
         self.state.list_tools_calls.load(Ordering::SeqCst)
     }
 
+    fn parked_list_tools_calls(&self) -> usize {
+        self.state.parked_list_tools_calls.load(Ordering::SeqCst)
+    }
+
     fn set_tools(&self, tools: Vec<Tool>) {
         *self
             .state
@@ -624,6 +657,15 @@ impl InstalledAppsFixture {
 
     fn fail_next_list_tools(&self) {
         self.state.fail_next.store(true, Ordering::SeqCst);
+    }
+
+    fn park_followup_list_tools(&self) {
+        self.state.followup_list_tools_gate.send_replace(true);
+    }
+
+    // Releases the parked reconnect on the success path only; fixture teardown does not need it.
+    fn release_followup_list_tools(&self) {
+        self.state.followup_list_tools_gate.send_replace(false);
     }
 }
 

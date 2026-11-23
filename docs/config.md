@@ -230,6 +230,23 @@ optional end-of-session transcript turn). Such a client should pass `config: {"s
 `skip_startup_warmup = true` in `config.toml` skips every warm-up, new or reopened, for all conversations, including
 sub-agents and the auto-reviewer (whose session then starts at the first review).
 
+## Automatic Thread Titles
+
+When a new conversation starts, Corbanu can name it from your first message. Naming sends one extra model request
+on the session's provider. It runs by default only when that provider is a plan or subscription account: a ChatGPT
+plan, Claude Plan, a Corbanu Plan, or another provider whose usage is declared as a subscription (see
+`model_providers.<id>.billing`). On pay-per-token API keys, wallet-funded providers, local models and undeclared
+providers it is off, and conversations stay unnamed until you rename them. The name `/rename` suggests is a
+separate request you start yourself and is not affected.
+
+To name conversations on every provider, set this in the `[tui]` table of `config.toml`; set it to `false` to turn
+naming off everywhere, including on plans:
+
+```toml
+[tui]
+automatic_thread_titles = true
+```
+
 ## Vault And Secrets
 
 Provider API keys saved by Corbanu Terminal are stored in the encrypted vault, not in

@@ -733,6 +733,7 @@ pub(super) async fn run_main_inner(
     }
     let mut managed_daemon = false;
     if auto_start_daemon && daemon_exclusion.is_none() {
+        let explicit_daemon_request = cli.agents_overview;
         let output = startup_draft
             .run_until(async {
                 // Daemon startup needs no terminal input. Keep the composer visible and
@@ -742,29 +743,34 @@ pub(super) async fn run_main_inner(
                     codex_app_server_daemon::start_with_features(&Default::default()).await;
                 daemon_telemetry::record_start(&config, &result).await;
                 match result {
-                    Ok(output) => Ok(Some(output)),
+                    Ok(output) => Ok(Ok(output)),
                     #[cfg(windows)]
                     Err(err) if err.is::<codex_app_server_daemon::DetachedLaunchRestricted>() => {
-                        Ok(None)
+                        Ok(Err("this Windows launcher"))
                     }
-                    Err(err) => Err(std::io::Error::other(format!(
-                        "{err:#}\n{}",
-                        daemon_startup::FAILURE_HINT
-                    ))),
+                    // D739: an automatic start that fails (including a CLI
+                    // built from source) runs without the background server.
+                    Err(err) => daemon_startup::auto_start_failure(&err, explicit_daemon_request)
+                        .map(|()| Err(daemon_startup::AUTO_START_FAILED_EXCLUSION)),
                 }
             })
             .await??;
-        if let Some(output) = output {
-            managed_daemon = output.backend.is_some();
-            app_server_target = AppServerTarget::LocalDaemon {
-                endpoint: RemoteAppServerEndpoint::UnixSocket {
-                    socket_path: AbsolutePathBuf::from_absolute_path_checked(output.socket_path)?,
-                },
-                allow_embedded_fallback: false,
-            };
-        } else {
-            app_server_target = AppServerTarget::Embedded;
-            daemon_exclusion = Some("this Windows launcher");
+        match output {
+            Ok(output) => {
+                managed_daemon = output.backend.is_some();
+                app_server_target = AppServerTarget::LocalDaemon {
+                    endpoint: RemoteAppServerEndpoint::UnixSocket {
+                        socket_path: AbsolutePathBuf::from_absolute_path_checked(
+                            output.socket_path,
+                        )?,
+                    },
+                    allow_embedded_fallback: false,
+                };
+            }
+            Err(exclusion) => {
+                app_server_target = AppServerTarget::Embedded;
+                daemon_exclusion = Some(exclusion);
+            }
         }
     }
     let compatibility_warning = daemon_recovery::check(
@@ -797,9 +803,13 @@ pub(super) async fn run_main_inner(
             // (`DAEMON_NOT_REUSED`) when one was running; otherwise embedded mode is expected.
             .filter(|reason| auto_start_daemon && *reason != NAMED_ACCOUNT_DAEMON_EXCLUSION)
             .map(|reason| {
-                format!(
-                    "Running without the shared background server: {reason} requires embedded mode."
-                )
+                if reason == daemon_startup::AUTO_START_FAILED_EXCLUSION {
+                    daemon_startup::AUTO_START_FALLBACK_NOTICE.to_string()
+                } else {
+                    format!(
+                        "Running without the shared background server: {reason} requires embedded mode."
+                    )
+                }
             })
         });
     #[cfg(target_os = "macos")]
@@ -955,6 +965,7 @@ pub(super) async fn run_main_inner(
                 Some("Bedrock sign-in") => "bedrock_sign_in",
                 Some(daemon_startup::WSL_DRVFS_EXCLUSION) => "wsl_drvfs",
                 Some("this Windows launcher") => "windows_detach_restricted",
+                Some(daemon_startup::AUTO_START_FAILED_EXCLUSION) => "daemon_start_failed",
                 Some("daemon feature settings") => "daemon_compatibility",
                 Some("the Corbanu security level") => "security_level",
                 Some(NAMED_ACCOUNT_DAEMON_EXCLUSION) => "named_account",

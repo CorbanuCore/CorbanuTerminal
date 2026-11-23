@@ -27,6 +27,26 @@ pub fn is_likely_sandbox_denied(
         return false;
     }
 
+    // #2820 follow-up: where bubblewrap may not create a user namespace at
+    // all, its message names no keyword above. Only a denial: whether the
+    // sandbox failed to start is decided by core's launcher probe, never by
+    // this text.
+    if sandbox_type == SandboxType::LinuxSeccomp
+        && [
+            &exec_output.stderr.text,
+            &exec_output.aggregated_output.text,
+        ]
+        .into_iter()
+        .any(|section| {
+            let lower = section.to_lowercase();
+            BWRAP_NO_NAMESPACE_WORDINGS
+                .iter()
+                .any(|wording| lower.contains(wording))
+        })
+    {
+        return true;
+    }
+
     #[cfg(unix)]
     {
         const EXIT_CODE_SIGNAL_BASE: i32 = 128;
@@ -40,6 +60,15 @@ pub fn is_likely_sandbox_denied(
 
     false
 }
+
+/// Bubblewrap's refusals to create a user namespace, lowercase, from its
+/// source: 0.11.x and earlier, later releases (and the bundled copy), and
+/// Debian's and Ubuntu's patched wording.
+const BWRAP_NO_NAMESPACE_WORDINGS: [&str; 3] = [
+    "no permissions to creating new namespace",
+    "no permissions to create a new namespace",
+    "no permissions to create new namespace",
+];
 
 /// Detect executor-managed sandbox denials when its concrete backend is unknown.
 pub fn is_likely_executor_managed_sandbox_denied(exec_output: &ExecToolCallOutput) -> bool {

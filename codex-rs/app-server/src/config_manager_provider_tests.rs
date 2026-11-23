@@ -303,19 +303,209 @@ name = "Gateway"
     manager
         .check_thread_model_provider_for_input(&current)
         .await?;
+    // D738 (#555/PF55): a thread keeps its configured, active provider after
+    // the saved default moves elsewhere.
     let default_manager =
         ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
-    let error = default_manager
+    default_manager
+        .check_thread_model_provider_for_input(&current)
+        .await?;
+    Ok(())
+}
+
+const RETAINED_PROVIDER_CONFIG: &str = r#"
+model_provider = "openai"
+[model_providers.gateway]
+name = "Gateway"
+"#;
+
+/// Loads a thread config on `gateway` while the home's saved default is OpenAI.
+async fn retained_gateway_thread(home: &Path) -> Result<(ConfigManager, Config)> {
+    std::fs::write(home.join("config.toml"), RETAINED_PROVIDER_CONFIG)?;
+    let thread_manager = ConfigManager::new_for_tests(
+        home.to_path_buf(),
+        vec![("model_provider".into(), TomlValue::String("gateway".into()))],
+        LoaderOverrides::without_managed_config_for_tests(),
+        CloudConfigBundleLoader::default(),
+    );
+    let current = thread_manager
+        .load_latest_config(Some(home.to_path_buf()))
+        .await?;
+    assert_eq!(current.model_provider_id, "gateway");
+    Ok((
+        ConfigManager::without_managed_config_for_tests(home.to_path_buf()),
+        current,
+    ))
+}
+
+fn deactivate_provider(home: &Path, config: &Config, provider: &str) -> Result<()> {
+    let catalog =
+        codex_provider_auth::ProviderCatalog::from_runtime_providers(&config.model_providers);
+    let entry = catalog
+        .entries()
+        .iter()
+        .find(|entry| {
+            entry
+                .runtime_provider_ids
+                .iter()
+                .any(|id| id.as_str() == provider)
+        })
+        .expect("provider catalog entry");
+    let store = codex_provider_auth::ProviderEligibilityStore::new(home);
+    let mut eligibility = store.load()?;
+    eligibility.set_policy(
+        entry,
+        codex_provider_auth::ProviderActivationPolicy::Inactive,
+    );
+    store.save(&eligibility)?;
+    Ok(())
+}
+
+fn provider_error(error: &std::io::Error) -> Option<&ModelProviderError> {
+    error
+        .get_ref()
+        .and_then(|error| error.downcast_ref::<ModelProviderError>())
+}
+
+/// D738 keeps upstream's read-only chat when this home deactivated the
+/// thread's provider.
+#[tokio::test]
+async fn input_provider_check_rejects_inactive_retained_provider() -> Result<()> {
+    let home = tempdir()?;
+    let (manager, current) = retained_gateway_thread(home.path()).await?;
+    manager
+        .check_thread_model_provider_for_input(&current)
+        .await?;
+    deactivate_provider(home.path(), &current, "gateway")?;
+    let error = manager
         .check_thread_model_provider_for_input(&current)
         .await
         .unwrap_err();
     assert_eq!(
-        error
-            .get_ref()
-            .and_then(|error| error.downcast_ref::<ModelProviderError>()),
+        provider_error(&error),
         Some(&ModelProviderError::ModelProviderMismatch {
             model_provider: "gateway".into(),
             current_model_provider: "openai".into(),
+        })
+    );
+    Ok(())
+}
+
+/// Activation state that cannot be read fails closed to a read-only chat.
+#[tokio::test]
+async fn input_provider_check_rejects_retained_provider_when_activation_is_unreadable() -> Result<()>
+{
+    let home = tempdir()?;
+    let (manager, current) = retained_gateway_thread(home.path()).await?;
+    std::fs::write(home.path().join("provider-eligibility.json"), "not json")?;
+    let error = manager
+        .check_thread_model_provider_for_input(&current)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderMismatch {
+            model_provider: "gateway".into(),
+            current_model_provider: "openai".into(),
+        })
+    );
+    Ok(())
+}
+
+/// A provider this home no longer configures is refused, as upstream does.
+#[tokio::test]
+async fn input_provider_check_rejects_unconfigured_retained_provider() -> Result<()> {
+    let home = tempdir()?;
+    let (manager, current) = retained_gateway_thread(home.path()).await?;
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
+    let error = manager
+        .check_thread_model_provider_for_input(&current)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderNotConfigured {
+            model_provider: "gateway".into(),
+        })
+    );
+    Ok(())
+}
+
+/// Resume admits the thread's own configured, active provider, and refuses it
+/// once the provider is deactivated or removed.
+#[tokio::test]
+async fn resume_admits_only_configured_active_retained_provider() -> Result<()> {
+    let home = tempdir()?;
+    let (manager, current) = retained_gateway_thread(home.path()).await?;
+    let resume = || {
+        manager.load_for_resume(
+            Some("gateway"),
+            None,
+            ConfigOverrides {
+                model_provider: Some("gateway".into()),
+                ..Default::default()
+            },
+            Some(home.path().to_path_buf()),
+        )
+    };
+    assert_eq!(resume().await?.model_provider_id, "gateway");
+
+    deactivate_provider(home.path(), &current, "gateway")?;
+    let error = resume().await.unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderMismatch {
+            model_provider: "gateway".into(),
+            current_model_provider: "openai".into(),
+        })
+    );
+
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
+    let error = resume().await.unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderNotConfigured {
+            model_provider: "gateway".into(),
+        })
+    );
+    Ok(())
+}
+
+/// Resume admits only providers the home's own configuration defines: a
+/// provider the resume request itself defines is still not configured here.
+#[tokio::test]
+async fn resume_does_not_admit_a_provider_defined_only_by_the_request() -> Result<()> {
+    let home = tempdir()?;
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
+    let manager = ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
+    let error = manager
+        .load_for_resume(
+            Some("gateway"),
+            Some(HashMap::from([(
+                "model_providers".to_string(),
+                serde_json::json!({"gateway": {"name": "Gateway"}}),
+            )])),
+            ConfigOverrides {
+                model_provider: Some("gateway".into()),
+                ..Default::default()
+            },
+            Some(home.path().to_path_buf()),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        provider_error(&error),
+        Some(&ModelProviderError::ModelProviderNotConfigured {
+            model_provider: "gateway".into(),
         })
     );
     Ok(())

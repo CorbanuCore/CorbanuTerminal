@@ -675,8 +675,11 @@ fn no_daemon_skips_startup_and_discovery() -> Result<()> {
     Ok(())
 }
 
+/// D739: an automatic background-server start that fails (here an incomplete
+/// installed package; a CLI built from source fails the same way) runs the
+/// session without the server and says so in one line, instead of exiting.
 #[test]
-fn auto_daemon_start_failure_exits_with_manual_fallback_hint() -> Result<()> {
+fn auto_daemon_start_failure_runs_without_the_background_server() -> Result<()> {
     let workspace = tempfile::tempdir()?;
     let home = tempfile::tempdir()?;
     write_test_config(home.path(), workspace.path())?;
@@ -687,7 +690,8 @@ fn auto_daemon_start_failure_exits_with_manual_fallback_hint() -> Result<()> {
         contents.replace("features.daemon_auto_start = false\n", ""),
     )?;
     // An incomplete selected package must fail without installing a replacement.
-    std::fs::create_dir_all(home.path().join("packages/app-server-daemon/current"))?;
+    let package = home.path().join("packages/app-server-daemon/current");
+    std::fs::create_dir_all(&package)?;
     let mut terminal = PtyCodex::start(
         workspace.path(),
         home,
@@ -698,33 +702,28 @@ fn auto_daemon_start_failure_exits_with_manual_fallback_hint() -> Result<()> {
             "suppress_unstable_features_warning=true",
         ],
     )?;
-    let deadline = Instant::now() + STARTUP_TIMEOUT;
-    while Instant::now() < deadline {
-        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
-        terminal.answer_startup_queries()?;
-        if let Some(status) = terminal.child.try_wait()? {
-            ensure!(!status.success());
-            let output = String::from_utf8_lossy(&terminal.output);
-            let failure = &output[output.find("Error:").context("missing fatal error")?..];
-            let failure = codex_ansi_escape::ansi_escape(failure)
-                .to_string()
-                .replace(
-                    terminal
-                        ._codex_home
-                        .path()
-                        .canonicalize()?
-                        .to_string_lossy()
-                        .as_ref(),
-                    "[CODEX_HOME]",
-                )
-                .replace(
-                    terminal._codex_home.path().to_string_lossy().as_ref(),
-                    "[CODEX_HOME]",
-                )
-                .replace('\r', "");
-            insta::assert_snapshot!("daemon_auto_start_failure", failure.trim());
-            return Ok(());
-        }
-    }
-    bail!("auto-start did not fail: {}", terminal.screen_contents())
+    terminal.wait_for_startup()?;
+    // Startup warnings sit behind the footer's count, in the F2 warnings view.
+    terminal.wait_for_screen("1 warning")?;
+    terminal.write_input(b"\x1bOQ")?;
+    terminal.wait_for_screen("could not start its background server")?;
+    // Keep the warning and leave the view.
+    terminal.write_input(b"k")?;
+    terminal.wait_for_screen("Ask Corbanu Terminal")?;
+    terminal.write_input(b"/status")?;
+    terminal.wait_for_screen("show current session configuration")?;
+    terminal.read_output(Duration::from_millis(/*millis*/ 200))?;
+    terminal.write_input(b"\r")?;
+    terminal.wait_for_screen("Model:")?;
+    ensure!(terminal.child.try_wait()?.is_none(), "the session exited");
+    let output = String::from_utf8_lossy(&terminal.output);
+    ensure!(
+        !output.contains("rerun the same command with --no-daemon"),
+        "the refusal hint was shown"
+    );
+    ensure!(
+        std::fs::read_dir(&package)?.next().is_none(),
+        "a replacement daemon was installed"
+    );
+    Ok(())
 }
