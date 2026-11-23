@@ -1493,9 +1493,8 @@ impl ToolOrchestrator {
             approval_reason: match &requirement {
                 ExecApprovalRequirement::NeedsApproval { reason, .. }
                 | ExecApprovalRequirement::NeedsHumanApproval { reason } => reason.clone(),
-                ExecApprovalRequirement::Skip { .. } | ExecApprovalRequirement::Forbidden { .. } => {
-                    None
-                }
+                ExecApprovalRequirement::Skip { .. }
+                | ExecApprovalRequirement::Forbidden { .. } => None,
             },
             strict_auto_review,
             decided_under,
@@ -3290,7 +3289,11 @@ where
         return denied(err);
     }
     // D50: nor on a policy that changed since the round was decided.
-    if tool_ctx.session.services.transition_since(plan.decided_under) {
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
         warn(tool_ctx, STALE_RETRY_NOTE).await;
         return denied(err);
     }
@@ -3342,7 +3345,11 @@ where
             "running outside the sandbox needs a person's approval here".to_string(),
         ));
     }
-    if tool_ctx.session.services.transition_since(plan.decided_under) {
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
         warn(tool_ctx, STALE_RETRY_NOTE).await;
         return denied(err);
     }
@@ -3354,14 +3361,9 @@ where
     };
     let network_approval_spec = tool.network_approval_spec(req, tool_ctx);
     let escalated_attempt_start = Instant::now();
-    let (retry_result, retry_deferred_network_approval) = ToolOrchestrator::run_attempt(
-        tool,
-        req,
-        tool_ctx,
-        &retry_attempt,
-        network_approval_spec,
-    )
-    .await;
+    let (retry_result, retry_deferred_network_approval) =
+        ToolOrchestrator::run_attempt(tool, req, tool_ctx, &retry_attempt, network_approval_spec)
+            .await;
     if let Some(check) = &plan.git_check {
         check.finish(tool_ctx).await;
     }

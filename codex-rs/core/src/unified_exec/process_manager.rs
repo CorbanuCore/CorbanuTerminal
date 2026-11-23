@@ -1050,7 +1050,9 @@ impl UnifiedExecProcessManager {
                         )
                         .await
                     {
-                        return Err(fail_process_with_message(entry.process.as_ref(), message).into());
+                        return Err(
+                            fail_process_with_message(entry.process.as_ref(), message).into()
+                        );
                     }
                     if !completion
                         .as_ref()
