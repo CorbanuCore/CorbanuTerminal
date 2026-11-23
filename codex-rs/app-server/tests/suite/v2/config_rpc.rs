@@ -2364,6 +2364,57 @@ async fn config_value_write_updates_desktop_settings() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn config_value_write_upsert_preserves_numeric_settings_on_disk() -> Result<()> {
+    let home = TempDir::new()?;
+    let initial = r#"
+[desktop]
+zoom = 1.25
+
+[telegram]
+allowed_chat_ids = [123456789]
+media_retention_days = 7
+"#;
+    write_config(&home, initial)?;
+    let mut server = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .without_auto_env()
+        .build_initialized_with_timeout(DEFAULT_READ_TIMEOUT)
+        .await?;
+
+    for (key_path, update) in [
+        ("desktop", json!({"appearanceTheme": "dark"})),
+        ("telegram", json!({"enabled": false})),
+    ] {
+        let id = server
+            .send_config_value_write_request(ConfigValueWriteParams {
+                file_path: None,
+                key_path: key_path.to_string(),
+                value: update,
+                merge_strategy: MergeStrategy::Upsert,
+                expected_version: None,
+            })
+            .await?;
+        let write: ConfigWriteResponse =
+            timeout(DEFAULT_READ_TIMEOUT, server.read_response(id)).await??;
+        assert_eq!(write.status, WriteStatus::Ok);
+    }
+
+    let expected = toml::toml! {
+        [desktop]
+        zoom = 1.25
+        appearanceTheme = "dark"
+        [telegram]
+        allowed_chat_ids = [123456789]
+        media_retention_days = 7
+        enabled = false
+    };
+    let persisted: toml::Table =
+        toml::from_str(&std::fs::read_to_string(home.path().join("config.toml"))?)?;
+    assert_eq!(persisted, expected);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn config_read_after_pipelined_write_sees_written_value() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let codex_home = temp_dir.path().canonicalize()?;
