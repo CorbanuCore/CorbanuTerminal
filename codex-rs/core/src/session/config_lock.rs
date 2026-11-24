@@ -16,6 +16,7 @@ use codex_protocol::ThreadId;
 use crate::config::Config;
 use crate::config_lock::ConfigLockReplayOptions;
 use crate::config_lock::clear_config_lock_debug_controls;
+use crate::config_lock::config_lock_toml_string;
 use crate::config_lock::config_lockfile;
 use crate::config_lock::toml_round_trip;
 use crate::config_lock::validate_config_lock_replay;
@@ -55,7 +56,7 @@ pub(crate) async fn export_config_lock_if_configured(
     };
 
     let lock = session_configuration.to_config_lockfile_toml()?;
-    let lock = toml::to_string_pretty(&lock).context("failed to serialize config lock")?;
+    let lock = config_lock_toml_string(&lock).context("failed to serialize config lock")?;
     let path = export_dir.join(format!("{conversation_id}.config.lock.toml"));
 
     tokio::fs::create_dir_all(export_dir)
