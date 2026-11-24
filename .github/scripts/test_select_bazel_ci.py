@@ -30,12 +30,15 @@ class SelectBazelCiTest(unittest.TestCase):
                             [
                                 {
                                     "os": "ubuntu-24.04",
-                                    "target": "x86_64-unknown-linux-gnu",
-                                },
-                                {
-                                    "os": "ubuntu-24.04",
-                                    "target": "x86_64-unknown-linux-musl",
-                                },
+                                    "target": target,
+                                    "shard": shard,
+                                    "shard_count": 3,
+                                }
+                                for target in (
+                                    "x86_64-unknown-linux-gnu",
+                                    "x86_64-unknown-linux-musl",
+                                )
+                                for shard in (1, 2, 3)
                             ],
                         )
 
@@ -45,7 +48,15 @@ class SelectBazelCiTest(unittest.TestCase):
         self.assertEqual(result["run_cold"], "true")
         self.assertEqual(
             json.loads(result["test_matrix"])["include"],
-            [{"os": "ubuntu-24.04", "target": "x86_64-unknown-linux-gnu"}],
+            [
+                {
+                    "os": "ubuntu-24.04",
+                    "target": "x86_64-unknown-linux-gnu",
+                    "shard": shard,
+                    "shard_count": 3,
+                }
+                for shard in (1, 2, 3)
+            ],
         )
 
     def test_ambiguous_or_nonmanual_selection_is_rejected(self):
@@ -144,6 +155,17 @@ class SelectBazelCiTest(unittest.TestCase):
         self.assertIn("fromJSON(needs.select.outputs.test_matrix)", jobs["test"])
         self.assertIn("needs: select", jobs["test"])
         self.assertNotIn("run_full", jobs["test"])
+        self.assertIn("select_linux_bazel_shard.py", jobs["test"])
+        self.assertIn("--skip_incompatible_explicit_targets", jobs["test"])
+        self.assertIn("${v8_status} -ne 3", jobs["test"])
+        self.assertIn(
+            "@crates//:v8 + //codex-rs/code-mode-runtime:all) intersect (${all_query})",
+            jobs["test"],
+        )
+        self.assertIn('> "${labels_dir}/shard.txt"', jobs["test"])
+        self.assertNotIn("< <(", jobs["test"])
+        self.assertIn("shard ${{ matrix.shard }}/${{ matrix.shard_count }}", jobs["test"])
+        self.assertNotIn("\n            //...\n", jobs["test"])
         for job in (
             "test-windows-shard",
             "test-windows-native-msvc",
