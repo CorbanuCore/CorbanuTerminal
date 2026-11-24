@@ -339,23 +339,34 @@ fn billing_override_under_the_real_id_wins_over_an_alias() {
 }
 
 /// D740: plan and subscription accounts are told apart from wallet-funded,
-/// pay-per-token, local and undeclared providers.
+/// pay-per-token, local and undeclared providers, as usage accounting does.
 #[test]
-fn plan_accounts_are_subscription_sessions_and_corbanu_plans() {
+fn plan_accounts_are_subscription_sessions() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let plan = |id: &str, auth_mode| is_plan_account(id, &providers[id], auth_mode);
     // Plan and subscription accounts.
     assert!(plan(OPENAI_PROVIDER_ID, Some(AuthMode::Chatgpt)));
+    assert!(plan(OPENAI_PROVIDER_ID, Some(AuthMode::ChatgptAuthTokens)));
     assert!(plan(CLAUDE_PLAN_PROVIDER_ID, None));
-    assert!(plan(PFTERMINAL_PLAN_PROVIDER_ID, None));
-    assert!(plan(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, None));
-    assert!(is_plan_account(
+    assert!(plan(KIMI_CODE_PROVIDER_ID, None));
+    assert!(plan(ZAI_ANTHROPIC_PROVIDER_ID, None));
+    // #2856: other OpenAI account credentials are undeclared, not plans.
+    for auth_mode in [
+        AuthMode::PersonalAccessToken,
+        AuthMode::Headers,
+        AuthMode::AgentIdentity,
+    ] {
+        assert!(!plan(OPENAI_PROVIDER_ID, Some(auth_mode)), "{auth_mode:?}");
+    }
+    // #2856: the Corbanu Plan providers and aliases debit a wallet-funded
+    // balance per request, so they are pay per use, not plans.
+    assert!(!plan(PFTERMINAL_PLAN_PROVIDER_ID, None));
+    assert!(!plan(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, None));
+    assert!(!is_plan_account(
         crate::CORBANU_PLAN_PROVIDER_ID,
         &providers[PFTERMINAL_PLAN_PROVIDER_ID],
         None
     ));
-    assert!(plan(KIMI_CODE_PROVIDER_ID, None));
-    assert!(plan(ZAI_ANTHROPIC_PROVIDER_ID, None));
     // Pay-per-token API keys and wallet-funded providers.
     assert!(!plan(OPENAI_PROVIDER_ID, Some(AuthMode::ApiKey)));
     assert!(!plan(OPENAI_PROVIDER_ID, None));

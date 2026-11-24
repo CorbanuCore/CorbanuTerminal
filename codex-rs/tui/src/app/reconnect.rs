@@ -584,6 +584,7 @@ impl App {
             server.reconnect(app_server.request_handle(), self.app_event_tx.clone());
         }
         self.reconnect.offline = false;
+        self.account_auth_mode = bootstrap.account_auth_mode;
         self.chat_widget.update_account_state(
             bootstrap.status_account_display,
             bootstrap.plan_type,
