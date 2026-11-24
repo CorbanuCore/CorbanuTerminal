@@ -157,6 +157,7 @@ class SelectBazelCiTest(unittest.TestCase):
         self.assertNotIn("run_full", jobs["test"])
         self.assertIn("select_linux_bazel_shard.py", jobs["test"])
         self.assertIn("--skip_incompatible_explicit_targets", jobs["test"])
+        self.assertIn("${v8_status} -ne 3", jobs["test"])
         self.assertIn("shard ${{ matrix.shard }}/${{ matrix.shard_count }}", jobs["test"])
         self.assertNotIn("\n            //...\n", jobs["test"])
         for job in (
