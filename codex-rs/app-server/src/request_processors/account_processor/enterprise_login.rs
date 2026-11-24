@@ -136,9 +136,11 @@ impl EnterpriseLoginState {
             return false;
         };
         let current = thread.config().await;
+        // #2853: keep the thread's runtime model and provider, as the other
+        // thread-scoped reloads do, so a changed saved default cannot fail it.
         let Ok(config) = self
             .config_manager
-            .load_latest_config_with_session_layers(&current.config_layer_stack, &current.cwd)
+            .load_latest_config_for_thread_runtime(&thread, &current)
             .await
         else {
             return false;
