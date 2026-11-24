@@ -1548,6 +1548,10 @@ impl ToolOrchestrator {
                             initial_duration,
                             /*escalated_duration*/ None,
                         );
+                        // #2851 follow-up: the person is told why it was not
+                        // retried, as for the other startup failures (this
+                        // one carries a network approval).
+                        warn(tool_ctx, STARTUP_RETRY_AUTO_REVIEW).await;
                         return Err(ToolError::Rejected(STARTUP_RETRY_NEEDS_PERSON.to_string()));
                     }
                     let approval_ctx = ApprovalCtx {
