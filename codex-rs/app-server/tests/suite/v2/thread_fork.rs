@@ -7,6 +7,7 @@ use app_test_support::create_fake_rollout;
 use app_test_support::create_fake_rollout_with_token_usage;
 use app_test_support::create_mock_responses_server_repeating_assistant;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
+use app_test_support::require_code_mode_host;
 use app_test_support::rollout_path;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
@@ -3443,6 +3444,10 @@ async fn fork_option_disables_mcp_servers(
     incremental_tools: bool,
     responses_lite: bool,
 ) -> Result<()> {
+    let disables_mcp = disable_mcp && incremental_tools && responses_lite;
+    if disables_mcp {
+        require_code_mode_host();
+    }
     let server = responses::start_mock_server().await;
     let mock = responses::mount_sse_sequence(
         &server,
@@ -3537,7 +3542,6 @@ async fn fork_option_disables_mcp_servers(
             },
         })
         .await?;
-    let disables_mcp = disable_mcp && incremental_tools && responses_lite;
     if disables_mcp {
         let initializations = mcp_server
             .received_requests()
