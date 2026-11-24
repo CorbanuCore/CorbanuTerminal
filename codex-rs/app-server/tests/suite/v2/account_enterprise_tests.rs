@@ -632,13 +632,14 @@ oauth = {{ client_id = "mcp-client", client_secret = "resource-secret", token_en
             .header(http::header::CONNECTION, "close")
             .send(),
     )
-    .await??;
-    assert_eq!(response.status(), http::StatusCode::OK);
+    .await;
+    let completion = enterprise_completion(&mut client).await;
+    std::fs::write(&default_config_path, original_config)?;
+    assert_eq!(response??.status(), http::StatusCode::OK);
     assert_eq!(
-        enterprise_completion(&mut client).await?,
+        completion?,
         json!({"name":"enterprise","threadId":thread_id,"loginId":retry["loginId"],"success":true})
     );
-    std::fs::write(&default_config_path, original_config)?;
     let replacement_scope =
         McpEmaAuthScope::new("enterprise-user".into(), WORKSPACE_ID_REFRESHED.into())
             .expect("replacement scope");

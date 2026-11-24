@@ -518,10 +518,7 @@ async fn workspace_routing_reload_keeps_session_runtime_over_incompatible_saved_
 -> Result<()> {
     let home = tempdir()?;
     let config_path = home.path().join("config.toml");
-    std::fs::write(
-        &config_path,
-        "model = 'gpt-6-astra'\nmodel_provider = 'openai'\n",
-    )?;
+    std::fs::write(&config_path, "model_provider = 'openai'\n")?;
     let manager = ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
     let current = manager.load_latest_config(/*fallback_cwd*/ None).await?;
     std::fs::write(
@@ -537,7 +534,8 @@ async fn workspace_routing_reload_keeps_session_runtime_over_incompatible_saved_
         "{unpinned}"
     );
 
-    let session = current.workspace_routing_session();
+    // The session resolved `gpt-6-astra` on `openai`; the reload keeps both.
+    let session = current.workspace_routing_session(Some("gpt-6-astra"));
     let retained = manager
         .load_retained_session_config(&session.config_layer_stack, &session.cwd)
         .await?;
@@ -548,5 +546,29 @@ async fn workspace_routing_reload_keeps_session_runtime_over_incompatible_saved_
         ),
         (Some("gpt-6-astra"), "openai")
     );
+    Ok(())
+}
+
+/// #2853: with no known model nothing is pinned, so a valid saved default on
+/// another provider still reloads; the provider alone would not pair with it.
+#[tokio::test]
+async fn workspace_routing_reload_without_a_model_pins_nothing() -> Result<()> {
+    let home = tempdir()?;
+    let config_path = home.path().join("config.toml");
+    std::fs::write(&config_path, "model_provider = 'openai'\n")?;
+    let manager = ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
+    let current = manager.load_latest_config(/*fallback_cwd*/ None).await?;
+    std::fs::write(
+        &config_path,
+        format!(
+            "model = '{}'\nmodel_provider = 'claude-plan'\n",
+            codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL
+        ),
+    )?;
+    let session = current.workspace_routing_session(/*model*/ None);
+    let retained = manager
+        .load_retained_session_config(&session.config_layer_stack, &session.cwd)
+        .await?;
+    assert_eq!(retained.model_provider_id, "claude-plan");
     Ok(())
 }
