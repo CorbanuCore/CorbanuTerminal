@@ -2022,6 +2022,16 @@ impl BottomPane {
         self.composer.cancel_pending_burst_submission();
     }
 
+    #[cfg(test)]
+    pub(crate) fn arm_burst_enter_for_tests(&mut self, text: &str, now: Instant) {
+        self.composer.arm_burst_enter_for_tests(text, now);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_pending_burst_enter_for_tests(&self) -> bool {
+        self.composer.has_pending_burst_enter_for_tests()
+    }
+
     pub(crate) fn take_burst_submission(&mut self, now: Instant) -> Option<InputResult> {
         if self.has_active_view() {
             self.composer.cancel_pending_burst_submission();
