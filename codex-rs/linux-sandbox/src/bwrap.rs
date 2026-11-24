@@ -12,17 +12,20 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::fs;
 use std::fs::File;
 use std::fs::Metadata;
 use std::io;
 use std::os::fd::AsRawFd;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Output;
 
 use crate::linux_run_main::RegistryLock;
 use crate::linux_run_main::synthetic_mount_registry_root;
@@ -1605,16 +1608,57 @@ fn ripgrep_files(
         }
         Err(err) => return Err(err.into()),
     };
+    ripgrep_scan_with_rescan(search_root, &output, || command.output())
+}
+
+/// #2893: a folder renamed mid-walk is reported missing under its old name,
+/// and its new name may already have been passed. When the first scan
+/// reported vanished paths, scan once more and mask the union, so one
+/// concurrent rename cannot hide a match.
+fn ripgrep_scan_with_rescan(
+    search_root: &Path,
+    output: &Output,
+    rescan: impl FnOnce() -> io::Result<Output>,
+) -> Result<Vec<AbsolutePathBuf>> {
+    let mut scan = ripgrep_scan_paths(search_root, output)?;
+    if scan.vanished_paths {
+        let rescan = ripgrep_scan_paths(search_root, &rescan()?)?;
+        scan.paths.extend(rescan.paths);
+    }
+    Ok(scan.paths)
+}
+
+/// Paths one `rg --files` run listed, and whether it reported vanished paths.
+struct RipgrepScan {
+    paths: Vec<AbsolutePathBuf>,
+    vanished_paths: bool,
+}
+
+/// Turn one finished `rg --files` scan into the paths it listed.
+///
+/// Status 1 with no stderr is ripgrep's "no matches" case. Status 2 is
+/// accepted only when every stderr line reports that a path under the search
+/// root vanished during the walk (#2893) and that path is still gone; ripgrep
+/// keeps walking past those, so stdout holds every other match (the caller
+/// rescans once). Any other failure stays fatal so deny-read does not
+/// silently weaken.
+fn ripgrep_scan_paths(search_root: &Path, output: &Output) -> Result<RipgrepScan> {
     if !output.status.success() {
         if output.status.code() == Some(1) && output.stderr.is_empty() {
-            return Ok(Vec::new());
+            return Ok(RipgrepScan {
+                paths: Vec::new(),
+                vanished_paths: false,
+            });
         }
-
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(CodexErr::Fatal(format!(
-            "ripgrep unreadable glob scan failed for {}: {stderr}",
-            search_root.display()
-        )));
+        if output.status.code() != Some(2)
+            || !ripgrep_errors_are_vanished_paths(search_root, &output.stderr)
+        {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(CodexErr::Fatal(format!(
+                "ripgrep unreadable glob scan failed for {}: {stderr}",
+                search_root.display()
+            )));
+        }
     }
 
     let paths = output
@@ -1631,7 +1675,49 @@ fn ripgrep_files(
         })
         .map(AbsolutePathBuf::from_absolute_path_checked)
         .collect::<io::Result<Vec<_>>>()?;
-    Ok(paths)
+    Ok(RipgrepScan {
+        paths,
+        vanished_paths: !output.status.success(),
+    })
+}
+
+/// True when `stderr` is non-empty and every line is ripgrep's
+/// `rg: <path>: No such file or directory (os error 2)` for a path strictly
+/// under `search_root` that still does not exist. A path that vanished cannot
+/// be read by the sandboxed command, so there is nothing to mask. Anything
+/// else (permission denied, I/O errors, glob errors, unrecognised text, a path
+/// outside the root, the root itself, a lossily printed path, or a path that
+/// exists again) is not.
+fn ripgrep_errors_are_vanished_paths(search_root: &Path, stderr: &[u8]) -> bool {
+    const PREFIX: &[u8] = b"rg: ";
+    const ENOENT_SUFFIX: &[u8] = b": No such file or directory (os error 2)";
+
+    let stderr = stderr.strip_suffix(b"\n").unwrap_or(stderr);
+    !stderr.is_empty()
+        && stderr.split(|byte| *byte == b'\n').all(|line| {
+            let Some(path) = line
+                .strip_prefix(PREFIX)
+                .and_then(|rest| rest.strip_suffix(ENOENT_SUFFIX))
+            else {
+                return false;
+            };
+            // ripgrep prints paths lossily; a replaced byte would make the
+            // existence check below look at a different name.
+            if path.windows(3).any(|bytes| bytes == "\u{FFFD}".as_bytes()) {
+                return false;
+            }
+            let path = Path::new(OsStr::from_bytes(path));
+            let Ok(relative) = path.strip_prefix(search_root) else {
+                return false;
+            };
+            path.is_absolute()
+                && relative.components().next().is_some()
+                && relative
+                    .components()
+                    .all(|component| matches!(component, std::path::Component::Normal(_)))
+                && fs::symlink_metadata(path)
+                    .is_err_and(|err| err.kind() == io::ErrorKind::NotFound)
+        })
 }
 
 fn glob_files(
@@ -4649,6 +4735,275 @@ mod tests {
             .arg("--version")
             .output()
             .is_ok_and(|output| output.status.success())
+    }
+
+    fn rg_output(status: i32, stdout: &str, stderr: &str) -> Output {
+        use std::os::unix::process::ExitStatusExt;
+
+        Output {
+            status: std::process::ExitStatus::from_raw(status),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    fn fatal_message<T>(result: Result<T>) -> Option<String> {
+        match result.err()?.details() {
+            codex_protocol::error::CodexErrorDetails::Fatal(message) => Some(message.clone()),
+            _ => None,
+        }
+    }
+
+    fn rg_exit(code: i32) -> i32 {
+        code << 8
+    }
+
+    fn rg_enoent(path: &Path) -> String {
+        format!(
+            "rg: {}: No such file or directory (os error 2)\n",
+            path.display()
+        )
+    }
+
+    /// #2893: paths that vanish mid-walk (a plugin clone being removed) are
+    /// not fatal, and every other match ripgrep listed is still masked.
+    #[test]
+    fn ripgrep_vanished_paths_keep_the_rest_of_the_scan() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        let kept = root.join("kept.env");
+        let clone = root.join(".tmp/plugins-clone-1");
+        let stderr = format!(
+            "{}{}",
+            rg_enoent(&clone.join("plugins/a.env")),
+            rg_enoent(&clone)
+        );
+        let output = rg_output(
+            rg_exit(/*code*/ 2),
+            &format!("{}\0", kept.display()),
+            &stderr,
+        );
+
+        let scan = ripgrep_scan_paths(root, &output).expect("vanished paths are not fatal");
+
+        assert_eq!(
+            scan.paths,
+            vec![AbsolutePathBuf::from_absolute_path(&kept).expect("absolute")]
+        );
+        assert!(scan.vanished_paths);
+    }
+
+    /// #2893: after vanished paths the scan runs once more and masks both
+    /// results, so a folder renamed mid-walk is still covered under its new
+    /// name; a clean first scan is not repeated, and a failed rescan is fatal.
+    #[test]
+    fn ripgrep_vanished_paths_rescan_and_mask_the_union() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        let first_match = root.join("kept.env");
+        let renamed_match = root.join("new/secret.env");
+        let first = rg_output(
+            rg_exit(/*code*/ 2),
+            &format!("{}\0", first_match.display()),
+            &rg_enoent(&root.join("old")),
+        );
+        let rescan = rg_output(
+            rg_exit(/*code*/ 0),
+            &format!("{}\0", renamed_match.display()),
+            "",
+        );
+
+        let paths = ripgrep_scan_with_rescan(root, &first, || Ok(rescan.clone()))
+            .expect("vanished paths are not fatal");
+        assert_eq!(
+            paths,
+            [&first_match, &renamed_match]
+                .map(|path| AbsolutePathBuf::from_absolute_path(path).expect("absolute"))
+        );
+
+        let clean = rg_output(
+            rg_exit(/*code*/ 0),
+            &format!("{}\0", first_match.display()),
+            "",
+        );
+        let paths = ripgrep_scan_with_rescan(root, &clean, || panic!("clean scan rescanned"))
+            .expect("clean scan");
+        assert_eq!(paths.len(), 1);
+
+        let denied = rg_output(
+            rg_exit(/*code*/ 2),
+            "",
+            &format!(
+                "rg: {}: Permission denied (os error 13)\n",
+                root.join("locked").display()
+            ),
+        );
+        assert!(fatal_message(ripgrep_scan_with_rescan(root, &first, || Ok(denied))).is_some());
+    }
+
+    #[test]
+    fn ripgrep_vanished_path_beside_another_error_stays_fatal() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        let stderr = format!(
+            "{}rg: {}: Permission denied (os error 13)\n",
+            rg_enoent(&root.join("gone")),
+            root.join("locked").display()
+        );
+        let output = rg_output(rg_exit(/*code*/ 2), "", &stderr);
+
+        assert!(
+            fatal_message(ripgrep_scan_paths(root, &output))
+                .is_some_and(|message| message.contains("Permission denied"))
+        );
+    }
+
+    #[test]
+    fn ripgrep_failures_other_than_vanished_paths_stay_fatal() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        let existing = root.join("present.env");
+        std::fs::write(&existing, "secret").expect("write file");
+        let gone = rg_enoent(&root.join("gone"));
+        let cases = [
+            ("exit 2 without stderr", rg_exit(/*code*/ 2), String::new()),
+            (
+                "glob error",
+                rg_exit(/*code*/ 2),
+                "rg: error parsing glob '[': unclosed character class\n".to_string(),
+            ),
+            (
+                "unknown text",
+                rg_exit(/*code*/ 2),
+                "something went wrong\n".to_string(),
+            ),
+            ("exit 1 with stderr", rg_exit(/*code*/ 1), gone.clone()),
+            ("other exit code", rg_exit(/*code*/ 3), gone.clone()),
+            ("killed by a signal", /*SIGKILL*/ 9, gone.clone()),
+            ("blank line", rg_exit(/*code*/ 2), format!("{gone}\n{gone}")),
+            (
+                "trailing text",
+                rg_exit(/*code*/ 2),
+                gone.replace('\n', " extra\n"),
+            ),
+            (
+                "path that exists",
+                rg_exit(/*code*/ 2),
+                rg_enoent(&existing),
+            ),
+            (
+                "lossily printed path",
+                rg_exit(/*code*/ 2),
+                rg_enoent(&root.join("gone\u{FFFD}")),
+            ),
+            ("search root itself", rg_exit(/*code*/ 2), rg_enoent(root)),
+            (
+                "path outside root",
+                rg_exit(/*code*/ 2),
+                rg_enoent(Path::new("/gone")),
+            ),
+            (
+                "path escaping root",
+                rg_exit(/*code*/ 2),
+                rg_enoent(&root.join("../gone")),
+            ),
+            (
+                "relative path",
+                rg_exit(/*code*/ 2),
+                rg_enoent(Path::new("gone")),
+            ),
+        ];
+
+        for (case, status, stderr) in cases {
+            let output = rg_output(status, "", &stderr);
+            assert!(
+                fatal_message(ripgrep_scan_paths(root, &output)).is_some(),
+                "{case} must stay fatal"
+            );
+        }
+    }
+
+    /// Negative control with the real ripgrep: an unreadable folder under a
+    /// deny-read scan root still blocks the command.
+    #[test]
+    fn ripgrep_permission_denied_scan_stays_fatal() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if !ripgrep_available() {
+            return;
+        }
+        let temp_dir = TempDir::new().expect("temp dir");
+        let locked = temp_dir.path().join("locked");
+        std::fs::create_dir(&locked).expect("create locked dir");
+        std::fs::write(locked.join("secret.env"), "secret").expect("write secret");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("lock dir");
+        // Root (and CAP_DAC_OVERRIDE) reads through mode 000; nothing to test.
+        let readable = std::fs::read_dir(&locked).is_ok();
+        let result = (!readable).then(|| {
+            ripgrep_files(
+                temp_dir.path(),
+                &["**/*.env".to_string()],
+                /*max_depth*/ None,
+            )
+        });
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700))
+            .expect("unlock dir");
+
+        if let Some(result) = result {
+            assert!(
+                fatal_message(result).is_some_and(|message| message.contains("Permission denied"))
+            );
+        }
+    }
+
+    /// #2893 with the real ripgrep: trees created and removed while the scan
+    /// walks (like a background plugin clone) no longer fail the scan, and the
+    /// stable secret is still found every time.
+    #[test]
+    fn ripgrep_scan_tolerates_paths_vanishing_during_the_walk() {
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicBool;
+        use std::sync::atomic::Ordering;
+
+        if !ripgrep_available() {
+            return;
+        }
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path().to_path_buf();
+        let secret = root.join("secret.env");
+        std::fs::write(&secret, "secret").expect("write secret");
+        let stop = Arc::new(AtomicBool::new(false));
+        let churn = {
+            let root = root.clone();
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                let mut clone_index = 0;
+                while !stop.load(Ordering::Relaxed) {
+                    let clone = root.join(format!(".tmp/plugins-clone-{clone_index}"));
+                    clone_index += 1;
+                    for plugin in 0..20 {
+                        let dir = clone.join(format!("plugins/p{plugin}/skills"));
+                        let _ = std::fs::create_dir_all(&dir);
+                        let _ = std::fs::write(dir.join("SKILL.md"), "x");
+                        let _ = std::fs::write(dir.join("a.env"), "x");
+                    }
+                    let _ = std::fs::remove_dir_all(&clone);
+                }
+            })
+        };
+
+        let results: Vec<_> = (0..200)
+            .map(|_| ripgrep_files(&root, &["**/*.env".to_string()], /*max_depth*/ None))
+            .collect();
+        stop.store(true, Ordering::Relaxed);
+        churn.join().expect("churn thread");
+
+        let secret = AbsolutePathBuf::from_absolute_path(&secret).expect("absolute");
+        for result in results {
+            let paths = result.expect("vanished paths do not fail the scan");
+            assert!(paths.contains(&secret), "stable match missing: {paths:?}");
+        }
     }
 
     fn path_entry(
