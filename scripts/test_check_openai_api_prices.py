@@ -78,6 +78,26 @@ class MissingDatedRowTests(unittest.TestCase):
         )
 
 
+class SavedPageTests(unittest.TestCase):
+    def test_the_saved_page_and_a_dated_sol_row_give_no_warning(self):
+        # The control for MissingDatedRowTests: the same inline catalogue,
+        # with the saved page unmodified.
+        rows = standard_table(PAGE.read_text())
+        sol = prices("4", "0.4", "5", "20")
+        codex = prices("1.75", "0.175", None, "14")
+        out = StringIO()
+        with redirect_stdout(out):
+            mismatches = compare(
+                rows,
+                {"gpt-5.6-sol": sol, "gpt-5.3-codex": codex},
+                {"gpt-5.6-sol"},
+            )
+        lines = out.getvalue().splitlines()
+        self.assertEqual(mismatches, 0)
+        self.assertEqual([line for line in lines if "WARNING" in line], [])
+        self.assertIn(f"ok gpt-5.6-sol: {sol}", lines)
+
+
 class CatalogueDatedTests(unittest.TestCase):
     MODELS = [
         {
