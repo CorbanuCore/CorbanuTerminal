@@ -986,9 +986,7 @@ pub(super) async fn run_main_inner(
                 Some(daemon_startup::WSL_DRVFS_EXCLUSION) => "wsl_drvfs",
                 Some("this Windows launcher") => "windows_detach_restricted",
                 Some(daemon_startup::AUTO_START_FAILED_EXCLUSION) => "daemon_start_failed",
-                Some(daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION) => {
-                    "daemon_connection_failed"
-                }
+                Some(daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION) => "daemon_unreachable",
                 Some("daemon feature settings") => "daemon_compatibility",
                 Some("the Corbanu security level") => "security_level",
                 Some(NAMED_ACCOUNT_DAEMON_EXCLUSION) => "named_account",

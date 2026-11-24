@@ -748,13 +748,8 @@ fn agents_overview_keeps_the_error_when_the_automatic_start_fails() -> Result<()
     let mut terminal = PtyCodex::start_cli(workspace.path(), home, &["agents"])?;
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     let status = loop {
-        // Reading fails once the exited child has closed the terminal.
-        if terminal
-            .read_output(Duration::from_millis(/*millis*/ 50))
-            .is_ok()
-        {
-            terminal.answer_startup_queries()?;
-        }
+        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
+        terminal.answer_startup_queries()?;
         if let Some(status) = terminal.child.try_wait()? {
             break status;
         }
@@ -764,14 +759,10 @@ fn agents_overview_keeps_the_error_when_the_automatic_start_fails() -> Result<()
             terminal.screen_contents()
         );
     };
-    // Collect what the exiting process wrote after its terminal was restored.
+    // The test keeps its own handle on the terminal, so what the exiting
+    // process wrote after restoring it stays readable.
     for _ in 0..20 {
-        if terminal
-            .read_output(Duration::from_millis(/*millis*/ 50))
-            .is_err()
-        {
-            break;
-        }
+        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
     }
     let output = String::from_utf8_lossy(&terminal.output);
     ensure!(!status.success(), "`agents` exited successfully:\n{output}");
