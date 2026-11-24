@@ -380,10 +380,7 @@ impl CatalogRequestProcessor {
                     .map_err(|_| invalid_request(format!("thread not found: {thread_id}")))?;
                 let thread_config = thread.config().await;
                 self.config_manager
-                    .load_latest_config_with_session_layers(
-                        &thread_config.config_layer_stack,
-                        &thread_config.cwd,
-                    )
+                    .load_latest_config_for_thread_runtime(&thread, &thread_config)
                     .await
                     .map_err(|err| internal_error(format!("failed to reload config: {err}")))?
             }

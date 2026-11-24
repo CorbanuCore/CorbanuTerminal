@@ -35,20 +35,34 @@ const THREAD_TITLE_RECENT_MESSAGES: usize = 8;
 
 /// D740: `[tui] automatic_thread_titles` wins when set; otherwise automatic
 /// titles run only on plan or subscription accounts, never on pay-per-token,
-/// wallet-funded, local or undeclared providers.
+/// wallet-funded, local or undeclared providers. `auth_mode` is the session's
+/// real OpenAI auth mode (#2856), so a personal access token is not taken for
+/// a ChatGPT plan; an unknown mode is not a plan.
 pub(super) fn automatic_thread_titles_enabled(
     setting: Option<bool>,
     provider_id: &str,
     provider: &codex_model_provider_info::ModelProviderInfo,
-    has_chatgpt_account: bool,
+    auth_mode: Option<codex_protocol::auth::AuthMode>,
 ) -> bool {
     setting.unwrap_or_else(|| {
-        codex_model_provider_info::is_plan_account(
-            provider_id,
-            provider,
-            has_chatgpt_account.then_some(codex_protocol::auth::AuthMode::Chatgpt),
-        )
+        codex_model_provider_info::is_plan_account(provider_id, provider, auth_mode)
     })
+}
+
+/// The server-reported auth mode as the provider classifier's type.
+fn core_auth_mode(mode: codex_app_server_protocol::AuthMode) -> codex_protocol::auth::AuthMode {
+    use codex_app_server_protocol::AuthMode as Server;
+    use codex_protocol::auth::AuthMode as Core;
+    match mode {
+        Server::ApiKey => Core::ApiKey,
+        Server::Chatgpt => Core::Chatgpt,
+        Server::ChatgptAuthTokens => Core::ChatgptAuthTokens,
+        Server::Headers => Core::Headers,
+        Server::AgentIdentity => Core::AgentIdentity,
+        Server::PersonalAccessToken => Core::PersonalAccessToken,
+        Server::BedrockApiKey => Core::BedrockApiKey,
+        Server::BedrockAccessKeys => Core::BedrockAccessKeys,
+    }
 }
 
 #[derive(Deserialize)]
@@ -85,7 +99,7 @@ impl App {
             config.tui_automatic_thread_titles,
             &config.model_provider_id,
             &config.model_provider,
-            self.chat_widget.has_chatgpt_account(),
+            self.account_auth_mode.map(core_auth_mode),
         )
     }
 

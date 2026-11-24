@@ -732,6 +732,7 @@ pub(super) async fn run_main_inner(
         daemon_exclusion = Some(daemon_startup::WSL_DRVFS_EXCLUSION);
     }
     let mut managed_daemon = false;
+    let mut auto_start_fallback = false;
     if auto_start_daemon && daemon_exclusion.is_none() {
         let explicit_daemon_request = cli.agents_overview;
         let output = startup_draft
@@ -758,6 +759,9 @@ pub(super) async fn run_main_inner(
         match output {
             Ok(output) => {
                 managed_daemon = output.backend.is_some();
+                // D739 (#2855): a server this automatic start cannot reach
+                // also falls back, unless the launch asked for it.
+                auto_start_fallback = !explicit_daemon_request;
                 app_server_target = AppServerTarget::LocalDaemon {
                     endpoint: RemoteAppServerEndpoint::UnixSocket {
                         socket_path: AbsolutePathBuf::from_absolute_path_checked(
@@ -773,18 +777,28 @@ pub(super) async fn run_main_inner(
             }
         }
     }
-    let compatibility_warning = daemon_recovery::check(
+    let compatibility_warning = match daemon_recovery::check(
         &mut startup_draft,
         &app_server_target,
         &config,
         &cli_kv_overrides,
         managed_daemon,
+        auto_start_fallback,
     )
-    .await?;
-    if compatibility_warning.is_some() {
-        app_server_target = AppServerTarget::Embedded;
-        daemon_exclusion = Some("daemon feature settings");
-    }
+    .await?
+    {
+        daemon_recovery::CheckOutcome::UseServer => None,
+        daemon_recovery::CheckOutcome::RunWithout(warning) => {
+            app_server_target = AppServerTarget::Embedded;
+            daemon_exclusion = Some("daemon feature settings");
+            Some(warning)
+        }
+        daemon_recovery::CheckOutcome::AutoStartUnreachable => {
+            app_server_target = AppServerTarget::Embedded;
+            daemon_exclusion = Some(daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION);
+            None
+        }
+    };
     // Defense in depth: the final target must still satisfy the security level.
     if !matches!(app_server_target, AppServerTarget::Embedded)
         && let Some(message) = &non_embedded_refusal
@@ -805,6 +819,8 @@ pub(super) async fn run_main_inner(
             .map(|reason| {
                 if reason == daemon_startup::AUTO_START_FAILED_EXCLUSION {
                     daemon_startup::AUTO_START_FALLBACK_NOTICE.to_string()
+                } else if reason == daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION {
+                    daemon_startup::AUTO_START_UNREACHABLE_NOTICE.to_string()
                 } else {
                     format!(
                         "Running without the shared background server: {reason} requires embedded mode."
@@ -875,6 +891,10 @@ pub(super) async fn run_main_inner(
         _ if cli.agents_overview => "agents",
         _ if elevated_warning.is_some() => "elevated_windows",
         (_, Some("--no-daemon")) => "explicit_no_daemon",
+        // D739 (#2855): an automatic start that failed, or whose server could
+        // not be reached, is not an incompatible launch option.
+        (_, Some(daemon_startup::AUTO_START_FAILED_EXCLUSION)) => "daemon_start_failed",
+        (_, Some(daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION)) => "daemon_unreachable",
         (_, Some(_)) => "incompatible_option",
         _ if auto_start_daemon => "auto_start",
         (AppServerTarget::LocalDaemon { .. }, _) => "existing_daemon",
@@ -966,6 +986,7 @@ pub(super) async fn run_main_inner(
                 Some(daemon_startup::WSL_DRVFS_EXCLUSION) => "wsl_drvfs",
                 Some("this Windows launcher") => "windows_detach_restricted",
                 Some(daemon_startup::AUTO_START_FAILED_EXCLUSION) => "daemon_start_failed",
+                Some(daemon_startup::AUTO_START_UNREACHABLE_EXCLUSION) => "daemon_unreachable",
                 Some("daemon feature settings") => "daemon_compatibility",
                 Some("the Corbanu security level") => "security_level",
                 Some(NAMED_ACCOUNT_DAEMON_EXCLUSION) => "named_account",

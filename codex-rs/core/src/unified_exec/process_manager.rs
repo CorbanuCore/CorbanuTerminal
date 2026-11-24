@@ -41,6 +41,7 @@ use crate::tools::events::ToolEventFailure;
 use crate::tools::events::ToolEventStage;
 use crate::tools::network_approval::DeferredNetworkApproval;
 use crate::tools::network_approval::finish_deferred_network_approval;
+use crate::tools::orchestrator::LateStartupRetry;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::runtimes::is_managed_proxy_env_var;
 use crate::tools::runtimes::unified_exec::UnifiedExecAttempt;
@@ -303,6 +304,57 @@ pub(super) struct StartFailure {
     /// #873: a policy refused it (before it started, or the launch contract
     /// at start), so it ends as refused whether or not a review showed it.
     pub(super) refused_by_policy: bool,
+}
+
+/// D750 (#2851): a sandbox startup failure seen after unified exec returned
+/// the run as started, for the orchestrator to decide (its launcher probe and
+/// once-only prompt); `error` is the run's denial, which stands otherwise.
+pub(super) struct LateStartupFailure {
+    plan: Box<LateStartupRetry>,
+    output: codex_protocol::exec_output::ExecToolCallOutput,
+    error: UnifiedExecError,
+}
+
+/// How one start of an `exec_command` ended.
+enum ExecOnceError {
+    Failed(UnifiedExecError),
+    LateStartupFailure(Box<LateStartupFailure>),
+}
+
+/// D750 (#2851): a started session, and what a late sandbox startup failure
+/// of it is decided on.
+type StartedSession<P> = (
+    P,
+    Option<DeferredNetworkApproval>,
+    Option<Box<LateStartupRetry>>,
+);
+
+/// D750 (#2851): a late sandbox startup failure for the orchestrator to
+/// decide, and the run's denied output.
+type LateRetry = (
+    Box<LateStartupRetry>,
+    codex_protocol::exec_output::ExecToolCallOutput,
+);
+
+impl From<UnifiedExecError> for ExecOnceError {
+    fn from(error: UnifiedExecError) -> Self {
+        Self::Failed(error)
+    }
+}
+
+/// D750 (#2851): a denial seen after the run started goes to the
+/// orchestrator only for a run started in the Linux sandbox (`plan`).
+fn late_denial(error: UnifiedExecError, plan: Option<Box<LateStartupRetry>>) -> ExecOnceError {
+    match (plan, &error) {
+        (Some(plan), UnifiedExecError::SandboxDenied { output, .. }) => {
+            ExecOnceError::LateStartupFailure(Box::new(LateStartupFailure {
+                plan,
+                output: output.clone(),
+                error,
+            }))
+        }
+        _ => ExecOnceError::Failed(error),
+    }
 }
 
 struct InitialExecCommandGuard {
@@ -716,17 +768,68 @@ impl UnifiedExecProcessManager {
 
     pub(super) async fn exec_command_inner(
         &self,
-        request: ExecCommandRequest,
+        mut request: ExecCommandRequest,
         context: &UnifiedExecContext,
         mut completion: Option<&mut Completion<'_>>,
     ) -> Result<ExecCommandToolOutput, UnifiedExecError> {
+        let mut late_failure = None;
+        loop {
+            match self
+                .exec_command_once(&request, context, completion.as_deref_mut(), late_failure)
+                .await
+            {
+                Ok(output) => return Ok(output),
+                Err(ExecOnceError::Failed(error)) => return Err(error),
+                // D750 (#2851): the run ended; a retry outside the sandbox,
+                // if the orchestrator allows one, is a new process.
+                Err(ExecOnceError::LateStartupFailure(failure)) => {
+                    request.process_id = self.allocate_process_id().await;
+                    late_failure = Some(failure);
+                }
+            }
+        }
+    }
+
+    /// One start of `request`: its first run, or (`late_failure`, D750) the
+    /// orchestrator's decision on a sandbox startup failure seen after that
+    /// run started.
+    async fn exec_command_once(
+        &self,
+        request: &ExecCommandRequest,
+        context: &UnifiedExecContext,
+        mut completion: Option<&mut Completion<'_>>,
+        late_failure: Option<Box<LateStartupFailure>>,
+    ) -> Result<ExecCommandToolOutput, ExecOnceError> {
         let prepared = &request.prepared;
         let command = &prepared.resolved.command;
         let cwd = prepared.cwd.clone();
-        let process = self.open_session_with_sandbox(&request, context).await;
+        let (late_retry, late_error) = match late_failure.map(|failure| *failure) {
+            Some(LateStartupFailure {
+                plan,
+                output,
+                error,
+            }) => (Some((plan, output)), Some(error)),
+            None => (None, None),
+        };
+        let process = self
+            .open_session_with_sandbox(request, context, late_retry)
+            .await;
 
-        let (attempt, mut deferred_network_approval) = match process {
-            Ok((attempt, deferred_network_approval)) => (attempt, deferred_network_approval),
+        // D750 (#2851): the run was shown and ended; where the orchestrator
+        // decided against a retry (the probe was inconclusive, or no person
+        // allowed it), the run's denial stands.
+        let process = match (process, late_error) {
+            (Err(StartFailure { error, .. }), Some(late_error)) => {
+                self.release_process_id(request.process_id).await;
+                return Err(ExecOnceError::Failed(match error {
+                    UnifiedExecError::SandboxDenied { .. } => late_error,
+                    error => error,
+                }));
+            }
+            (process, _) => process,
+        };
+        let (attempt, mut deferred_network_approval, mut late_startup_retry) = match process {
+            Ok(started) => started,
             Err(StartFailure {
                 error,
                 shown_by_review,
@@ -735,17 +838,17 @@ impl UnifiedExecProcessManager {
             }) => {
                 self.release_process_id(request.process_id).await;
                 if let UnifiedExecError::SandboxDenied { output, .. } = &error {
-                    emit_denied_at_start(context, &request, cwd, output).await;
+                    emit_denied_at_start(context, request, cwd, output).await;
                 } else if refused_by_policy {
                     // #873: shown once and ended as refused with the reason,
                     // like a refused shell command.
-                    emit_refused_at_start(context, &request, cwd, error.to_string()).await;
+                    emit_refused_at_start(context, request, cwd, error.to_string()).await;
                 } else if shown_by_review && !launch_failure_reported {
                     // #466: end an approved command that failed before the launch layer
                     // could report it. Launch failures already have one begin/end pair.
-                    emit_failed_at_start(context, &request, cwd, error.to_string()).await;
+                    emit_failed_at_start(context, request, cwd, error.to_string()).await;
                 }
-                return Err(error);
+                return Err(error.into());
             }
         };
         let UnifiedExecAttempt {
@@ -755,7 +858,10 @@ impl UnifiedExecProcessManager {
         } = attempt;
         let process = Arc::new(process);
         if let Some(completion) = completion.as_ref() {
-            let _ = completion.process.set(Arc::clone(&process));
+            *completion
+                .process
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Arc::clone(&process));
         }
         let network_denial_monitor = deferred_network_approval.as_ref().map(|deferred| {
             terminate_process_on_network_denial(
@@ -897,7 +1003,7 @@ impl UnifiedExecProcessManager {
                 process_stored,
                 process.sandbox_type(),
                 context,
-                &request,
+                request,
                 cwd.clone(),
                 plugin_attribution.clone(),
                 Arc::clone(&output_buffer),
@@ -907,7 +1013,7 @@ impl UnifiedExecProcessManager {
             )
             .await;
             self.release_process_id(request.process_id).await;
-            return Err(fail_process_with_message(process.as_ref(), message));
+            return Err(fail_process_with_message(process.as_ref(), message).into());
         }
         if let Some(message) = process.failure_message() {
             let finish_result = finish_deferred_network_approval_for_session(
@@ -919,7 +1025,7 @@ impl UnifiedExecProcessManager {
                 process_stored,
                 process.sandbox_type(),
                 context,
-                &request,
+                request,
                 cwd.clone(),
                 plugin_attribution.clone(),
                 Arc::clone(&output_buffer),
@@ -930,9 +1036,9 @@ impl UnifiedExecProcessManager {
             .await;
             self.release_process_id(request.process_id).await;
             if let Err(message) = finish_result {
-                return Err(fail_process_with_message(process.as_ref(), message));
+                return Err(fail_process_with_message(process.as_ref(), message).into());
             }
-            return Err(UnifiedExecError::process_failed(message));
+            return Err(UnifiedExecError::process_failed(message).into());
         }
         let process_id = request.process_id;
         let (response_process_id, exit_code) = if process_stored {
@@ -959,21 +1065,22 @@ impl UnifiedExecProcessManager {
                         )
                         .await
                     {
-                        return Err(fail_process_with_message(entry.process.as_ref(), message));
+                        return Err(
+                            fail_process_with_message(entry.process.as_ref(), message).into()
+                        );
                     }
                     if !completion
                         .as_ref()
                         .is_some_and(|completion| completion.timed_out)
+                        && let Err(err) = process.check_for_sandbox_denial_with_text(&text).await
                     {
-                        process
-                            .check_for_sandbox_denial_with_text(&text)
-                            .await
-                            .map_err(|err| {
-                                err.with_output_collection_metadata(
-                                    original_token_count,
-                                    output_omitted_bytes,
-                                )
-                            })?;
+                        return Err(late_denial(
+                            err.with_output_collection_metadata(
+                                original_token_count,
+                                output_omitted_bytes,
+                            ),
+                            late_startup_retry.take(),
+                        ));
                     }
                     let metrics_sidecar = entry
                         .plugin_metrics_sidecar
@@ -991,7 +1098,7 @@ impl UnifiedExecProcessManager {
                     (None, exit_code)
                 }
                 ProcessStatus::Unknown => {
-                    return Err(UnifiedExecError::UnknownProcessId { process_id });
+                    return Err(UnifiedExecError::UnknownProcessId { process_id }.into());
                 }
             }
         } else {
@@ -1007,7 +1114,7 @@ impl UnifiedExecProcessManager {
                     process_stored,
                     process.sandbox_type(),
                     context,
-                    &request,
+                    request,
                     cwd.clone(),
                     plugin_attribution.clone(),
                     Arc::clone(&output_buffer),
@@ -1017,7 +1124,7 @@ impl UnifiedExecProcessManager {
                 )
                 .await;
                 self.release_process_id(request.process_id).await;
-                return Err(fail_process_with_message(process.as_ref(), message));
+                return Err(fail_process_with_message(process.as_ref(), message).into());
             }
             let exit_code = process.exit_code();
             let exit = exit_code.unwrap_or(-1);
@@ -1043,12 +1150,12 @@ impl UnifiedExecProcessManager {
             .await;
 
             self.release_process_id(request.process_id).await;
-            process
-                .check_for_sandbox_denial_with_text(&text)
-                .await
-                .map_err(|err| {
-                    err.with_output_collection_metadata(original_token_count, output_omitted_bytes)
-                })?;
+            if let Err(err) = process.check_for_sandbox_denial_with_text(&text).await {
+                return Err(late_denial(
+                    err.with_output_collection_metadata(original_token_count, output_omitted_bytes),
+                    late_startup_retry.take(),
+                ));
+            }
             (None, exit_code)
         };
 
@@ -1708,7 +1815,8 @@ impl UnifiedExecProcessManager {
         &self,
         request: &ExecCommandRequest,
         context: &UnifiedExecContext,
-    ) -> Result<(UnifiedExecAttempt, Option<DeferredNetworkApproval>), StartFailure> {
+        late_retry: Option<LateRetry>,
+    ) -> Result<StartedSession<UnifiedExecAttempt>, StartFailure> {
         let prepared = &request.prepared;
         let shell_environment_policy = prepared.turn_environment.shell_environment_policy();
         // Issue #310: provider credentials stay out of the command's
@@ -1770,12 +1878,25 @@ impl UnifiedExecProcessManager {
             call_id: context.call_id.clone(),
             tool_name: ToolName::plain("exec_command"),
         };
-        let result = orchestrator.run(&mut runtime, &req, &tool_ctx).await;
+        let result = match late_retry {
+            None => orchestrator.run(&mut runtime, &req, &tool_ctx).await,
+            Some((plan, output)) => {
+                orchestrator
+                    .retry_late_sandbox_startup_failure(&mut runtime, &req, &tool_ctx, plan, output)
+                    .await
+            }
+        };
         let shown_by_review = runtime.shown_by_review();
         let start_rejected = runtime.start_rejected();
         let launch_failure_reported = runtime.launch_failure_reported();
         let result = result
-            .map(|result| (result.output, result.deferred_network_approval))
+            .map(|result| {
+                (
+                    result.output,
+                    result.deferred_network_approval,
+                    result.late_startup_retry,
+                )
+            })
             .map_err(|err| {
                 // #873: a policy refusal is `Rejected` from the orchestrator,
                 // not from the start attempt itself (a setup or spawn

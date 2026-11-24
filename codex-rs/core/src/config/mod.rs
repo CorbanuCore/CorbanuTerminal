@@ -2603,11 +2603,51 @@ impl Config {
     }
 
     pub fn workspace_routing_context(&self) -> codex_model_provider::WorkspaceRoutingContext {
+        self.workspace_routing_context_for_model(self.model.as_deref())
+    }
+
+    /// [`Self::workspace_routing_context`] for a session whose resolved model
+    /// is `model`.
+    pub fn workspace_routing_context_for_model(
+        &self,
+        model: Option<&str>,
+    ) -> codex_model_provider::WorkspaceRoutingContext {
         codex_model_provider::WorkspaceRoutingContext::new(self.chatgpt_base_url.clone())
-            .with_session(codex_login::WorkspaceRoutingSession {
-                cwd: self.cwd.to_path_buf(),
-                config_layer_stack: self.config_layer_stack.clone(),
-            })
+            .with_session(self.workspace_routing_session(model))
+    }
+
+    /// The layers a model request's workspace routing reloads for a session on
+    /// this config's provider and `model`. #2853: when the model is known, they
+    /// keep this session's model and provider, so the reload cannot pick up a
+    /// saved default that changed since and may be an incompatible pair. With
+    /// no model, nothing is pinned: a provider alone could pair with a saved
+    /// model it cannot serve.
+    pub fn workspace_routing_session(
+        &self,
+        model: Option<&str>,
+    ) -> codex_login::WorkspaceRoutingSession {
+        let config_layer_stack = match model.filter(|model| !model.is_empty()) {
+            Some(model) => self
+                .config_layer_stack
+                .clone()
+                .with_session_value(
+                    "model_provider",
+                    TomlValue::String(self.model_provider_id.clone()),
+                )
+                .and_then(|layers| {
+                    layers.with_session_value("model", TomlValue::String(model.to_string()))
+                })
+                .unwrap_or_else(|err| {
+                    // Session-flags layers are always tables, so this is not expected.
+                    tracing::warn!(%err, "could not pin the session runtime for workspace routing");
+                    self.config_layer_stack.clone()
+                }),
+            None => self.config_layer_stack.clone(),
+        };
+        codex_login::WorkspaceRoutingSession {
+            cwd: self.cwd.to_path_buf(),
+            config_layer_stack,
+        }
     }
 
     pub async fn rebuild_with_session_layers(

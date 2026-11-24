@@ -868,21 +868,35 @@ async fn failed_thread_title_requests_are_removed() -> color_eyre::Result<()> {
 /// set, and otherwise run only on plan or subscription accounts.
 #[test]
 fn automatic_thread_titles_default_to_plan_accounts_only() {
+    use codex_protocol::auth::AuthMode;
     let providers =
         codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
-    let enabled = |setting, id: &str, chatgpt| {
-        super::automatic_thread_titles_enabled(setting, id, &providers[id], chatgpt)
+    let enabled = |setting, id: &str, auth_mode| {
+        super::automatic_thread_titles_enabled(setting, id, &providers[id], auth_mode)
     };
-    // Plan and subscription accounts: ChatGPT plan, Claude Plan, Corbanu Plan.
-    assert!(enabled(None, "openai", /*chatgpt*/ true));
-    assert!(enabled(None, "claude-plan", /*chatgpt*/ false));
-    assert!(enabled(None, "pfterminal-plan", /*chatgpt*/ false));
-    assert!(enabled(
+    // Plan and subscription accounts: a ChatGPT plan, Claude Plan.
+    assert!(enabled(None, "openai", Some(AuthMode::Chatgpt)));
+    assert!(enabled(None, "claude-plan", /*auth_mode*/ None));
+    // #2856: a ChatGPT personal access token is not declared a plan.
+    assert!(!enabled(
         None,
-        "pfterminal-plan-anthropic",
-        /*chatgpt*/ false
+        "openai",
+        Some(AuthMode::PersonalAccessToken)
     ));
+    // #2856: the Corbanu Plan providers and the `corbanu-plan` alias debit a
+    // wallet-funded balance per request.
+    let corbanu_plan = &providers["pfterminal-plan"];
+    assert!(!super::automatic_thread_titles_enabled(
+        None,
+        "corbanu-plan",
+        corbanu_plan,
+        /*auth_mode*/ None
+    ));
+    for id in ["pfterminal-plan", "pfterminal-plan-anthropic"] {
+        assert!(!enabled(None, id, /*auth_mode*/ None), "{id}");
+    }
     // Pay-per-token API keys and wallet-funded providers.
+    assert!(!enabled(None, "openai", Some(AuthMode::ApiKey)));
     for id in [
         "openai",
         "anthropic",
@@ -891,15 +905,75 @@ fn automatic_thread_titles_default_to_plan_accounts_only() {
         "openrouter",
         "deepseek",
     ] {
-        assert!(!enabled(None, id, /*chatgpt*/ false), "{id}");
+        assert!(!enabled(None, id, /*auth_mode*/ None), "{id}");
     }
     // Local models are no plan either.
-    assert!(!enabled(None, "ollama", /*chatgpt*/ false));
+    assert!(!enabled(None, "ollama", /*auth_mode*/ None));
     // The setting turns them on for any provider, or off for a plan.
-    assert!(enabled(Some(true), "zai", /*chatgpt*/ false));
-    assert!(enabled(Some(true), "anthropic", /*chatgpt*/ false));
-    assert!(!enabled(Some(false), "openai", /*chatgpt*/ true));
-    assert!(!enabled(Some(false), "claude-plan", /*chatgpt*/ false));
+    assert!(enabled(Some(true), "zai", /*auth_mode*/ None));
+    assert!(enabled(Some(true), "anthropic", /*auth_mode*/ None));
+    assert!(enabled(Some(true), "openai", Some(AuthMode::Chatgpt)));
+    assert!(super::automatic_thread_titles_enabled(
+        Some(true),
+        "corbanu-plan",
+        corbanu_plan,
+        /*auth_mode*/ None
+    ));
+    assert!(!enabled(Some(false), "openai", Some(AuthMode::Chatgpt)));
+    assert!(!enabled(
+        Some(false),
+        "claude-plan",
+        /*auth_mode*/ None
+    ));
+}
+
+/// #2856: the App gates automatic titles on the auth mode the server reports,
+/// so a ChatGPT personal access token does not count as a ChatGPT plan.
+#[tokio::test]
+async fn automatic_thread_title_uses_the_reported_auth_mode() -> color_eyre::Result<()> {
+    use codex_app_server_protocol::AccountUpdatedNotification;
+    use codex_app_server_protocol::AuthMode;
+    let mut app = make_test_app().await;
+    app.chat_widget.config_mut_for_tests().model_provider_id = "openai".to_string();
+    app.chat_widget.config_mut_for_tests().model_provider =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)["openai"]
+            .clone();
+    let app_server = crate::start_embedded_app_server_for_picker(&app.config).await?;
+    for (auth_mode, expected) in [
+        (AuthMode::PersonalAccessToken, false),
+        (AuthMode::Chatgpt, true),
+    ] {
+        app.handle_app_server_event(
+            &app_server,
+            AppServerEvent::ServerNotification(Box::new(ServerNotification::AccountUpdated(
+                AccountUpdatedNotification {
+                    auth_mode: Some(auth_mode),
+                    plan_type: None,
+                    api_key_env_var: None,
+                },
+            ))),
+        )
+        .await;
+        assert!(app.chat_widget.has_chatgpt_account(), "{auth_mode:?}");
+        let thread_id = ThreadId::new();
+        app.generate_thread_title(
+            &app_server,
+            thread_id,
+            ThreadTitleDestination::Automatic,
+            thread_title_prompt("Fix the login timeout"),
+        );
+        assert_eq!(
+            app.pending_thread_titles
+                .contains_key(&(thread_id, ThreadTitleDestination::Automatic)),
+            expected,
+            "{auth_mode:?}"
+        );
+    }
+    for cancellation in app.pending_thread_titles.values() {
+        cancellation.cancel();
+    }
+    app_server.shutdown().await?;
+    Ok(())
 }
 
 /// D740: on a pay-per-token provider no automatic title request starts unless
@@ -950,5 +1024,9 @@ async fn automatic_thread_title_skips_pay_per_token_provider_unless_enabled()
         app.pending_thread_titles
             .contains_key(&(thread_id, ThreadTitleDestination::Automatic))
     );
+    for cancellation in app.pending_thread_titles.values() {
+        cancellation.cancel();
+    }
+    app_server.shutdown().await?;
     Ok(())
 }

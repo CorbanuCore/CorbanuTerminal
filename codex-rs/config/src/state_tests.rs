@@ -427,3 +427,36 @@ fn session_plugins_keep_a_project_role_layers_mark() {
         .collect();
     assert_eq!(marks, vec![None, Some(&role_file)]);
 }
+
+/// #2853: a session value lands in the highest enabled session-flags layer and
+/// wins over the same key in lower session layers and in user config.
+#[test]
+fn session_value_overrides_lower_layers() {
+    let user = ConfigLayerEntry::new(
+        ConfigLayerSource::User {
+            file: AbsolutePathBuf::from_absolute_path(std::env::temp_dir().join("config.toml"))
+                .expect("absolute path"),
+            profile: None,
+        },
+        toml::from_str("model_provider = \"claude-plan\"\nmodel = \"gpt-6-astra\"")
+            .expect("config TOML should parse"),
+    );
+    let stack = ConfigLayerStack::new(
+        vec![user],
+        ConfigRequirements::default(),
+        ConfigRequirementsToml::default(),
+    )
+    .expect("stack should be valid")
+    .with_session_value("model_provider", TomlValue::String("pf55-a".into()))
+    .expect("session value should apply")
+    .with_session_value("model", TomlValue::String("fixture-model".into()))
+    .expect("session value should apply");
+    let effective = stack.effective_config();
+    assert_eq!(effective["model_provider"].as_str(), Some("pf55-a"));
+    assert_eq!(effective["model"].as_str(), Some("fixture-model"));
+    let session_layers = stack
+        .layers_low_to_high()
+        .filter(|layer| layer.name == ConfigLayerSource::SessionFlags)
+        .count();
+    assert_eq!(session_layers, 1);
+}

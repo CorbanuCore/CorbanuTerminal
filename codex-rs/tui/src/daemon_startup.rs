@@ -21,6 +21,12 @@ pub(super) const AUTO_START_FAILED_EXCLUSION: &str = "background server start fa
 /// D739: the one-line notice shown when Corbanu Terminal runs without the background server.
 pub(super) const AUTO_START_FALLBACK_NOTICE: &str =
     "Corbanu Terminal could not start its background server; running without it.";
+/// D739 (#2855): launch exclusion recorded when the background server an
+/// automatic start reported running cannot be connected to.
+pub(super) const AUTO_START_UNREACHABLE_EXCLUSION: &str = "background server connection failure";
+/// D739 (#2855): the one-line notice for [`AUTO_START_UNREACHABLE_EXCLUSION`].
+pub(super) const AUTO_START_UNREACHABLE_NOTICE: &str =
+    "Corbanu Terminal could not reach its background server; running without it.";
 
 /// D739: an automatic background-server start that fails (for example a CLI
 /// built from source, which has no installable server) falls back to running
@@ -76,6 +82,8 @@ pub(super) const ELEVATED_LAUNCH_WARNING: &str = "Running as administrator: shar
 pub(super) struct CompatibilityError {
     pub reason: String,
     pub restart_features: Option<BTreeMap<String, bool>>,
+    /// The check could not connect to the server at all.
+    pub unreachable: bool,
 }
 
 pub(super) fn exclusion(
@@ -173,11 +181,14 @@ pub(super) async fn compatibility_warning(
         })
         .collect();
     let mut restart_features = None;
+    let mut unreachable = false;
     let check = async {
         // Connect even without overrides so startup can recover from an unreachable daemon.
-        let client = app_server_connection::connect(target)
-            .await
-            .map_err(|_| "could not connect to check daemon feature settings".to_string())?;
+        let client = app_server_connection::connect(target).await.map_err(|err| {
+            tracing::warn!(error = %format!("{err:#}"), "could not connect to the background server");
+            unreachable = true;
+            "could not connect to check daemon feature settings".to_string()
+        })?;
         if requested.is_empty() {
             let _ = client.shutdown().await;
             return Ok(());
@@ -263,6 +274,7 @@ pub(super) async fn compatibility_warning(
         Err(reason) => Err(CompatibilityError {
             reason,
             restart_features,
+            unreachable,
         }),
     }
 }
