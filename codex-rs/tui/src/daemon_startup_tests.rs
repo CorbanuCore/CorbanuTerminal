@@ -137,9 +137,18 @@ async fn daemon_feature_compatibility_respects_required_and_optional_attachment(
                 drop(listener);
                 let result =
                     daemon_startup::compatibility_warning(&target, &config, &cli_overrides).await;
+                // #2855: a required attachment reports the server unreachable,
+                // so an automatic start can fall back without the prompt.
                 assert!(matches!(
                     (allow_embedded_fallback, result),
-                    (true, Ok(Some(_))) | (false, Err(_))
+                    (true, Ok(Some(_)))
+                        | (
+                            false,
+                            Err(daemon_startup::CompatibilityError {
+                                unreachable: true,
+                                ..
+                            })
+                        )
                 ));
                 continue;
             }
@@ -211,6 +220,7 @@ async fn daemon_feature_compatibility_respects_required_and_optional_attachment(
                 );
             } else {
                 let error = result.unwrap_err();
+                assert!(!error.unreachable, "{scenario}");
                 assert_eq!(error.restart_features.is_some(), restartable);
                 if scenario == "mixed flags" {
                     assert_eq!(
@@ -437,10 +447,13 @@ fn auto_start_failure_falls_back_unless_the_server_was_requested() {
     let message = refused.to_string();
     assert!(message.contains("daemon executable not found"), "{message}");
     assert!(message.contains(daemon_startup::FAILURE_HINT), "{message}");
-    assert!(
-        daemon_startup::AUTO_START_FALLBACK_NOTICE.starts_with("Corbanu Terminal ")
-            && !daemon_startup::AUTO_START_FALLBACK_NOTICE.contains('\n')
-            && daemon_startup::AUTO_START_FALLBACK_NOTICE.len() <= 78,
-        "the fallback notice is one line naming Corbanu Terminal"
-    );
+    for notice in [
+        daemon_startup::AUTO_START_FALLBACK_NOTICE,
+        daemon_startup::AUTO_START_UNREACHABLE_NOTICE,
+    ] {
+        assert!(
+            notice.starts_with("Corbanu Terminal ") && !notice.contains('\n') && notice.len() <= 78,
+            "the fallback notice is one line naming Corbanu Terminal: {notice}"
+        );
+    }
 }
