@@ -617,6 +617,14 @@ oauth = {{ client_id = "mcp-client", client_secret = "resource-secret", token_en
     )
     .await?;
     let retry_callback = enterprise_callback(&retry, &issuer, callback_port)?;
+    // #2853: a saved default changed to a pair that does not resolve must not
+    // fail this thread's configuration check; the thread keeps its runtime.
+    let default_config_path = home.path().join("config.toml");
+    let original_config = std::fs::read_to_string(&default_config_path)?;
+    let mut saved: toml::Value = toml::from_str(&original_config)?;
+    saved["model"] = toml::Value::String("gpt-6-astra".into());
+    saved["model_provider"] = toml::Value::String("claude-plan".into());
+    std::fs::write(&default_config_path, toml::to_string(&saved)?)?;
     let response = timeout(
         DEFAULT_READ_TIMEOUT,
         browser
@@ -624,10 +632,12 @@ oauth = {{ client_id = "mcp-client", client_secret = "resource-secret", token_en
             .header(http::header::CONNECTION, "close")
             .send(),
     )
-    .await??;
-    assert_eq!(response.status(), http::StatusCode::OK);
+    .await;
+    let completion = enterprise_completion(&mut client).await;
+    std::fs::write(&default_config_path, original_config)?;
+    assert_eq!(response??.status(), http::StatusCode::OK);
     assert_eq!(
-        enterprise_completion(&mut client).await?,
+        completion?,
         json!({"name":"enterprise","threadId":thread_id,"loginId":retry["loginId"],"success":true})
     );
     let replacement_scope =

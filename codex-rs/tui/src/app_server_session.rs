@@ -422,6 +422,9 @@ pub(crate) struct AppServerBootstrap {
     pub(crate) default_model: String,
     pub(crate) feedback_audience: FeedbackAudience,
     pub(crate) has_chatgpt_account: bool,
+    /// The OpenAI auth mode the server reports (`auth/status`); `None` when
+    /// unknown. D740/#2856: decides whether the session is on a plan account.
+    pub(crate) account_auth_mode: Option<AuthMode>,
     pub(crate) available_models: Vec<ModelPreset>,
     pub(crate) collaboration_modes: Vec<codex_protocol::config_types::CollaborationModeMask>,
     pub(crate) allowed_approval_policies: Option<Vec<AskForApproval>>,
@@ -1173,6 +1176,10 @@ impl AppServerSession {
             default_model,
             feedback_audience,
             has_chatgpt_account,
+            // Unlike `has_chatgpt_account`, no fallback to the account kind:
+            // a ChatGPT account may be a personal access token, which is not a
+            // plan. An unknown mode keeps automatic titles off (no extra spend).
+            account_auth_mode: auth_status_mode,
             available_models,
             collaboration_modes,
             allowed_approval_policies,
@@ -3825,6 +3832,9 @@ mod tests {
                 true,
             )
         );
+        // #2856: the account says ChatGPT, but this server reports no auth
+        // method, so the session's auth mode stays unknown (not a plan).
+        assert_eq!(bootstrap.account_auth_mode, None);
 
         // Account-specific catalog filtering at startup and before/after thread creation.
         let models = bootstrap.available_models;

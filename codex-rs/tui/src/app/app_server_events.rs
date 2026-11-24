@@ -421,6 +421,7 @@ impl App {
                     .auth_mode
                     .is_some_and(AuthMode::has_chatgpt_account);
                 self.account_email_request_id = None;
+                self.account_auth_mode = notification.auth_mode;
                 self.chat_widget.update_account_state(
                     account_display,
                     notification.plan_type,

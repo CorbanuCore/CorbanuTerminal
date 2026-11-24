@@ -2066,8 +2066,15 @@ impl Session {
             let mcp_resource_client = Arc::new(McpResourceClient::new(Arc::clone(&mcp_runtime)));
             let extension_metrics =
                 extension_metrics::from_session_telemetry(session_telemetry.clone());
-            let workspace_routing =
-                thread_extension_data.get_or_init(|| config.workspace_routing_context());
+            // #2853: pin the session's resolved model, not only a configured one.
+            let workspace_routing = thread_extension_data.get_or_init(|| {
+                config.workspace_routing_context_for_model(Some(
+                    session_configuration
+                        .step_settings
+                        .collaboration_mode
+                        .model(),
+                ))
+            });
             for contributor in extensions.thread_lifecycle_contributors() {
                 contributor
                     .on_thread_start(codex_extension_api::ThreadStartInput {

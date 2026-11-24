@@ -5,7 +5,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File dump_tables.ps1 -Out desktop.json
 #   pwsh -NoProfile -ExecutionPolicy Bypass -File dump_tables.ps1 -Out core.json
 # Parameters are `Name|alias,alias|flags`: s a switch, p positional in some parameter set,
-# r takes the remaining arguments.
+# r takes the remaining arguments, i takes pipeline input (by value or by property name).
 param([string]$Out)
 $ProgressPreference = 'SilentlyContinue'
 $PSModuleAutoLoadingPreference = 'None'
@@ -23,14 +23,17 @@ foreach ($name in ($D729Allow.Keys | Sort-Object)) {
     foreach ($parameter in ($info.Parameters.Values | Sort-Object Name)) {
         $positional = $false
         $remaining = $false
+        $pipeline = $false
         foreach ($set in $parameter.ParameterSets.Values) {
             if ($set.Position -ge 0) { $positional = $true }
             if ($set.ValueFromRemainingArguments) { $remaining = $true }
+            if ($set.ValueFromPipeline -or $set.ValueFromPipelineByPropertyName) { $pipeline = $true }
         }
         $flags = ''
         if ($parameter.SwitchParameter) { $flags += 's' }
         if ($positional) { $flags += 'p' }
         if ($remaining) { $flags += 'r' }
+        if ($pipeline) { $flags += 'i' }
         $params += ('{0}|{1}|{2}' -f $parameter.Name, (($parameter.Aliases | Sort-Object) -join ','), $flags)
     }
     $dynamic = [ordered]@{}
