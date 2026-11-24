@@ -3063,6 +3063,11 @@ where
             /*sandbox_startup_failure*/ true,
         )
     {
+        // #2851 follow-up: the person is told why it was not retried (where
+        // an approval could have allowed it).
+        if unsandboxed_allowed {
+            warn(tool_ctx, STARTUP_RETRY_NOT_ASKED).await;
+        }
         return denied(err);
     }
     if !unsandboxed_allowed {
@@ -3084,8 +3089,30 @@ where
         warn(tool_ctx, STALE_RETRY_NOTE).await;
         return denied(err);
     }
+    // #2851 follow-up: untrusted content may have arrived while the command
+    // ran (a late failure can come long after the round was decided).
+    let post_taint = match startup_retry_post_taint(
+        tool,
+        req,
+        tool_ctx,
+        plan.post_taint.as_ref(),
+        &ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        },
+    )
+    .await
+    {
+        Ok(post_taint) => post_taint,
+        Err(note) => {
+            warn(tool_ctx, &note).await;
+            return denied(err);
+        }
+    };
     if !person_may_answer(plan.strict_auto_review, turn_ctx) {
         let _ = denied(err);
+        // #2851 follow-up: the person is told why it was not retried.
+        warn(tool_ctx, STARTUP_RETRY_AUTO_REVIEW).await;
         return Err(ToolError::Rejected(STARTUP_RETRY_NEEDS_PERSON.to_string()));
     }
     let retry_reason = "sandbox failed to start; retry without sandbox?".to_string();
@@ -3093,7 +3120,7 @@ where
         session: &tool_ctx.session,
         turn: &tool_ctx.turn,
         call_id: &tool_ctx.call_id,
-        retry_reason: Some(match &plan.post_taint {
+        retry_reason: Some(match &post_taint {
             Some(action) => format!("{} {retry_reason}", action.approval_reason()),
             None => retry_reason,
         }),
@@ -3115,7 +3142,7 @@ where
         /*asked_again*/ false,
     )
     .await?;
-    if let Some(action) = &plan.post_taint {
+    if let Some(action) = &post_taint {
         post_taint_recheck(action, tool_ctx)?;
     }
     if retry_approved_by != ApprovalResolutionSource::User {
@@ -3178,6 +3205,80 @@ where
             Err(err)
         }
     }
+}
+
+/// #2851 follow-up: the start of what the person is told when a run whose
+/// sandbox failed to start is not retried outside it.
+const STARTUP_RETRY_REFUSED: &str = "The sandbox failed to start, so this command did not \
+     run, and it was not retried outside the sandbox:";
+
+/// #2851 follow-up: [`STARTUP_RETRY_REFUSED`] where the approval settings
+/// (approvals off, or on request without an approval of this command) do
+/// not ask a person.
+const STARTUP_RETRY_NOT_ASKED: &str = "The sandbox failed to start, so this command did not \
+     run, and it was not retried outside the sandbox: that needs a person's approval, which \
+     the approval settings do not ask for here.";
+
+/// #2851 follow-up: [`STARTUP_RETRY_REFUSED`] where automatic review is
+/// required ([`STARTUP_RETRY_NEEDS_PERSON`]).
+const STARTUP_RETRY_AUTO_REVIEW: &str = "The sandbox failed to start, so this command did not \
+     run, and it was not retried outside the sandbox: that needs a person's approval, and this \
+     session requires automatic review.";
+
+/// #2851 follow-up: the protected action after untrusted content that a
+/// retry after a sandbox startup failure is asked about as, read again now:
+/// a late failure can come long after the round was decided, and untrusted
+/// content may have arrived while the command ran. Where the round already
+/// had one, a change since (new untrusted content, or the policy) refuses
+/// the retry before anyone is asked (its recheck would refuse any answer);
+/// `Err` is what the person is told. Where it had none, the action is
+/// classified now, so the prompt says so and the answer is rechecked. This
+/// only adds to the prompt and refuses: whether the run may leave the
+/// sandbox stays decided on the round's action.
+async fn startup_retry_post_taint<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    round: Option<&crate::security::tainted_action::PostTaintAction>,
+    requirement: &ExecApprovalRequirement,
+) -> Result<Option<crate::security::tainted_action::PostTaintAction>, String>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let Some(action) = round else {
+        let Some((action, _hint)) = post_taint_action(tool, req, tool_ctx, requirement).await
+        else {
+            return Ok(None);
+        };
+        if let Some(refusal) = action.refused_up_front() {
+            post_taint_outcome(
+                &action,
+                tool_ctx,
+                "refused_kill_switch",
+                /*waited*/ None,
+            );
+            return Err(refusal);
+        }
+        return Ok(Some(action));
+    };
+    let now = tool_ctx.session.services.model_client().post_taint_state();
+    if action.recheck(now.as_ref()).is_ok() {
+        return Ok(Some(action.clone()));
+    }
+    post_taint_outcome(action, tool_ctx, "refused_stale", /*waited*/ None);
+    let what = if now
+        .as_ref()
+        .is_some_and(|now| now.taint_generation != action.state.taint_generation)
+    {
+        "new untrusted content arrived"
+    } else {
+        "the security policy changed"
+    };
+    Err(format!(
+        "{STARTUP_RETRY_REFUSED} {what} while this command ({}) ran. Run it again to have it \
+         decided afresh.",
+        action.kind.describe()
+    ))
 }
 
 /// #2820: the longest the launcher probe may take.
