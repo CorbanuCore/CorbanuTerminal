@@ -2503,7 +2503,11 @@ fn ripgrep_vanished_paths_keep_the_rest_of_the_scan() {
         rg_enoent(&clone.join("plugins/a.env")),
         rg_enoent(&clone)
     );
-    let output = rg_output(rg_exit(2), &format!("{}\0", kept.display()), &stderr);
+    let output = rg_output(
+        rg_exit(/*code*/ 2),
+        &format!("{}\0", kept.display()),
+        &stderr,
+    );
 
     let scan = ripgrep_scan_paths(root, &output).expect("vanished paths are not fatal");
 
@@ -2524,11 +2528,15 @@ fn ripgrep_vanished_paths_rescan_and_mask_the_union() {
     let first_match = root.join("kept.env");
     let renamed_match = root.join("new/secret.env");
     let first = rg_output(
-        rg_exit(2),
+        rg_exit(/*code*/ 2),
         &format!("{}\0", first_match.display()),
         &rg_enoent(&root.join("old")),
     );
-    let rescan = rg_output(rg_exit(0), &format!("{}\0", renamed_match.display()), "");
+    let rescan = rg_output(
+        rg_exit(/*code*/ 0),
+        &format!("{}\0", renamed_match.display()),
+        "",
+    );
 
     let paths = ripgrep_scan_with_rescan(root, &first, || Ok(rescan.clone()))
         .expect("vanished paths are not fatal");
@@ -2538,13 +2546,17 @@ fn ripgrep_vanished_paths_rescan_and_mask_the_union() {
             .map(|path| AbsolutePathBuf::from_absolute_path(path).expect("absolute"))
     );
 
-    let clean = rg_output(rg_exit(0), &format!("{}\0", first_match.display()), "");
+    let clean = rg_output(
+        rg_exit(/*code*/ 0),
+        &format!("{}\0", first_match.display()),
+        "",
+    );
     let paths = ripgrep_scan_with_rescan(root, &clean, || panic!("clean scan rescanned"))
         .expect("clean scan");
     assert_eq!(paths.len(), 1);
 
     let denied = rg_output(
-        rg_exit(2),
+        rg_exit(/*code*/ 2),
         "",
         &format!(
             "rg: {}: Permission denied (os error 13)\n",
@@ -2563,7 +2575,7 @@ fn ripgrep_vanished_path_beside_another_error_stays_fatal() {
         rg_enoent(&root.join("gone")),
         root.join("locked").display()
     );
-    let output = rg_output(rg_exit(2), "", &stderr);
+    let output = rg_output(rg_exit(/*code*/ 2), "", &stderr);
 
     assert!(
         fatal_message(ripgrep_scan_paths(root, &output))
@@ -2579,40 +2591,52 @@ fn ripgrep_failures_other_than_vanished_paths_stay_fatal() {
     std::fs::write(&existing, "secret").expect("write file");
     let gone = rg_enoent(&root.join("gone"));
     let cases = [
-        ("exit 2 without stderr", rg_exit(2), String::new()),
+        ("exit 2 without stderr", rg_exit(/*code*/ 2), String::new()),
         (
             "glob error",
-            rg_exit(2),
+            rg_exit(/*code*/ 2),
             "rg: error parsing glob '[': unclosed character class\n".to_string(),
         ),
         (
             "unknown text",
-            rg_exit(2),
+            rg_exit(/*code*/ 2),
             "something went wrong\n".to_string(),
         ),
-        ("exit 1 with stderr", rg_exit(1), gone.clone()),
-        ("other exit code", rg_exit(3), gone.clone()),
-        ("killed by a signal", 9, gone.clone()),
-        ("blank line", rg_exit(2), format!("{gone}\n{gone}")),
-        ("trailing text", rg_exit(2), gone.replace('\n', " extra\n")),
-        ("path that exists", rg_exit(2), rg_enoent(&existing)),
+        ("exit 1 with stderr", rg_exit(/*code*/ 1), gone.clone()),
+        ("other exit code", rg_exit(/*code*/ 3), gone.clone()),
+        ("killed by a signal", /*SIGKILL*/ 9, gone.clone()),
+        ("blank line", rg_exit(/*code*/ 2), format!("{gone}\n{gone}")),
+        (
+            "trailing text",
+            rg_exit(/*code*/ 2),
+            gone.replace('\n', " extra\n"),
+        ),
+        (
+            "path that exists",
+            rg_exit(/*code*/ 2),
+            rg_enoent(&existing),
+        ),
         (
             "lossily printed path",
-            rg_exit(2),
+            rg_exit(/*code*/ 2),
             rg_enoent(&root.join("gone\u{FFFD}")),
         ),
-        ("search root itself", rg_exit(2), rg_enoent(root)),
+        ("search root itself", rg_exit(/*code*/ 2), rg_enoent(root)),
         (
             "path outside root",
-            rg_exit(2),
+            rg_exit(/*code*/ 2),
             rg_enoent(Path::new("/gone")),
         ),
         (
             "path escaping root",
-            rg_exit(2),
+            rg_exit(/*code*/ 2),
             rg_enoent(&root.join("../gone")),
         ),
-        ("relative path", rg_exit(2), rg_enoent(Path::new("gone"))),
+        (
+            "relative path",
+            rg_exit(/*code*/ 2),
+            rg_enoent(Path::new("gone")),
+        ),
     ];
 
     for (case, status, stderr) in cases {
@@ -2640,8 +2664,13 @@ fn ripgrep_permission_denied_scan_stays_fatal() {
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).expect("lock dir");
     // Root (and CAP_DAC_OVERRIDE) reads through mode 000; nothing to test.
     let readable = std::fs::read_dir(&locked).is_ok();
-    let result =
-        (!readable).then(|| path_ripgrep_files(temp_dir.path(), &["**/*.env".to_string()], None));
+    let result = (!readable).then(|| {
+        path_ripgrep_files(
+            temp_dir.path(),
+            &["**/*.env".to_string()],
+            /*max_depth*/ None,
+        )
+    });
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).expect("unlock dir");
 
     if let Some(result) = result {
@@ -2686,7 +2715,7 @@ fn ripgrep_scan_tolerates_paths_vanishing_during_the_walk() {
     };
 
     let results: Vec<_> = (0..200)
-        .map(|_| path_ripgrep_files(&root, &["**/*.env".to_string()], None))
+        .map(|_| path_ripgrep_files(&root, &["**/*.env".to_string()], /*max_depth*/ None))
         .collect();
     stop.store(true, Ordering::Relaxed);
     churn.join().expect("churn thread");
