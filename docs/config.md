@@ -234,10 +234,13 @@ sub-agents and the auto-reviewer (whose session then starts at the first review)
 
 When a new conversation starts, Corbanu can name it from your first message. Naming sends one extra model request
 on the session's provider. It runs by default only when that provider is a plan or subscription account: a ChatGPT
-plan, Claude Plan, a Corbanu Plan, or another provider whose usage is declared as a subscription (see
-`model_providers.<id>.billing`). On pay-per-token API keys, wallet-funded providers, local models and undeclared
-providers it is off, and conversations stay unnamed until you rename them. The name `/rename` suggests is a
-separate request you start yourself and is not affected.
+plan (signed in with ChatGPT), Claude Plan, Kimi Code, the Z.AI coding plan (`zai-anthropic`, or a provider pointed
+at the Z.AI or BigModel coding-plan endpoint), or a provider you declared a subscription with
+`model_providers.<id>.billing = "subscription"`. Kimi Code and the Z.AI coding plan count without any declaration.
+It is off on pay-per-token API keys, wallet-funded providers (including the Corbanu Plan providers, which debit a
+dollar balance per request), local models, undeclared providers, and OpenAI credentials other than a ChatGPT
+sign-in (such as a personal access token). Conversations there stay unnamed until you rename them. The name
+`/rename` suggests is a separate request you start yourself and is not affected.
 
 To name conversations on every provider, set this in the `[tui]` table of `config.toml`; set it to `false` to turn
 naming off everywhere, including on plans:

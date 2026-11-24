@@ -606,6 +606,7 @@ impl App {
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
         let has_chatgpt_account = bootstrap.has_chatgpt_account;
+        let account_auth_mode = bootstrap.account_auth_mode;
         let has_codex_backend_auth = bootstrap.has_codex_backend_auth;
         let requires_openai_auth = bootstrap.requires_openai_auth;
         let status_account_display = bootstrap.status_account_display.clone();
@@ -1347,6 +1348,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             background_voice_error: None,
             temporary_structured_requests: HashMap::new(),
             pending_thread_titles: HashMap::new(),
+            account_auth_mode,
             thread_event_listener_tasks: HashMap::new(),
             agent_navigation: AgentNavigationState::default(),
             agents_overview,

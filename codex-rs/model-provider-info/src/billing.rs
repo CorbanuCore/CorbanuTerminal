@@ -279,15 +279,17 @@ pub fn declared_billing(
 }
 
 /// Whether a session on `provider` (configured as `provider_id`) runs on a plan
-/// or subscription account (a ChatGPT plan, Claude Plan, a Corbanu Plan or
-/// another subscription route) rather than wallet-funded or pay-per-token
-/// usage. D740: optional extra model requests, such as automatic thread
-/// titles, are on by default only for these accounts.
+/// or subscription account (a ChatGPT plan, Claude Plan or another
+/// subscription route) rather than wallet-funded or pay-per-token usage.
+/// D740: optional extra model requests, such as automatic thread titles, are
+/// on by default only for these accounts.
 ///
 /// A `billing` the user declared for the provider wins. Otherwise the route and
-/// credential the session would use decide, as for usage accounting, with the
-/// Corbanu Plan providers counted as plans. An undeclared or local route is
-/// not a plan account.
+/// credential the session would use decide, exactly as for usage accounting.
+/// The Corbanu Plan providers are a wallet-funded balance debited per request
+/// (pay per use), so they are not plans. An undeclared or local route, and an
+/// OpenAI credential no row declares (a personal access token, request headers
+/// or an agent identity), is not a plan account either.
 pub fn is_plan_account(
     provider_id: &str,
     provider: &ModelProviderInfo,
@@ -296,22 +298,11 @@ pub fn is_plan_account(
     if let Some(basis) = provider.billing {
         return basis == Subscription;
     }
-    if matches!(
-        crate::canonical_provider_id(provider_id),
-        PFTERMINAL_PLAN_PROVIDER_ID | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-    ) {
-        return true;
-    }
-    let Ok(endpoint) = provider.to_api_provider(auth_mode).map(|api| api.base_url) else {
-        return false;
-    };
+    let endpoint = provider.api_base_url(auth_mode);
     let at_built_in_route = crate::built_in_model_providers(/*openai_base_url*/ None)
         .get(provider_id)
         .is_some_and(|built_in| {
-            built_in.wire_api == provider.wire_api
-                && built_in
-                    .to_api_provider(auth_mode)
-                    .is_ok_and(|api| api.base_url == endpoint)
+            built_in.wire_api == provider.wire_api && built_in.api_base_url(auth_mode) == endpoint
         });
     declared_billing(
         provider_id,

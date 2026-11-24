@@ -422,6 +422,9 @@ pub(crate) struct AppServerBootstrap {
     pub(crate) default_model: String,
     pub(crate) feedback_audience: FeedbackAudience,
     pub(crate) has_chatgpt_account: bool,
+    /// The OpenAI auth mode the server reports (`auth/status`); `None` when
+    /// unknown. D740/#2856: decides whether the session is on a plan account.
+    pub(crate) account_auth_mode: Option<AuthMode>,
     pub(crate) available_models: Vec<ModelPreset>,
     pub(crate) collaboration_modes: Vec<codex_protocol::config_types::CollaborationModeMask>,
     pub(crate) allowed_approval_policies: Option<Vec<AskForApproval>>,
@@ -1173,6 +1176,7 @@ impl AppServerSession {
             default_model,
             feedback_audience,
             has_chatgpt_account,
+            account_auth_mode: auth_status_mode,
             available_models,
             collaboration_modes,
             allowed_approval_policies,
