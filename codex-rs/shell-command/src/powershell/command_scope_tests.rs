@@ -38,3 +38,50 @@ fn names_resolve_as_powershell_finds_them_on_path() {
     let relative_last = lookup(vec![dir.path().to_path_buf(), "bin".into()]);
     assert_eq!(relative_last.find("tool"), Found::Yes);
 }
+
+/// #2756: a command whose environment has no `PATH` finds no name, so no
+/// module cmdlet counts as unshadowed (the spawn may fill `PATH` in); with a
+/// `PATH` that holds no program of the cmdlet's name, it does.
+#[test]
+fn a_command_without_path_finds_no_names() {
+    let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("cwd");
+    let cmdlets = ["get-content".to_string()];
+    let no_path = std::collections::HashMap::from([("PATHEXT".to_string(), ".EXE".to_string())]);
+    let scope =
+        enter_powershell_command_scope(PowershellCommandScope::new(Some(&cwd), Some(&no_path)));
+    assert!(!names_resolve(&[], &cmdlets));
+    assert!(names_resolve(&[], &[]));
+    drop(scope);
+    let dir = tempfile::tempdir().expect("tempdir");
+    let with_path = std::collections::HashMap::from([(
+        "Path".to_string(),
+        dir.path().to_string_lossy().into_owned(),
+    )]);
+    let _scope =
+        enter_powershell_command_scope(PowershellCommandScope::new(Some(&cwd), Some(&with_path)));
+    assert!(names_resolve(&[], &cmdlets));
+}
+
+/// #2756: a command whose environment has no `PATHEXT` may be spawned with
+/// Corbanu's: a program with one of its extensions (`Get-Content.vbs`)
+/// shadows the cmdlet. Program names still need the command's own lookup.
+#[test]
+fn a_command_without_pathext_looks_for_shadows_with_corbanus() {
+    let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("cwd");
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("get-content.vbs"), "").expect("write");
+    std::fs::write(dir.path().join("tool.vbs"), "").expect("write");
+    let env = std::collections::HashMap::from([(
+        "Path".to_string(),
+        dir.path().to_string_lossy().into_owned(),
+    )]);
+    let cmdlets = ["get-content".to_string()];
+    for (fallback, unshadowed) in [(Some(".com;.exe;.vbs"), false), (None, true)] {
+        let scope = enter_powershell_command_scope(
+            PowershellCommandScope::new(Some(&cwd), Some(&env)).with_fallback_extensions(fallback),
+        );
+        assert_eq!(names_resolve(&[], &cmdlets), unshadowed, "{fallback:?}");
+        assert!(!names_resolve(&["tool".to_string()], &[]), "{fallback:?}");
+        drop(scope);
+    }
+}

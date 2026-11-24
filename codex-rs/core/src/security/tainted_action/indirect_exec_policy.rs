@@ -256,6 +256,11 @@ fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Ve
         return None;
     }
     let name = names::launcher_name_for(shell, case);
+    // #2734: only a name Windows runs as exactly that shell (`BASH.EXE.`,
+    // not `bash .exe`, which names another file).
+    if case == names::NameCase::Windows && !names::windows_runs_exactly(shell, &name) {
+        return None;
+    }
     let read_as = match name.as_ref() {
         "bash" | "zsh" | "sh" if case != names::NameCase::Sensitive => name.into_owned(),
         // #2543: on every platform, POSIX shells the parser does not know
@@ -279,6 +284,16 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
     let case = names::PLATFORM;
     names::unsure(program, case)
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
+        // #2734: a name shell detection reads through another extension
+        // (`bash.foo.exe`, `bash.sh`), whose script is not read, may run one.
+        || matches!(
+            codex_shell_command::shell_detect::detect_shell_type(program),
+            Some(
+                codex_shell_command::shell_detect::ShellType::Bash
+                    | codex_shell_command::shell_detect::ShellType::Zsh
+                    | codex_shell_command::shell_detect::ShellType::Sh
+            )
+        )
 }
 
 /// #2548: the name `program` runs as on this platform (its file name,

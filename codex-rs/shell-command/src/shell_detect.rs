@@ -58,6 +58,26 @@ pub fn detect_shell_type(shell_path: impl AsRef<std::path::Path>) -> Option<Shel
     }
 }
 
+/// #2734: the shell `program` names exactly: its file name is the shell's
+/// own name, or that name with `.exe` (`bash`, `/bin/bash`, `pwsh.exe`,
+/// `C:\…\powershell.exe`), compared as written. [`detect_shell_type`] also
+/// reads a name through any extension (`pwsh.evil.exe`, `pwsh.bat`,
+/// `bash.sh`), which names another file: readers that lower a script into
+/// the commands rules see read only these exact names, so any other spelling
+/// stays one command (callers that respell names as the platform runs them
+/// still may). Never more than [`detect_shell_type`] reads.
+pub fn exact_shell_type(program: &str) -> Option<ShellType> {
+    let name = std::path::Path::new(program).file_name()?.to_str()?;
+    match name.strip_suffix(".exe").unwrap_or(name) {
+        "zsh" => Some(ShellType::Zsh),
+        "bash" => Some(ShellType::Bash),
+        "sh" => Some(ShellType::Sh),
+        "cmd" => Some(ShellType::Cmd),
+        "pwsh" | "powershell" => Some(ShellType::PowerShell),
+        _ => None,
+    }
+}
+
 /// #2699: whether Windows may run another file than the one `program`
 /// spells: its file name (after any drive, `C:pwsh.exe`) names an NTFS
 /// stream (`pwsh.exe:x.exe`, `C:\PS\pwsh.exe:s`, `pwsh.exe::$DATA`) or holds
@@ -410,6 +430,53 @@ mod tests {
             ("", false),
         ] {
             assert_eq!(windows_name_unsure(program), unsure, "{program}");
+        }
+    }
+
+    /// #2734: only a shell's own name, or that name with `.exe`, is exact;
+    /// every exact name is one [`detect_shell_type`] reads too.
+    #[test]
+    fn exact_shell_names_only() {
+        let windows = cfg!(windows);
+        for (program, exact) in [
+            ("bash", Some(ShellType::Bash)),
+            ("/bin/bash", Some(ShellType::Bash)),
+            ("bash.exe", Some(ShellType::Bash)),
+            ("/usr/bin/zsh", Some(ShellType::Zsh)),
+            ("sh", Some(ShellType::Sh)),
+            ("pwsh", Some(ShellType::PowerShell)),
+            ("pwsh.exe", Some(ShellType::PowerShell)),
+            ("powershell.exe", Some(ShellType::PowerShell)),
+            ("/usr/local/bin/pwsh", Some(ShellType::PowerShell)),
+            ("cmd.exe", Some(ShellType::Cmd)),
+            (
+                r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                windows.then_some(ShellType::PowerShell),
+            ),
+            (r"C:\PS\bash.exe", windows.then_some(ShellType::Bash)),
+            ("pwsh.evil.exe", None),
+            ("pwsh.x.exe", None),
+            ("pwsh.bat", None),
+            ("pwsh.cmd", None),
+            ("pwsh.exe.exe", None),
+            ("pwsh.exe:x.exe", None),
+            ("pwsh.exe::$DATA", None),
+            ("bash.foo.exe", None),
+            ("bash.exe:x.exe", None),
+            ("bash.sh", None),
+            ("/tmp/bash.sh", None),
+            ("zsh.app", None),
+            ("BASH", None),
+            ("PWSH.EXE", None),
+            ("pwsh.exe.", None),
+            ("pwsh ", None),
+            ("fish", None),
+            ("", None),
+        ] {
+            assert_eq!(exact_shell_type(program), exact, "{program}");
+            if exact.is_some() {
+                assert_eq!(detect_shell_type(program), exact, "{program}");
+            }
         }
     }
 }

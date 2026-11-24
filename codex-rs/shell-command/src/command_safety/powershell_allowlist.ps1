@@ -100,8 +100,9 @@ foreach ($name in @($D729Allow.Keys)) {
 }
 
 # Names an agent shell defines before its script runs, since D731 imports the system
-# modules with `-Global` (`rcim`, `gin`, `Compress-Archive`), or that PowerShell's core
-# defines (`Invoke-Expression`). Each beats a program of that name on `PATH`, so none is
+# modules with `-Global` (`rcim`, `gin`, `Compress-Archive`, and `Invoke-Expression`, from
+# Microsoft.PowerShell.Utility), or that PowerShell's core defines (`ForEach-Object`).
+# Each beats a program of that name on `PATH`, so none is
 # read as a program: the imported commands of this process (the same modules), and a
 # fixed list of the aliases and functions that import adds in 5.1 and 7.7.
 $D729ModuleNames = @{}
@@ -141,7 +142,26 @@ function Get-D729LiteralText($element) {
 function Test-D729NetworkPath($text) {
     if ($null -eq $text) { return $false }
     $text = [string]$text
-    return ($text.Contains('::') -or $text -match '^\s*[\\/]{2}')
+    return ($text.Contains('::') -or $text -match '^\s*[\\/]{2}' -or (Test-D729RemoteDrive $text))
+}
+
+# #2756: a drive-letter path (`Z:\s`, `Z:s`) on a drive that is not a local disk now: a
+# mapped network drive, or a letter an earlier command may map (`net use`, `subst`).
+# Not covered: a link (`mklink /d`) to a network path, which a path or a recursive listing
+# may pass through (5.1's `Get-ChildItem -Recurse` follows links).
+$D729LocalDriveTypes = @('Fixed', 'Removable', 'CDRom', 'Ram')
+function Test-D729RemoteDrive([string]$text) {
+    if ($text -match '^\s*([A-Za-z]):') {
+        $letter = $Matches[1]
+    } else {
+        return $false
+    }
+    try {
+        $type = [string]([System.IO.DriveInfo]::new($letter).DriveType)
+    } catch {
+        return $true
+    }
+    return $D729LocalDriveTypes -notcontains $type
 }
 
 # Why a native program's argv may not be what PowerShell passes; $null if it is.
@@ -255,6 +275,21 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     # Also after binding: a value given by position binds to an excluded parameter too.
     foreach ($bound in $binding.BoundParameters.Keys) {
         if ($D729Banned -contains $bound -or $entry.x -contains $bound) { return "excluded parameter -${bound}: $target" }
+    }
+    # #2756: past the first command of a pipeline, input objects bind to parameters
+    # too, by value or by property name (`Import-Csv hosts.csv | Get-Process` binds
+    # -ComputerName in 5.1): no excluded parameter may take pipeline input.
+    # Not covered: a path bound from input objects (`ConvertFrom-Json … | Get-ChildItem`)
+    # is not checked for a network path (#2891).
+    if ($index -gt 0) {
+        foreach ($parameter in $info.Parameters.Values) {
+            if ($D729Banned -notcontains $parameter.Name -and $entry.x -notcontains $parameter.Name) { continue }
+            foreach ($set in $parameter.ParameterSets.Values) {
+                if ($set.ValueFromPipeline -or $set.ValueFromPipelineByPropertyName) {
+                    return "excluded parameter -$($parameter.Name) takes pipeline input: $target"
+                }
+            }
+        }
     }
     foreach ($action in 'ErrorAction', 'WarningAction', 'InformationAction', 'ProgressAction') {
         $value = Get-D729Bound $binding $action
