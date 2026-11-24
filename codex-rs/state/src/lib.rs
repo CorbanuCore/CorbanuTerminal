@@ -9,6 +9,11 @@ const _: () = assert!(
     "bundled SQLite must include the WAL-reset corruption fix",
 );
 
+const _: () = assert!(
+    libsqlite3_sys::SQLITE_VERSION_NUMBER >= 3_054_000,
+    "bundled SQLite must include the crafted -wal page-size fix (RUSTSEC-2026-0459)",
+);
+
 /// Explicit opt-in accounting storage; ordinary startup does not install or collect.
 pub use runtime::accounting::store as accounting;
 

@@ -398,7 +398,7 @@ lazy_static = "1"
 libc = "0.2.182"
 # Keep SQLx's bundled SQLite on a version containing the WAL-reset corruption fix:
 # https://www.sqlite.org/wal.html#the_wal_reset_bug
-libsqlite3-sys = { version = "0.37", default-features = false }
+libsqlite3-sys = { version = "0.39.1", default-features = false }
 log = "0.4"
 lru = "0.18.2"
 maplit = "1.0.2"
@@ -471,7 +471,7 @@ symphonia = { version = "0.6.0", default-features = false, features = [
 ] }
 socket2 = "0.6.1"
 # When bumping sqlx, audit the SQLite constructor deny list in clippy.toml.
-sqlx = { version = "0.9.0", default-features = false, features = [
+sqlx = { version = "0.9.1", default-features = false, features = [
     "chrono",
     "json",
     "macros",
