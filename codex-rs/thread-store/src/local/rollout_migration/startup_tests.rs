@@ -27,6 +27,10 @@ use crate::local::StartupMigrationRetryGate;
 use crate::local::test_support::test_config;
 
 const TIMESTAMP: &str = "2025-01-03T12:00:00Z";
+// Bounds a hang rather than the behavior under test: cold or busy runners can spend seconds on
+// SQLite/file IO and blocking-task scheduling around the retry. Stay under nextest's 60 s
+// slow-kill while leaving legitimate work ample room.
+const HANG_GUARD: Duration = Duration::from_secs(30);
 
 fn write_rollout(home: &Path, thread_id: ThreadId, history_mode: ThreadHistoryMode) -> PathBuf {
     let directory = home.join("sessions/2025/01/03");
@@ -314,7 +318,7 @@ async fn waits_for_rollout_maintenance_before_migrating() {
     });
 
     // Observe real lock contention instead of assuming the task reached it after 50 ms.
-    tokio::time::timeout(Duration::from_secs(2), async {
+    tokio::time::timeout(HANG_GUARD, async {
         tokio::select! {
             result = &mut migration => panic!("migration should wait for rollout maintenance: {result:?}"),
             _ = gate.retry_started.notified() => {}
@@ -334,7 +338,7 @@ async fn waits_for_rollout_maintenance_before_migrating() {
     drop(maintenance_guard);
     // Drive the retry explicitly so the completion budget does not include the production backoff.
     gate.retry_allowed.notify_one();
-    tokio::time::timeout(Duration::from_secs(2), migration)
+    tokio::time::timeout(HANG_GUARD, migration)
         .await
         .expect("migration should retry rollout maintenance")
         .expect("join startup migration");
