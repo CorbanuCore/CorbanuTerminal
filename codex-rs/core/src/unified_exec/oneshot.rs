@@ -4,7 +4,6 @@
 //! terminate the exact process handle published by the normal startup path.
 
 use std::sync::Arc;
-use std::sync::OnceLock;
 
 use tokio::time::Duration;
 use tokio::time::Instant;
@@ -21,7 +20,9 @@ use crate::tools::context::ExecCommandToolOutput;
 pub(super) struct Completion<'a> {
     pub timeout: Duration,
     pub timed_out: bool,
-    pub process: &'a OnceLock<Arc<UnifiedExecProcess>>,
+    /// The process running for the command (D750: a retry outside the
+    /// sandbox after a late startup failure replaces it).
+    pub process: &'a std::sync::Mutex<Option<Arc<UnifiedExecProcess>>>,
 }
 
 impl UnifiedExecProcessManager {
@@ -63,7 +64,7 @@ impl UnifiedExecProcessManager {
                 );
             }
 
-            let process = OnceLock::new();
+            let process = std::sync::Mutex::new(None);
             let mut completion = Completion {
                 timeout,
                 timed_out: false,
@@ -75,7 +76,11 @@ impl UnifiedExecProcessManager {
                 tokio::select! {
                     biased;
                     _ = context.cancellation_token.cancelled() => {
-                        if let Some(process) = process.get() {
+                        let current = process
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .clone();
+                        if let Some(process) = current {
                             if !process.has_exited()
                                 && let Err(err) = process.terminate_confirmed().await
                             {

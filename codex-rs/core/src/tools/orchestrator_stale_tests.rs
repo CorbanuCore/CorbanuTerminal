@@ -108,6 +108,8 @@ struct Probe {
     /// #2820: the `PATH` it runs with, if known.
     search_path: Option<&'static str>,
     runs: usize,
+    /// D750 (#2851): the sandbox each run had, in order.
+    sandboxes: Vec<SandboxType>,
 }
 
 /// The request: the environment it runs in and the additional permissions
@@ -176,9 +178,10 @@ impl ToolRuntime<Req, ()> for Probe {
     async fn run(
         &mut self,
         _req: &Req,
-        _attempt: &SandboxAttempt<'_>,
+        attempt: &SandboxAttempt<'_>,
         _ctx: &ToolCtx,
     ) -> Result<(), ToolError> {
+        self.sandboxes.push(attempt.sandbox);
         if !self.while_running.is_empty() {
             let transition = self.while_running.remove(0);
             self.transitions
@@ -215,6 +218,9 @@ struct Outcome {
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     offered: Vec<Vec<ReviewDecision>>,
     runs: usize,
+    /// D750 (#2851): the sandbox each run had (read by the Linux tests).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    sandboxes: Vec<SandboxType>,
 }
 
 /// The reason the first prompt shows: the model's justification (upstream's
@@ -250,6 +256,9 @@ struct Case {
     sandbox_approval_by_policy: bool,
     /// #2820: the `PATH` the command runs with (`local_search_path`).
     search_path: Option<&'static str>,
+    /// D750 (#2851): the first run starts (its attempt returns), and its
+    /// denial (`denial_text`) is seen only afterwards.
+    late_denial: bool,
 }
 
 struct Handler {
@@ -272,6 +281,7 @@ impl Default for Case {
             sandbox_exe: None,
             sandbox_approval_by_policy: false,
             search_path: None,
+            late_denial: false,
         }
     }
 }
@@ -363,6 +373,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         sandbox_approval_by_policy: case.sandbox_approval_by_policy,
         search_path: case.search_path,
         runs: 0,
+        sandboxes: Vec::new(),
     };
     let tool_ctx = ToolCtx {
         session: Arc::clone(&session),
@@ -419,12 +430,35 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         environment,
         additional,
     };
-    let result = tokio::time::timeout(
-        PROBE_TIMEOUT,
-        ToolOrchestrator::new()
-            .with_handler_basis(handler_basis)
-            .run(&mut probe, &req, &tool_ctx),
-    )
+    let late_denial = case.late_denial.then(|| ExecToolCallOutput {
+        exit_code: 1,
+        stderr: codex_protocol::exec_output::StreamOutput::new(
+            case.denial_text.unwrap_or_default().to_string(),
+        ),
+        aggregated_output: codex_protocol::exec_output::StreamOutput::new(
+            case.denial_text.unwrap_or_default().to_string(),
+        ),
+        ..Default::default()
+    });
+    let result = tokio::time::timeout(PROBE_TIMEOUT, async {
+        let mut orchestrator = ToolOrchestrator::new().with_handler_basis(handler_basis);
+        let started = orchestrator.run(&mut probe, &req, &tool_ctx).await?;
+        let Some(output) = late_denial else {
+            return Ok(());
+        };
+        // D750 (#2851): as unified exec does when the run it returned as
+        // started is then denied.
+        let Some(plan) = started.late_startup_retry else {
+            return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
+                output: Box::new(output),
+                network_policy_decision: None,
+            })));
+        };
+        orchestrator
+            .retry_late_sandbox_startup_failure(&mut probe, &req, &tool_ctx, plan, output)
+            .await
+            .map(|_| ())
+    })
     .await
     .expect("the probe run finished (a prompt that is never answered would hang it)");
     answerer.abort();
@@ -442,6 +476,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
             asked,
             offered,
             runs: probe.runs,
+            sandboxes: probe.sandboxes,
         },
         result,
     )
@@ -939,4 +974,102 @@ async fn issue_2820_a_printed_namespace_refusal_is_not_retried_outside_the_sandb
         assert_eq!(probe.asked, vec![first_prompt()], "{wording}");
         assert_eq!(probe.runs, 1, "not retried: {wording}");
     }
+}
+
+/// D750 (#2851): a sandbox that failed to start only after the run was
+/// returned as started (late) is asked about again as an early one: once
+/// only, and run outside the sandbox only on the person's answer.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_sandbox_startup_failure_is_asked_about_again() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    for approval_policy in [AskForApproval::OnRequest, AskForApproval::UnlessTrusted] {
+        let (probe, result) = run_probe(Case {
+            keeps_denial_final: true,
+            approval_policy,
+            denial_text: Some(UID_MAP_DENIED),
+            sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            late_denial: true,
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Ok(()), "{approval_policy:?}");
+        assert_eq!(
+            probe.asked,
+            vec![
+                first_prompt(),
+                Some("sandbox failed to start; retry without sandbox?".to_string())
+            ],
+            "{approval_policy:?}"
+        );
+        assert_eq!(
+            probe.offered[1],
+            vec![
+                ReviewDecision::Approved,
+                ReviewDecision::denied("rejected by user"),
+                ReviewDecision::Abort,
+            ],
+            "once only: {approval_policy:?}"
+        );
+        assert_eq!(
+            probe.sandboxes,
+            vec![SandboxType::LinuxSeccomp, SandboxType::None],
+            "retried outside the sandbox on the second answer: {approval_policy:?}"
+        );
+    }
+}
+
+/// D750 (#2851): a late denial whose text the launcher probe does not
+/// confirm (an ordinary one, or bubblewrap's text printed by the command in
+/// a sandbox that started) stays a plain denial: not asked about again.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_denial_of_a_started_sandbox_stays_final() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    for (denial_text, starts) in [
+        ("touch: cannot touch 'x': Permission denied\n", false),
+        (UID_MAP_DENIED, true),
+    ] {
+        let (probe, result) = run_probe(Case {
+            keeps_denial_final: true,
+            approval_policy: AskForApproval::UnlessTrusted,
+            denial_text: Some(denial_text),
+            sandbox_exe: Some(fake_launcher(dir.path(), starts)),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            late_denial: true,
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Err("sandbox denied".to_string()), "{denial_text}");
+        assert_eq!(probe.asked, vec![first_prompt()], "{denial_text}");
+        assert_eq!(probe.runs, 1, "not retried: {denial_text}");
+    }
+}
+
+/// D750 (#2851): with approvals off, a late startup failure is refused.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_startup_failure_is_refused_with_approvals_off() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        requirement: ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+        keeps_denial_final: true,
+        approval_policy: AskForApproval::Never,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        late_denial: true,
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 1, "not retried");
 }
