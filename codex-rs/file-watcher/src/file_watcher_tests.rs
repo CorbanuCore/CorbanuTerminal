@@ -26,6 +26,7 @@ async fn throttled_receiver_coalesces_within_interval() {
     let mut throttled = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
 
     tx.add_changed_paths(&[path("a")]).await;
+    let started = Instant::now();
     let first = timeout(Duration::from_secs(1), throttled.recv())
         .await
         .expect("first emit timeout");
@@ -36,18 +37,28 @@ async fn throttled_receiver_coalesces_within_interval() {
         })
     );
 
+    let deadline = throttled
+        .next_allowed
+        .expect("first emit schedules a throttle deadline");
+    assert!(
+        deadline.duration_since(started) >= TEST_THROTTLE_INTERVAL,
+        "throttle deadline scheduled too early: started={started:?}, deadline={deadline:?}"
+    );
     tx.add_changed_paths(&[path("b"), path("c")]).await;
-    let blocked = timeout(TEST_THROTTLE_INTERVAL / 2, throttled.recv()).await;
-    assert_eq!(blocked.is_err(), true);
 
-    let second = timeout(TEST_THROTTLE_INTERVAL * 2, throttled.recv())
+    let second = timeout(Duration::from_secs(1), throttled.recv())
         .await
         .expect("second emit timeout");
+    let delivered_at = Instant::now();
     assert_eq!(
         second,
         Some(FileWatcherEvent {
             paths: vec![path("b"), path("c")],
         })
+    );
+    assert!(
+        delivered_at >= deadline,
+        "second batch delivered at {delivered_at:?} before throttle deadline {deadline:?}"
     );
 }
 

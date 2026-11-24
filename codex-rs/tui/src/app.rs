@@ -730,6 +730,9 @@ pub(crate) struct App {
     temporary_structured_requests: HashMap<ThreadId, mpsc::UnboundedSender<ServerNotification>>,
     /// Track title generation across thread switches and deduplicate automatic requests.
     pending_thread_titles: HashMap<(ThreadId, ThreadTitleDestination), CancellationToken>,
+    /// D740/#2856: the server session's OpenAI auth mode, which decides whether
+    /// the session is on a plan account. `None` when unknown.
+    account_auth_mode: Option<codex_app_server_protocol::AuthMode>,
     thread_event_listener_tasks: HashMap<ThreadId, JoinHandle<()>>,
     pub(crate) agent_navigation: AgentNavigationState,
     agents_overview: agents_overview::AgentsOverviewState,
