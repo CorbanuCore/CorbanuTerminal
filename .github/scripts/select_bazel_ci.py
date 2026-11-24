@@ -5,6 +5,11 @@ import os
 import sys
 from pathlib import Path
 
+# Each Linux target's `bazel test //...` runs as this many jobs; see
+# select_linux_bazel_shard.py. Without remote execution one job exceeded
+# GitHub's 360-minute hosted-runner limit.
+LINUX_SHARD_COUNT = 3
+
 
 def boolean_input(raw: str, name: str, *, optional: bool = False) -> bool:
     try:
@@ -36,7 +41,14 @@ def select_lanes(event: str, cold_raw: str, gnu_raw: str) -> dict[str, str]:
         "test_matrix": json.dumps(
             {
                 "include": [
-                    {"os": "ubuntu-24.04", "target": target} for target in targets
+                    {
+                        "os": "ubuntu-24.04",
+                        "target": target,
+                        "shard": shard,
+                        "shard_count": LINUX_SHARD_COUNT,
+                    }
+                    for target in targets
+                    for shard in range(1, LINUX_SHARD_COUNT + 1)
                 ]
             },
             separators=(",", ":"),
