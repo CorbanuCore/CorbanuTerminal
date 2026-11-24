@@ -1677,6 +1677,7 @@ async fn turn_start_tracks_thread_originator_in_analytics() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn code_mode_exec_emits_correlated_production_analytics() -> Result<()> {
+    require_code_mode_host();
     let server = responses::start_mock_server().await;
     let _responses = responses::mount_sse_sequence(
         &server,
@@ -1741,6 +1742,19 @@ async fn code_mode_exec_emits_correlated_production_analytics() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Code mode runs cells in the `codex-code-mode-host` process, found next to
+/// the app server. `cargo test -p codex-app-server` builds only this package's
+/// binaries; `just test`, CI and Bazel also build the host. Without it the
+/// cell cannot start, so the analytics event this test checks is emitted
+/// without a `cell_id` (#2871, #371).
+fn require_code_mode_host() {
+    assert!(
+        codex_utils_cargo_bin::cargo_bin("codex-code-mode-host").is_ok(),
+        "build `codex-code-mode-host` first (`cargo build -p codex-code-mode-host`, or run \
+         through `just test`): without it code mode cannot run the cell"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
