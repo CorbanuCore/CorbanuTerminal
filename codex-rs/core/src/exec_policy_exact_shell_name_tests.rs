@@ -128,6 +128,7 @@ fn near_shell_approval_keys_keep_their_argv() {
 #[cfg(windows)]
 mod powershell {
     use super::*;
+    use pretty_assertions::assert_eq;
     use codex_shell_command::powershell::PowershellScriptRead;
     use codex_shell_command::powershell::read_powershell_command_script;
 
