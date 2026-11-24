@@ -279,6 +279,16 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
     let case = names::PLATFORM;
     names::unsure(program, case)
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
+        // #2734: a name shell detection reads through another extension
+        // (`bash.foo.exe`, `bash.sh`), whose script is not read, may run one.
+        || matches!(
+            codex_shell_command::shell_detect::detect_shell_type(program),
+            Some(
+                codex_shell_command::shell_detect::ShellType::Bash
+                    | codex_shell_command::shell_detect::ShellType::Zsh
+                    | codex_shell_command::shell_detect::ShellType::Sh
+            )
+        )
 }
 
 /// #2548: the name `program` runs as on this platform (its file name,

@@ -232,13 +232,17 @@ async fn non_plain_parameters_keep_literal_restrictions() {
                 }
             }
         }
-        assert!(
-            matches!(
-                requirement(command.clone(), Some(FORBID_GIT_PUSH)).await,
-                ExecApprovalRequirement::Skip { .. }
-            ),
-            "{command:?}"
-        );
+        // #2756: an `-EncodedCommand` script runs without D731's module
+        // hardening, so D729 (A) reads it in part: it asks.
+        let result = requirement(command.clone(), Some(FORBID_GIT_PUSH)).await;
+        if line.contains(&"-EncodedCommand") {
+            assert_eq!(result, ASKED, "{command:?}");
+        } else {
+            assert!(
+                matches!(result, ExecApprovalRequirement::Skip { .. }),
+                "{command:?}"
+            );
+        }
     }
 }
 

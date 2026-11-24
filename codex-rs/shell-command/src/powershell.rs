@@ -9,6 +9,7 @@ use crate::command_safety::PowershellParseOutcome;
 use crate::command_safety::parse_with_powershell_ast;
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
+use crate::shell_detect::exact_shell_type;
 
 mod cli;
 mod command_scope;
@@ -59,7 +60,7 @@ pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
             run: cli::Run::Command { start, script },
             ..
         },
-    )) = read_invocation(command)
+    )) = read_any_invocation(command)
     else {
         return command.to_vec();
     };
@@ -75,8 +76,10 @@ pub fn prefix_powershell_script_with_utf8(command: &[String]) -> Vec<String> {
     prefixed
 }
 
-/// Whether `program` names a PowerShell this crate reads command lines of
-/// (`pwsh`, `powershell.exe`, `C:\…\pwsh.exe`).
+/// Whether `program` may name PowerShell: any name [`detect_shell_type`]
+/// reads as PowerShell (`pwsh`, `powershell.exe`, `C:\…\pwsh.exe`, also
+/// `pwsh.evil.exe` and `pwsh.bat`). Only those [`reads_powershell_program`]
+/// accepts have their command lines read.
 pub fn is_powershell_program(program: &str) -> bool {
     matches!(
         detect_shell_type(PathBuf::from(program)),
@@ -84,11 +87,30 @@ pub fn is_powershell_program(program: &str) -> bool {
     )
 }
 
+/// Whether this crate reads the command lines of `program` as PowerShell's:
+/// (#2734) its file name is exactly `pwsh` or `powershell`, with at most
+/// `.exe` ([`exact_shell_type`]), and (#2699) not spelled so Windows may run
+/// another file (`pwsh.exe:x.exe`, an NTFS stream). Any other name that may
+/// be PowerShell ([`is_powershell_program`]: `pwsh.evil.exe`, `pwsh.bat`)
+/// stays one command rules see whole.
+pub fn reads_powershell_program(program: &str) -> bool {
+    matches!(exact_shell_type(program), Some(ShellType::PowerShell))
+        && !crate::shell_detect::windows_name_unsure(program)
+}
+
 /// `command` read as PowerShell reads its command line (#2568); `None` when
-/// `command[0]` is not a PowerShell, or (#2699) is spelled so Windows may run
-/// another file (`pwsh.exe:x.exe`, an NTFS stream): such a command is never
-/// read as PowerShell, so it stays one command rules see whole.
+/// [`reads_powershell_program`] does not read `command[0]`.
 fn read_invocation(command: &[String]) -> Option<(&str, cli::Invocation<'_>)> {
+    let shell = command.first()?;
+    if !reads_powershell_program(shell) {
+        return None;
+    }
+    Some((shell, cli::read(command, PowershellKind::of(shell))))
+}
+
+/// [`read_invocation`] for any name that may be PowerShell (as before
+/// #2734), only for putting [`AGENT_SCRIPT_PREFIX`] before a script.
+fn read_any_invocation(command: &[String]) -> Option<(&str, cli::Invocation<'_>)> {
     let shell = command.first()?;
     if !is_powershell_program(shell) || crate::shell_detect::windows_name_unsure(shell) {
         return None;
@@ -188,7 +210,18 @@ pub fn read_powershell_command_script(command: &[String]) -> Option<PowershellSc
     };
     match invocation.run {
         cli::Run::Command { script, .. } => Some(read_script(shell, &script, reading)),
-        cli::Run::Encoded(script) => Some(read_script(shell, &script, reading)),
+        // #2756: an `-EncodedCommand` script runs without the D731 module
+        // hardening ([`AGENT_SCRIPT_PREFIX`] goes before `-Command` scripts
+        // only), so the module commands D729 (A) assumes may be others: its
+        // commands only add prompts and refusals, as a script read in part.
+        cli::Run::Encoded(script) => Some(match read_script(shell, &script, reading) {
+            PowershellScriptRead::Commands(commands)
+                if matches!(reading, ParserReading::Allowlist { .. }) =>
+            {
+                PowershellScriptRead::Partial(commands)
+            }
+            read => read,
+        }),
         cli::Run::File(words) => Some(PowershellScriptRead::File(words.to_vec())),
         cli::Run::Unreadable => Some(PowershellScriptRead::Unreadable),
         cli::Run::Interactive => Some(PowershellScriptRead::Unreadable),
@@ -780,6 +813,64 @@ mod tests {
                 let command = line(shell, &["-Command", "git status"]);
                 assert!(extract_powershell_command(&command).is_some(), "{shell}");
             }
+        }
+    }
+
+    /// #2734: a name read as PowerShell only through another extension
+    /// (`pwsh.evil.exe`, `pwsh.bat`) names another file: it may still be
+    /// PowerShell, but no reader reads its command line. The agent-script
+    /// prefix still goes before its `-Command` script, as before.
+    #[test]
+    fn only_exact_powershell_names_are_read() {
+        let line = |shell: &str, rest: &[&str]| {
+            std::iter::once(shell)
+                .chain(rest.iter().copied())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        for shell in [
+            "pwsh.evil.exe",
+            "pwsh.x.exe",
+            "pwsh.bat",
+            "powershell.cmd",
+            "pwsh.exe.exe",
+            "/opt/ps/pwsh.evil.exe",
+        ] {
+            assert!(super::is_powershell_program(shell), "{shell}");
+            assert!(!super::reads_powershell_program(shell), "{shell}");
+            for rest in [
+                &["-Command", "git status"][..],
+                &["-NoProfile", "-c", "git", "status"],
+                &["-EncodedCommand", "ZwBpAHQA"],
+                &["-File", "x.ps1"],
+            ] {
+                let command = line(shell, rest);
+                assert_eq!(extract_powershell_command(&command), None, "{command:?}");
+                assert_eq!(
+                    super::extract_plain_powershell_command(&command),
+                    None,
+                    "{command:?}"
+                );
+                assert_eq!(
+                    super::read_powershell_command_script(&command),
+                    None,
+                    "{command:?}"
+                );
+            }
+            let prefixed = super::prefix_powershell_script_with_utf8(&line(
+                shell,
+                &["-Command", "git status"],
+            ));
+            assert_eq!(
+                prefixed.last().map(String::as_str),
+                Some(format!("{}git status", super::AGENT_SCRIPT_PREFIX).as_str()),
+                "{shell}"
+            );
+        }
+        for shell in ["pwsh", "pwsh.exe", "powershell.exe", "/usr/local/bin/pwsh"] {
+            assert!(super::reads_powershell_program(shell), "{shell}");
+            let command = line(shell, &["-Command", "git status"]);
+            assert!(extract_powershell_command(&command).is_some(), "{shell}");
         }
     }
 }

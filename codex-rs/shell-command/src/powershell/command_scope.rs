@@ -103,6 +103,9 @@ impl Drop for PowershellCommandScopeGuard {
 /// elsewhere (no local folder) has no names this host can find. Outside a
 /// scope (no command to check, as in safety heuristics and tests) names are
 /// not looked up: the approval path always checks within one.
+/// #2756: a command whose environment has no `PATH` finds no name either:
+/// where it is spawned, `PATH` may be filled in (the Windows sandbox gives
+/// it Corbanu's own), so a cmdlet's shadow there is unknown too.
 pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     if programs.is_empty() && cmdlets.is_empty() {
         return true;
@@ -110,7 +113,7 @@ pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     let Some(scope) = current_scope() else {
         return true;
     };
-    if !scope.local {
+    if !scope.local || scope.path.is_none() {
         return false;
     }
     let lookup = PathLookup::new(scope.path.as_deref(), scope.extensions.as_deref());

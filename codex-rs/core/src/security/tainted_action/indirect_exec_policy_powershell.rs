@@ -22,8 +22,9 @@ pub(crate) fn policy_powershell_script(words: &[String]) -> Option<Vec<String>> 
 fn respelled(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
     let (program, rest) = words.split_first()?;
     if case != names::NameCase::Windows
-        // #2568: the reader reads any command line of a PowerShell it knows.
-        || codex_shell_command::powershell::is_powershell_program(program)
+        // #2568: the reader reads any command line of a PowerShell it knows
+        // (#2734: by its exact name only).
+        || codex_shell_command::powershell::reads_powershell_program(program)
     {
         return None;
     }
@@ -84,14 +85,18 @@ mod tests {
             ),
             (r"C:PWSH", Some("C:pwsh.exe")),
             ("D:/PS/Pwsh", Some("D:/PS/pwsh.exe")),
+            // #2734: the reader reads exact names only; Windows trims this.
+            ("powershell.exe. ", Some("powershell.exe")),
+            ("pwsh.exe.", Some("pwsh.exe")),
             // Spellings the reader knows already, and other programs.
             ("pwsh", None),
             ("powershell", None),
             ("powershell.exe", None),
-            // The reader drops the last extension, so it reads these too.
-            ("powershell.exe. ", None),
             ("PWSH.com", None),
             ("pwshx", None),
+            ("pwsh.evil.exe", None),
+            ("pwsh.bat", None),
+            ("pwsh.exe.exe", None),
             (r"\\?\C:\PS\PWSH.EXE", Some(r"\\?\C:\PS\pwsh.exe")),
             (r"\\?\C:\PS\PWSH.EXE.", None),
             (r"\\?\C:\PS\pwsh.exe ", None),
