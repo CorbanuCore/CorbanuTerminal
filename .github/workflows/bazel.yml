@@ -166,8 +166,18 @@ jobs:
           mkdir -p "${labels_dir}"
           ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${all_query}" \
             | LC_ALL=C sort > "${labels_dir}/all.txt"
-          ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${v8_query}" \
-            | LC_ALL=C sort > "${labels_dir}/v8.txt"
+          # rdeps preloads every select() branch, and some (other platforms'
+          # toolchains) cannot load here. Exit 3 is that partial result; it can
+          # only move work between shards, because the shards still partition
+          # all.txt. Any other failure stops the job.
+          v8_status=0
+          ./.github/scripts/run-bazel-query-ci.sh --keep_going --output=label -- "${v8_query}" \
+            > "${labels_dir}/v8.unsorted" || v8_status=$?
+          if [[ ${v8_status} -ne 0 && ${v8_status} -ne 3 ]]; then
+            echo "V8 consumer query failed with exit code ${v8_status}." >&2
+            exit 1
+          fi
+          LC_ALL=C sort "${labels_dir}/v8.unsorted" > "${labels_dir}/v8.txt"
           mapfile -t bazel_targets < <(
             python3 .github/scripts/select_linux_bazel_shard.py \
               --all "${labels_dir}/all.txt" \
