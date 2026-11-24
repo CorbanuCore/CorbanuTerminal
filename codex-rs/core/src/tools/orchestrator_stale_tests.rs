@@ -1286,12 +1286,12 @@ async fn issue_2851_untrusted_content_while_the_command_ran_is_read_again() {
     let setup = ReadAgain::new().await;
 
     // No untrusted content: nothing to say.
-    assert_eq!(setup.read_again(None).await, Ok(None));
+    assert_eq!(setup.read_again(/*round*/ None).await, Ok(None));
 
     // Some arrived while the command ran: the prompt says so.
     setup.taint("call-1");
     let arrived = setup
-        .read_again(None)
+        .read_again(/*round*/ None)
         .await
         .expect("not refused")
         .expect("a protected action after untrusted content");
@@ -1330,10 +1330,10 @@ async fn issue_2851_a_startup_retry_is_refused_with_the_kill_switch_on() {
     setup.probe.apply(Transition::KillSwitchOn);
 
     // No untrusted content: not a protected action, nothing to refuse.
-    assert_eq!(setup.read_again(None).await, Ok(None));
+    assert_eq!(setup.read_again(/*round*/ None).await, Ok(None));
 
     setup.taint("call-1");
-    let refused = setup.read_again(None).await.expect_err("refused");
+    let refused = setup.read_again(/*round*/ None).await.expect_err("refused");
     assert!(
         refused.contains("after untrusted content entered the session"),
         "{refused}"
@@ -1353,7 +1353,7 @@ async fn issue_2851_a_policy_change_while_the_command_ran_is_named() {
     let mut setup = ReadAgain::new().await;
     setup.taint("call-1");
     let round = setup
-        .read_again(None)
+        .read_again(/*round*/ None)
         .await
         .expect("not refused")
         .expect("a protected action after untrusted content");
