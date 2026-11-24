@@ -1570,9 +1570,8 @@ fn escape_unclosed_glob_classes(glob: &str) -> String {
 /// The `rg --files` command that lists deny-read glob matches under
 /// `search_root`. Use `rg --files` rather than shell expansion so dotfiles and
 /// ignored files are still considered. `--no-config` keeps an inherited
-/// `RIPGREP_CONFIG_PATH` from adding flags (`--max-depth`, `--ignore-file`,
-/// `--max-filesize`, type filters, ...) that would silently drop matches and
-/// weaken deny-read (#2897).
+/// `RIPGREP_CONFIG_PATH` from adding flags (`--max-depth`, `--max-filesize`,
+/// ...) that would silently drop matches and weaken deny-read (#2897).
 fn ripgrep_files_command(
     search_root: &Path,
     globs: &[String],
@@ -4620,8 +4619,9 @@ mod tests {
     }
 
     /// #2897: an inherited `RIPGREP_CONFIG_PATH` must not change what the
-    /// deny-read scan lists. Each flag in this config alone drops a match when
-    /// ripgrep reads it (`--no-ignore` does not cover `--ignore-file`).
+    /// deny-read scan lists. Each flag in this config alone drops matches when
+    /// ripgrep reads it: `--max-depth=1` drops the nested key and
+    /// `--max-filesize=1` drops both.
     #[test]
     fn ripgrep_scan_ignores_inherited_ripgrep_config() {
         if !ripgrep_available() {
@@ -4633,14 +4633,8 @@ mod tests {
         std::fs::create_dir_all(root.join("nested")).expect("create nested dir");
         std::fs::write(root.join("top.key"), "secret").expect("write top key");
         std::fs::write(root.join("nested/deep.key"), "secret").expect("write deep key");
-        let ignore_file = temp_dir.path().join("hostile.ignore");
-        std::fs::write(&ignore_file, "top.key\n").expect("write ignore file");
         let config = temp_dir.path().join("hostile.ripgreprc");
-        std::fs::write(
-            &config,
-            format!("--max-depth=1\n--ignore-file={}\n", ignore_file.display()),
-        )
-        .expect("write ripgrep config");
+        std::fs::write(&config, "--max-depth=1\n--max-filesize=1\n").expect("write ripgrep config");
 
         let mut command =
             ripgrep_files_command(&root, &["**/*.key".to_string()], /*max_depth*/ None);
