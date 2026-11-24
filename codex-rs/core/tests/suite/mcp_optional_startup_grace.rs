@@ -146,7 +146,12 @@ async fn optional_mcp_startup_grace_controls_initial_turn_tool_catalog(
                     .is_err(),
                 "zero grace should keep waiting until the server-specific startup timeout"
             );
-            tokio::time::timeout(Duration::from_secs(1), &mut turn)
+            // The server's own 250 ms startup timeout ends the wait. Allow the turn the same
+            // slow-runner budget as the other cases: on macOS CI (RUST_BACKTRACE=1) building
+            // the timeout's anyhow error captures a backtrace of the large debug test binary,
+            // which alone takes about 1.5 s (#2814). The budget stays well under the 30 s
+            // default startup timeout, so ignoring the server's timeout still fails here.
+            tokio::time::timeout(TURN_TIMEOUT, &mut turn)
                 .await
                 .context("zero grace should stop waiting once the server startup times out")??;
             release_startup
