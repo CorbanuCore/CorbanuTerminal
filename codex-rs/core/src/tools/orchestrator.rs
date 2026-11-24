@@ -68,6 +68,10 @@ impl HandlerBasis {
 pub(crate) struct OrchestratorRunResult<Out> {
     pub output: Out,
     pub deferred_network_approval: Option<DeferredNetworkApproval>,
+    /// D750 (#2851): for a run started in the Linux sandbox, what a startup
+    /// failure seen only after `run` returned is decided on
+    /// ([`ToolOrchestrator::retry_late_sandbox_startup_failure`]).
+    pub late_startup_retry: Option<Box<LateStartupRetry>>,
 }
 
 impl ToolOrchestrator {
@@ -1312,12 +1316,46 @@ impl ToolOrchestrator {
             check.finish(tool_ctx).await;
         }
         let initial_duration = initial_attempt_start.elapsed();
+        // D750 (#2851): what a sandbox startup failure is decided on.
+        let startup_retry = |git_check: Option<GitCheck>| LateStartupRetry {
+            approval_policy,
+            already_approved,
+            keeps_sandbox,
+            policy_allows_no_sandbox,
+            post_taint: post_taint.clone(),
+            git_held: git_held.clone(),
+            git_check,
+            protected_launch_no_retry: permissive_launch
+                && unsandboxed_execution_allowed(&file_system_sandbox_policy),
+            strict_auto_review,
+            decided_under,
+            initial_duration,
+            sandbox: initial_attempt.sandbox,
+            sandbox_requested: initial_attempt.sandbox_requested,
+            permissions: initial_attempt.permissions.clone(),
+            exec_server_permissions: initial_attempt.exec_server_permissions.clone(),
+            enforce_managed_network: initial_attempt.enforce_managed_network,
+            // A unit struct on main.
+            manager: SandboxManager::new(),
+            sandbox_cwd: initial_attempt.sandbox_cwd.clone(),
+            workspace_roots: initial_attempt.workspace_roots.to_vec(),
+            codex_linux_sandbox_exe: initial_attempt.codex_linux_sandbox_exe.cloned(),
+            use_legacy_landlock: initial_attempt.use_legacy_landlock,
+            windows_sandbox_level: initial_attempt.windows_sandbox_level,
+            windows_sandbox_private_desktop: initial_attempt.windows_sandbox_private_desktop,
+        };
         let result = match first_result {
             Ok(out) => {
-                // We have a successful initial result
+                // We have a successful initial result. D750 (#2851): the
+                // Linux sandbox may still fail to start after unified exec
+                // returned the run as started.
+                let late_startup_retry = (initial_sandbox == SandboxType::LinuxSeccomp
+                    && tool.escalate_on_failure())
+                .then(|| Box::new(startup_retry(git_check)));
                 Ok(OrchestratorRunResult {
                     output: out,
                     deferred_network_approval: first_deferred_network_approval,
+                    late_startup_retry,
                 })
             }
             Err(ToolError::Codex(err)) => {
@@ -1374,6 +1412,19 @@ impl ToolOrchestrator {
                     output.as_ref(),
                 )
                 .await;
+                // D750 (#2851): early and late startup failures are decided
+                // in one place.
+                if sandbox_startup_failure && network_approval_context.is_none() {
+                    return retry_after_sandbox_startup_failure(
+                        tool,
+                        req,
+                        tool_ctx,
+                        startup_retry(git_check),
+                        ToolError::Codex(err),
+                    )
+                    .await
+                    .map(Round::Done);
+                }
                 // #874: nor while the git check's findings are still there
                 // (an approval doesn't lift the rules then); the person is
                 // told why.
@@ -1624,6 +1675,7 @@ impl ToolOrchestrator {
                         Ok(OrchestratorRunResult {
                             output,
                             deferred_network_approval: retry_deferred_network_approval,
+                            late_startup_retry: None,
                         })
                     }
                     Err(err) => {
@@ -2867,6 +2919,265 @@ fn person_may_answer(
             .approvals_reviewer
             .can_set(&codex_config::types::ApprovalsReviewer::User)
             .is_ok()
+}
+
+/// D750 (#2851): what a round decided, kept for a sandbox startup failure
+/// seen only after the run started (unified exec reports a denial to the
+/// orchestrator only within its early-exit grace period). Linux (bubblewrap)
+/// only. Such a failure goes through the same launcher probe and once-only
+/// prompt as an early one ([`retry_after_sandbox_startup_failure`]).
+pub(crate) struct LateStartupRetry {
+    approval_policy: AskForApproval,
+    already_approved: bool,
+    keeps_sandbox: bool,
+    policy_allows_no_sandbox: bool,
+    post_taint: Option<crate::security::tainted_action::PostTaintAction>,
+    git_held: Vec<String>,
+    git_check: Option<GitCheck>,
+    /// #739: where only protected launch keeps the run in the sandbox.
+    protected_launch_no_retry: bool,
+    strict_auto_review: bool,
+    decided_under: crate::state::AuthorityMarker,
+    initial_duration: std::time::Duration,
+    // The first attempt (the probe runs `true` through its launcher).
+    sandbox: SandboxType,
+    sandbox_requested: bool,
+    permissions: codex_protocol::models::PermissionProfile,
+    exec_server_permissions: codex_protocol::models::PermissionProfile,
+    enforce_managed_network: bool,
+    manager: SandboxManager,
+    sandbox_cwd: PathUri,
+    workspace_roots: Vec<PathUri>,
+    codex_linux_sandbox_exe: Option<std::path::PathBuf>,
+    use_legacy_landlock: bool,
+    windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    windows_sandbox_private_desktop: bool,
+}
+
+impl LateStartupRetry {
+    /// The round's first attempt, as it ran.
+    fn first_attempt(&self) -> SandboxAttempt<'_> {
+        SandboxAttempt {
+            sandbox: self.sandbox,
+            sandbox_requested: self.sandbox_requested,
+            permissions: &self.permissions,
+            exec_server_permissions: &self.exec_server_permissions,
+            enforce_managed_network: self.enforce_managed_network,
+            manager: &self.manager,
+            sandbox_cwd: &self.sandbox_cwd,
+            workspace_roots: &self.workspace_roots,
+            codex_linux_sandbox_exe: self.codex_linux_sandbox_exe.as_ref(),
+            use_legacy_landlock: self.use_legacy_landlock,
+            windows_sandbox_level: self.windows_sandbox_level,
+            windows_sandbox_private_desktop: self.windows_sandbox_private_desktop,
+            network_denial_cancellation_token: None,
+            network_proxy: None,
+        }
+    }
+}
+
+impl ToolOrchestrator {
+    /// D750 (#2851): a run whose sandbox (bubblewrap) failed to start after
+    /// unified exec's early-exit grace period, so after `run` returned it as
+    /// started: denied with `output`. Decided as an early one: the launcher
+    /// probe decides whether the sandbox failed to start (anything
+    /// inconclusive stays an ordinary, final denial), and the retry outside
+    /// it needs a person's fresh answer, once only, refused where no person
+    /// can be asked. Never on an earlier approval.
+    pub(crate) async fn retry_late_sandbox_startup_failure<Rq, Out, T>(
+        &mut self,
+        tool: &mut T,
+        req: &Rq,
+        tool_ctx: &ToolCtx,
+        plan: Box<LateStartupRetry>,
+        output: ExecToolCallOutput,
+    ) -> Result<OrchestratorRunResult<Out>, ToolError>
+    where
+        T: ToolRuntime<Rq, Out>,
+    {
+        let started = sandbox_failed_to_start(
+            &plan.first_attempt(),
+            tool.local_search_path(req),
+            tool.command_cwd(req).map(PathUri::from),
+            &output,
+        )
+        .await;
+        let err = ToolError::Codex(codex_protocol::error::CodexErr::Sandbox(
+            SandboxErr::Denied {
+                output: Box::new(output),
+                network_policy_decision: None,
+            },
+        ));
+        if !started {
+            return Err(err);
+        }
+        retry_after_sandbox_startup_failure(tool, req, tool_ctx, *plan, err).await
+    }
+}
+
+/// #2820 (D747), D750 (#2851): after the launcher probe found that the
+/// sandbox failed to start (`err` is the run's denial), the retry outside
+/// it: asked again of a person, for this run only (no "don't ask again",
+/// nothing remembered or reused), refused where no person can be asked
+/// (approvals off, automatic review required) and where the run must stay
+/// in the sandbox. Early and late failures both come here.
+async fn retry_after_sandbox_startup_failure<Rq, Out, T>(
+    tool: &mut T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    plan: LateStartupRetry,
+    err: ToolError,
+) -> Result<OrchestratorRunResult<Out>, ToolError>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    let turn_ctx = tool_ctx.turn.as_ref();
+    let otel = turn_ctx.session_telemetry.clone();
+    let otel_tn = flat_tool_name(&tool_ctx.tool_name).into_owned();
+    let otel_ci = &tool_ctx.call_id;
+    let denied = |err: ToolError| {
+        otel.sandbox_outcome(
+            &otel_tn,
+            otel_ci,
+            "denied",
+            plan.initial_duration,
+            /*escalated_duration*/ None,
+        );
+        Err(err)
+    };
+    let unsandboxed_allowed = retry_may_leave_sandbox(
+        plan.policy_allows_no_sandbox,
+        plan.keeps_sandbox,
+        plan.post_taint.is_some(),
+        /*network_retry*/ false,
+    );
+    // #874, #943 item 3: as for any retry outside the sandbox.
+    if unsandboxed_allowed && !plan.git_held.is_empty() {
+        warn(tool_ctx, &git_held_note(&plan.git_held, Withheld::Rules)).await;
+    }
+    let unsandboxed_allowed = unsandboxed_allowed && plan.git_held.is_empty();
+    if !tool.wants_no_sandbox_approval(plan.approval_policy)
+        && !allow_on_request_sandbox_startup_retry(
+            plan.approval_policy,
+            plan.already_approved,
+            /*sandbox_startup_failure*/ true,
+        )
+    {
+        return denied(err);
+    }
+    if !unsandboxed_allowed {
+        if plan.protected_launch_no_retry {
+            warn(
+                tool_ctx,
+                crate::security::protected_additional::PROTECTED_LAUNCH_NO_RETRY,
+            )
+            .await;
+        }
+        return denied(err);
+    }
+    // D50: nor on a policy that changed since the round was decided.
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
+        warn(tool_ctx, STALE_RETRY_NOTE).await;
+        return denied(err);
+    }
+    if !person_may_answer(plan.strict_auto_review, turn_ctx) {
+        let _ = denied(err);
+        return Err(ToolError::Rejected(STARTUP_RETRY_NEEDS_PERSON.to_string()));
+    }
+    let retry_reason = "sandbox failed to start; retry without sandbox?".to_string();
+    let approval_ctx = ApprovalCtx {
+        session: &tool_ctx.session,
+        turn: &tool_ctx.turn,
+        call_id: &tool_ctx.call_id,
+        retry_reason: Some(match &plan.post_taint {
+            Some(action) => format!("{} {retry_reason}", action.approval_reason()),
+            None => retry_reason,
+        }),
+        network_approval_context: None,
+        // For this run only: no hook allows it, no "don't ask again",
+        // nothing remembered or reused.
+        fresh_human_authority: true,
+    };
+    let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
+    let retry_approved_by = resolve_tool_apporval(
+        tool,
+        req,
+        &permission_request_run_id,
+        approval_ctx,
+        tool_ctx,
+        ApprovalReviewer::for_turn(turn_ctx),
+        &otel,
+        DeclineRecord::Here,
+        /*asked_again*/ false,
+    )
+    .await?;
+    if let Some(action) = &plan.post_taint {
+        post_taint_recheck(action, tool_ctx)?;
+    }
+    if retry_approved_by != ApprovalResolutionSource::User {
+        return Err(ToolError::Rejected(
+            "running outside the sandbox needs a person's approval here".to_string(),
+        ));
+    }
+    if tool_ctx
+        .session
+        .services
+        .transition_since(plan.decided_under)
+    {
+        warn(tool_ctx, STALE_RETRY_NOTE).await;
+        return denied(err);
+    }
+    let retry_attempt = SandboxAttempt {
+        sandbox: SandboxType::None,
+        sandbox_requested: false,
+        codex_linux_sandbox_exe: None,
+        ..plan.first_attempt()
+    };
+    let escalated_attempt_start = Instant::now();
+    let (retry_result, retry_deferred_network_approval) = ToolOrchestrator::run_attempt(
+        tool,
+        req,
+        tool_ctx,
+        &retry_attempt,
+        plan.enforce_managed_network,
+    )
+    .await;
+    if let Some(check) = &plan.git_check {
+        check.finish(tool_ctx).await;
+    }
+    let escalated_duration = escalated_attempt_start.elapsed();
+    match retry_result {
+        Ok(output) => {
+            otel.sandbox_outcome(
+                &otel_tn,
+                otel_ci,
+                "escalated",
+                plan.initial_duration,
+                Some(escalated_duration),
+            );
+            Ok(OrchestratorRunResult {
+                output,
+                deferred_network_approval: retry_deferred_network_approval,
+                late_startup_retry: None,
+            })
+        }
+        Err(err) => {
+            if let Some(outcome) = sandbox_outcome_from_tool_error(&err) {
+                otel.sandbox_outcome(
+                    &otel_tn,
+                    otel_ci,
+                    outcome,
+                    plan.initial_duration,
+                    Some(escalated_duration),
+                );
+            }
+            Err(err)
+        }
+    }
 }
 
 /// #2820: the longest the launcher probe may take.

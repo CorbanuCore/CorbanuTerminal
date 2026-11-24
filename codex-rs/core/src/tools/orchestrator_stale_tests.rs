@@ -77,6 +77,10 @@ struct Probe {
     /// #2820: the `PATH` it runs with, if known.
     search_path: Option<&'static str>,
     runs: usize,
+    /// D750 (#2851): the sandbox each run had, in order (read by the Linux
+    /// tests).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    sandboxes: Vec<SandboxType>,
     revocations: RevocationState,
     level: SecurityLevel,
 }
@@ -209,9 +213,10 @@ impl ToolRuntime<Req, ()> for Probe {
     async fn run(
         &mut self,
         _req: &Req,
-        _attempt: &SandboxAttempt<'_>,
+        attempt: &SandboxAttempt<'_>,
         _ctx: &ToolCtx,
     ) -> Result<(), ToolError> {
+        self.sandboxes.push(attempt.sandbox);
         if !self.while_running.is_empty() {
             let transition = self.while_running.remove(0);
             self.apply(transition);
@@ -262,6 +267,9 @@ struct Case {
     sandbox_approval_by_policy: bool,
     /// #2820: the `PATH` the command runs with (`local_search_path`).
     search_path: Option<&'static str>,
+    /// D750 (#2851): the first run starts (its attempt returns), and its
+    /// denial (`denial_text`) is seen only afterwards.
+    late_denial: bool,
 }
 
 struct Handler {
@@ -283,6 +291,7 @@ impl Default for Case {
             sandbox_exe: None,
             sandbox_approval_by_policy: false,
             search_path: None,
+            late_denial: false,
         }
     }
 }
@@ -319,6 +328,7 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         sandbox_approval_by_policy: case.sandbox_approval_by_policy,
         search_path: case.search_path,
         runs: 0,
+        sandboxes: Vec::new(),
         revocations: RevocationState::new(),
         level: SecurityLevel::Permissive,
     };
@@ -372,26 +382,51 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
             probe.apply(transition);
         }
     }
-    let result = ToolOrchestrator::new()
-        .with_handler_basis(handler_basis)
-        .run(
-            &mut probe,
-            &additional,
-            &tool_ctx,
-            turn.as_ref(),
-            case.approval_policy,
-        )
-        .await
-        .map(|_| ())
-        .map_err(|err| match err {
-            ToolError::Rejected(message) | ToolError::Declined(message) => message,
-            ToolError::Codex(err) => match err.details() {
-                CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => {
-                    "sandbox denied".to_string()
-                }
-                _ => err.to_string(),
-            },
-        });
+    let late_denial = case.late_denial.then(|| ExecToolCallOutput {
+        exit_code: 1,
+        stderr: codex_protocol::exec_output::StreamOutput::new(
+            case.denial_text.unwrap_or_default().to_string(),
+        ),
+        aggregated_output: codex_protocol::exec_output::StreamOutput::new(
+            case.denial_text.unwrap_or_default().to_string(),
+        ),
+        ..Default::default()
+    });
+    let mut orchestrator = ToolOrchestrator::new().with_handler_basis(handler_basis);
+    let result = async {
+        let started = orchestrator
+            .run(
+                &mut probe,
+                &additional,
+                &tool_ctx,
+                turn.as_ref(),
+                case.approval_policy,
+            )
+            .await?;
+        let Some(output) = late_denial else {
+            return Ok(());
+        };
+        // D750 (#2851): as unified exec does when the run it returned as
+        // started is then denied.
+        let Some(plan) = started.late_startup_retry else {
+            return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
+                output: Box::new(output),
+                network_policy_decision: None,
+            })));
+        };
+        orchestrator
+            .retry_late_sandbox_startup_failure(&mut probe, &additional, &tool_ctx, plan, output)
+            .await
+            .map(|_| ())
+    }
+    .await
+    .map_err(|err| match err {
+        ToolError::Rejected(message) | ToolError::Declined(message) => message,
+        ToolError::Codex(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { .. }) => "sandbox denied".to_string(),
+            _ => err.to_string(),
+        },
+    });
     (probe, result)
 }
 
@@ -778,4 +813,95 @@ async fn issue_2820_no_person_is_asked_where_automatic_review_is_required() {
     let (_session, turn, _events) = make_session_and_context_with_rx().await;
     assert!(person_may_answer(/*strict_auto_review*/ false, &turn));
     assert!(!person_may_answer(/*strict_auto_review*/ true, &turn));
+}
+
+/// D750 (#2851): a sandbox that failed to start only after the run was
+/// returned as started (late) is asked about again as an early one: for a
+/// person, once only, and run outside the sandbox only on that answer.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_sandbox_startup_failure_is_asked_about_again() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    for approval_policy in [AskForApproval::OnRequest, AskForApproval::UnlessTrusted] {
+        let (probe, result) = run_probe(Case {
+            approval_policy,
+            denial_text: Some(UID_MAP_DENIED),
+            sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            late_denial: true,
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Ok(()), "{approval_policy:?}");
+        assert_eq!(
+            probe.asked,
+            vec![
+                None,
+                Some("sandbox failed to start; retry without sandbox?".to_string())
+            ],
+            "{approval_policy:?}"
+        );
+        assert_eq!(
+            probe.fresh,
+            vec![false, true],
+            "the retry is for a person, once: {approval_policy:?}"
+        );
+        assert_eq!(
+            probe.sandboxes,
+            vec![SandboxType::LinuxSeccomp, SandboxType::None],
+            "retried outside the sandbox on the second answer: {approval_policy:?}"
+        );
+    }
+}
+
+/// D750 (#2851): a late denial whose text the launcher probe does not
+/// confirm (an ordinary one, or bubblewrap's text printed by the command in
+/// a sandbox that started) stays a plain denial: not asked about again.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_denial_of_a_started_sandbox_stays_final() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    for (denial_text, starts) in [
+        ("touch: cannot touch 'x': Permission denied\n", false),
+        (UID_MAP_DENIED, true),
+    ] {
+        let (probe, result) = run_probe(Case {
+            approval_policy: AskForApproval::UnlessTrusted,
+            denial_text: Some(denial_text),
+            sandbox_exe: Some(fake_launcher(dir.path(), starts)),
+            sandbox_approval_by_policy: true,
+            search_path: Some(RUN_PATH),
+            late_denial: true,
+            ..Case::default()
+        })
+        .await;
+        assert_eq!(result, Err("sandbox denied".to_string()), "{denial_text}");
+        assert_eq!(probe.asked, vec![None], "{denial_text}");
+        assert_eq!(probe.runs, 1, "not retried: {denial_text}");
+    }
+}
+
+/// D750 (#2851): with approvals off, a late startup failure is refused.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn issue_2851_a_late_startup_failure_is_refused_with_approvals_off() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (probe, result) = run_probe(Case {
+        requirement: ExecApprovalRequirement::Skip {
+            bypass_sandbox: false,
+            proposed_execpolicy_amendment: None,
+        },
+        approval_policy: AskForApproval::Never,
+        denial_text: Some(UID_MAP_DENIED),
+        sandbox_exe: Some(fake_launcher(dir.path(), /*starts*/ false)),
+        sandbox_approval_by_policy: true,
+        search_path: Some(RUN_PATH),
+        late_denial: true,
+        ..Case::default()
+    })
+    .await;
+    assert_eq!(result, Err("sandbox denied".to_string()));
+    assert_eq!(probe.asked, Vec::<Option<String>>::new());
+    assert_eq!(probe.runs, 1, "not retried");
 }
