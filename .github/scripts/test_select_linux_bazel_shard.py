@@ -35,6 +35,14 @@ class SelectLinuxBazelShardTest(unittest.TestCase):
         earlier = assign_shard(ALL, V8, 1, 3) + assign_shard(ALL, V8, 2, 3)
         self.assertEqual(set(earlier), set(V8))
 
+    def test_v8_labels_outside_the_target_set_are_ignored(self):
+        extra = V8 + ["//codex-rs/other:manual"]
+        for shard in (1, 2, 3):
+            with self.subTest(shard=shard):
+                self.assertEqual(
+                    assign_shard(ALL, extra, shard, 3), assign_shard(ALL, V8, shard, 3)
+                )
+
     def test_assignment_is_deterministic_and_order_independent(self):
         first = assign_shard(ALL, V8, 1, 3)
         self.assertEqual(first, assign_shard(list(reversed(ALL)), sorted(V8), 1, 3))
@@ -47,7 +55,7 @@ class SelectLinuxBazelShardTest(unittest.TestCase):
             (ALL, V8, 4, 3),
             ([], V8, 1, 3),
             (ALL, [], 1, 3),
-            (ALL, V8 + ["//codex-rs/other:missing"], 1, 3),
+            (ALL, ["//codex-rs/other:missing"], 1, 3),
             (V8, V8, 3, 3),
         ):
             with self.subTest(shard=shard, shard_count=shard_count), self.assertRaises(
