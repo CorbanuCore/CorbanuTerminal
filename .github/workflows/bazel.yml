@@ -158,10 +158,12 @@ jobs:
           # standalone V8 library targets stay out of the ordinary Bazel CI
           # path (V8 consumers under `//codex-rs/...` still participate), and
           # D316 keeps voice outside the sync lanes pending a product decision.
-          # Wildcards skip `manual` targets, so the query does too.
-          all_query='//... except //third_party/v8:all except //codex-rs/v8-poc:v8-poc-unit-tests except //third_party/voice/... except attr(tags, "manual", //...)'
-          # Only code-mode-runtime links V8; its consumers go to the V8 shards.
-          v8_query="rdeps(${all_query}, //codex-rs/code-mode-runtime:all)"
+          # Wildcards skip targets tagged exactly `manual`, so the query does too.
+          all_query='//... except //third_party/v8:all except //codex-rs/v8-poc:v8-poc-unit-tests except //third_party/voice/... except attr(tags, "[\[ ]manual[,\]]", //...)'
+          # Everything that links the source-built V8 crate goes to the V8
+          # shards: direct `@crates//:v8` users (v8-poc) and code-mode-runtime,
+          # which depends on the versioned crate label.
+          v8_query="rdeps(${all_query}, @crates//:v8 + //codex-rs/code-mode-runtime:all)"
           labels_dir="${RUNNER_TEMP}/bazel-shard-labels"
           mkdir -p "${labels_dir}"
           ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${all_query}" \
@@ -177,14 +179,17 @@ jobs:
             echo "V8 consumer query failed with exit code ${v8_status}." >&2
             exit 1
           fi
+          if [[ ${v8_status} -eq 3 ]]; then
+            echo "::warning::V8 consumer query returned a partial result (exit 3); V8 targets it missed run in the last shard."
+          fi
           LC_ALL=C sort "${labels_dir}/v8.unsorted" > "${labels_dir}/v8.txt"
-          mapfile -t bazel_targets < <(
-            python3 .github/scripts/select_linux_bazel_shard.py \
-              --all "${labels_dir}/all.txt" \
-              --v8 "${labels_dir}/v8.txt" \
-              --shard "${BAZEL_TEST_SHARD}" \
-              --shard-count "${BAZEL_TEST_SHARD_COUNT}"
-          )
+          python3 .github/scripts/select_linux_bazel_shard.py \
+            --all "${labels_dir}/all.txt" \
+            --v8 "${labels_dir}/v8.txt" \
+            --shard "${BAZEL_TEST_SHARD}" \
+            --shard-count "${BAZEL_TEST_SHARD_COUNT}" \
+            > "${labels_dir}/shard.txt"
+          mapfile -t bazel_targets < "${labels_dir}/shard.txt"
           if [[ ${#bazel_targets[@]} -eq 0 ]]; then
             echo "No Bazel targets selected for Linux shard ${BAZEL_TEST_SHARD}/${BAZEL_TEST_SHARD_COUNT}." >&2
             exit 1

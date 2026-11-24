@@ -4,8 +4,9 @@
 
 Without remote execution, V8 is built from source (target and exec
 configuration) in every job that needs it. Only the shards before the last
-receive V8 consumers, hashed between them; the last shard receives every other
-target and never builds V8. The shards together cover exactly the input set.
+receive the targets that link the V8 crate, hashed between them; the last
+shard receives every other target and so builds no V8. The shards together
+cover exactly the input set; the V8 list only decides where a target runs.
 """
 
 import argparse
