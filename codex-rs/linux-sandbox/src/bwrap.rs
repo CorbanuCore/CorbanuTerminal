@@ -1567,16 +1567,20 @@ fn escape_unclosed_glob_classes(glob: &str) -> String {
     escaped
 }
 
-fn ripgrep_files(
+/// The `rg --files` command that lists deny-read glob matches under
+/// `search_root`. Use `rg --files` rather than shell expansion so dotfiles and
+/// ignored files are still considered. `--no-config` keeps an inherited
+/// `RIPGREP_CONFIG_PATH` from adding flags (`--max-depth`, `--ignore-file`,
+/// `--max-filesize`, type filters, ...) that would silently drop matches and
+/// weaken deny-read (#2897).
+fn ripgrep_files_command(
     search_root: &Path,
     globs: &[String],
     max_depth: Option<usize>,
-) -> Result<Vec<AbsolutePathBuf>> {
-    // Use `rg --files` rather than shell expansion so dotfiles and ignored files
-    // are still considered. A status 1 with no stderr is ripgrep's "no matches"
-    // case, not a sandbox construction error.
+) -> Command {
     let mut command = Command::new("rg");
     command
+        .arg("--no-config")
         .arg("--files")
         .arg("--hidden")
         .arg("--no-ignore")
@@ -1588,6 +1592,17 @@ fn ripgrep_files(
         command.arg("--glob").arg(glob);
     }
     command.arg("--").arg(search_root);
+    command
+}
+
+fn ripgrep_files(
+    search_root: &Path,
+    globs: &[String],
+    max_depth: Option<usize>,
+) -> Result<Vec<AbsolutePathBuf>> {
+    // A status 1 with no stderr is ripgrep's "no matches" case, not a sandbox
+    // construction error.
+    let mut command = ripgrep_files_command(search_root, globs, max_depth);
 
     /*
      * Prefer ripgrep for unreadable glob expansion because it is fast and
@@ -4601,6 +4616,50 @@ mod tests {
         assert_eq!(
             expand(vec![format!("{}/**/.env.*", root.display())]),
             vec![".env.example", ".env.local", ".env.sample", ".env.template"]
+        );
+    }
+
+    /// #2897: an inherited `RIPGREP_CONFIG_PATH` must not change what the
+    /// deny-read scan lists. Each flag in this config alone drops a match when
+    /// ripgrep reads it (`--no-ignore` does not cover `--ignore-file`).
+    #[test]
+    fn ripgrep_scan_ignores_inherited_ripgrep_config() {
+        if !ripgrep_available() {
+            return;
+        }
+
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path().join("root");
+        std::fs::create_dir_all(root.join("nested")).expect("create nested dir");
+        std::fs::write(root.join("top.key"), "secret").expect("write top key");
+        std::fs::write(root.join("nested/deep.key"), "secret").expect("write deep key");
+        let ignore_file = temp_dir.path().join("hostile.ignore");
+        std::fs::write(&ignore_file, "top.key\n").expect("write ignore file");
+        let config = temp_dir.path().join("hostile.ripgreprc");
+        std::fs::write(
+            &config,
+            format!("--max-depth=1\n--ignore-file={}\n", ignore_file.display()),
+        )
+        .expect("write ripgrep config");
+
+        let mut command =
+            ripgrep_files_command(&root, &["**/*.key".to_string()], /*max_depth*/ None);
+        command.env("RIPGREP_CONFIG_PATH", &config);
+        let output = command.output().expect("run rg");
+        let mut listed = output
+            .stdout
+            .split(|byte| *byte == b'\0')
+            .filter(|path| !path.is_empty())
+            .map(|path| PathBuf::from(OsString::from_vec(path.to_vec())))
+            .collect::<Vec<_>>();
+        listed.sort();
+
+        assert_eq!(
+            (listed, String::from_utf8_lossy(&output.stderr).into_owned()),
+            (
+                vec![root.join("nested/deep.key"), root.join("top.key")],
+                String::new()
+            )
         );
     }
 
