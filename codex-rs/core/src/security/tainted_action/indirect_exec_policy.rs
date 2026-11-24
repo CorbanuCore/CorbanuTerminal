@@ -295,6 +295,16 @@ pub(crate) fn policy_runs_shell(program: &str) -> bool {
     let case = names::PLATFORM;
     names::unsure(program, case)
         || SHELLS.contains(&names::launcher_name_for(program, case).as_ref())
+        // #2734: a name shell detection reads through another extension
+        // (`bash.foo.exe`, `bash.sh`), whose script is not read, may run one.
+        || matches!(
+            codex_shell_command::shell_detect::detect_shell_type(program),
+            Some(
+                codex_shell_command::shell_detect::ShellType::Bash
+                    | codex_shell_command::shell_detect::ShellType::Zsh
+                    | codex_shell_command::shell_detect::ShellType::Sh
+            )
+        )
 }
 
 /// #2704: the name `program` runs as on Windows (its file name, folded, a
@@ -348,8 +358,24 @@ pub(crate) fn windows_names_unread(words: &[String]) -> bool {
     let Some(program) = words.first() else {
         return false;
     };
-    if runs_powershell_as(program, windows)
-        && !codex_shell_command::powershell::is_powershell_program(program)
+    // #2734: also a name shell detection reads as PowerShell or a POSIX
+    // shell only through another extension (`pwsh.evil.exe`, `pwsh.bat`,
+    // `C:\PS\bash.foo.exe`, its file name taken as Windows takes it), which
+    // runs another file and is not read.
+    let file_name = names::windows_file_name(program);
+    let near_shell = matches!(
+        codex_shell_command::shell_detect::detect_shell_type(file_name),
+        Some(
+            codex_shell_command::shell_detect::ShellType::Bash
+                | codex_shell_command::shell_detect::ShellType::Zsh
+                | codex_shell_command::shell_detect::ShellType::Sh
+                | codex_shell_command::shell_detect::ShellType::PowerShell
+        )
+    ) && codex_shell_command::shell_detect::exact_shell_type(file_name).is_none();
+    if (runs_powershell_as(program, windows)
+        || codex_shell_command::powershell::is_powershell_program(program)
+        || near_shell)
+        && !codex_shell_command::powershell::reads_powershell_program(program)
         && policy_powershell_script(words).is_none()
     {
         return true;

@@ -90,7 +90,7 @@ pub(super) fn launcher_name_for(word: &str, case: NameCase) -> Cow<'_, str> {
 
 /// The last path component, with `/` or `\` separators and an optional
 /// drive (`C:sudo`).
-fn windows_file_name(word: &str) -> &str {
+pub(super) fn windows_file_name(word: &str) -> &str {
     let name = word
         .trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])

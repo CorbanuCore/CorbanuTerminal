@@ -245,3 +245,109 @@ fn a_local_command_looks_names_and_profiles_up() {
         enter_powershell_command_scope(PowershellCommandScope::new(Some(&cwd), Some(&env)));
     assert!(review("pwsh", PowershellKind::Pwsh, false, &words("tool -x")).is_some());
 }
+
+/// #2756: which allowlisted cmdlets have an excluded parameter that takes
+/// pipeline input, per edition (main's tables, dumped with the `i` flag).
+#[test]
+fn excluded_parameters_taking_pipeline_input_are_known() {
+    let common = [
+        "get-content",
+        "get-item",
+        "get-itemproperty",
+        "get-itempropertyvalue",
+        "join-path",
+        "receive-job",
+        "resolve-path",
+        "split-path",
+        "test-path",
+    ];
+    for kind in BOTH {
+        let mut piped: Vec<&str> = tables(kind)
+            .expect("tables")
+            .allow
+            .iter()
+            .filter(|(_, cmdlet)| cmdlet.excluded_pipeline)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        piped.sort_unstable();
+        let mut expected = common.to_vec();
+        if kind == PowershellKind::WindowsPowershell {
+            expected.extend(["get-process", "get-service"]);
+            expected.sort_unstable();
+        }
+        assert_eq!(piped, expected, "{kind:?}");
+    }
+}
+
+/// #2756: past a pipeline's first command, input objects bind to parameters
+/// too, so a cmdlet with an excluded parameter that takes pipeline input
+/// reads in part there; first in a pipeline, or with none, it reads in full.
+#[test]
+fn excluded_pipeline_parameters_read_in_part_when_piped() {
+    for kind in BOTH {
+        for script in [
+            r"Import-Csv C:\Temp\a.csv | Get-Content",
+            r"Import-Csv C:\Temp\a.csv | Test-Path",
+            "Get-Job | Receive-Job",
+            "Get-ChildItem | Select-Object -First 1 | Resolve-Path",
+        ] {
+            assert!(cause(kind, script).is_some(), "{kind:?} {script}");
+        }
+        for script in [
+            "Get-Content README.md | Select-Object -First 3",
+            "Get-ChildItem -File | Select-String -Pattern x | Measure-Object",
+            "Get-Content README.md; Test-Path x",
+        ] {
+            assert_eq!(cause(kind, script), None, "{kind:?} {script}");
+        }
+    }
+    let piped = |script: &str| -> Vec<bool> {
+        words(script)
+            .iter()
+            .map(|command| command[0].piped)
+            .collect()
+    };
+    assert_eq!(piped("a | b | c; d"), vec![false, true, true, false]);
+    assert_eq!(piped("a && b | c"), vec![false, false, true]);
+    assert_eq!(piped("a -x 'y|z'"), vec![false]);
+    // 5.1 binds `-ComputerName` from input objects by property name.
+    assert!(
+        cause(
+            PowershellKind::WindowsPowershell,
+            r"Import-Csv h.csv | Get-Process"
+        )
+        .is_some()
+    );
+    assert_eq!(
+        cause(PowershellKind::Pwsh, r"Import-Csv h.csv | Get-Process"),
+        None
+    );
+}
+
+/// #2756: a drive letter that is not a local disk (a mapped network drive,
+/// or one not present: a command may map it first) counts as a network
+/// path on a Windows host.
+#[cfg(windows)]
+#[test]
+fn drive_letters_that_are_not_local_disks_read_in_part() {
+    let Some(letter) = ('D'..='Z')
+        .rev()
+        .find(|letter| !std::path::Path::new(&format!(r"{letter}:\")).exists())
+    else {
+        return;
+    };
+    for kind in BOTH {
+        for script in [
+            format!(r"Get-Content {letter}:\x"),
+            format!(r"Get-ChildItem -LiteralPath '{letter}:\share'"),
+            format!(r"Get-Content -Path {letter}:x"),
+        ] {
+            assert!(cause(kind, &script).is_some(), "{kind:?} {script}");
+        }
+        assert_eq!(
+            cause(kind, r"Get-Content C:\does\not\exist.txt"),
+            None,
+            "{kind:?}"
+        );
+    }
+}

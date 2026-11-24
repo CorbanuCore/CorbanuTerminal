@@ -1558,7 +1558,7 @@ fn commands_for_exec_policy_for_platform(
     if let Some(read) = shell_lc_script_read(command)
         && read.plain
         && !read.commands.is_empty()
-        && !wrappers::runs_more_than_argv(&read)
+        && !wrappers::runs_more_than_argv(&read, command_platform)
     {
         return ExecPolicyCommands {
             commands: read
