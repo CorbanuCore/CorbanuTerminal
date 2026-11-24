@@ -183,7 +183,9 @@ fn normalize_json_numbers(value: &mut toml::Value) {
             if let Some(number) = json_number(table) {
                 *value = number;
             } else {
-                table.values_mut().for_each(normalize_json_numbers);
+                table
+                    .iter_mut()
+                    .for_each(|(_, value)| normalize_json_numbers(value));
             }
         }
         toml::Value::Array(items) => items.iter_mut().for_each(normalize_json_numbers),

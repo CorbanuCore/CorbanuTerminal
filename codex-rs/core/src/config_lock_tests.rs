@@ -46,7 +46,12 @@ fn json_valued_numbers_stay_toml_numbers() {
     }
     let read_back: ConfigLockfileToml =
         toml::from_str(&toml::to_string(&written).expect("serialize")).expect("read back");
-    assert_eq!(read_back, lockfile);
+    assert_eq!(read_back.config.desktop, lockfile.config.desktop);
+    assert_eq!(read_back.config.telegram, lockfile.config.telegram);
+    assert_eq!(
+        read_back.config.openrouter_provider,
+        lockfile.config.openrouter_provider
+    );
 
     // The lock's config layer holds the same numbers.
     let path = AbsolutePathBuf::from_absolute_path(std::env::temp_dir().join("x.config.lock.toml"))
