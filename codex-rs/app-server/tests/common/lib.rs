@@ -69,3 +69,15 @@ pub fn to_response<T: DeserializeOwned>(response: JSONRPCResponse) -> anyhow::Re
     let codex_response = serde_json::from_value(value)?;
     Ok(codex_response)
 }
+
+/// Code Mode runs cells in the `codex-code-mode-host` process, which must be
+/// built next to the app server. Without it Code Mode falls back to direct
+/// tools, so `exec` is not declared and cells cannot run (#371, #2871, #2913).
+pub fn require_code_mode_host() {
+    assert!(
+        codex_utils_cargo_bin::cargo_bin("codex-code-mode-host").is_ok(),
+        "build `codex-code-mode-host` first (`cargo build -p codex-code-mode-host`, or run \
+         through `just test`): without it Code Mode falls back to direct tools, so `exec` is not \
+         declared and cells cannot run"
+    );
+}

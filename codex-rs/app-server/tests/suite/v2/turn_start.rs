@@ -14,6 +14,7 @@ use app_test_support::create_mock_responses_server_sequence;
 use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::create_request_user_input_sse_response;
 use app_test_support::format_with_current_shell_display;
+use app_test_support::require_code_mode_host;
 use app_test_support::write_chatgpt_auth;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
 use app_test_support::write_models_cache;
@@ -1742,19 +1743,6 @@ async fn code_mode_exec_emits_correlated_production_analytics() -> Result<()> {
     );
 
     Ok(())
-}
-
-/// Code mode runs cells in the `codex-code-mode-host` process, found next to
-/// the app server. `cargo test -p codex-app-server` builds only this package's
-/// binaries; `just test`, CI and Bazel also build the host. Without it the
-/// cell cannot start, so the analytics event this test checks is emitted
-/// without a `cell_id` (#2871, #371).
-fn require_code_mode_host() {
-    assert!(
-        codex_utils_cargo_bin::cargo_bin("codex-code-mode-host").is_ok(),
-        "build `codex-code-mode-host` first (`cargo build -p codex-code-mode-host`, or run \
-         through `just test`): without it code mode cannot run the cell"
-    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
