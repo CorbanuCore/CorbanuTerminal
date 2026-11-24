@@ -185,7 +185,7 @@ impl Approvable<Req> for Probe {
         Ok(ApprovalAction::Shell {
             id: ctx.call_id.to_string(),
             environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
-            command: self.command.iter().map(|word| word.to_string()).collect(),
+            command: self.command.iter().map(ToString::to_string).collect(),
             #[allow(deprecated)]
             cwd: PathUri::from_abs_path(&ctx.turn.cwd),
             sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
