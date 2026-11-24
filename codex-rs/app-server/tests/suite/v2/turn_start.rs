@@ -1678,6 +1678,7 @@ async fn turn_start_tracks_thread_originator_in_analytics() -> Result<()> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn code_mode_exec_emits_correlated_production_analytics() -> Result<()> {
+    // Without the host the analytics event is still emitted, but with a null `cell_id` (#2871).
     require_code_mode_host();
     let server = responses::start_mock_server().await;
     let _responses = responses::mount_sse_sequence(
