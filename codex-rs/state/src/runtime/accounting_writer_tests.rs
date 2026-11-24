@@ -600,9 +600,18 @@ async fn an_adopted_retry_waits_for_its_predecessor() -> anyhow::Result<()> {
 /// has, making model requests while another connection holds the write lock
 /// for seconds partway through (as a long maintenance or a backup does). What
 /// a request waits on in the shared state DB - the throttle check, its
-/// admission, a thread-metadata write and its usage - never adds up to more
-/// than about a second (a few on loaded Windows runners, still well short of
-/// the hold), nothing fails, and every record ends up in the ledger.
+/// admission, a thread-metadata write and its usage - stays within the bound
+/// below, nothing fails, and every record ends up in the ledger.
+///
+/// The bound is derived, not a platform guess: every step a request waits on
+/// uses the short-wait pool, where one try waits at most `QUICK_BUSY_TIMEOUT`.
+/// The throttle check's 1 s budget allows two tries; its admission and usage
+/// each cap at 1 s (`WAIT_CAP`, two quick waits), and the metadata write gets
+/// one. Seven quick waits plus one more of margin for SQLite's busy-handler
+/// rounding, scheduling and file I/O bound a legitimate request. The hold is
+/// one and a half times the bound, so a request that waits out the hold is at
+/// least half again it. Windows' slower timer rounding (#636, #691) and
+/// loaded runners (#905, #1849) are why the ceiling is this generous.
 ///
 /// The bounds hold when the test has the four cores its runtime uses: Bazel
 /// runs the test alone, after everything else (`unit_test_alone` in state's
@@ -614,9 +623,25 @@ async fn an_adopted_retry_waits_for_its_predecessor() -> anyhow::Result<()> {
 async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::Result<()> {
     const SESSIONS: usize = 10;
     const REQUESTS: usize = 12;
-    // Longer on Windows, so its looser bounds below stay well short of a
-    // request that waited out the whole hold.
-    const HOLD: Duration = Duration::from_secs(if cfg!(windows) { 6 } else { 3 });
+    // The throttle's 1 s budget allows two quick tries; admission and usage
+    // each cap at 1 s (`WAIT_CAP`, two quick waits); the metadata write gets
+    // one. One more quick wait is margin for SQLite's busy-handler rounding,
+    // scheduling and file I/O.
+    const THROTTLE_QUICK_WAITS: u32 = 2;
+    const ADMISSION_QUICK_WAITS: u32 = 2;
+    const METADATA_QUICK_WAITS: u32 = 1;
+    const USAGE_QUICK_WAITS: u32 = 2;
+    const MARGIN_QUICK_WAITS: u32 = 1;
+    const QUICK_WAITS_IN_BOUND: u32 = THROTTLE_QUICK_WAITS
+        + ADMISSION_QUICK_WAITS
+        + METADATA_QUICK_WAITS
+        + USAGE_QUICK_WAITS
+        + MARGIN_QUICK_WAITS;
+    // Half again the bound, so waiting out the hold stays distinguishable.
+    const QUICK_WAITS_IN_HOLD: u32 = QUICK_WAITS_IN_BOUND * 3 / 2;
+    let quick_wait = crate::runtime::QUICK_BUSY_TIMEOUT;
+    let hold = quick_wait * QUICK_WAITS_IN_HOLD;
+    let bound = quick_wait * QUICK_WAITS_IN_BOUND;
     let path = home();
     let setup = StateRuntime::init_for_testing(path.to_path_buf(), "synthetic".into()).await?;
     let owners: Vec<ThreadId> = (0..SESSIONS).map(|_| ThreadId::new()).collect();
@@ -628,7 +653,7 @@ async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::R
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(800)).await;
             let mut lock = hold_write_lock(&setup).await?;
-            tokio::time::sleep(HOLD).await;
+            tokio::time::sleep(hold).await;
             sqlx::query("ROLLBACK").execute(&mut *lock).await?;
             anyhow::Ok(())
         })
@@ -697,17 +722,11 @@ async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::R
     let p99 = waits[waits.len() * 99 / 100];
     let max = waits[waits.len() - 1];
     eprintln!("request waits: p50 {p50:?}, p99 {p99:?}, max {max:?}");
-    // One short wait on the lock (`QUICK_BUSY_TIMEOUT`) plus the work of
-    // ten sessions sharing four test threads. Windows runners take longer
-    // to open and lock SQLite files (p99 1.6-1.9 s on nightly-ci, #636).
-    let bound = Duration::from_millis(if cfg!(windows) { 3_000 } else { 1_500 });
-    assert!(p99 < bound, "p99 {p99:?}, max {max:?}");
-    // With 120 waits, p99 is the second-largest, so a max bound under the
-    // p99 bound would override it: Windows keeps its 3 s here too (the 2.5 s
-    // bound failed nightly-ci at max 2.50 s and 2.87 s, #691), half its 6 s
-    // hold.
-    let max_bound = Duration::from_millis(if cfg!(windows) { 3_000 } else { 2_500 });
-    assert!(max < max_bound, "p99 {p99:?}, max {max:?}");
+    assert!(p99 < bound, "p99 {p99:?}, max {max:?}, bound {bound:?}");
+    // With 120 waits, p99 is the second-largest, so a max bound below the
+    // p99 bound would decide the test. Both use the same derived ceiling.
+    let max_bound = bound;
+    assert!(max < max_bound, "p99 {p99:?}, max {max:?}, bound {bound:?}");
     assert_eq!(attempts.len(), SESSIONS * REQUESTS);
     for attempt in &attempts {
         assert_eq!(recorded(&setup, attempt).await?, (1, 1));
