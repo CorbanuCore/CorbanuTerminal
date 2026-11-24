@@ -41,6 +41,10 @@ pub struct PowershellCommandScope {
     allowlist: bool,
     path: Option<std::ffi::OsString>,
     extensions: Option<String>,
+    /// #2756: where the command's environment has no `PATHEXT`, Corbanu's
+    /// own, which its spawn may fill in; also looked for when deciding that
+    /// no program shadows a module cmdlet.
+    fallback_extensions: Option<String>,
     /// Sync: the user's Documents folder on this host, where PowerShell keeps
     /// the user's profile scripts; `None`: unknown (a profile may exist).
     documents: Option<PathBuf>,
@@ -61,14 +65,29 @@ impl PowershellCommandScope {
                 .map(|(_, value)| value.clone()),
             None => std::env::var(name).ok(),
         };
+        let extensions = var("PATHEXT");
+        let fallback_extensions = if env.is_some() && extensions.is_none() {
+            std::env::var("PATHEXT").ok()
+        } else {
+            None
+        };
         Self {
             checked: true,
             local: cwd.is_some(),
             allowlist: true,
             path: var("PATH").map(Into::into),
-            extensions: var("PATHEXT"),
+            extensions,
+            fallback_extensions,
             documents: None,
         }
+    }
+
+    /// Test support: the `PATHEXT` Corbanu's own environment would give a
+    /// command whose environment has none.
+    #[cfg(test)]
+    fn with_fallback_extensions(mut self, extensions: Option<&str>) -> Self {
+        self.fallback_extensions = extensions.map(str::to_string);
+        self
     }
 
     /// Sync: no command to check (heuristics, tests): names are not looked up,
@@ -82,6 +101,7 @@ impl PowershellCommandScope {
             allowlist: true,
             path: None,
             extensions: None,
+            fallback_extensions: None,
             documents: None,
         }
     }
@@ -143,6 +163,9 @@ impl Drop for PowershellCommandScopeGuard {
 /// elsewhere (no local folder) has no names this host can find. Outside a
 /// scope (no command to check, as in safety heuristics and tests) names are
 /// not looked up: the approval path always checks within one.
+/// #2756: a command whose environment has no `PATH` finds no name either:
+/// where it is spawned, `PATH` may be filled in (the Windows sandbox gives
+/// it Corbanu's own), so a cmdlet's shadow there is unknown too.
 pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     if programs.is_empty() && cmdlets.is_empty() {
         return true;
@@ -150,13 +173,24 @@ pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
     let Some(scope) = current_scope().filter(|scope| scope.checked) else {
         return true;
     };
-    if !scope.local {
+    if !scope.local || scope.path.is_none() {
         return false;
     }
     let lookup = PathLookup::new(scope.path.as_deref(), scope.extensions.as_deref());
+    // #2756: a command whose environment has no `PATHEXT` may be spawned with
+    // Corbanu's (`.VBS`, `.JS`, …): a program with any of those extensions
+    // may shadow a cmdlet too.
+    let shadow_extensions = match (&scope.extensions, &scope.fallback_extensions) {
+        (None, Some(fallback)) => Some(format!("{DEFAULT_PATHEXT};{fallback}")),
+        (extensions, _) => extensions.clone(),
+    };
+    let shadows = PathLookup::new(scope.path.as_deref(), shadow_extensions.as_deref());
     programs.iter().all(|name| lookup.find(name) == Found::Yes)
-        && cmdlets.iter().all(|name| lookup.find(name) == Found::No)
+        && cmdlets.iter().all(|name| shadows.find(name) == Found::No)
 }
+
+/// The extensions a `PATH` search tries where `PATHEXT` is not set.
+const DEFAULT_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
 
 /// Sync (D729 A, main's `Find-D729Program`): whether a program (not a
 /// PowerShell script) named `name` is on the command's `PATH`. A command
@@ -287,7 +321,7 @@ impl PathLookup {
             })
             .collect();
         let extensions = pathext
-            .unwrap_or(".COM;.EXE;.BAT;.CMD")
+            .unwrap_or(DEFAULT_PATHEXT)
             .split(';')
             .chain(std::iter::once(".ps1"))
             .map(str::trim)

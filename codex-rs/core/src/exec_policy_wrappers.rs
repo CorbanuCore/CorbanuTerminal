@@ -57,7 +57,7 @@ fn script_commands(
     }
     // #2548: a here-document a shell reads as its script (or any script
     // whose commands run more than their argv) is read whole, input and all.
-    if shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read)) {
+    if shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read, platform)) {
         return None;
     }
     parse_shell_lc_single_command_prefix(command).map(|single| (vec![single], true, false))
@@ -80,7 +80,7 @@ pub(super) fn has_wrappers(
         // literal argv cannot approve the commands inside.
         || (read_own_scripts && script_commands(command, platform).is_some())
         // #2548: nor can one for a script rules read only in part.
-        || shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read))
+        || shell_lc_script_read(command).is_some_and(|read| runs_more_than_argv(&read, platform))
         // #2568: an amendment for a PowerShell command line whose script
         // rules cannot read cannot approve the commands inside.
         || unread_powershell_line(command, platform).is_some()
@@ -245,10 +245,9 @@ pub(crate) fn unread_script_matches(
     let reading = shell_lc_script_read(respelled.as_deref().unwrap_or(command));
     // #2548: a plain script the split lowered to its commands is read there,
     // unless one runs a script file, whose unread commands ask below.
-    let plain = reading
-        .as_ref()
-        .is_some_and(|read| read.plain && !runs_more_than_argv(read) && !runs_script_file(read))
-        && respelled.is_none();
+    let plain = reading.as_ref().is_some_and(|read| {
+        read.plain && !runs_more_than_argv(read, platform) && !runs_script_file(read)
+    }) && respelled.is_none();
     // A top-level heredoc script has its own pass
     // (`apply_heredoc_restrictive_matches`) unless (#2548) it runs more than
     // its one command's argv (a shell given the here-document), or lies
@@ -258,7 +257,7 @@ pub(crate) fn unread_script_matches(
         .is_some();
     let heredoc_pass_suffices = parse_shell_lc_single_command_prefix(command).is_some()
         && reading.as_ref().is_none_or(|read| {
-            !runs_more_than_argv(read) && (!read.fails_closed() || !strict_rules)
+            !runs_more_than_argv(read, platform) && (!read.fails_closed() || !strict_rules)
         });
     // #2704: a script cmd.exe reads is read here too (strict rules first:
     // finding a batch file looks at `PATH`).
@@ -551,6 +550,7 @@ pub(super) fn check(
                     &mut matches,
                     &mut folded,
                     &mut pending,
+                    platform,
                 );
                 raise_match(&mut matches, inner, ask);
                 unread_script_prompts |= matches[reading_from..]
@@ -587,15 +587,7 @@ pub(super) fn check(
             // rebinds a name or runs code is unread, as bash's `alias` is;
             // only where nothing else reads or asks, so script text read
             // precisely (`eval git push alias:`) keeps its refusals.
-            let role = match roles::role(&command[..start], inner, stdin) {
-                Role::Argv
-                    if platform == DangerousCommandPlatform::Windows
-                        && roles::powershell_runs_code(inner) =>
-                {
-                    Role::Unread
-                }
-                role => role,
-            };
+            let role = roles::role_for_platform(&command[..start], inner, stdin, platform);
             let ask = match role {
                 Role::Argv => None,
                 Role::Unread | Role::File => any_rule(),
@@ -612,6 +604,7 @@ pub(super) fn check(
                         &mut matches,
                         &mut folded,
                         &mut pending,
+                        platform,
                     );
                     if past_bound { ask.max(any_rule()) } else { ask }
                 }
@@ -659,6 +652,7 @@ fn queue_script(
     matches: &mut Vec<RuleMatch>,
     folded: &mut Vec<RuleMatch>,
     pending: &mut Vec<Pending>,
+    platform: DangerousCommandPlatform,
 ) -> Option<Decision> {
     let mut ask = None;
     // Text after a stdin script's one command may become commands once it
@@ -690,6 +684,7 @@ fn queue_script(
                 any_rule,
                 matches,
                 folded,
+                platform,
             ));
         }
     }
@@ -700,7 +695,7 @@ fn queue_script(
 /// its commands' argv: a part not read, or a command whose program runs
 /// text (`eval`, a shell's here-document). Commands with words known only
 /// at run time ask where needed when checked.
-pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
+pub(super) fn runs_more_than_argv(read: &ScriptRead, platform: DangerousCommandPlatform) -> bool {
     read.unread
         || read.commands.iter().any(|read_command| {
             let ReadCommand { words, stdin, .. } = read_command;
@@ -713,14 +708,14 @@ pub(super) fn runs_more_than_argv(read: &ScriptRead) -> bool {
                 let role_words = role_words(read_command);
                 return policy_wrapper_commands(&argv).starts.iter().any(|&start| {
                     words[start].as_deref().is_some_and(|program| {
-                        roles::runs_more_than_argv(program, &role_words[start + 1..])
+                        roles::runs_more_than_argv(program, &role_words[start + 1..], platform)
                     })
                 });
             };
             let wrappers = policy_wrapper_commands(&command);
             let start = wrappers.starts.last().copied().unwrap_or(0);
             !matches!(
-                roles::role(&command[..start], &command[start..], stdin),
+                roles::role_for_platform(&command[..start], &command[start..], stdin, platform),
                 Role::Argv | Role::File
             )
         })
@@ -964,6 +959,7 @@ pub(super) fn windows_batch_file_in(
 /// where a rule could match once those words are known. Launchers read an
 /// unknown word as a word of their own, so one that may be the program
 /// (`sudo $cmd`, `env $x git`) is found as such.
+#[allow(clippy::too_many_arguments)]
 fn partial_command_decision(
     policy: &Policy,
     words: &[Option<String>],
@@ -972,6 +968,7 @@ fn partial_command_decision(
     any_rule: &mut impl FnMut() -> Option<Decision>,
     matches: &mut Vec<RuleMatch>,
     folded: &mut Vec<RuleMatch>,
+    platform: DangerousCommandPlatform,
 ) -> Option<Decision> {
     let argv: Vec<String> = words
         .iter()
@@ -1003,7 +1000,9 @@ fn partial_command_decision(
         let known = &argv[start..end];
         // An unknown program, or a shell (#2585: PowerShell too), `eval` or
         // a builtin that runs code given unknown words, runs anything.
-        if known.is_empty() || roles::runs_more_than_argv(&known[0], &role_words[start + 1..]) {
+        if known.is_empty()
+            || roles::runs_more_than_argv(&known[0], &role_words[start + 1..], platform)
+        {
             return any_rule();
         }
         let mut found = policy

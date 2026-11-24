@@ -28,6 +28,10 @@ pub(crate) struct LoweredWord {
     pub(crate) bare: bool,
     /// A bare word with a backtick escape in it.
     pub(crate) escaped: bool,
+    /// #2756: the command name of a command past the first of a pipeline,
+    /// whose parameters may also bind input objects (by value or property
+    /// name). Always `false` for argument words.
+    pub(crate) piped: bool,
 }
 
 /// [`try_parse_powershell_commands`] with how each word was written (D729
@@ -135,7 +139,11 @@ fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<LoweredWord>>, String>
             .utf8_text(script.as_bytes())
             .map_err(|_| "command source is not UTF-8".to_string())?;
         command_ranges.push(node.start_byte()..node.end_byte());
-        commands.push(lower_command_text(text)?);
+        let mut command = lower_command_text(text)?;
+        if let Some(name) = command.first_mut() {
+            name.piped = piped(node);
+        }
+        commands.push(command);
     }
     if !source_is_covered_by_commands(script, &command_ranges) {
         return Err("source outside literal command nodes".to_string());
@@ -154,6 +162,17 @@ fn lower_with_tree_sitter(script: &str) -> Result<Vec<Vec<LoweredWord>>, String>
         return Err("empty lowered command or word".to_string());
     }
     Ok(commands)
+}
+
+/// #2756: whether `command` follows another element of its pipeline
+/// (`a | command`), so input objects reach it. The grammar puts the
+/// elements joined by `|` in one `pipeline_chain` (`&&` and `||` join
+/// chains); any earlier named node in the chain counts.
+fn piped(command: Node<'_>) -> bool {
+    command
+        .parent()
+        .is_some_and(|parent| parent.kind() == "pipeline_chain")
+        && command.prev_named_sibling().is_some()
 }
 
 /// Every `command` node, including commands nested in another command's
@@ -450,6 +469,7 @@ fn lower_command_text_with_prefix(
                 text: word,
                 bare: is_bare,
                 escaped,
+                piped: false,
             })
         })();
         match lowered {
