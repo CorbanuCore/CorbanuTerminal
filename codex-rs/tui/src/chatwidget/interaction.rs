@@ -3,6 +3,31 @@
 use super::*;
 
 impl ChatWidget {
+    /// Cancels a held burst Enter and materializes its text into the draft, as a
+    /// Ctrl/Alt key routed here would. For app-level shortcuts that never reach
+    /// `handle_key_event` (#2407).
+    pub(crate) fn cancel_pending_burst_submission(&mut self) {
+        self.bottom_pane.cancel_pending_burst_submission();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn arm_burst_enter_for_tests(&mut self, text: &str, now: Instant) {
+        self.bottom_pane.arm_burst_enter_for_tests(text, now);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_pending_burst_enter_for_tests(&self) -> bool {
+        self.bottom_pane.has_pending_burst_enter_for_tests()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn take_burst_submission_for_tests(
+        &mut self,
+        now: Instant,
+    ) -> Option<crate::bottom_pane::InputResult> {
+        self.bottom_pane.take_burst_submission(now)
+    }
+
     pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
         if let Some(result) = self.bottom_pane.take_burst_submission(Instant::now()) {
             self.handle_composer_input_result(result, /*had_modal_or_popup*/ false);

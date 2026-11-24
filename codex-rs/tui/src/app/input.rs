@@ -176,6 +176,10 @@ impl App {
         }
 
         if app_keymap_shortcuts_available && self.keymap.app.open_transcript.is_pressed(key_event) {
+            // #2407: app-level shortcuts never reach ChatWidget, which cancels a
+            // held burst Enter for every other Ctrl/Alt key. Do the same here so
+            // the overlay cannot leave a submission armed behind it.
+            self.chat_widget.cancel_pending_burst_submission();
             // Enter alternate screen and set viewport to full size.
             let _ = tui.enter_alt_screen();
             self.overlay = Some(Overlay::new_transcript(
@@ -189,6 +193,9 @@ impl App {
         if app_keymap_shortcuts_available
             && self.keymap.app.open_external_editor.is_pressed(key_event)
         {
+            // #2407: materialize a held burst before the editor seeds from the
+            // draft, and never leave its Enter armed (the key is consumed either way).
+            self.chat_widget.cancel_pending_burst_submission();
             // Only launch the external editor if there is no overlay and the bottom pane is not in use.
             // Note that it can be launched while a task is running to enable editing while the previous turn is ongoing.
             if self.overlay.is_none()
