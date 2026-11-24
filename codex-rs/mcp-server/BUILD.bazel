@@ -3,4 +3,12 @@ load("//:defs.bzl", "codex_rust_crate")
 codex_rust_crate(
     name = "mcp-server",
     crate_name = "codex_mcp_server",
+    # #2868: the integration tests run commands in the Linux sandbox. Ship
+    # bubblewrap with them, as `core` and `app-server` do; without it the
+    # sandbox cannot start under Bazel and D747 (#2820) rightly asks again
+    # before any run outside it.
+    extra_binaries = [
+        "//codex-rs/bwrap:bwrap",
+    ],
+    test_tags = ["no-sandbox"],
 )
