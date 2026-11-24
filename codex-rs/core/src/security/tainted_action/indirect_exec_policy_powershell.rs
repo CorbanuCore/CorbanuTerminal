@@ -32,7 +32,10 @@ fn respelled(words: &[String], case: names::NameCase) -> Option<Vec<String>> {
         return None;
     }
     let name = names::launcher_name_for(program, case);
-    if !matches!(name.as_ref(), "pwsh" | "powershell") {
+    // #2734: Windows runs `pwsh .exe` and `pwsh..exe` as other files.
+    if !matches!(name.as_ref(), "pwsh" | "powershell")
+        || !names::windows_runs_exactly(program, &name)
+    {
         return None;
     }
     // A `\\?\` path skips Win32 normalization (`pwsh.exe.` and `pwsh`
@@ -125,6 +128,11 @@ mod tests {
             ("pwsh.evil.exe", None),
             ("pwsh.bat", None),
             ("pwsh.exe.exe", None),
+            // Windows trims only the end of a name: these run other files.
+            ("pwsh .exe", None),
+            ("PWSH..EXE", None),
+            (r"C:\ws\pwsh .exe", None),
+            ("powershell. .exe", None),
             (r"\\?\C:\PS\PWSH.EXE.", None),
             (r"\\?\C:\PS\pwsh.exe ", None),
             (r"\\?\C:\PS\PWSH", None),

@@ -420,6 +420,8 @@ fn cmdlet_cause(
     // #2756: past the first command of a pipeline, input objects bind to
     // parameters too (`Import-Csv hosts.csv | Get-Process` binds
     // -ComputerName in 5.1): no excluded parameter may take pipeline input.
+    // Not covered: a path bound from input objects (`ConvertFrom-Json … |
+    // Get-ChildItem`) is not checked for a network path (#2891).
     if piped && cmdlet.excluded_pipeline {
         return Some(format!(
             "an excluded parameter takes pipeline input: {target}"

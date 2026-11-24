@@ -190,6 +190,10 @@ async fn near_shells_ask_for_a_windows_executor() {
         "pwsh.exe.exe",
         r"C:\PS\pwsh.evil.exe",
         "POWERS~1.EXE",
+        // Windows trims only the end of a name: these run other files.
+        "pwsh .exe",
+        "pwsh..exe",
+        r"C:\ws\powershell .exe",
     ] {
         for script in ["git status", "git push"] {
             for command in [
@@ -205,7 +209,13 @@ async fn near_shells_ask_for_a_windows_executor() {
             }
         }
     }
-    for shell in ["bash.foo.exe", "bash.exe:x.exe", "bash.sh"] {
+    for shell in [
+        "bash.foo.exe",
+        "bash.exe:x.exe",
+        "bash.sh",
+        "bash .exe",
+        "BASH..EXE",
+    ] {
         for script in ["git status", "git push"] {
             let command = words(&[shell, "-lc", script]);
             let results = windows_requirements(&command, ALLOW_STATUS_FORBID_PUSH).await;

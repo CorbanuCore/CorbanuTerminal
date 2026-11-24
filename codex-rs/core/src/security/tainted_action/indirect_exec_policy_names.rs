@@ -88,6 +88,18 @@ pub(super) fn launcher_name_for(word: &str, case: NameCase) -> Cow<'_, str> {
     }
 }
 
+/// #2734: whether Windows runs `word` as exactly the program `name` (a
+/// [`launcher_name_for`] result): its file name, folded, with trailing dots
+/// and spaces trimmed as Win32 trims them, is `name` or `name.exe`.
+/// [`launcher_name_for`] also trims inside (`bash .exe`, `pwsh..exe` give
+/// `bash`, `pwsh`), but Windows trims only the end of a name, so those run
+/// another file: callers that read a script as that program's check this.
+pub(super) fn windows_runs_exactly(word: &str, name: &str) -> bool {
+    let folded = fold(windows_file_name(word), NameCase::Windows);
+    let trimmed = trim_windows(&folded);
+    trimmed == name || trimmed.strip_suffix(".exe") == Some(name)
+}
+
 /// The last path component, with `/` or `\` separators and an optional
 /// drive (`C:sudo`).
 pub(super) fn windows_file_name(word: &str) -> &str {
@@ -544,6 +556,10 @@ mod tests {
             ("Z\u{17f}h", "-c", Some("zsh"), Some("zsh")),
             ("Bash.exe", "-c", None, Some("bash")),
             ("C:\\x\\SH.EXE.", "-c", None, Some("sh")),
+            // #2734: Windows trims only the end of a name.
+            ("bash .exe", "-c", None, None),
+            ("BASH..EXE", "-c", None, None),
+            ("C:\\ws\\sh .exe", "-c", None, None),
             ("BASH", "-x", None, None),
             ("BASH~1.EXE", "-c", None, None),
             ("BA\u{200d}SH", "-c", None, None),
