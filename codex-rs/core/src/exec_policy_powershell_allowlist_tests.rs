@@ -232,6 +232,35 @@ fn unread_scripts() -> Vec<String> {
     ]
 }
 
+/// #2756: an excluded parameter bound from pipeline input, and a drive letter
+/// that is not a local disk (a mapped network drive, or one a command may map
+/// first).
+fn issue_2756_scripts() -> Vec<String> {
+    let mut scripts = vec![
+        // `-Credential` binds by property name in 5.1 and 7.
+        r"Import-Csv C:\Temp\a.csv | Get-Content".to_string(),
+        r"Import-Csv C:\Temp\a.csv | Test-Path".to_string(),
+        "Get-Job | Receive-Job".to_string(),
+    ];
+    if let Some(letter) = unused_drive_letter() {
+        scripts.extend([
+            format!(r"Get-Content {letter}:\x"),
+            format!(r"Get-ChildItem -LiteralPath '{letter}:\share'"),
+            format!(r"Get-Content -Path {letter}:x"),
+            format!(r"$p = '{letter}:\x'; Get-Content $p"),
+            format!(r"git status; Get-Content README.md, {letter}:\x"),
+        ]);
+    }
+    scripts
+}
+
+/// A drive letter no volume or mapping uses now.
+fn unused_drive_letter() -> Option<char> {
+    ('D'..='Z')
+        .rev()
+        .find(|letter| !Path::new(&format!(r"{letter}:\")).exists())
+}
+
 /// A workspace folder inside a temporary folder that is not itself writable.
 fn workspace() -> (tempfile::TempDir, std::path::PathBuf) {
     let parent = tempfile::tempdir().expect("tempdir");
@@ -248,7 +277,11 @@ async fn unread_powershell_forms_ask_and_refuse_with_approvals_off() {
         if shell == "powershell.exe" {
             // Windows PowerShell parses HTML with Internet Explorer's engine.
             scripts.push("Invoke-WebRequest http://127.0.0.1:9/".into());
+            // #2756: 5.1 binds `-ComputerName` from input objects by property name.
+            scripts.push(r"Import-Csv C:\Temp\hosts.csv | Get-Process".into());
+            scripts.push(r"Import-Csv C:\Temp\hosts.csv | Get-Service".into());
         }
+        scripts.extend(issue_2756_scripts());
         for script in scripts {
             for permission_profile in [
                 PermissionProfile::Disabled,
@@ -306,6 +339,11 @@ async fn allowlisted_forms_stay_precise() {
             // File-system dynamic parameters, also for a path that does not exist.
             r"Get-ChildItem 'C:\does not\exist' -Directory -ea 0 | Select-Object -ExpandProperty Name",
             r"Get-Content -LiteralPath 'C:\does not\exist.txt' -Raw",
+            // #2756: a local disk, and pipelines whose excluded parameters
+            // take no input.
+            r"Get-ChildItem C:\ | Select-Object -First 1",
+            "Get-ChildItem -File | Select-String -Pattern x | Measure-Object",
+            "Get-Content README.md | Select-Object -First 3",
         ] {
             for permission_profile in [
                 PermissionProfile::Disabled,
@@ -409,6 +447,47 @@ async fn without_strict_rules_scripts_read_as_before() {
                     Some(PowershellScriptRead::Commands(_))
                 ),
                 "{shell}"
+            );
+        }
+    }
+}
+
+/// #2756: a command whose environment has no `PATH` finds no program and no
+/// unshadowed module cmdlet (its spawn may fill `PATH` in): read in part, it
+/// asks under strict rules.
+#[tokio::test]
+async fn a_command_without_path_finds_no_names() {
+    let (_parent, workspace) = workspace();
+    let env = std::collections::HashMap::from([("PATHEXT".to_string(), ".EXE".to_string())]);
+    for shell in shells() {
+        for script in ["Get-Content README.md", "git status"] {
+            let command = vec![
+                shell.to_string(),
+                "-NoProfile".to_string(),
+                "-Command".to_string(),
+                script.to_string(),
+            ];
+            let result = ExecPolicyManager::new(policy_from_src(Some(GIT_PUSH_FORBIDDEN)))
+                .create_exec_approval_requirement_for_command(ExecApprovalRequest {
+                    command: &command,
+                    approval_policy: AskForApproval::OnRequest,
+                    permission_profile: PermissionProfile::Disabled,
+                    windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
+                    sandbox_permissions: SandboxPermissions::UseDefault,
+                    prefix_rule: Some(command.clone()),
+                    cwd: Some(AbsolutePathBuf::from_absolute_path(&workspace).expect("cwd")),
+                    env: Some(&env),
+                })
+                .await;
+            assert!(
+                matches!(
+                    result,
+                    ExecApprovalRequirement::NeedsApproval {
+                        proposed_execpolicy_amendment: None,
+                        ..
+                    }
+                ),
+                "{shell} {script}: {result:?}"
             );
         }
     }
