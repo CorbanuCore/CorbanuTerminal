@@ -3093,7 +3093,10 @@ where
         req,
         tool_ctx,
         plan.post_taint.as_ref(),
-        &ExecApprovalRequirement::NeedsHumanApproval { reason: None },
+        &ExecApprovalRequirement::NeedsApproval {
+            reason: None,
+            proposed_execpolicy_amendment: None,
+        },
     )
     .await
     {

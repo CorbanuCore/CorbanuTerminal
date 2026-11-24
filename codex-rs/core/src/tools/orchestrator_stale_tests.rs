@@ -1055,7 +1055,7 @@ async fn issue_2851_untrusted_content_while_the_command_ran_is_read_again() {
         call_id: "call-2851".to_string(),
         tool_name: codex_tools::ToolName::plain("issue_2851_probe"),
     };
-    let requirement = ExecApprovalRequirement::NeedsHumanApproval { reason: None };
+    let requirement = needs_approval();
     macro_rules! read_again {
         ($round:expr) => {
             startup_retry_post_taint::<Req, (), Probe>(
