@@ -147,7 +147,7 @@ impl Approvable<Req> for Probe {
         Ok(ApprovalAction::ExecCommand {
             id: call_id.to_string(),
             environment_id: req.environment.selection.environment_id.clone(),
-            command: self.command.iter().map(|word| word.to_string()).collect(),
+            command: self.command.iter().map(ToString::to_string).collect(),
             hook_command: self.command.join(" "),
             cwd: req.environment.cwd().clone(),
             sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
