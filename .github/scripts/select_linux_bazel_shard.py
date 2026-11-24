@@ -37,8 +37,11 @@ def assign_shard(
     v8 = set(v8_labels)
     if not v8:
         raise ValueError("no V8-consuming Bazel targets were provided")
-    if not v8 <= targets:
-        raise ValueError("V8-consuming targets must be a subset of all targets")
+    # Classification only decides which shard builds a target; the shards
+    # always partition all_labels, so labels outside it are ignored.
+    v8 &= targets
+    if not v8:
+        raise ValueError("no V8-consuming Bazel targets are in the target set")
     if shard == shard_count:
         selected = targets - v8
     else:
@@ -60,9 +63,16 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--shard-count", type=int, required=True)
     args = parser.parse_args(argv)
     try:
-        selected = assign_shard(
-            read_labels(args.all), read_labels(args.v8), args.shard, args.shard_count
-        )
+        all_labels = read_labels(args.all)
+        v8_labels = read_labels(args.v8)
+        extra = sorted(set(v8_labels) - set(all_labels))
+        if extra:
+            print(
+                f"Ignoring {len(extra)} V8-consuming labels outside the target set, "
+                f"e.g. {', '.join(extra[:5])}",
+                file=sys.stderr,
+            )
+        selected = assign_shard(all_labels, v8_labels, args.shard, args.shard_count)
     except ValueError as error:
         print(f"::error::Invalid Linux Bazel shard selection: {error}", file=sys.stderr)
         return 1
