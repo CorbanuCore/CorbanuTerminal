@@ -77,6 +77,9 @@ struct Probe {
     /// #2820: the `PATH` it runs with, if known.
     search_path: Option<&'static str>,
     runs: usize,
+    /// #2851 follow-up: the command it asks about (`issue-1001-probe`
+    /// unless a test needs a protected one).
+    command: &'static [&'static str],
     /// D750 (#2851): the sandbox each run had, in order (read by the Linux
     /// tests).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -182,7 +185,7 @@ impl Approvable<Req> for Probe {
         Ok(ApprovalAction::Shell {
             id: ctx.call_id.to_string(),
             environment_id: codex_exec_server::LOCAL_ENVIRONMENT_ID.to_string(),
-            command: vec!["issue-1001-probe".to_string()],
+            command: self.command.iter().map(|word| word.to_string()).collect(),
             #[allow(deprecated)]
             cwd: PathUri::from_abs_path(&ctx.turn.cwd),
             sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
@@ -274,7 +277,9 @@ struct Case {
     /// D750 (#2851): the first run starts (its attempt returns), and its
     /// denial (`denial_text`) is seen only afterwards.
     late_denial: bool,
-    /// #2851 follow-up: the turn requires automatic review.
+    /// #2851 follow-up: the late failure is decided as for a round decided
+    /// under required automatic review (whose first attempt was reviewed
+    /// automatically; this harness has no automatic reviewer to run it).
     strict_auto_review: bool,
 }
 
@@ -328,19 +333,6 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         }
     };
     let controller = initialize_policy(&session);
-    if case.strict_auto_review {
-        let active = crate::state::ActiveTurn::default();
-        active
-            .turn_state
-            .lock()
-            .await
-            .enable_strict_auto_review(session.services.authority_marker());
-        *session.active_turn.lock().await = Some(active);
-        assert!(
-            session.strict_auto_review_enabled_for_turn().await,
-            "automatic review is required"
-        );
-    }
     let mut probe = Probe {
         session: Arc::clone(&session),
         controller,
@@ -354,6 +346,7 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         sandbox_approval_by_policy: case.sandbox_approval_by_policy,
         search_path: case.search_path,
         runs: 0,
+        command: &["issue-1001-probe"],
         sandboxes: Vec::new(),
         warnings: Vec::new(),
         revocations: RevocationState::new(),
@@ -435,12 +428,13 @@ async fn run_probe(case: Case) -> (Probe, Result<(), String>) {
         };
         // D750 (#2851): as unified exec does when the run it returned as
         // started is then denied.
-        let Some(plan) = started.late_startup_retry else {
+        let Some(mut plan) = started.late_startup_retry else {
             return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
                 output: Box::new(output),
                 network_policy_decision: None,
             })));
         };
+        plan.strict_auto_review |= case.strict_auto_review;
         orchestrator
             .retry_late_sandbox_startup_failure(&mut probe, &additional, &tool_ctx, plan, output)
             .await
@@ -1048,6 +1042,7 @@ async fn issue_2851_untrusted_content_while_the_command_ran_is_read_again() {
         sandbox_approval_by_policy: true,
         search_path: None,
         runs: 0,
+        command: &["corbanu", "vault", "list"],
         sandboxes: Vec::new(),
         warnings: Vec::new(),
         revocations: RevocationState::new(),
