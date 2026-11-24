@@ -28,6 +28,10 @@ pub struct PowershellCommandScope {
     allowlist: bool,
     path: Option<std::ffi::OsString>,
     extensions: Option<String>,
+    /// #2756: where the command's environment has no `PATHEXT`, Corbanu's
+    /// own, which its spawn may fill in; also looked for when deciding that
+    /// no program shadows a module cmdlet.
+    fallback_extensions: Option<String>,
 }
 
 impl PowershellCommandScope {
@@ -45,12 +49,27 @@ impl PowershellCommandScope {
                 .map(|(_, value)| value.clone()),
             None => std::env::var(name).ok(),
         };
+        let extensions = var("PATHEXT");
+        let fallback_extensions = if env.is_some() && extensions.is_none() {
+            std::env::var("PATHEXT").ok()
+        } else {
+            None
+        };
         Self {
             local: cwd.is_some(),
             allowlist: true,
             path: var("PATH").map(Into::into),
-            extensions: var("PATHEXT"),
+            extensions,
+            fallback_extensions,
         }
+    }
+
+    /// Test support: the `PATHEXT` Corbanu's own environment would give a
+    /// command whose environment has none.
+    #[cfg(test)]
+    fn with_fallback_extensions(mut self, extensions: Option<&str>) -> Self {
+        self.fallback_extensions = extensions.map(str::to_string);
+        self
     }
 
     /// Whether the allowlist applies (default: yes); see [`Self::allowlist`].
@@ -117,9 +136,20 @@ pub(crate) fn names_resolve(programs: &[String], cmdlets: &[String]) -> bool {
         return false;
     }
     let lookup = PathLookup::new(scope.path.as_deref(), scope.extensions.as_deref());
+    // #2756: a command whose environment has no `PATHEXT` may be spawned with
+    // Corbanu's (`.VBS`, `.JS`, …): a program with any of those extensions
+    // may shadow a cmdlet too.
+    let shadow_extensions = match (&scope.extensions, &scope.fallback_extensions) {
+        (None, Some(fallback)) => Some(format!("{DEFAULT_PATHEXT};{fallback}")),
+        (extensions, _) => extensions.clone(),
+    };
+    let shadows = PathLookup::new(scope.path.as_deref(), shadow_extensions.as_deref());
     programs.iter().all(|name| lookup.find(name) == Found::Yes)
-        && cmdlets.iter().all(|name| lookup.find(name) == Found::No)
+        && cmdlets.iter().all(|name| shadows.find(name) == Found::No)
 }
+
+/// The extensions a `PATH` search tries where `PATHEXT` is not set.
+const DEFAULT_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Found {
@@ -156,7 +186,7 @@ impl PathLookup {
             })
             .collect();
         let extensions = pathext
-            .unwrap_or(".COM;.EXE;.BAT;.CMD")
+            .unwrap_or(DEFAULT_PATHEXT)
             .split(';')
             .chain(std::iter::once(".ps1"))
             .map(str::trim)

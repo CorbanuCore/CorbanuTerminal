@@ -128,9 +128,9 @@ fn near_shell_approval_keys_keep_their_argv() {
 #[cfg(windows)]
 mod powershell {
     use super::*;
-    use pretty_assertions::assert_eq;
     use codex_shell_command::powershell::PowershellScriptRead;
     use codex_shell_command::powershell::read_powershell_command_script;
+    use pretty_assertions::assert_eq;
 
     const NEAR_POWERSHELLS: &[&str] = &[
         "pwsh.evil.exe",
@@ -176,14 +176,21 @@ mod powershell {
         }
     }
 
-    /// Windows trims trailing dots, so `pwsh.exe.` runs `pwsh.exe`: it is
-    /// respelled and read.
+    /// Windows trims trailing dots and spaces, so `powershell.exe.` runs
+    /// `powershell.exe`: it is respelled and read (Windows PowerShell is
+    /// always present). Not `powershell .exe`, which names another file.
     #[tokio::test]
     async fn trimmed_powershell_names_are_still_read() {
-        if !trusted_pwsh_reads() {
-            return;
+        let mut shells = vec!["powershell.exe.", "POWERSHELL.EXE", "powershell.exe "];
+        if trusted_pwsh_reads() {
+            shells.extend(["pwsh.exe.", "PWSH.EXE"]);
         }
-        for shell in ["pwsh.exe.", "PWSH.EXE", "pwsh.exe"] {
+        for shell in [r"C:\ws\powershell .exe", "powershell..exe", "pwsh .exe"] {
+            let status = words(&[shell, "-NoProfile", "-Command", "git status"]);
+            let result = requirement(&status, ALLOW_STATUS_FORBID_PUSH).await;
+            assert!(asked(&result), "{status:?}: {result:?}");
+        }
+        for shell in shells {
             let status = words(&[shell, "-NoProfile", "-Command", "git status"]);
             let result = requirement(&status, ALLOW_STATUS_FORBID_PUSH).await;
             assert!(

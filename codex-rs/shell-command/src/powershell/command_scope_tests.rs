@@ -61,3 +61,27 @@ fn a_command_without_path_finds_no_names() {
         enter_powershell_command_scope(PowershellCommandScope::new(Some(&cwd), Some(&with_path)));
     assert!(names_resolve(&[], &cmdlets));
 }
+
+/// #2756: a command whose environment has no `PATHEXT` may be spawned with
+/// Corbanu's: a program with one of its extensions (`Get-Content.vbs`)
+/// shadows the cmdlet. Program names still need the command's own lookup.
+#[test]
+fn a_command_without_pathext_looks_for_shadows_with_corbanus() {
+    let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir()).expect("cwd");
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("get-content.vbs"), "").expect("write");
+    std::fs::write(dir.path().join("tool.vbs"), "").expect("write");
+    let env = std::collections::HashMap::from([(
+        "Path".to_string(),
+        dir.path().to_string_lossy().into_owned(),
+    )]);
+    let cmdlets = ["get-content".to_string()];
+    for (fallback, unshadowed) in [(Some(".com;.exe;.vbs"), false), (None, true)] {
+        let scope = enter_powershell_command_scope(
+            PowershellCommandScope::new(Some(&cwd), Some(&env)).with_fallback_extensions(fallback),
+        );
+        assert_eq!(names_resolve(&[], &cmdlets), unshadowed, "{fallback:?}");
+        assert!(!names_resolve(&["tool".to_string()], &[]), "{fallback:?}");
+        drop(scope);
+    }
+}

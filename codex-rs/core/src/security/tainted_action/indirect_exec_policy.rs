@@ -256,6 +256,11 @@ fn policy_shell_script_for(words: &[String], case: names::NameCase) -> Option<Ve
         return None;
     }
     let name = names::launcher_name_for(shell, case);
+    // #2734: only a name Windows runs as exactly that shell (`BASH.EXE.`,
+    // not `bash .exe`, which names another file).
+    if case == names::NameCase::Windows && !names::windows_runs_exactly(shell, &name) {
+        return None;
+    }
     let read_as = match name.as_ref() {
         "bash" | "zsh" | "sh" if case != names::NameCase::Sensitive => name.into_owned(),
         // #2543: on every platform, POSIX shells the parser does not know

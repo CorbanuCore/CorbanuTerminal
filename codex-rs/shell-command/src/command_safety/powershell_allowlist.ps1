@@ -151,9 +151,13 @@ function Test-D729NetworkPath($text) {
 # may pass through (5.1's `Get-ChildItem -Recurse` follows links).
 $D729LocalDriveTypes = @('Fixed', 'Removable', 'CDRom', 'Ram')
 function Test-D729RemoteDrive([string]$text) {
-    if ($text -notmatch '^\s*([A-Za-z]):') { return $false }
+    if ($text -match '^\s*([A-Za-z]):') {
+        $letter = $Matches[1]
+    } else {
+        return $false
+    }
     try {
-        $type = [string]([System.IO.DriveInfo]::new($Matches[1]).DriveType)
+        $type = [string]([System.IO.DriveInfo]::new($letter).DriveType)
     } catch {
         return $true
     }
@@ -275,6 +279,8 @@ function Get-D729CmdletCause($commandAst, [string]$target, [int]$index, $state) 
     # #2756: past the first command of a pipeline, input objects bind to parameters
     # too, by value or by property name (`Import-Csv hosts.csv | Get-Process` binds
     # -ComputerName in 5.1): no excluded parameter may take pipeline input.
+    # Not covered: a path bound from input objects (`ConvertFrom-Json … | Get-ChildItem`)
+    # is not checked for a network path (#2891).
     if ($index -gt 0) {
         foreach ($parameter in $info.Parameters.Values) {
             if ($D729Banned -notcontains $parameter.Name -and $entry.x -notcontains $parameter.Name) { continue }
