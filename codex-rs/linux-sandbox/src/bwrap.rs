@@ -1608,7 +1608,30 @@ fn ripgrep_files(
         }
         Err(err) => return Err(err.into()),
     };
-    ripgrep_scan_paths(search_root, &output)
+    ripgrep_scan_with_rescan(search_root, &output, || command.output())
+}
+
+/// #2893: a folder renamed mid-walk is reported missing under its old name,
+/// and its new name may already have been passed. When the first scan
+/// reported vanished paths, scan once more and mask the union, so one
+/// concurrent rename cannot hide a match.
+fn ripgrep_scan_with_rescan(
+    search_root: &Path,
+    output: &Output,
+    rescan: impl FnOnce() -> io::Result<Output>,
+) -> Result<Vec<AbsolutePathBuf>> {
+    let mut scan = ripgrep_scan_paths(search_root, output)?;
+    if scan.vanished_paths {
+        let rescan = ripgrep_scan_paths(search_root, &rescan()?)?;
+        scan.paths.extend(rescan.paths);
+    }
+    Ok(scan.paths)
+}
+
+/// Paths one `rg --files` run listed, and whether it reported vanished paths.
+struct RipgrepScan {
+    paths: Vec<AbsolutePathBuf>,
+    vanished_paths: bool,
 }
 
 /// Turn one finished `rg --files` scan into the paths it listed.
@@ -1616,12 +1639,16 @@ fn ripgrep_files(
 /// Status 1 with no stderr is ripgrep's "no matches" case. Status 2 is
 /// accepted only when every stderr line reports that a path under the search
 /// root vanished during the walk (#2893) and that path is still gone; ripgrep
-/// keeps walking past those, so stdout holds every other match. Any other
-/// failure stays fatal so deny-read does not silently weaken.
-fn ripgrep_scan_paths(search_root: &Path, output: &Output) -> Result<Vec<AbsolutePathBuf>> {
+/// keeps walking past those, so stdout holds every other match (the caller
+/// rescans once). Any other failure stays fatal so deny-read does not
+/// silently weaken.
+fn ripgrep_scan_paths(search_root: &Path, output: &Output) -> Result<RipgrepScan> {
     if !output.status.success() {
         if output.status.code() == Some(1) && output.stderr.is_empty() {
-            return Ok(Vec::new());
+            return Ok(RipgrepScan {
+                paths: Vec::new(),
+                vanished_paths: false,
+            });
         }
         if output.status.code() != Some(2)
             || !ripgrep_errors_are_vanished_paths(search_root, &output.stderr)
@@ -1648,7 +1675,10 @@ fn ripgrep_scan_paths(search_root: &Path, output: &Output) -> Result<Vec<Absolut
         })
         .map(AbsolutePathBuf::from_absolute_path_checked)
         .collect::<io::Result<Vec<_>>>()?;
-    Ok(paths)
+    Ok(RipgrepScan {
+        paths,
+        vanished_paths: !output.status.success(),
+    })
 }
 
 /// True when `stderr` is non-empty and every line is ripgrep's
@@ -1656,7 +1686,8 @@ fn ripgrep_scan_paths(search_root: &Path, output: &Output) -> Result<Vec<Absolut
 /// under `search_root` that still does not exist. A path that vanished cannot
 /// be read by the sandboxed command, so there is nothing to mask. Anything
 /// else (permission denied, I/O errors, glob errors, unrecognised text, a path
-/// outside the root, the root itself, or a path that exists again) is not.
+/// outside the root, the root itself, a lossily printed path, or a path that
+/// exists again) is not.
 fn ripgrep_errors_are_vanished_paths(search_root: &Path, stderr: &[u8]) -> bool {
     const PREFIX: &[u8] = b"rg: ";
     const ENOENT_SUFFIX: &[u8] = b": No such file or directory (os error 2)";
@@ -1670,6 +1701,11 @@ fn ripgrep_errors_are_vanished_paths(search_root: &Path, stderr: &[u8]) -> bool 
             else {
                 return false;
             };
+            // ripgrep prints paths lossily; a replaced byte would make the
+            // existence check below look at a different name.
+            if path.windows(3).any(|bytes| bytes == "\u{FFFD}".as_bytes()) {
+                return false;
+            }
             let path = Path::new(OsStr::from_bytes(path));
             let Ok(relative) = path.strip_prefix(search_root) else {
                 return false;
@@ -4711,7 +4747,7 @@ mod tests {
         }
     }
 
-    fn fatal_message(result: Result<Vec<AbsolutePathBuf>>) -> Option<String> {
+    fn fatal_message<T>(result: Result<T>) -> Option<String> {
         match result.err()?.details() {
             codex_protocol::error::CodexErrorDetails::Fatal(message) => Some(message.clone()),
             _ => None,
@@ -4744,12 +4780,53 @@ mod tests {
         );
         let output = rg_output(rg_exit(2), &format!("{}\0", kept.display()), &stderr);
 
-        let paths = ripgrep_scan_paths(root, &output).expect("vanished paths are not fatal");
+        let scan = ripgrep_scan_paths(root, &output).expect("vanished paths are not fatal");
 
         assert_eq!(
-            paths,
+            scan.paths,
             vec![AbsolutePathBuf::from_absolute_path(&kept).expect("absolute")]
         );
+        assert!(scan.vanished_paths);
+    }
+
+    /// #2893: after vanished paths the scan runs once more and masks both
+    /// results, so a folder renamed mid-walk is still covered under its new
+    /// name; a clean first scan is not repeated, and a failed rescan is fatal.
+    #[test]
+    fn ripgrep_vanished_paths_rescan_and_mask_the_union() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let root = temp_dir.path();
+        let first_match = root.join("kept.env");
+        let renamed_match = root.join("new/secret.env");
+        let first = rg_output(
+            rg_exit(2),
+            &format!("{}\0", first_match.display()),
+            &rg_enoent(&root.join("old")),
+        );
+        let rescan = rg_output(rg_exit(0), &format!("{}\0", renamed_match.display()), "");
+
+        let paths = ripgrep_scan_with_rescan(root, &first, || Ok(rescan.clone()))
+            .expect("vanished paths are not fatal");
+        assert_eq!(
+            paths,
+            [&first_match, &renamed_match]
+                .map(|path| AbsolutePathBuf::from_absolute_path(path).expect("absolute"))
+        );
+
+        let clean = rg_output(rg_exit(0), &format!("{}\0", first_match.display()), "");
+        let paths = ripgrep_scan_with_rescan(root, &clean, || panic!("clean scan rescanned"))
+            .expect("clean scan");
+        assert_eq!(paths.len(), 1);
+
+        let denied = rg_output(
+            rg_exit(2),
+            "",
+            &format!(
+                "rg: {}: Permission denied (os error 13)\n",
+                root.join("locked").display()
+            ),
+        );
+        assert!(fatal_message(ripgrep_scan_with_rescan(root, &first, || Ok(denied))).is_some());
     }
 
     #[test]
@@ -4794,6 +4871,11 @@ mod tests {
             ("blank line", rg_exit(2), format!("{gone}\n{gone}")),
             ("trailing text", rg_exit(2), gone.replace('\n', " extra\n")),
             ("path that exists", rg_exit(2), rg_enoent(&existing)),
+            (
+                "lossily printed path",
+                rg_exit(2),
+                rg_enoent(&root.join("gone\u{FFFD}")),
+            ),
             ("search root itself", rg_exit(2), rg_enoent(root)),
             (
                 "path outside root",
