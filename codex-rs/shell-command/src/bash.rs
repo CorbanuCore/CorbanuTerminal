@@ -7,6 +7,7 @@ use tree_sitter_bash::LANGUAGE as BASH;
 
 use crate::shell_detect::ShellType;
 use crate::shell_detect::detect_shell_type;
+use crate::shell_detect::exact_shell_type;
 
 mod heredoc;
 mod script_lexical;
@@ -277,13 +278,31 @@ pub fn parse_shell_script_into_plain_words(script: &str) -> Option<Vec<Vec<Plain
     Some(plain)
 }
 
+/// `[shell, -c|-lc, script]` where `shell` names bash, zsh or sh exactly
+/// ([`exact_shell_type`]): (`shell`, `script`). #2734: a name read only
+/// through another extension (`bash.foo.exe`, `bash.sh`, an NTFS stream
+/// `bash.exe:x.exe`) runs another file, so its script is not read here.
 pub fn extract_bash_command(command: &[String]) -> Option<(&str, &str)> {
+    extract_bash_command_by(command, exact_shell_type)
+}
+
+/// [`extract_bash_command`] for any name [`detect_shell_type`] reads as
+/// bash, zsh or sh, `bash.sh` too: only for finding dangerous commands,
+/// where reading more scripts can only add warnings.
+fn extract_bash_command_any_name(command: &[String]) -> Option<(&str, &str)> {
+    extract_bash_command_by(command, |shell| detect_shell_type(PathBuf::from(shell)))
+}
+
+fn extract_bash_command_by(
+    command: &[String],
+    shell_type: impl Fn(&str) -> Option<ShellType>,
+) -> Option<(&str, &str)> {
     let [shell, flag, script] = command else {
         return None;
     };
     if !matches!(flag.as_str(), "-lc" | "-c")
         || !matches!(
-            detect_shell_type(PathBuf::from(shell)),
+            shell_type(shell),
             Some(ShellType::Zsh) | Some(ShellType::Bash) | Some(ShellType::Sh)
         )
     {
@@ -415,7 +434,7 @@ pub(crate) fn parse_shell_lc_literal_commands(
     command: &[String],
     mode: LiteralWordMode,
 ) -> Option<Vec<Vec<String>>> {
-    let (_, script) = extract_bash_command(command)?;
+    let (_, script) = extract_bash_command_any_name(command)?;
     let tree = try_parse_shell(script)?;
     let root = tree.root_node();
     if root.has_error() {
@@ -1190,6 +1209,50 @@ mod tests {
             "echo $((1<<2))".to_string(),
         ];
         assert_eq!(parse_shell_lc_single_command_prefix(&command), None);
+    }
+
+    /// #2734: a name read as bash, zsh or sh only through another
+    /// extension (`bash.foo.exe`, `bash.sh`, an NTFS stream) names another
+    /// file: its script is not read for rules, approval keys or known-safe
+    /// commands, but dangerous commands in it are still found.
+    #[test]
+    fn only_exact_shell_names_are_read() {
+        for shell in [
+            "bash.foo.exe",
+            "bash.sh",
+            "/tmp/bash.sh",
+            "zsh.app",
+            "sh.x.exe",
+            "bash.exe:x.exe",
+            "bash.exe.exe",
+        ] {
+            let command = vec![shell.to_string(), "-lc".to_string(), "rm -rf /".to_string()];
+            assert_eq!(extract_bash_command(&command), None, "{shell}");
+            assert_eq!(shell_lc_script_read(&command), None, "{shell}");
+            assert_eq!(parse_shell_lc_plain_commands(&command), None, "{shell}");
+            assert_eq!(
+                parse_shell_lc_single_command_prefix(&command),
+                None,
+                "{shell}"
+            );
+            assert_eq!(
+                parse_shell_lc_literal_commands(&command, LiteralWordMode::Verbatim),
+                Some(vec![vec![
+                    "rm".to_string(),
+                    "-rf".to_string(),
+                    "/".to_string()
+                ]]),
+                "{shell}"
+            );
+        }
+        for shell in ["bash", "/bin/bash", "bash.exe", "zsh", "/bin/sh", "sh.exe"] {
+            let command = vec![shell.to_string(), "-c".to_string(), "ls".to_string()];
+            assert_eq!(
+                extract_bash_command(&command),
+                Some((shell, "ls")),
+                "{shell}"
+            );
+        }
     }
 
     #[test]

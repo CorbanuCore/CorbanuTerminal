@@ -1726,6 +1726,9 @@ fn apply_resolved_values(original: &mut TomlValue, resolved: TomlValue) {
                 apply_resolved_values(original_value, resolved_value);
             }
         }
+        // JSON-backed fields can serialize a number as a private serde_json table.
+        // Path resolution cannot change a numeric leaf, so retain its TOML type.
+        (TomlValue::Integer(_) | TomlValue::Float(_), TomlValue::Table(_)) => {}
         (original, resolved) => *original = resolved,
     }
 }

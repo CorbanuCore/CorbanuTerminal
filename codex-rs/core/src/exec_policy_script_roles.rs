@@ -13,6 +13,7 @@ use codex_shell_command::bash::CommandStdin;
 use codex_shell_command::bash::RESERVED_WORDS;
 use codex_shell_command::bash::numeric_operand;
 use codex_shell_command::bash::runs_code_from_variable;
+use codex_shell_command::is_dangerous_command::DangerousCommandPlatform;
 
 /// What a command runs besides its argv.
 #[derive(Debug, PartialEq, Eq)]
@@ -72,11 +73,43 @@ pub(super) fn role(before: &[String], program_and_args: &[String], stdin: &Comma
     }
 }
 
+/// [`role`] for a command checked for `platform`: (#2601) on Windows, where
+/// PowerShell scripts are lowered into these commands, a PowerShell command
+/// that rebinds a name or runs code ([`powershell_runs_code`]) is unread,
+/// as main's `role` reads it on a Windows host; only where nothing else
+/// reads or asks, so script text read precisely (`eval git push alias:`)
+/// keeps its refusals.
+pub(super) fn role_for_platform(
+    before: &[String],
+    program_and_args: &[String],
+    stdin: &CommandStdin,
+    platform: DangerousCommandPlatform,
+) -> Role {
+    let role = role(before, program_and_args, stdin);
+    if role == Role::Argv
+        && platform == DangerousCommandPlatform::Windows
+        && let Some((program, args)) = program_and_args.split_first()
+        && powershell_runs_code(program, args.iter().map(String::as_str))
+    {
+        return Role::Unread;
+    }
+    role
+}
+
 /// [`role`] for a command with words known only at run time (`None`): where
 /// its program is one that runs more than its argv, those words may make it
-/// run anything.
-pub(super) fn runs_more_than_argv(program: &str, args: &[Option<String>]) -> bool {
-    if runs_shell(program) {
+/// run anything. #2794: for a Windows command (`platform`), as main reads
+/// it on a Windows host, also a PowerShell command that rebinds a name or
+/// runs code ([`powershell_runs_code`], over the words already known).
+pub(super) fn runs_more_than_argv(
+    program: &str,
+    args: &[Option<String>],
+    platform: DangerousCommandPlatform,
+) -> bool {
+    if runs_shell(program)
+        || (platform == DangerousCommandPlatform::Windows
+            && powershell_runs_code(program, args.iter().flatten().map(String::as_str)))
+    {
         return true;
     }
     match builtin_lookup_name(program).as_str() {
@@ -134,19 +167,17 @@ const POWERSHELL_CODE_COMMANDS: &[&str] = &[
 /// [`POWERSHELL_CODE_COMMANDS`] (module-qualified too), or any command given
 /// a literal path on the alias or function drive (`Set-Item alias:f git`,
 /// `Set-Location function:`), compared as [`powershell_fold`] does.
-/// Sync: the caller applies it to commands checked for the Windows command
-/// platform, whose PowerShell scripts are lowered into these commands.
+/// Sync: callers apply it to commands checked for the Windows command
+/// platform, whose PowerShell scripts are lowered into these commands
+/// ([`role_for_platform`], [`runs_more_than_argv`]).
 ///
 /// Not complete: PowerShell can also run code or bind a drive path from
 /// literal words in other ways (member invocation through `ForEach-Object`,
 /// pipeline-bound `-Path`); #2661 tracks reading it default-deny.
-pub(super) fn powershell_runs_code(program_and_args: &[String]) -> bool {
-    let Some((program, args)) = program_and_args.split_first() else {
-        return false;
-    };
+fn powershell_runs_code<'a>(program: &str, mut args: impl Iterator<Item = &'a str>) -> bool {
     let name = program.rsplit(['/', '\\']).next().unwrap_or(program);
     POWERSHELL_CODE_COMMANDS.contains(&powershell_fold(name).as_str())
-        || args.iter().any(|arg| {
+        || args.any(|arg| {
             let arg = powershell_fold(arg);
             // #2704: also the environment drive, where `PATH` and `PATHEXT`
             // decide which program a later name runs.

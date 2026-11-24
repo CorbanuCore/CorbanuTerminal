@@ -106,6 +106,10 @@ struct Cmdlet {
     dynamic: HashMap<String, bool>,
     /// An excluded parameter may take a value given by position.
     excluded_positional: bool,
+    /// #2756: an excluded parameter may bind input objects from the
+    /// pipeline, by value or by property name (`-ComputerName` of 5.1's
+    /// `Get-Process`, `-Credential` of `Get-Content`).
+    excluded_pipeline: bool,
 }
 
 /// The common parameters whose value decides what happens on an error or a
@@ -143,6 +147,7 @@ fn load(json: &str) -> Option<Tables> {
         let mut names = HashMap::new();
         let mut switches = HashSet::new();
         let mut excluded_positional = false;
+        let mut excluded_pipeline = false;
         for param in cmdlet.params {
             let mut fields = param.split('|');
             let (Some(canonical), Some(aliases), Some(flags), None) =
@@ -156,6 +161,9 @@ fn load(json: &str) -> Option<Tables> {
             }
             if flags.contains('p') && excluded.contains(&canonical) {
                 excluded_positional = true;
+            }
+            if flags.contains('i') && excluded.contains(&canonical) {
+                excluded_pipeline = true;
             }
             for alias in aliases.split(',').filter(|alias| !alias.is_empty()) {
                 names.insert(alias.to_lowercase(), canonical.clone());
@@ -182,6 +190,7 @@ fn load(json: &str) -> Option<Tables> {
                 excluded,
                 dynamic,
                 excluded_positional,
+                excluded_pipeline,
             },
         );
     }
@@ -231,7 +240,7 @@ fn command_cause(
             && !rest.contains(['\\', '/'])
             && let Some(cmdlet) = tables.allow.get(rest)
         {
-            return cmdlet_cause(tables, cmdlet, rest, args);
+            return cmdlet_cause(tables, cmdlet, rest, name.piped, args);
         }
         if lower.ends_with(".exe") || lower.ends_with(".com") {
             return native_cause(args);
@@ -248,7 +257,7 @@ fn command_cause(
         if cmdlet.module_cmdlet {
             cmdlets.push(target.clone());
         }
-        return cmdlet_cause(tables, cmdlet, target, args);
+        return cmdlet_cause(tables, cmdlet, target, name.piped, args);
     }
     if tables.aliases.contains_key(&lower) || tables.functions.contains(&lower) {
         return Some(format!("command not on the allowlist: {target}"));
@@ -282,7 +291,8 @@ fn verb_noun(lower: &str) -> bool {
 
 /// A network path (`\\host\share`, `//host`) reaches another computer with
 /// the user's credentials. Any text holding `::` (a provider qualifier) or
-/// starting with `\\` or `//` (also device paths) counts.
+/// starting with `\\` or `//` (also device paths) counts, and (#2756) a
+/// drive-letter path on a drive that is not a local disk ([`remote_drive`]).
 fn network_path(text: &str) -> bool {
     let mut start = text.trim_start().chars();
     text.contains("::")
@@ -290,6 +300,47 @@ fn network_path(text: &str) -> bool {
             (start.next(), start.next()),
             (Some('\\' | '/'), Some('\\' | '/'))
         )
+        || remote_drive(text)
+}
+
+/// #2756 (main's `Test-D729RemoteDrive`): a drive-letter path (`Z:\s`,
+/// `Z:s`) on a drive that is not a local disk now: a mapped network drive,
+/// or a letter an earlier command may map (`net use`, `subst`). Not covered:
+/// a link (`mklink /d`) to a network path, which a path or a recursive
+/// listing may pass through.
+fn remote_drive(text: &str) -> bool {
+    let mut start = text.trim_start().chars();
+    match (start.next(), start.next()) {
+        (Some(letter), Some(':')) if letter.is_ascii_alphabetic() => !local_drive(letter),
+        _ => false,
+    }
+}
+
+/// Whether drive `letter` is a local disk of this host (removable, fixed,
+/// CD-ROM or RAM disk), as `GetDriveTypeW` says without reaching it.
+#[cfg(windows)]
+fn local_drive(letter: char) -> bool {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetDriveTypeW(root_path_name: *const u16) -> u32;
+    }
+    let root: Vec<u16> = format!("{letter}:\\")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: `root` is a NUL-terminated UTF-16 string that outlives the call,
+    // which only reads it.
+    let kind = unsafe { GetDriveTypeW(root.as_ptr()) };
+    // DRIVE_REMOVABLE, DRIVE_FIXED, DRIVE_CDROM, DRIVE_RAMDISK.
+    matches!(kind, 2 | 3 | 5 | 6)
+}
+
+/// Off Windows no drive letter names a disk of this host. A command for a
+/// Windows executor checked here runs elsewhere, so it finds no names: its
+/// path cmdlets (module cmdlets) are read in part anyway.
+#[cfg(not(windows))]
+fn local_drive(_letter: char) -> bool {
+    true
 }
 
 /// Main's `Get-D729NativeCause`: why a native program's argv may not be what
@@ -363,8 +414,19 @@ fn cmdlet_cause(
     tables: &Tables,
     cmdlet: &Cmdlet,
     target: &str,
+    piped: bool,
     args: &[LoweredWord],
 ) -> Option<String> {
+    // #2756: past the first command of a pipeline, input objects bind to
+    // parameters too (`Import-Csv hosts.csv | Get-Process` binds
+    // -ComputerName in 5.1): no excluded parameter may take pipeline input.
+    // Not covered: a path bound from input objects (`ConvertFrom-Json … |
+    // Get-ChildItem`) is not checked for a network path (#2891).
+    if piped && cmdlet.excluded_pipeline {
+        return Some(format!(
+            "an excluded parameter takes pipeline input: {target}"
+        ));
+    }
     let mut positional = 0usize;
     let mut words = args.iter();
     while let Some(word) = words.next() {

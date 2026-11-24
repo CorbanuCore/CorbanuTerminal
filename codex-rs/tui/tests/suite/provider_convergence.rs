@@ -121,7 +121,10 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             ensure!(pane.capture_viewport()?.contains(MODEL));
             pane.send_literal("/mcp")?;
             pane.send_key(TmuxKey::Enter)?;
-            pane.wait_stable_contains("No MCP servers configured.", READY_TIMEOUT)?;
+            // The TUI's own `codex_tui` tools are always listed since the
+            // upstream sync, so the inventory is never empty; what matters is
+            // that it loads for the retained runtime (#2853).
+            pane.wait_stable_contains("MCP Tools", READY_TIMEOUT)?;
             ensure!(
                 !pane
                     .capture_viewport()?

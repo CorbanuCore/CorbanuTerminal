@@ -17,10 +17,12 @@ fn daemon_recovery_requires_explicit_restart_and_defaults_to_cancel() {
             ("instant_interrupt".to_string(), true),
             ("mcp_oauth_refresh_coordination".to_string(), false),
         ])),
+        unreachable: false,
     };
     let non_restartable = CompatibilityError {
         reason: "code-mode host fallback policy requires embedded mode".to_string(),
         restart_features: None,
+        unreachable: false,
     };
     for (issue, managed, snapshot) in [
         (&issue, true, "daemon_recovery_menu"),

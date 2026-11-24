@@ -58,6 +58,14 @@ slow-timeout = { period = "60s", terminate-after = 3 }
 filter = 'package(codex-network-proxy) & test(three_mib_eight_isolated_lengths_pass_and_copies_at_end_are_found)'
 slow-timeout = { period = "60s", terminate-after = 5 }
 
+[[profile.default.overrides]]
+# #2814: the tainted-action linear-time and budget cases classify inputs of up
+# to several MiB and check linearity by counting work, not by time. Unoptimized
+# Windows CI needs up to ~115 s for some of them (macOS up to ~55 s), past the
+# default 60 s bound.
+filter = 'package(codex-core) & kind(lib) & test(/^security::tainted_action::/)'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
 [test-groups.app_server_protocol_codegen]
 max-threads = 1
 

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "autoupdate": false,
+  "share": "disabled"
+}
