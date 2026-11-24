@@ -1,0 +1,1306 @@
+{
+  "schema": "corbanu-benchmark-freeze/1",
+  "status": "draft: frozen inputs for the #2717 bootstrap cycle; competitive repository and task blocked on access; product approval pending",
+  "issue": 2717,
+  "authority": "benchmarks/README.md",
+  "prepared_at": "2026-11-23T20:30Z",
+  "candidate": {
+    "status": "pending: the post-sync signed candidate (sync/upstream-rust-v0.167.0 landed on main)",
+    "record_at_run": [
+      "version",
+      "commit",
+      "sha256",
+      "codesign identity",
+      "INSTALL.json launcher_target"
+    ],
+    "dry_run_reference_build": {
+      "version": "corbanu 0.1.49",
+      "commit": "ff2b81a7b4",
+      "launcher": "~/.local/bin/corbanu",
+      "launcher_target": "/Volumes/CorbanuDrive/Corbanu/.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu",
+      "sha256": "896684ea2c7560e95214e3c455f26f57d296eaa4329c8d03327f8f34e89d082f",
+      "signing_identity": "Developer ID Application: Travis Good (K5N2T25C23)",
+      "built_at": "2026-11-20T10:00:53Z"
+    }
+  },
+  "harnesses": {
+    "hermes": {
+      "version": "Hermes Agent v0.23.3 (stable, released 2026-11-20)",
+      "source": "https://github.com/NousResearch/hermes-agent.git",
+      "tag": "v0.23.3",
+      "commit": "caafe5389ae585ef77387a962aee05b1bcf17029",
+      "installer": "scripts/install.sh at tag v0.23.3",
+      "install_command": "env -i HOME=$BENCH/homes/hermes2-install PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin TERM=dumb LANG=en_US.UTF-8 bash $BENCH/tools/hermes-install-v0.23.3.sh --channel stable --branch v0.23.3 --hermes-home $BENCH/homes/hermes2 --non-interactive --skip-browser --skip-computer-use",
+      "binary": "$BENCH/homes/hermes2/hermes-agent/.hermes/bin/hermes",
+      "runtime": "Python 3.14.9, OpenAI SDK 2.54.0 (installer-pinned uv)",
+      "per_run_state": "fresh home $BENCH/homes/hermes2/profiles/run-<sha256(result dir)[:16]> per run (path recorded in the run's HERMES_HOME.path); a home outside profiles/ would copy ~420 MB of dependencies into every run; HOME is a fresh per-run directory",
+      "telemetry": "shared metrics off by default; nothing uploaded",
+      "install_note": "keep the installer's default checkout location ($HERMES_HOME/hermes-agent): per-run homes under $HERMES_HOME/profiles/ can then share the installed dependency environment",
+      "installed_home": "$BENCH/homes/hermes2",
+      "installer_sha256": "c73dad4dcf7c9ecadb98578e28cc763d23d7be3fa1b513545319038795493214"
+    },
+    "kilo": {
+      "version": "@kilocode/cli 7.8.32 (npm, published 2026-11-23)",
+      "install_command": "env -i HOME=$BENCH/homes/kilo-install PATH=/usr/bin:/bin:/opt/homebrew/bin npm_config_cache=$BENCH/homes/kilo-install/npm-cache npm install --no-fund --no-audit --prefix $BENCH/tools/kilo-7.8.32 @kilocode/cli@7.8.32",
+      "binary": "$BENCH/tools/kilo-7.8.32/node_modules/.bin/kilo",
+      "platform_binary_sha256": "af2bfa052de787138a4fc1c3e19411bc5e4b8161d0e8cf63cc30690815aaa177",
+      "runtime": "node v25.2.1 (launcher script); darwin-arm64 platform binary",
+      "per_run_state": "fresh HOME and XDG config/data/state/cache under the run's result directory",
+      "frozen_settings": "KILO_CONFIG=qa/release/unreleased/benchmarks/kilo-frozen.json (autoupdate off, sharing off)"
+    },
+    "corbanu": {
+      "binary": "the signed candidate binary (absolute path, not the launcher script, so activate.sh cannot replace the per-run home)",
+      "per_run_state": "fresh HOME, and CODEX_HOME = CORBANU_HOME = a fresh directory under the run's result directory (PFTERMINAL_HOME unset); request dumps on; claude-plan routes sign in with CLAUDE_CODE_OAUTH_TOKEN"
+    },
+    "bench_root": "$BENCH = /Volumes/CorbanuDrive/Corbanu/.codex-work/bench-prep-2717 on the Mac; outside the repository; no credentials stored there"
+  },
+  "competitive": {
+    "status": "blocked: neither canonical repository is readable by the maintainers' GitHub login (repository not found), and no CORBANU_TENSORCASH_REPO / CORBANU_ISOMETRIC_REPO path is configured on the Mac or glitch (same finding as qa/release/0.1.49/LIVE-TUI-PREFLIGHT.md)",
+    "proposed_repository": "Isometric Game",
+    "origin": "https://github.com/goodalexander/isometricgame.git",
+    "proposed_base_commit": "59821b7a85524f186f946c4670480c7ee96483cb",
+    "base_commit_note": "last recorded base (0.1.38 and 0.1.41 release QA); confirm it still exists, or record the current default-branch head, before freezing",
+    "alternative": {
+      "repository": "TensorCash",
+      "origin": "https://github.com/agtico/tensorcash.git",
+      "last_recorded_base_commit": "9325ed67d23355170d6ad38ad58ea776d049ae4e"
+    },
+    "task": "pending: one development task chosen with repository access (prompt file and rubric to be frozen with sha256 before any lane starts)",
+    "rubric_shape": [
+      "repository test suite passes after the change (command recorded at freeze)",
+      "task-specific acceptance checks, each pass/fail, written before any lane runs",
+      "no edits outside the declared scope; no deleted or weakened tests",
+      "final diff, transcript, timing and usage preserved for audit"
+    ],
+    "route": "same as hermes_efficiency.route (OpenRouter, openai/gpt-6-sol, reasoning high)",
+    "repeats": 3,
+    "run_timeout_seconds": 3600,
+    "estimate_run_multiplier": 3.0,
+    "worktrees": "one disposable worktree per harness per repeat, all from the frozen base commit"
+  },
+  "permissions_and_tools": {
+    "rule": "full auto-approval inside a disposable workspace for every harness; each harness's default built-in tools in a fresh home, with HOME itself set to a fresh per-run directory so no user-level skills, plugins, config or memories leak in; no added MCP servers; network available; no harness-specific turn, tool or workflow cap",
+    "corbanu": "exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -C <workspace>",
+    "hermes": "-z <prompt> --yolo --accept-hooks (one-shot mode)",
+    "kilo": "run --auto --format json --dir <workspace> (7.8.32 does not list the runner built-in adapter's --dangerously-skip-permissions flag, so the frozen template omits it)",
+    "reasoning": "matched explicit level per route: corbanu -c model_reasoning_effort, hermes --reasoning, kilo --variant"
+  },
+  "coding_matrix": {
+    "task_catalog": {
+      "config": "benchmarks/coding/configs/all-tasks.example.json",
+      "tasks": [
+        "eventforge",
+        "logtriage",
+        "rategate",
+        "chronoledger",
+        "queryforge",
+        "toothpaste-site",
+        "apigate",
+        "confclerk",
+        "pipeflow",
+        "queuecraft",
+        "textwright"
+      ],
+      "tree_sha256": {
+        "eventforge": "b5a4d23ee70b6933e75d5e397667134dd8d64fafa12ba4735d092675602d323b",
+        "logtriage": "f1a8707f51d83bc8bd6086f0355c477f942912681e8c112be7a3d6fabb241181",
+        "rategate": "5ee9676678fdfb89786d4a58d74a8a74fc76f4510e75cf657793fcc4dfb083d9",
+        "chronoledger": "6c4cde59c338455bb2df820758b2c2f8144fe5cca77622df93c4f2f8e7b1fa75",
+        "queryforge": "dea1dc5ef310bc7bd99be9acc260a4ee274988d49d8947323a4b175731c0fcce",
+        "toothpaste-site": "658bf08654045da43f5105c3408eac50da7f6da904191f26ad4b3aa4d0de4e7e",
+        "apigate": "38d905c67978af992403c937b5298716caafbc244b83cd795559d86725cfc609",
+        "confclerk": "6e1616afdab1e755b73620fbd1433f6ebea9beeabb3e3feb769f82d178a72078",
+        "pipeflow": "2e74d1f25f0d154fe17913e2269404b04fc0036ff868fa5cb75fd49e46545c05",
+        "queuecraft": "4ca2ce2871d99d2c6c4481857e741d99be1b8784515a9d396fc456782fd96972",
+        "textwright": "6bf72f42f0fc794e4f9bdf86017829936d1f2e11608ed0409e6cbd59a0c10494"
+      }
+    },
+    "waves": 1,
+    "model_set_rule": {
+      "rule": "every catalogue route with visibility 'list' (every route a user can pick; orchestration status 'disabled' only means manual selection, not unsuitability), at the route's default reasoning level; derived from the candidate commit's codex-rs/models-manager/models.json by make_run_configs.py refresh",
+      "multi_route_default": "where one model has several connections, the OpenAI-style connection is the default route (owner decision 2026-10-13, item 6); Anthropic-style duplicates are not separate list routes",
+      "exclusions": "none applied; any exclusion needs a written rationale and product-authority approval and goes in approved_exclusions. Decision needed: muse-spark-1.1 has no published direct Meta API price (catalogue reason), so its spend can only come from a provider billing delta; approve that source or approve excluding the route",
+      "required_env_by_provider": {
+        "openai": [
+          "OPENAI_API_KEY"
+        ],
+        "anthropic": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "openrouter": [
+          "OPENROUTER_API_KEY"
+        ],
+        "zai": [
+          "ZAI_API_KEY"
+        ],
+        "vercel": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "vercel-anthropic-fast": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "ambient": [
+          "AMBIENT_API_KEY"
+        ],
+        "baseten": [
+          "BASETEN_API_KEY"
+        ],
+        "deepseek": [
+          "DEEPSEEK_API_KEY"
+        ],
+        "kimi-code": [
+          "KIMI_API_KEY"
+        ],
+        "pfterminal-plan": [
+          "CORBANU_PLAN_API_KEY"
+        ],
+        "claude-plan": [
+          "CLAUDE_CODE_OAUTH_TOKEN"
+        ],
+        "meta": [
+          "MODEL_API_KEY"
+        ]
+      },
+      "reasoning": "a route whose catalogue row sets no default reasoning level (reasoning null) runs without an explicit reasoning setting, so the route's own default applies"
+    },
+    "approved_exclusions": [],
+    "model_set": [
+      {
+        "name": "corbanu--zai--glm-5.3-flash",
+        "provider": "zai",
+        "model": "glm-5.3-flash",
+        "reasoning": "max",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "ZAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.15,
+          "cached_input": 0.03,
+          "output": 0.5,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.0414
+      },
+      {
+        "name": "corbanu--openrouter--x-ai_grok-4.7",
+        "provider": "openrouter",
+        "model": "x-ai/grok-4.7",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "frontier",
+        "billing_kind": null,
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 2.0,
+          "cached_input": 0.5,
+          "output": 6.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.588
+      },
+      {
+        "name": "corbanu--openrouter--deepseek_deepseek-v4.1-flash",
+        "provider": "openrouter",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "fast",
+        "billing_kind": null,
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.3,
+          "cached_input": 0.006,
+          "output": 1.2,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.0605
+      },
+      {
+        "name": "corbanu--openrouter--xiaomi_mimo-v2.6-pro",
+        "provider": "openrouter",
+        "model": "xiaomi/mimo-v2.6-pro",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "high"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "balanced",
+        "billing_kind": null,
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.435,
+          "cached_input": 0.0036,
+          "output": 0.87,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.0696
+      },
+      {
+        "name": "corbanu--openrouter--z-ai_glm-5.3-flash",
+        "provider": "openrouter",
+        "model": "z-ai/glm-5.3-flash",
+        "reasoning": "max",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.15,
+          "cached_input": 0.05,
+          "output": 0.5,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.051
+      },
+      {
+        "name": "corbanu--openrouter--nvidia_nemotron-3-ultra-550b-a55b:free",
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "medium",
+          "high"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.0,
+          "cached_input": null,
+          "output": 0.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.0
+      },
+      {
+        "name": "corbanu--ambient--z-ai_glm-5.2",
+        "provider": "ambient",
+        "model": "z-ai/glm-5.2",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "medium",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "AMBIENT_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.76,
+          "cached_input": 0.14,
+          "output": 2.42,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.202
+      },
+      {
+        "name": "corbanu--vercel--zai_glm-5.3-flash",
+        "provider": "vercel",
+        "model": "zai/glm-5.3-flash",
+        "reasoning": "low",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.15,
+          "cached_input": 0.03,
+          "output": 0.5,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.0414
+      },
+      {
+        "name": "corbanu--vercel--zai_glm-5.3",
+        "provider": "vercel",
+        "model": "zai/glm-5.3",
+        "reasoning": "low",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.4,
+          "cached_input": 0.14,
+          "output": 4.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.3144
+      },
+      {
+        "name": "corbanu--vercel--vercel_moonshotai_kimi-k3",
+        "provider": "vercel",
+        "model": "vercel/moonshotai/kimi-k3",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 3.0,
+          "cached_input": 0.3,
+          "output": 15.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.774
+      },
+      {
+        "name": "corbanu--vercel--vercel_deepseek_deepseek-v4-pro",
+        "provider": "vercel",
+        "model": "vercel/deepseek/deepseek-v4-pro",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.32,
+          "cached_input": 0.044,
+          "output": 3.96,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.2508
+      },
+      {
+        "name": "corbanu--zai--glm-5.3",
+        "provider": "zai",
+        "model": "glm-5.3",
+        "reasoning": "max",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "ZAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.4,
+          "cached_input": 0.26,
+          "output": 4.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.372
+      },
+      {
+        "name": "corbanu--deepseek--deepseek-v4-pro",
+        "provider": "deepseek",
+        "model": "deepseek-v4-pro",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered_schedule",
+        "required_env": [
+          "DEEPSEEK_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.32,
+          "cached_input": 0.044,
+          "output": 3.96,
+          "source": "catalogue",
+          "note": "peak rate of a time-of-day schedule"
+        },
+        "estimated_usd_per_run": 0.2508
+      },
+      {
+        "name": "corbanu--kimi-code--k3",
+        "provider": "kimi-code",
+        "model": "k3",
+        "reasoning": "max",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "KIMI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 3.0,
+          "cached_input": 0.3,
+          "output": 15.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.774
+      },
+      {
+        "name": "corbanu--vercel--zai_glm-5.2",
+        "provider": "vercel",
+        "model": "zai/glm-5.2",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "medium",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.4,
+          "cached_input": 0.26,
+          "output": 4.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.372
+      },
+      {
+        "name": "corbanu--vercel-anthropic-fast--zai_glm-5.2-fast",
+        "provider": "vercel-anthropic-fast",
+        "model": "zai/glm-5.2-fast",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "medium",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "AI_GATEWAY_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 2.1,
+          "cached_input": 0.21,
+          "output": 6.6,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.4716
+      },
+      {
+        "name": "corbanu--baseten--zai-org_GLM-5.2",
+        "provider": "baseten",
+        "model": "zai-org/GLM-5.2",
+        "reasoning": null,
+        "reasoning_levels": [],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "BASETEN_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.4,
+          "cached_input": 0.14,
+          "output": 4.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.3144
+      },
+      {
+        "name": "corbanu--zai--glm-5.2",
+        "provider": "zai",
+        "model": "glm-5.2",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "medium",
+          "xhigh"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "ZAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.4,
+          "cached_input": 0.26,
+          "output": 4.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.372
+      },
+      {
+        "name": "corbanu--openrouter--minimax_minimax-m3",
+        "provider": "openrouter",
+        "model": "minimax/minimax-m3",
+        "reasoning": null,
+        "reasoning_levels": [],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.6,
+          "cached_input": null,
+          "output": 2.4,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.4032
+      },
+      {
+        "name": "corbanu--openrouter--google_gemini-3.5-flash",
+        "provider": "openrouter",
+        "model": "google/gemini-3.5-flash",
+        "reasoning": null,
+        "reasoning_levels": [
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 1.5,
+          "cached_input": 0.15,
+          "output": 9.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.414
+      },
+      {
+        "name": "corbanu--deepseek--deepseek-flash",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered_schedule",
+        "required_env": [
+          "DEEPSEEK_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.3,
+          "cached_input": 0.006,
+          "output": 1.2,
+          "source": "catalogue",
+          "note": "peak rate of a time-of-day schedule"
+        },
+        "estimated_usd_per_run": 0.0605
+      },
+      {
+        "name": "corbanu--deepseek--deepseek-v4-flash",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered_schedule",
+        "required_env": [
+          "DEEPSEEK_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.3,
+          "cached_input": 0.006,
+          "output": 1.2,
+          "source": "catalogue",
+          "note": "peak rate of a time-of-day schedule"
+        },
+        "estimated_usd_per_run": 0.0605
+      },
+      {
+        "name": "corbanu--openrouter--moonshotai_kimi-k3",
+        "provider": "openrouter",
+        "model": "moonshotai/kimi-k3",
+        "reasoning": "max",
+        "reasoning_levels": [
+          "low",
+          "high",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENROUTER_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 3.0,
+          "cached_input": 0.3,
+          "output": 15.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.774
+      },
+      {
+        "name": "corbanu--meta--muse-spark-1.1",
+        "provider": "meta",
+        "model": "muse-spark-1.1",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "unclassified",
+        "billing_kind": null,
+        "required_env": [
+          "MODEL_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "source": "none"
+        },
+        "estimated_usd_per_run": null
+      },
+      {
+        "name": "corbanu--openai--gpt-6-astra",
+        "provider": "openai",
+        "model": "gpt-6-astra",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 10.0,
+          "cached_input": 1.0,
+          "output": 50.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 2.58
+      },
+      {
+        "name": "corbanu--openai--gpt-6.1-sol",
+        "provider": "openai",
+        "model": "gpt-6.1-sol",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 2.0,
+          "cached_input": 0.1,
+          "output": 10.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.468
+      },
+      {
+        "name": "corbanu--openai--gpt-6-sol",
+        "provider": "openai",
+        "model": "gpt-6-sol",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 2.0,
+          "cached_input": 0.2,
+          "output": 10.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.516
+      },
+      {
+        "name": "corbanu--openai--gpt-6-luna",
+        "provider": "openai",
+        "model": "gpt-6-luna",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "disabled",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.1,
+          "cached_input": 0.01,
+          "output": 0.5,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.0258
+      },
+      {
+        "name": "corbanu--openai--gpt-5.6-sol",
+        "provider": "openai",
+        "model": "gpt-5.6-sol",
+        "reasoning": "low",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "auth_dependent",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 4.0,
+          "cached_input": 0.4,
+          "output": 20.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 1.032
+      },
+      {
+        "name": "corbanu--openai--gpt-5.6-terra",
+        "provider": "openai",
+        "model": "gpt-5.6-terra",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max",
+          "ultra"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "balanced",
+        "billing_kind": "auth_dependent",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 2.0,
+          "cached_input": 0.2,
+          "output": 12.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.552
+      },
+      {
+        "name": "corbanu--openai--gpt-5.6-luna",
+        "provider": "openai",
+        "model": "gpt-5.6-luna",
+        "reasoning": "medium",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "auth_dependent",
+        "required_env": [
+          "OPENAI_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.2,
+          "cached_input": 0.02,
+          "output": 1.2,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.0552
+      },
+      {
+        "name": "corbanu--claude-plan--claude-opus-5-5-plan",
+        "provider": "claude-plan",
+        "model": "claude-opus-5-5-plan",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "plan",
+        "required_env": [
+          "CLAUDE_CODE_OAUTH_TOKEN"
+        ],
+        "price_usd_per_million": {
+          "input": 4.0,
+          "cached_input": 0.2,
+          "output": 20.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 0.936
+      },
+      {
+        "name": "corbanu--claude-plan--claude-opus-5-plan",
+        "provider": "claude-plan",
+        "model": "claude-opus-5-plan",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "plan",
+        "required_env": [
+          "CLAUDE_CODE_OAUTH_TOKEN"
+        ],
+        "price_usd_per_million": {
+          "input": 5.0,
+          "cached_input": 0.5,
+          "output": 25.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 1.29
+      },
+      {
+        "name": "corbanu--claude-plan--claude-fable-5-1-plan",
+        "provider": "claude-plan",
+        "model": "claude-fable-5-1-plan",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "plan",
+        "required_env": [
+          "CLAUDE_CODE_OAUTH_TOKEN"
+        ],
+        "price_usd_per_million": {
+          "input": 10.0,
+          "cached_input": 0.25,
+          "output": 50.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 2.22
+      },
+      {
+        "name": "corbanu--claude-plan--claude-fable-5-plan",
+        "provider": "claude-plan",
+        "model": "claude-fable-5-plan",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "plan",
+        "required_env": [
+          "CLAUDE_CODE_OAUTH_TOKEN"
+        ],
+        "price_usd_per_million": {
+          "input": 10.0,
+          "cached_input": 1.0,
+          "output": 50.0,
+          "source": "openrouter-snapshot"
+        },
+        "estimated_usd_per_run": 2.58
+      },
+      {
+        "name": "corbanu--anthropic--claude-opus-5-5",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 4.0,
+          "cached_input": 0.2,
+          "output": 20.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.936
+      },
+      {
+        "name": "corbanu--anthropic--claude-opus-5",
+        "provider": "anthropic",
+        "model": "claude-opus-5",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 5.0,
+          "cached_input": 0.5,
+          "output": 25.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 1.29
+      },
+      {
+        "name": "corbanu--anthropic--claude-fable-5-1",
+        "provider": "anthropic",
+        "model": "claude-fable-5-1",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 10.0,
+          "cached_input": 0.25,
+          "output": 50.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 2.22
+      },
+      {
+        "name": "corbanu--anthropic--claude-fable-5",
+        "provider": "anthropic",
+        "model": "claude-fable-5",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "frontier",
+        "billing_kind": "metered",
+        "required_env": [
+          "ANTHROPIC_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 10.0,
+          "cached_input": 1.0,
+          "output": 50.0,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 2.58
+      },
+      {
+        "name": "corbanu--pfterminal-plan--corbanu_deepseek-v4.1-flash",
+        "provider": "pfterminal-plan",
+        "model": "corbanu/deepseek-v4.1-flash",
+        "reasoning": "high",
+        "reasoning_levels": [
+          "high"
+        ],
+        "orchestration_status": "eligible",
+        "capability": "fast",
+        "billing_kind": "metered",
+        "required_env": [
+          "CORBANU_PLAN_API_KEY"
+        ],
+        "price_usd_per_million": {
+          "input": 0.22,
+          "cached_input": 0.007,
+          "output": 0.66,
+          "source": "catalogue"
+        },
+        "estimated_usd_per_run": 0.0416
+      }
+    ],
+    "model_set_source": "codex-rs/models-manager/models.json",
+    "planned_runs": 440,
+    "diffs": "after each campaign, save diff -ruN <task baseline> <run workspace> as final.diff in every result directory (RUNBOOK step 5)"
+  },
+  "hermes_efficiency": {
+    "purpose": "evidence for or against the claim that Corbanu is more efficient than Hermes; Kilo runs alongside as the third competitor",
+    "route": {
+      "provider": "openrouter",
+      "model": "openai/gpt-6-sol",
+      "hermes_model": "openai/gpt-6-sol",
+      "kilo_model": "openrouter/openai/gpt-6-sol",
+      "reasoning": "high",
+      "required_env": [
+        "OPENROUTER_API_KEY"
+      ],
+      "why": "gpt-6-sol is Corbanu's default model; OpenRouter is an OpenAI-style connection every harness supports, so all three see the same model, endpoint and price list"
+    },
+    "waves": 3,
+    "lanes": "one lane per harness (three concurrent processes on one OpenRouter key)",
+    "decision_rule": {
+      "correctness_gate": "Corbanu verifier passes >= Hermes passes - 1 over the 33 task x wave runs, and Corbanu meets the live task rubric in at least 2 of 3 repeats",
+      "primary_metric": "per-pair cost ratio Corbanu/Hermes for each task x wave where both runs finished with known spend",
+      "estimate": "geometric mean of the ratios",
+      "interval": "95% percentile bootstrap, resampling tasks (all waves of a task together), 10,000 resamples, seed 2717; bounds are the 250th smallest and 250th largest resampled values",
+      "claim_if": "correctness gate met and the interval's upper bound <= 0.95: publish 'Corbanu used X% less spend than Hermes (95% CI a-b%)' with the point estimate and interval",
+      "no_claim_if": "any other outcome (including an upper bound above 0.95, or a failed correctness gate): publish nothing",
+      "regression_if": "the interval's lower bound > 1.05 (Corbanu costs more): file a regression issue instead of a claim",
+      "secondary": "the same procedure for wall time and total tokens; report them separately, never fold them into the spend claim"
+    },
+    "planned_runs": 99
+  },
+  "website_builder": {
+    "status": "optional diagnostic; not part of the qualifying cycle",
+    "model": "claude-opus-5",
+    "waves": [
+      1,
+      2,
+      3
+    ],
+    "claude_max_budget_usd": 6.0,
+    "corbanu_estimated_usd_per_wave": 6.0,
+    "judge_and_images_estimated_usd": 5.0,
+    "keychain_rule": "real Claude Code runs only inside a sandbox-exec profile that denies com.apple.SecurityServer, com.apple.securityd.xpc and com.apple.securityd.systemkeychain"
+  },
+  "thresholds": {
+    "status": "proposed for product-authority approval before any lane runs",
+    "bootstrap_absolute_caps": {
+      "coding_pair": "verifier pass; wall time <= 1200 s (timeout is a failure); calculated spend <= $5.00",
+      "competitive_corbanu": "rubric met in >= 2 of 3 repeats; wall time <= 3600 s per run; calculated spend <= $15.00 per run"
+    },
+    "regression_vs_last_qualifying_cycle": {
+      "correctness": "per-route pass count must not fall",
+      "runtime": "per-route median wall time <= 1.25 x baseline",
+      "spend": "per-route total calculated spend <= 1.25 x baseline"
+    }
+  },
+  "cutoff": {
+    "common_to_all_harnesses": true,
+    "coding_run_timeout_seconds": 1200,
+    "live_run_timeout_seconds": 3600,
+    "openrouter_key": "a dedicated OpenRouter key for the shared-route campaigns (efficiency and live task) with a hard credit limit equal to 1.5 x (hermes_efficiency_usd + competitive_usd); the coding matrix's OpenRouter routes use a different key; a run that hits the limit is recorded as cut off",
+    "direct_provider_routes": "the operator stops the runner process (by PID) once the cumulative calculated spend reaches 1.5 x coding_matrix_usd and records the cutoff",
+    "no_turn_or_tool_caps": true
+  },
+  "price_source": {
+    "primary": "the candidate commit's codex-rs/models-manager/models.json billing rows (catalogue), per route",
+    "openrouter_snapshot": {
+      "url": "https://openrouter.ai/api/v1/models",
+      "fetched_at": "2026-11-23T20:24Z",
+      "sha256": "945e342c9a2a4de417c793590920ad8de0021cb5ec7095da02d9c3543ebe931c",
+      "local_copy": "$BENCH/prices/openrouter-models-20261123T2024Z.json (copy into the release evidence at run time)",
+      "use": "the shared OpenRouter route, and catalogue routes without billing rows (auth-dependent and plan routes, priced at API-equivalent rates)"
+    },
+    "precedence": "provider-reported actual cost when the harness records it; otherwise recorded tokens x frozen price; never record unknown spend as zero",
+    "openrouter_equivalents": {
+      "openai/gpt-6-sol": {
+        "openrouter_id": "openai/gpt-6-sol",
+        "input": 2.0,
+        "cached_input": 0.2,
+        "output": 10.0
+      },
+      "gpt-5.6-sol": {
+        "openrouter_id": "openai/gpt-5.6-sol",
+        "input": 4.0,
+        "cached_input": 0.4,
+        "output": 20.0
+      },
+      "gpt-5.6-terra": {
+        "openrouter_id": "openai/gpt-5.6-terra",
+        "input": 2.0,
+        "cached_input": 0.2,
+        "output": 12.0
+      },
+      "gpt-5.6-luna": {
+        "openrouter_id": "openai/gpt-5.6-luna",
+        "input": 0.2,
+        "cached_input": 0.02,
+        "output": 1.2
+      },
+      "claude-opus-5-5-plan": {
+        "openrouter_id": "anthropic/claude-opus-5.5",
+        "input": 4.0,
+        "cached_input": 0.2,
+        "output": 20.0
+      },
+      "claude-opus-5-plan": {
+        "openrouter_id": "anthropic/claude-opus-5",
+        "input": 5.0,
+        "cached_input": 0.5,
+        "output": 25.0
+      },
+      "claude-fable-5-1-plan": {
+        "openrouter_id": "anthropic/claude-fable-5.1",
+        "input": 10.0,
+        "cached_input": 0.25,
+        "output": 50.0
+      },
+      "claude-fable-5-plan": {
+        "openrouter_id": "anthropic/claude-fable-5",
+        "input": 10.0,
+        "cached_input": 1.0,
+        "output": 50.0
+      },
+      "x-ai/grok-4.7": {
+        "openrouter_id": "x-ai/grok-4.7",
+        "input": 2.0,
+        "cached_input": 0.5,
+        "output": 6.0
+      },
+      "deepseek/deepseek-v4.1-flash": {
+        "openrouter_id": "deepseek/deepseek-v4.1-flash",
+        "input": 0.3,
+        "cached_input": 0.006,
+        "output": 1.2
+      },
+      "xiaomi/mimo-v2.6-pro": {
+        "openrouter_id": "xiaomi/mimo-v2.6-pro",
+        "input": 0.435,
+        "cached_input": 0.0036,
+        "output": 0.87
+      }
+    },
+    "schedules": "time-of-day catalogue rows (DeepSeek direct) are estimated at the peak rate; actual spend uses the row's schedule at each request's timestamp"
+  },
+  "spend_estimate": {
+    "method": "per-run token profile x frozen price x planning multiplier; the profile is calibrated on the 0.1.46 matched-reasoning diagnostics (GPT-6 Sol over OpenRouter: $1.20 for four Corbanu runs, about $0.30 per run)",
+    "per_run_token_profile": {
+      "uncached_input_tokens": 80000,
+      "cached_input_tokens": 320000,
+      "output_tokens": 12000
+    },
+    "planning_multiplier": 1.5,
+    "coding_matrix_usd": 289.9,
+    "coding_matrix_plan_routes_usd": 77.29,
+    "coding_matrix_unpriced_routes": [
+      "muse-spark-1.1"
+    ],
+    "shared_route_usd_per_run": 0.516,
+    "hermes_efficiency_usd": 51.08,
+    "competitive_usd": 13.93,
+    "website_builder_usd": 41.0,
+    "total_usd": 395.91
+  }
+}
