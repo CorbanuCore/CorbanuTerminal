@@ -438,3 +438,85 @@ exit 1
     );
     release.join().expect("writer thread");
 }
+
+fn write_named_fake_rg_in(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let path = dir.join("rg");
+    std::fs::write(&path, "#!/bin/sh\n").expect("write fake rg");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod fake rg");
+    std::fs::canonicalize(path).expect("canonicalize fake rg")
+}
+
+/// #2901 (ported from sync): the deny-read scanner is never taken from the
+/// command cwd or a writable root, wherever that root sits.
+#[test]
+fn pre_sandbox_rg_skips_writable_roots_and_the_command_cwd() {
+    let temp_dir = tempdir().expect("temp dir");
+    let workspace = temp_dir.path().join("workspace");
+    let cwd = workspace.join("service");
+    let cwd_bin = cwd.join("bin");
+    let workspace_bin = workspace.join("bin");
+    let extra_root = temp_dir.path().join("extra");
+    let trusted_dir = temp_dir.path().join("trusted");
+    for dir in [&cwd_bin, &workspace_bin, &extra_root, &trusted_dir] {
+        std::fs::create_dir_all(dir).expect("create directory");
+    }
+    write_named_fake_rg_in(&cwd_bin);
+    write_named_fake_rg_in(&workspace_bin);
+    write_named_fake_rg_in(&extra_root);
+    let expected_rg = write_named_fake_rg_in(&trusted_dir);
+    let policy = PermissionProfile::read_only()
+        .file_system_sandbox_policy()
+        .with_additional_writable_roots(
+            &cwd,
+            &[workspace, extra_root.clone()].map(|path| AbsolutePathBuf::try_from(path).unwrap()),
+        );
+    let search_paths = vec![cwd_bin, workspace_bin, extra_root];
+
+    assert_eq!(
+        find_executable_in_search_paths("rg", search_paths.clone(), &cwd, &policy, &cwd),
+        None,
+    );
+    assert_eq!(
+        find_executable_in_search_paths(
+            "rg",
+            search_paths.into_iter().chain([trusted_dir]),
+            &cwd,
+            &policy,
+            &cwd,
+        ),
+        Some(expected_rg),
+    );
+}
+
+/// #2901: with full-disk writes, an `rg` the current user can modify is not
+/// trusted (the scan falls back to the built-in walker).
+#[test]
+fn pre_sandbox_rg_rejects_user_writable_binaries_under_full_disk_write() {
+    let temp_dir = tempdir().expect("temp dir");
+    let bin_dir = temp_dir.path().join("bin");
+    std::fs::create_dir_all(&bin_dir).expect("create bin dir");
+    let expected_rg = write_named_fake_rg_in(&bin_dir);
+
+    assert_eq!(
+        find_executable_in_search_paths(
+            "rg",
+            [bin_dir.clone()],
+            Path::new("/"),
+            &PermissionProfile::read_only().file_system_sandbox_policy(),
+            Path::new("/"),
+        ),
+        Some(expected_rg),
+    );
+    assert_eq!(
+        find_executable_in_search_paths(
+            "rg",
+            [bin_dir],
+            Path::new("/"),
+            &PermissionProfile::Disabled.file_system_sandbox_policy(),
+            Path::new("/"),
+        ),
+        None,
+    );
+}

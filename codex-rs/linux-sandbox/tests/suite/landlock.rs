@@ -2355,6 +2355,72 @@ async fn issue_442_env_created_between_commands_stays_hidden() {
     }
 }
 
+/// #2901, real bubblewrap: a fake `rg` that lists nothing, first on `PATH`
+/// in a folder the sandboxed command can write, is never run; the deny-read
+/// glob scan still hides an existing match. A plain glob (not the credential
+/// rule, which other layers also hide) so a skipped mask shows as a leak.
+#[tokio::test]
+async fn issue_2901_deny_read_scan_skips_rg_in_a_writable_path_entry() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some((_tmpdir, work)) = credential_workspace().await else {
+        return;
+    };
+    let bin = work.join("bin");
+    std::fs::create_dir(&bin).unwrap();
+    let fake_rg = bin.join("rg");
+    let ran = bin.join("fake-rg-ran");
+    std::fs::write(
+        &fake_rg,
+        format!("#!/bin/sh\n: > '{}'\nexit 0\n", ran.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_rg, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(work.join("app/token.secret"), "dummy-2901").unwrap();
+    let root = AbsolutePathBuf::try_from(work.as_path()).unwrap();
+    let (mut file_system, network) = PermissionProfile::workspace_write_with(
+        std::slice::from_ref(&root),
+        NetworkSandboxPolicy::Restricted,
+        /*exclude_tmpdir_env_var*/ true,
+        /*exclude_slash_tmp*/ true,
+    )
+    .to_runtime_permissions();
+    file_system.entries.push(FileSystemSandboxEntry::new(
+        FileSystemPath::GlobPattern {
+            pattern: format!("{}/**/*.secret", work.display()),
+            scan: None,
+        },
+        FileSystemAccessMode::Deny,
+    ));
+    let profile = PermissionProfile::from_runtime_permissions(&file_system, network);
+    let mut env = create_env_from_core_vars();
+    let path = env.get("PATH").cloned().unwrap_or_default();
+    env.insert("PATH".to_string(), format!("{}:{path}", bin.display()));
+
+    let read = match run_cmd_result_with_permission_profile_for_cwd(
+        &["bash", "-c", "cat app/token.secret; echo secret=$?"],
+        root,
+        profile,
+        env,
+        LONG_TIMEOUT_MS,
+        /*use_legacy_landlock*/ false,
+    )
+    .await
+    {
+        Ok(output) => output,
+        Err(err) => match err.details() {
+            CodexErrorDetails::Sandbox(SandboxErr::Denied { output, .. }) => {
+                output.as_ref().clone()
+            }
+            details => panic!("{details:?}"),
+        },
+    };
+    let text = format!("{}{}", read.stdout.text, read.stderr.text);
+    assert!(!text.contains("dummy-2901"), "{text}");
+    assert!(read.stdout.text.contains("secret=1"), "{text}");
+    assert!(!ran.exists(), "the writable fake rg ran: {text}");
+}
+
 /// #442, real bubblewrap: a `.env` created while a command runs stops that
 /// command before it reads it (the command waits, as a later read in a
 /// long-lived shell would).

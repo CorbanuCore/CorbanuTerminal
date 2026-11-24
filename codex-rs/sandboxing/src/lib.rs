@@ -24,6 +24,10 @@ pub use bwrap::find_apparmor_bwrap_launcher_for_fd;
 #[cfg(target_os = "linux")]
 pub use bwrap::find_bundled_bwrap;
 #[cfg(target_os = "linux")]
+pub use bwrap::find_executable_in_search_paths;
+#[cfg(target_os = "linux")]
+pub use bwrap::find_pre_sandbox_executable_in_path;
+#[cfg(target_os = "linux")]
 pub use bwrap::find_system_bwrap_in_path;
 #[cfg(target_os = "linux")]
 pub use bwrap::system_bwrap_warning;

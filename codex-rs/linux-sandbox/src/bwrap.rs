@@ -39,6 +39,7 @@ use codex_protocol::protocol::FileSystemPath;
 use codex_protocol::protocol::FileSystemSandboxPolicy;
 use codex_protocol::protocol::FileSystemSpecialPath;
 use codex_protocol::protocol::WritableRoot;
+use codex_sandboxing::find_pre_sandbox_executable_in_path;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use globset::GlobBuilder;
 use globset::GlobSet;
@@ -550,8 +551,18 @@ fn create_filesystem_args_with_pins(
     // Bubblewrap can only mask concrete paths. Expand unreadable glob patterns
     // to the existing matches we can see before constructing the mount overlay;
     // core tool helpers still evaluate the original patterns directly at read time.
+    // #2901: run only an `rg` the sandboxed command cannot have placed or
+    // replaced (outside the cwd and every writable root, as on sync); with
+    // none, the built-in walker lists the matches. Resolved on first use.
+    let rg_path = std::cell::OnceCell::new();
+    let scan_files = |search_root: &Path, globs: &[String], depth: Option<usize>| match rg_path
+        .get_or_init(|| find_pre_sandbox_executable_in_path("rg", file_system_sandbox_policy, cwd))
+    {
+        Some(rg_path) => ripgrep_files_with(rg_path, search_root, globs, depth),
+        None => glob_files(search_root, globs, depth),
+    };
     unreadable_roots.extend(
-        expand_unreadable_globs(&unreadable_globs, cwd, glob_scan_max_depth, ripgrep_files)?
+        expand_unreadable_globs(&unreadable_globs, cwd, glob_scan_max_depth, &scan_files)?
             .into_iter()
             .map(AbsolutePathBuf::into_path_buf),
     );
@@ -1422,7 +1433,8 @@ fn append_metadata_path_masks_for_writable_root(
     }
 }
 
-type GlobFileScanner = fn(&Path, &[String], Option<usize>) -> Result<Vec<AbsolutePathBuf>>;
+type GlobFileScanner<'a> =
+    &'a dyn Fn(&Path, &[String], Option<usize>) -> Result<Vec<AbsolutePathBuf>>;
 /// Search root, credential rule, depth, and whether it is a database-entry
 /// scan (#732).
 type ScanGroup = (AbsolutePathBuf, bool, Option<usize>, bool);
@@ -1431,7 +1443,7 @@ fn expand_unreadable_globs(
     patterns: &[FileSystemDenyGlob],
     cwd: &Path,
     max_depth: Option<usize>,
-    scan_files: GlobFileScanner,
+    scan_files: GlobFileScanner<'_>,
 ) -> Result<Vec<AbsolutePathBuf>> {
     if patterns.is_empty() || max_depth == Some(0) {
         return Ok(Vec::new());
@@ -1477,7 +1489,7 @@ fn expand_unreadable_globs(
         // #732 (D226): ripgrep still opens each subfolder at `--max-depth 1`
         // (ripgrep 14.1), so an unreadable one failed the scan; listing the
         // folder itself never opens a subfolder.
-        let scan: GlobFileScanner = if database { glob_files } else { scan_files };
+        let scan: GlobFileScanner<'_> = if database { &glob_files } else { scan_files };
         for path in scan(search_root.as_path(), &globs, depth)? {
             if credential
                 && path
@@ -1573,11 +1585,12 @@ fn escape_unclosed_glob_classes(glob: &str) -> String {
 /// `RIPGREP_CONFIG_PATH` from adding flags (`--max-depth`, `--max-filesize`,
 /// ...) that would silently drop matches and weaken deny-read (#2897).
 fn ripgrep_files_command(
+    rg_path: &Path,
     search_root: &Path,
     globs: &[String],
     max_depth: Option<usize>,
 ) -> Command {
-    let mut command = Command::new("rg");
+    let mut command = Command::new(rg_path);
     command
         .arg("--no-config")
         .arg("--files")
@@ -1594,14 +1607,25 @@ fn ripgrep_files_command(
     command
 }
 
+/// [`ripgrep_files_with`] for the `rg` found first on `PATH`, unchecked.
+#[cfg(test)]
 fn ripgrep_files(
+    search_root: &Path,
+    globs: &[String],
+    max_depth: Option<usize>,
+) -> Result<Vec<AbsolutePathBuf>> {
+    ripgrep_files_with(Path::new("rg"), search_root, globs, max_depth)
+}
+
+fn ripgrep_files_with(
+    rg_path: &Path,
     search_root: &Path,
     globs: &[String],
     max_depth: Option<usize>,
 ) -> Result<Vec<AbsolutePathBuf>> {
     // A status 1 with no stderr is ripgrep's "no matches" case, not a sandbox
     // construction error.
-    let mut command = ripgrep_files_command(search_root, globs, max_depth);
+    let mut command = ripgrep_files_command(rg_path, search_root, globs, max_depth);
 
     /*
      * Prefer ripgrep for unreadable glob expansion because it is fast and
@@ -4599,7 +4623,7 @@ mod tests {
                     scan: None,
                 })
                 .collect();
-            expand_unreadable_globs(&globs, root, /*max_depth*/ None, ripgrep_files)
+            expand_unreadable_globs(&globs, root, /*max_depth*/ None, &ripgrep_files)
                 .expect("expand")
                 .into_iter()
                 .map(|path| path.as_path().file_name().expect("name").to_os_string())
@@ -4636,8 +4660,12 @@ mod tests {
         let config = temp_dir.path().join("hostile.ripgreprc");
         std::fs::write(&config, "--max-depth=1\n--max-filesize=1\n").expect("write ripgrep config");
 
-        let mut command =
-            ripgrep_files_command(&root, &["**/*.key".to_string()], /*max_depth*/ None);
+        let mut command = ripgrep_files_command(
+            Path::new("rg"),
+            &root,
+            &["**/*.key".to_string()],
+            /*max_depth*/ None,
+        );
         command.env("RIPGREP_CONFIG_PATH", &config);
         let output = command.output().expect("run rg");
         let mut listed = output

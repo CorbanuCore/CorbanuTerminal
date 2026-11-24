@@ -61,7 +61,7 @@ fn database_entries_are_top_level_in_both_engines_including_escaped_roots() {
         .collect();
     for scanner in [ripgrep_files as Scanner, glob_files] {
         assert_eq!(
-            expand_unreadable_globs(&patterns, &root, /*max_depth*/ None, scanner)
+            expand_unreadable_globs(&patterns, &root, /*max_depth*/ None, &scanner)
                 .unwrap()
                 .into_iter()
                 .collect::<BTreeSet<_>>(),
@@ -92,7 +92,7 @@ fn same_root_generic_globs_keep_recursive_matches_in_both_engines() {
         .collect::<BTreeSet<_>>();
     for scanner in [ripgrep_files as Scanner, glob_files] {
         assert_eq!(
-            expand_unreadable_globs(&patterns, root, /*max_depth*/ None, scanner)
+            expand_unreadable_globs(&patterns, root, /*max_depth*/ None, &scanner)
                 .unwrap()
                 .into_iter()
                 .collect::<BTreeSet<_>>(),
@@ -104,7 +104,7 @@ fn same_root_generic_globs_keep_recursive_matches_in_both_engines() {
             .into_iter()
             .collect::<BTreeSet<_>>();
         assert_eq!(
-            expand_unreadable_globs(&recursive_sqlite, root, /*max_depth*/ None, scanner)
+            expand_unreadable_globs(&recursive_sqlite, root, /*max_depth*/ None, &scanner)
                 .unwrap()
                 .into_iter()
                 .collect::<BTreeSet<_>>(),
@@ -148,10 +148,10 @@ fn database_scan_does_not_enter_unreadable_descendant_but_generic_scan_still_fai
     assert_eq!(mixed.len(), 2);
     for scanner in [ripgrep_files as Scanner, glob_files] {
         assert_eq!(
-            expand_unreadable_globs(&bounded, root, /*max_depth*/ None, scanner).unwrap(),
+            expand_unreadable_globs(&bounded, root, /*max_depth*/ None, &scanner).unwrap(),
             vec![AbsolutePathBuf::from_absolute_path(root.join("state.sqlite")).unwrap()]
         );
-        assert!(expand_unreadable_globs(&mixed, root, /*max_depth*/ None, scanner).is_err());
+        assert!(expand_unreadable_globs(&mixed, root, /*max_depth*/ None, &scanner).is_err());
         assert!(
             scanner(&unreadable, &["*.sqlite*".to_string()], Some(1)).is_err(),
             "an unreadable required root must still fail"
