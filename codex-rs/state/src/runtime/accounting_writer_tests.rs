@@ -599,49 +599,52 @@ async fn an_adopted_retry_waits_for_its_predecessor() -> anyhow::Result<()> {
 /// Ten sessions on one home, each with its own runtime as a separate process
 /// has, making model requests while another connection holds the write lock
 /// for seconds partway through (as a long maintenance or a backup does). What
-/// a request waits on in the shared state DB - the throttle check, its
-/// admission, a thread-metadata write and its usage - stays within the bound
-/// below, nothing fails, and every record ends up in the ledger.
+/// a request waits on in the shared state DB stays within the bound below,
+/// nothing fails, and every record ends up in the ledger.
 ///
-/// The bound is derived, not a platform guess: every step a request waits on
-/// uses the short-wait pool, where one try waits at most `QUICK_BUSY_TIMEOUT`.
-/// The throttle check's 1 s budget allows two tries; its admission and usage
-/// each cap at 1 s (`WAIT_CAP`, two quick waits), and the metadata write gets
-/// one. Seven quick waits plus one more of margin for SQLite's busy-handler
-/// rounding, scheduling and file I/O bound a legitimate request. The hold is
-/// one and a half times the bound, so a request that waits out the hold is at
-/// least half again it. Windows' slower timer rounding (#636, #691) and
-/// loaded runners (#905, #1849) are why the ceiling is this generous.
+/// Waits do not stack across steps. Every step that can wait uses the
+/// short-wait pool, where one try waits at most `QUICK_BUSY_TIMEOUT`, and the
+/// first busy result sets contention for this process: the throttle check
+/// through `pause_state_db`, the writer through `Deferred`/`WAIT_CAP`. After
+/// that `record_accounting` returns `Deferred` at once and the metadata write
+/// is skipped. Only the throttle check waits twice: its
+/// `PROVIDER_REQUEST_BUSY_WAIT` budget lets a second try start just inside it,
+/// and that try runs its full `QUICK_BUSY_TIMEOUT`. The worst legitimate wait
+/// is therefore `PROVIDER_REQUEST_BUSY_WAIT + QUICK_BUSY_TIMEOUT`, 1.5 s
+/// nominal.
+///
+/// The bound is twice that, the stated margin for slow and loaded runners: the
+/// musl maximum of 1.92 s leaves about 55% headroom, and 3 s equals the old
+/// Windows ceiling, which reached 2.87 s in #691. The hold is twice the bound,
+/// 6 s, so a request that waits it out is clearly distinguishable. p99 and max
+/// share the bound on every platform.
+///
+/// Losing the contention short-circuit would cost about 1.6-2.6 s in all,
+/// below the bound and overlapping legitimate musl tails, so this test cannot
+/// detect it.
 ///
 /// The bounds hold when the test has the four cores its runtime uses: Bazel
 /// runs the test alone, after everything else (`unit_test_alone` in state's
 /// BUILD.bazel), and nextest reserves them (`threads-required`). Scheduled as
 /// a one-core test beside compiles on a 4-core Windows runner, its waits
-/// stretched past the bound (#905); with other work keeping that runner
+/// stretched past the old bound (#905); with other work keeping that runner
 /// busy, p99 reached 3.36 s (#1849's run).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::Result<()> {
     const SESSIONS: usize = 10;
     const REQUESTS: usize = 12;
-    // The throttle's 1 s budget allows two quick tries; admission and usage
-    // each cap at 1 s (`WAIT_CAP`, two quick waits); the metadata write gets
-    // one. One more quick wait is margin for SQLite's busy-handler rounding,
-    // scheduling and file I/O.
-    const THROTTLE_QUICK_WAITS: u32 = 2;
-    const ADMISSION_QUICK_WAITS: u32 = 2;
-    const METADATA_QUICK_WAITS: u32 = 1;
-    const USAGE_QUICK_WAITS: u32 = 2;
-    const MARGIN_QUICK_WAITS: u32 = 1;
-    const QUICK_WAITS_IN_BOUND: u32 = THROTTLE_QUICK_WAITS
-        + ADMISSION_QUICK_WAITS
-        + METADATA_QUICK_WAITS
-        + USAGE_QUICK_WAITS
-        + MARGIN_QUICK_WAITS;
-    // Half again the bound, so waiting out the hold stays distinguishable.
-    const QUICK_WAITS_IN_HOLD: u32 = QUICK_WAITS_IN_BOUND * 3 / 2;
-    let quick_wait = crate::runtime::QUICK_BUSY_TIMEOUT;
-    let hold = quick_wait * QUICK_WAITS_IN_HOLD;
-    let bound = quick_wait * QUICK_WAITS_IN_BOUND;
+    // The throttle check is the only step that waits twice: its
+    // `PROVIDER_REQUEST_BUSY_WAIT` budget plus one full `QUICK_BUSY_TIMEOUT`
+    // try starting just inside it. The bound doubles that for slow and loaded
+    // runners, and the hold is twice the bound so waiting it out stands out.
+    let worst_wait = crate::runtime::provider_requests::PROVIDER_REQUEST_BUSY_WAIT
+        + crate::runtime::QUICK_BUSY_TIMEOUT;
+    let bound = worst_wait * 2;
+    let hold = bound * 2;
+    // Keep the test meaningful if the constants change: a bound at or above
+    // the main pool's busy timeout could pass with a step on the wrong pool,
+    // and a hold below it would release before such a step gave up.
+    assert!(bound < crate::sqlite::BUSY_TIMEOUT && hold > crate::sqlite::BUSY_TIMEOUT);
     let path = home();
     let setup = StateRuntime::init_for_testing(path.to_path_buf(), "synthetic".into()).await?;
     let owners: Vec<ThreadId> = (0..SESSIONS).map(|_| ThreadId::new()).collect();
@@ -723,10 +726,9 @@ async fn ten_sessions_on_one_home_wait_briefly_and_lose_no_record() -> anyhow::R
     let max = waits[waits.len() - 1];
     eprintln!("request waits: p50 {p50:?}, p99 {p99:?}, max {max:?}");
     assert!(p99 < bound, "p99 {p99:?}, max {max:?}, bound {bound:?}");
-    // With 120 waits, p99 is the second-largest, so a max bound below the
-    // p99 bound would decide the test. Both use the same derived ceiling.
-    let max_bound = bound;
-    assert!(max < max_bound, "p99 {p99:?}, max {max:?}, bound {bound:?}");
+    // With 120 waits, p99 is the second-largest, so a separate max bound
+    // below it would decide the test. Both use the same ceiling.
+    assert!(max < bound, "p99 {p99:?}, max {max:?}, bound {bound:?}");
     assert_eq!(attempts.len(), SESSIONS * REQUESTS);
     for attempt in &attempts {
         assert_eq!(recorded(&setup, attempt).await?, (1, 1));
