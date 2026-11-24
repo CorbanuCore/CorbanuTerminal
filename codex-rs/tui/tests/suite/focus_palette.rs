@@ -727,3 +727,56 @@ fn auto_daemon_start_failure_runs_without_the_background_server() -> Result<()> 
     );
     Ok(())
 }
+
+/// D739 (#2855): `corbanu agents` asks for the background server, so a failed
+/// automatic start keeps its error and the `--no-daemon` hint instead of
+/// running without the server.
+#[test]
+fn agents_overview_keeps_the_error_when_the_automatic_start_fails() -> Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let home = tempfile::tempdir()?;
+    write_test_config(home.path(), workspace.path())?;
+    let config = home.path().join("config.toml");
+    let contents = std::fs::read_to_string(&config)?;
+    std::fs::write(
+        config,
+        contents.replace("features.daemon_auto_start = false\n", ""),
+    )?;
+    // The same incomplete package as above makes the automatic start fail.
+    let package = home.path().join("packages/app-server-daemon/current");
+    std::fs::create_dir_all(&package)?;
+    let mut terminal = PtyCodex::start_cli(workspace.path(), home, &["agents"])?;
+    let deadline = Instant::now() + STARTUP_TIMEOUT;
+    let status = loop {
+        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
+        terminal.answer_startup_queries()?;
+        if let Some(status) = terminal.child.try_wait()? {
+            break status;
+        }
+        ensure!(
+            Instant::now() < deadline,
+            "`agents` kept running; screen:\n{}",
+            terminal.screen_contents()
+        );
+    };
+    // The test keeps its own handle on the terminal, so what the exiting
+    // process wrote after restoring it stays readable.
+    for _ in 0..20 {
+        terminal.read_output(Duration::from_millis(/*millis*/ 50))?;
+    }
+    let output = String::from_utf8_lossy(&terminal.output);
+    ensure!(!status.success(), "`agents` exited successfully:\n{output}");
+    ensure!(
+        output.contains("rerun the same command with --no-daemon"),
+        "the --no-daemon hint is missing:\n{output}"
+    );
+    ensure!(
+        !output.contains("could not start its background server"),
+        "`agents` fell back to running without the server:\n{output}"
+    );
+    ensure!(
+        std::fs::read_dir(&package)?.next().is_none(),
+        "a replacement daemon was installed"
+    );
+    Ok(())
+}

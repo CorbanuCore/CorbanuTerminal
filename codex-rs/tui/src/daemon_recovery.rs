@@ -27,13 +27,35 @@ use std::io::IsTerminal;
 use tokio::sync::mpsc::unbounded_channel;
 use tokio_stream::StreamExt;
 
+/// What startup does with the local server after [`check`].
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum CheckOutcome {
+    /// Use the server.
+    UseServer,
+    /// Run without the server and show this warning.
+    RunWithout(String),
+    /// D739 (#2855): the server an automatic start reported cannot be reached;
+    /// run without it, as when the start itself fails.
+    AutoStartUnreachable,
+}
+
+impl CheckOutcome {
+    fn from_warning(warning: Option<String>) -> Self {
+        warning.map_or(Self::UseServer, Self::RunWithout)
+    }
+}
+
+/// `auto_start_fallback` is set for an automatic start that did not ask for
+/// the server explicitly: a server it cannot reach then falls back without
+/// the recovery prompt (D739).
 pub(super) async fn check(
     startup: &mut StartupDraft,
     target: &AppServerTarget,
     config: &Config,
     cli_kv_overrides: &[(String, toml::Value)],
     mut managed_daemon: bool,
-) -> io::Result<Option<String>> {
+    auto_start_fallback: bool,
+) -> io::Result<CheckOutcome> {
     let issue = match startup
         .run_until(daemon_startup::compatibility_warning(
             target,
@@ -42,9 +64,12 @@ pub(super) async fn check(
         ))
         .await?
     {
-        Ok(warning) => return Ok(warning),
+        Ok(warning) => return Ok(CheckOutcome::from_warning(warning)),
         Err(issue) => issue,
     };
+    if auto_start_fallback && issue.unreachable {
+        return Ok(CheckOutcome::AutoStartUnreachable);
+    }
     if !(io::stdin().is_terminal() && io::stdout().is_terminal()) {
         return Err(io::Error::other(issue));
     }
@@ -109,7 +134,7 @@ pub(super) async fn check(
     };
     tui.terminal.clear()?;
     match (selection, issue.restart_features.as_ref()) {
-        (Some(0), _) => Ok(Some(format!(
+        (Some(0), _) => Ok(CheckOutcome::RunWithout(format!(
             "Running without the shared background server: {}.",
             issue.reason
         ))),
@@ -130,6 +155,7 @@ pub(super) async fn check(
                     cli_kv_overrides,
                 ))
                 .await?
+                .map(CheckOutcome::from_warning)
                 .map_err(io::Error::other)
         }
         (Some(_) | None, _) => Err(io::Error::other(issue)),
