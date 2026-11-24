@@ -510,3 +510,43 @@ async fn resume_does_not_admit_a_provider_defined_only_by_the_request() -> Resul
     );
     Ok(())
 }
+
+/// #2853: a model request's workspace-routing reload keeps the session's model
+/// and provider after the saved default changes to a pair that does not resolve.
+#[tokio::test]
+async fn workspace_routing_reload_keeps_session_runtime_over_incompatible_saved_default()
+-> Result<()> {
+    let home = tempdir()?;
+    let config_path = home.path().join("config.toml");
+    std::fs::write(
+        &config_path,
+        "model = 'gpt-6-astra'\nmodel_provider = 'openai'\n",
+    )?;
+    let manager = ConfigManager::without_managed_config_for_tests(home.path().to_path_buf());
+    let current = manager.load_latest_config(/*fallback_cwd*/ None).await?;
+    std::fs::write(
+        &config_path,
+        "model = 'gpt-6-astra'\nmodel_provider = 'claude-plan'\n",
+    )?;
+    let unpinned = manager
+        .load_retained_session_config(&current.config_layer_stack, &current.cwd)
+        .await
+        .expect_err("the saved default alone is an incompatible pair");
+    assert!(
+        unpinned.to_string().contains("is incompatible"),
+        "{unpinned}"
+    );
+
+    let session = current.workspace_routing_session();
+    let retained = manager
+        .load_retained_session_config(&session.config_layer_stack, &session.cwd)
+        .await?;
+    assert_eq!(
+        (
+            retained.model.as_deref(),
+            retained.model_provider_id.as_str()
+        ),
+        (Some("gpt-6-astra"), "openai")
+    );
+    Ok(())
+}
