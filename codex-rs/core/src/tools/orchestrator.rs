@@ -3063,8 +3063,11 @@ where
             /*sandbox_startup_failure*/ true,
         )
     {
-        // #2851 follow-up: the person is told why it was not retried.
-        warn(tool_ctx, STARTUP_RETRY_NOT_ASKED).await;
+        // #2851 follow-up: the person is told why it was not retried (where
+        // an approval could have allowed it).
+        if unsandboxed_allowed {
+            warn(tool_ctx, STARTUP_RETRY_NOT_ASKED).await;
+        }
         return denied(err);
     }
     if !unsandboxed_allowed {
