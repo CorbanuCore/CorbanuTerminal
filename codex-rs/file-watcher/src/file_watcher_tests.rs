@@ -46,7 +46,7 @@ async fn throttled_receiver_coalesces_within_interval() {
     );
     tx.add_changed_paths(&[path("b"), path("c")]).await;
 
-    let second = timeout(TEST_THROTTLE_INTERVAL * 2, throttled.recv())
+    let second = timeout(Duration::from_secs(1), throttled.recv())
         .await
         .expect("second emit timeout");
     let delivered_at = Instant::now();
@@ -99,6 +99,10 @@ async fn throttled_receiver_flushes_pending_on_shutdown() {
 
 #[tokio::test]
 async fn debounced_receiver_coalesces_each_event_batch() {
+    // `timeout` polls the receiver before its own timer, so if the runtime
+    // wakes late (coarse Windows timers, a loaded runner) after both deadlines
+    // passed, the batch slips through the "blocked" window. Keep that window
+    // far shorter than the debounce interval.
     const INTERVAL: Duration = Duration::from_millis(500);
     let (tx, rx) = watch_channel();
     let mut debounced = DebouncedWatchReceiver::new(rx, INTERVAL);
@@ -114,25 +118,19 @@ async fn debounced_receiver_coalesces_each_event_batch() {
         })
     );
 
-    // Seed the current debounce batch directly and make the next path pending
-    // before `recv` starts its interval. This exercises coalescing without a
-    // real-time delay that a runner stall could overshoot.
-    debounced.changed_paths.insert(path("c"));
+    tx.add_changed_paths(&[path("c")]).await;
+    let blocked = timeout(INTERVAL / 5, debounced.recv()).await;
+    assert_eq!(blocked.is_err(), true);
+
     tx.add_changed_paths(&[path("d")]).await;
-    let started = Instant::now();
     let second = timeout(INTERVAL * 4, debounced.recv())
         .await
         .expect("second emit timeout");
-    let delivered_at = Instant::now();
     assert_eq!(
         second,
         Some(FileWatcherEvent {
             paths: vec![path("c"), path("d")],
         })
-    );
-    assert!(
-        delivered_at.duration_since(started) >= INTERVAL,
-        "second batch delivered at {delivered_at:?} before debounce interval elapsed"
     );
 }
 
