@@ -158,7 +158,10 @@ class SelectBazelCiTest(unittest.TestCase):
         self.assertIn("select_linux_bazel_shard.py", jobs["test"])
         self.assertIn("--skip_incompatible_explicit_targets", jobs["test"])
         self.assertIn("${v8_status} -ne 3", jobs["test"])
-        self.assertIn("@crates//:v8 + //codex-rs/code-mode-runtime:all", jobs["test"])
+        self.assertIn(
+            "@crates//:v8 + //codex-rs/code-mode-runtime:all) intersect (${all_query})",
+            jobs["test"],
+        )
         self.assertIn('> "${labels_dir}/shard.txt"', jobs["test"])
         self.assertNotIn("< <(", jobs["test"])
         self.assertIn("shard ${{ matrix.shard }}/${{ matrix.shard_count }}", jobs["test"])

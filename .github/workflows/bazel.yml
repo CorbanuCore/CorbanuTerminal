@@ -163,7 +163,8 @@ jobs:
           # Everything that links the source-built V8 crate goes to the V8
           # shards: direct `@crates//:v8` users (v8-poc) and code-mode-runtime,
           # which depends on the versioned crate label.
-          v8_query="rdeps(${all_query}, @crates//:v8 + //codex-rs/code-mode-runtime:all)"
+          # Intersecting with the set drops the external seed and manual targets.
+          v8_query="rdeps(${all_query}, @crates//:v8 + //codex-rs/code-mode-runtime:all) intersect (${all_query})"
           labels_dir="${RUNNER_TEMP}/bazel-shard-labels"
           mkdir -p "${labels_dir}"
           ./.github/scripts/run-bazel-query-ci.sh --output=label -- "${all_query}" \

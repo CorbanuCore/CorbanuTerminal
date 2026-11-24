@@ -78,12 +78,19 @@ class SelectLinuxBazelShardTest(unittest.TestCase):
 
             (root / "dup.txt").write_text("//a:b\n//a:b\n", encoding="utf-8")
             (root / "ext.txt").write_text("@repo//a:b\n", encoding="utf-8")
-            for bad in ("dup.txt", "ext.txt"):
-                with self.subTest(bad=bad):
+            for flag, bad in (
+                ("--all", "dup.txt"),
+                ("--all", "ext.txt"),
+                ("--v8", "dup.txt"),
+                ("--v8", "ext.txt"),
+            ):
+                with self.subTest(flag=flag, bad=bad):
+                    files = {"--all": root / "all.txt", "--v8": root / "v8.txt"}
+                    files[flag] = root / bad
                     stdout, stderr = io.StringIO(), io.StringIO()
                     with redirect_stdout(stdout), redirect_stderr(stderr):
                         status = main(
-                            ["--all", str(root / bad), "--v8", str(root / "v8.txt")]
+                            ["--all", str(files["--all"]), "--v8", str(files["--v8"])]
                             + ["--shard", "1", "--shard-count", "3"]
                         )
                     self.assertEqual(status, 1)
