@@ -138,17 +138,20 @@ fn config_lock_error(message: impl Into<String>) -> io::Error {
     io::Error::other(message.into())
 }
 
+/// The config lock as written to a `*.config.lock.toml` file, numbers in
+/// JSON-valued fields as TOML numbers (see [`toml_value`]).
+pub(crate) fn config_lock_toml_string(lockfile: &ConfigLockfileToml) -> io::Result<String> {
+    lock_toml_string(lockfile, "config lock")
+}
+
+fn lock_toml_string<T: Serialize>(value: &T, label: &str) -> io::Result<String> {
+    toml::to_string_pretty(&toml_value(value, label)?)
+        .map_err(|err| config_lock_error(format!("failed to serialize {label} TOML: {err}")))
+}
+
 fn compact_diff<T: Serialize>(root: &str, expected: &T, actual: &T) -> io::Result<String> {
-    let expected = toml::to_string_pretty(expected).map_err(|err| {
-        config_lock_error(format!(
-            "failed to serialize expected {root} lock TOML: {err}"
-        ))
-    })?;
-    let actual = toml::to_string_pretty(actual).map_err(|err| {
-        config_lock_error(format!(
-            "failed to serialize actual {root} lock TOML: {err}"
-        ))
-    })?;
+    let expected = lock_toml_string(expected, &format!("expected {root} lock"))?;
+    let actual = lock_toml_string(actual, &format!("actual {root} lock"))?;
     Ok(TextDiff::from_lines(&expected, &actual)
         .unified_diff()
         .context_radius(2)
@@ -156,9 +159,56 @@ fn compact_diff<T: Serialize>(root: &str, expected: &T, actual: &T) -> io::Resul
         .to_string())
 }
 
+/// `value` as TOML. #2872: with serde_json's `arbitrary_precision` (on in
+/// binaries that link `codex-exec-server-protocol`, such as the CLI and the
+/// app server), a number in a JSON-valued config field (`desktop`,
+/// `telegram`, `openrouter_provider`, a MITM hook `body`) serializes as a
+/// private `{"$serde_json::private::Number" = "1.25"}` table; it is written
+/// as the TOML number it is, as #2866 keeps them in config layers. A number
+/// TOML cannot hold exactly keeps that table, which reads back as the same
+/// number.
 fn toml_value<T: Serialize>(value: &T, label: &str) -> io::Result<toml::Value> {
-    toml::Value::try_from(value)
-        .map_err(|err| config_lock_error(format!("failed to serialize {label}: {err}")))
+    let mut value = toml::Value::try_from(value)
+        .map_err(|err| config_lock_error(format!("failed to serialize {label}: {err}")))?;
+    normalize_json_numbers(&mut value);
+    Ok(value)
+}
+
+/// serde_json's private field name for an `arbitrary_precision` number.
+const JSON_NUMBER_FIELD: &str = "$serde_json::private::Number";
+
+fn normalize_json_numbers(value: &mut toml::Value) {
+    match value {
+        toml::Value::Table(table) => {
+            if let Some(number) = json_number(table) {
+                *value = number;
+            } else {
+                table.values_mut().for_each(normalize_json_numbers);
+            }
+        }
+        toml::Value::Array(items) => items.iter_mut().for_each(normalize_json_numbers),
+        _ => {}
+    }
+}
+
+/// The TOML number a private serde_json number table holds, when TOML
+/// holds it exactly: it prints back as the same text.
+fn json_number(table: &toml::Table) -> Option<toml::Value> {
+    let (field, toml::Value::String(text)) = table.iter().next()? else {
+        return None;
+    };
+    if table.len() != 1 || field != JSON_NUMBER_FIELD {
+        return None;
+    }
+    if let Ok(integer) = text.parse::<i64>()
+        && integer.to_string() == *text
+    {
+        return Some(toml::Value::Integer(integer));
+    }
+    let float = text.parse::<f64>().ok()?;
+    serde_json::Number::from_f64(float)
+        .is_some_and(|number| number.to_string() == *text)
+        .then_some(toml::Value::Float(float))
 }
 
 pub(crate) fn toml_round_trip<T>(value: &impl Serialize, label: &'static str) -> io::Result<T>
@@ -177,3 +227,7 @@ where
     }
     Ok(toml)
 }
+
+#[cfg(test)]
+#[path = "config_lock_tests.rs"]
+mod tests;
