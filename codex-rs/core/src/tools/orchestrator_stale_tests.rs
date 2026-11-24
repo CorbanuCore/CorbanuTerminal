@@ -108,6 +108,9 @@ struct Probe {
     /// #2820: the `PATH` it runs with, if known.
     search_path: Option<&'static str>,
     runs: usize,
+    /// #2851 follow-up: the command it asks about (`issue-1001-probe`
+    /// unless a test needs a protected one).
+    command: &'static [&'static str],
     /// D750 (#2851): the sandbox each run had, in order.
     sandboxes: Vec<SandboxType>,
 }
@@ -144,8 +147,8 @@ impl Approvable<Req> for Probe {
         Ok(ApprovalAction::ExecCommand {
             id: call_id.to_string(),
             environment_id: req.environment.selection.environment_id.clone(),
-            command: vec!["issue-1001-probe".to_string()],
-            hook_command: "issue-1001-probe".to_string(),
+            command: self.command.iter().map(|word| word.to_string()).collect(),
+            hook_command: self.command.join(" "),
             cwd: req.environment.cwd().clone(),
             sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
             additional_permissions: req.additional.clone(),
@@ -267,8 +270,9 @@ struct Case {
     /// D750 (#2851): the first run starts (its attempt returns), and its
     /// denial (`denial_text`) is seen only afterwards.
     late_denial: bool,
-    /// #2851 follow-up: the turn requires automatic review (a grant with
-    /// strict auto review is recorded for it before the run).
+    /// #2851 follow-up: the late failure is decided as for a round decided
+    /// under required automatic review (whose first attempt was reviewed
+    /// automatically; this harness has no automatic reviewer to run it).
     strict_auto_review: bool,
 }
 
@@ -393,6 +397,7 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         sandbox_approval_by_policy: case.sandbox_approval_by_policy,
         search_path: case.search_path,
         runs: 0,
+        command: &["issue-1001-probe"],
         sandboxes: Vec::new(),
     };
     let tool_ctx = ToolCtx {
@@ -402,30 +407,6 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         call_id: "call-1001".to_string(),
         tool_name: codex_tools::ToolName::plain("issue_1001_probe"),
     };
-    if case.strict_auto_review {
-        assert!(
-            session.record_granted_request_permissions_for_turn(
-                &codex_protocol::request_permissions::RequestPermissionsResponse {
-                    permissions: codex_protocol::request_permissions::RequestPermissionProfile {
-                        network: Some(codex_protocol::models::NetworkPermissions {
-                            enabled: Some(true),
-                        }),
-                        ..Default::default()
-                    },
-                    scope: codex_protocol::request_permissions::PermissionGrantScope::Turn,
-                    strict_auto_review: true,
-                },
-                &environment.selection.environment_id,
-                turn.as_ref(),
-                session.services.authority_marker(),
-            ),
-            "the strict grant is recorded"
-        );
-        assert!(
-            turn.strict_auto_review_enabled(),
-            "automatic review is required"
-        );
-    }
     let mut additional = case.additional;
     let mut handler_basis = None;
     if let Some(handler) = case.handler {
@@ -492,12 +473,13 @@ async fn run_probe(case: Case) -> (Outcome, Result<(), String>) {
         };
         // D750 (#2851): as unified exec does when the run it returned as
         // started is then denied.
-        let Some(plan) = started.late_startup_retry else {
+        let Some(mut plan) = started.late_startup_retry else {
             return Err(ToolError::Codex(CodexErr::Sandbox(SandboxErr::Denied {
                 output: Box::new(output),
                 network_policy_decision: None,
             })));
         };
+        plan.strict_auto_review |= case.strict_auto_review;
         orchestrator
             .retry_late_sandbox_startup_failure(&mut probe, &req, &tool_ctx, plan, output)
             .await
@@ -1259,6 +1241,7 @@ async fn issue_2851_untrusted_content_while_the_command_ran_is_read_again() {
         sandbox_approval_by_policy: true,
         search_path: None,
         runs: 0,
+        command: &["corbanu", "vault", "list"],
         sandboxes: Vec::new(),
     };
     let req = Req {
