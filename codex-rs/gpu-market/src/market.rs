@@ -289,6 +289,12 @@ fn merge_search_results(
             Err(error) if error.kind == ProviderErrorKind::InsufficientFunds => Some(error.clone()),
             _ => None,
         });
+    let rate_limited = [&first, &second]
+        .into_iter()
+        .find_map(|result| match result {
+            Err(error) if error.kind == ProviderErrorKind::RateLimited => Some(error.clone()),
+            _ => None,
+        });
     if matches!(
         (&first, &second),
         (
@@ -356,6 +362,11 @@ fn merge_search_results(
     }
     if offers.is_empty()
         && let Some(error) = insufficient_funds
+    {
+        return Err(error);
+    }
+    if offers.is_empty()
+        && let Some(error) = rate_limited
     {
         return Err(error);
     }
