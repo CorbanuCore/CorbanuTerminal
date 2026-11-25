@@ -195,6 +195,40 @@ fn two_rate_limited_providers_do_not_masquerade_as_empty_inventory() {
 }
 
 #[test]
+fn one_rate_limited_provider_does_not_masquerade_as_empty_inventory() {
+    let limited = ProviderError {
+        retry_after_ms: Some(30_000),
+        ..ProviderError::new(ProviderErrorKind::RateLimited, "rate limit")
+    };
+    for other in [
+        Err(ProviderError::new(
+            ProviderErrorKind::NotConfigured,
+            "missing second",
+        )),
+        Ok(Vec::new()),
+    ] {
+        let error = merge_search_results(Err(limited.clone()), other)
+            .expect_err("a rate limit must not look like empty capacity");
+        assert_eq!(error.kind, ProviderErrorKind::RateLimited);
+        assert_eq!(error.retry_after_ms, Some(30_000));
+    }
+
+    let offers = vec![offer(
+        "available",
+        /*price*/ 1_000_000,
+        &SearchOffersRequest {
+            hardware: hardware(),
+            allow_interruptible: false,
+            require_verified_or_secure: true,
+            maximum_hourly_microusd: 2_000_000,
+        },
+    )];
+    let merged = merge_search_results(Err(limited), Ok(offers))
+        .expect("another provider's offers remain usable");
+    assert_eq!(merged.len(), 1);
+}
+
+#[test]
 fn one_unconfigured_provider_does_not_block_configured_inventory() {
     let offers = vec![offer(
         "configured",
