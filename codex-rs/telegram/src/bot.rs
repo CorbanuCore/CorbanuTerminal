@@ -672,7 +672,7 @@ fn callback_answer_text(text: &str) -> String {
 
 #[cfg(test)]
 #[path = "bot_failure_tests.rs"]
-mod failure_tests;
+pub(crate) mod failure_tests;
 
 #[cfg(test)]
 mod tests {

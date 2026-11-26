@@ -67,6 +67,8 @@ impl BridgeRuntime {
             ServerNotification::TurnCompleted(notification) => {
                 let thread_id = notification.thread_id;
                 let status = notification.turn.status;
+                // The turn is over whether or not the notice below can be sent.
+                self.sessions.clear_turn_for_thread(&thread_id).await;
                 if let Some(chat_id) = self.sessions.conversation_for_thread(&thread_id).await {
                     match status {
                         TurnStatus::Completed => {}
@@ -79,7 +81,6 @@ impl BridgeRuntime {
                         TurnStatus::InProgress => {}
                     }
                 }
-                self.sessions.clear_turn_for_thread(&thread_id).await;
                 Ok(())
             }
             ServerNotification::Warning(notification) => {
@@ -407,3 +408,7 @@ impl BridgeRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "notifications_tests.rs"]
+mod tests;
