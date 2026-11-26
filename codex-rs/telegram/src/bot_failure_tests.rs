@@ -28,7 +28,9 @@ fn test_home() -> PathBuf {
 }
 
 // One bounded loopback request; no Telegram credentials or live service.
-async fn notice_bot(fail_notice: bool) -> (Bot, tokio::task::JoinHandle<serde_json::Value>) {
+pub(crate) async fn notice_bot(
+    fail_notice: bool,
+) -> (Bot, tokio::task::JoinHandle<serde_json::Value>) {
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncWriteExt;
 
