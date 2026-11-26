@@ -3699,7 +3699,7 @@ async fn open_agent_picker_prompts_when_subagents_disabled() -> Result<()> {
     let _ = app.config.features.disable(Feature::Collab);
     let primary_thread_id = ThreadId::new();
     app.enqueue_primary_thread_session(
-        test_thread_session(primary_thread_id, test_path_buf("/tmp/project")),
+        test_thread_session(primary_thread_id, app.config.cwd.to_path_buf()),
         Vec::new(),
     )
     .await?;
@@ -9691,22 +9691,22 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     }
 
     let source_thread_id = ThreadId::from_string(&source_thread_id)?;
-    let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(&config)).await?;
+    let mut app_server =
+        boxed_future!(crate::start_embedded_app_server_for_picker(&config)).await?;
     // Bound fixture hydration independently from the owned viewport exercised below.
     // Inline hydration's row cap leaves the oldest prompt on an unloaded page.
     let mut local_settings = crate::local_settings::LocalSettings::from(&config);
     local_settings.transcript_mode = crate::transcript_mode::TranscriptMode::Terminal;
     local_settings.tui.alternate_screen = codex_config::types::AltScreenMode::Never;
     local_settings.tui.terminal_resize_reflow_max_rows = Some(2);
-    let started = app_server
-        .resume_thread_with_permission_overrides(
-            &local_settings,
-            config.clone(),
-            source_thread_id,
-            crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
-            crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
-        )
-        .await?;
+    let started = boxed_future!(app_server.resume_thread_with_permission_overrides(
+        &local_settings,
+        config.clone(),
+        source_thread_id,
+        crate::app_server_session::ResumeModelSettings::OverrideFromCurrentConfig,
+        crate::resume_permissions::ResumePermissions::CURRENT_CONFIG,
+    ))
+    .await?;
     assert!(app_server.has_older_history(source_thread_id));
     let selected_turn = started.turns[3].clone();
     app.enqueue_primary_thread_session(started.session, started.turns)
@@ -9814,7 +9814,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         mention_bindings: Vec::new(),
     };
 
-    Box::pin(app.handle_event(
+    boxed_future!(app.handle_event(
         &mut tui,
         &mut app_server,
         AppEvent::UpdateModel("gpt-5.4".into()),
@@ -9835,7 +9835,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             remote_prompt.text = text.into();
             remote_prompt.local_images.clear();
         }
-        Box::pin(app.handle_event(
+        boxed_future!(app.handle_event(
             &mut tui,
             &mut app_server,
             AppEvent::RevertSessionForPromptEdit {
@@ -9877,21 +9877,21 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             /*limit*/ 1,
         )
         .await?;
-    app.handle_older_history_page(
+    boxed_future!(app.handle_older_history_page(
         &mut tui,
         &mut app_server,
         source_thread_id,
         &cursor,
         Ok(page),
-    )
+    ))
     .await?;
-    let control = Box::pin(app.handle_event(&mut tui, &mut app_server, selection)).await?;
+    let control = boxed_future!(app.handle_event(&mut tui, &mut app_server, selection)).await?;
 
     while let Ok(event) = app_event_rx.try_recv() {
         match event {
             AppEvent::InsertHistoryCell(cell) => app.transcript_cells.push(Arc::from(cell)),
             event @ AppEvent::FinishPromptRevert { .. } => {
-                Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
+                boxed_future!(app.handle_event(&mut tui, &mut app_server, event)).await?;
             }
             _ => {}
         }
@@ -9919,7 +9919,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         .collect::<Vec<_>>()
         .join("\n");
     let stable_cwd = "/tmp/project";
-    let cwd = test_path_buf(stable_cwd).display().to_string();
+    let cwd = config.cwd.display().to_string();
     let transcript = transcript.replace(&cwd, &format!("{stable_cwd:<width$}", width = cwd.len()));
     insta::assert_snapshot!("owned_prompt_revert_retained_history", transcript);
     assert!(Arc::ptr_eq(
@@ -9980,7 +9980,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
             preserve_in_flight_turn: false,
         },
     );
-    Box::pin(app.handle_event(
+    boxed_future!(app.handle_event(
         &mut tui,
         &mut app_server,
         AppEvent::RevertSessionForPromptEdit {
@@ -9994,7 +9994,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     .await?;
     while let Ok(event) = app_event_rx.try_recv() {
         if matches!(event, AppEvent::FinishPromptRevert { .. }) {
-            Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
+            boxed_future!(app.handle_event(&mut tui, &mut app_server, event)).await?;
         }
     }
     assert!(!app.transcript_view.is_search_editing());
@@ -10016,8 +10016,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
         vec!["turn-0"]
     );
     tui.set_owned_screen(/*owned*/ true)?;
-    app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)
-        .await?;
+    boxed_future!(app.handle_tui_event(&mut tui, &mut app_server, TuiEvent::Draw)).await?;
     assert_eq!(
         app.transcript_view.history,
         crate::pager_overlay::TranscriptHistoryState::LoadingOlder
@@ -10025,7 +10024,7 @@ async fn prompt_edit_reverts_earlier_and_first_visible_prompts_in_place_scenario
     loop {
         let event = app_event_rx.recv().await.expect("older history page");
         if let AppEvent::OlderThreadHistoryLoaded { .. } = event {
-            Box::pin(app.handle_event(&mut tui, &mut app_server, event)).await?;
+            boxed_future!(app.handle_event(&mut tui, &mut app_server, event)).await?;
             break;
         }
     }
