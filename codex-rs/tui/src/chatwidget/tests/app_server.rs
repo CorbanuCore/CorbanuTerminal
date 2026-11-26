@@ -329,7 +329,8 @@ async fn safety_buffering_offers_one_retry_with_app_wording() {
     );
     assert_chatwidget_snapshot!(
         "safety_buffering_retry_confirmation_narrow",
-        render_bottom_popup(&chat, /*width*/ 40)
+        // Only the platform path separator survives this narrow footer's clipping.
+        render_bottom_popup(&chat, /*width*/ 40).replace(r"\…", "/…")
     );
     assert!(op_rx.try_recv().is_err());
     while let Ok(event) = rx.try_recv() {

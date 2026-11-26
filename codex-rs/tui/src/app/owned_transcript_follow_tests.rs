@@ -42,6 +42,8 @@ async fn follow_control_click_preserves_draft_caret_and_composer_geometry() -> R
                 ),
                 /*replay_kind*/ None,
             );
+            // Freeze the existing snapshot's elapsed time and blink phase.
+            crate::chatwidget::tests::helpers::freeze_status_indicator_timer(&mut app.chat_widget);
         }
         let size = Size::new(width, /*height*/ 12);
         tui.screen_size_for_event(&TuiEvent::Resize(size))?;
