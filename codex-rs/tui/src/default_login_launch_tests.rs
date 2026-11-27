@@ -44,6 +44,11 @@ async fn launch(named_accounts: bool, named_session: bool) -> Launch {
             .features
             .enable(Feature::NamedAccounts)
             .expect("named accounts should be available in tests");
+    } else {
+        config
+            .features
+            .disable(Feature::NamedAccounts)
+            .expect("named accounts should be available in tests");
     }
     config.model_provider_id = "openai".to_string();
     config.model_provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);

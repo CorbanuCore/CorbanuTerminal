@@ -3363,7 +3363,7 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
         prompt,
         model,
         reasoning_effort,
-        provider_account: None,
+        provider_account,
         agents_states,
     } = spawn_completed
     else {
@@ -3381,6 +3381,9 @@ async fn turn_start_emits_spawn_agent_item_with_model_metadata_v2() -> Result<()
     assert_eq!(prompt, Some(CHILD_PROMPT.to_string()));
     assert_eq!(model, Some(REQUESTED_MODEL.to_string()));
     assert_eq!(reasoning_effort, Some(REQUESTED_REASONING_EFFORT));
+    // PF-84: named accounts are on by default; the child runs on the
+    // parent's account, `default`.
+    assert_eq!(provider_account, Some("default".to_string()));
     let agent_state = agents_states
         .get(&receiver_thread_id)
         .expect("spawn completion should include child agent state");
@@ -3729,7 +3732,7 @@ config_file = "./custom-role.toml"
         prompt,
         model,
         reasoning_effort,
-        provider_account: None,
+        provider_account,
         agents_states,
     } = spawn_completed
     else {
@@ -3747,6 +3750,9 @@ config_file = "./custom-role.toml"
     assert_eq!(prompt, Some(CHILD_PROMPT.to_string()));
     assert_eq!(model, Some(ROLE_MODEL.to_string()));
     assert_eq!(reasoning_effort, Some(ROLE_REASONING_EFFORT));
+    // PF-84: named accounts are on by default; the child runs on the
+    // parent's account, `default`.
+    assert_eq!(provider_account, Some("default".to_string()));
     let agent_state = agents_states
         .get(&receiver_thread_id)
         .expect("spawn completion should include child agent state");

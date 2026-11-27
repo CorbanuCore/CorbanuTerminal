@@ -37,9 +37,11 @@ fn ruled_out_default_login_home(named_accounts: bool) -> Result<(TempDir, Vec<u8
         .with_provider_config("requires_openai_auth = true")
         .with_root_config("forced_login_method = \"chatgpt\"")
         .with_root_config("cli_auth_credentials_store = \"file\"");
-    if named_accounts {
-        config = config.enable_feature(Feature::NamedAccounts);
-    }
+    config = if named_accounts {
+        config.enable_feature(Feature::NamedAccounts)
+    } else {
+        config.disable_feature(Feature::NamedAccounts)
+    };
     config.write(codex_home.path())?;
     codex_login::login_with_api_key(
         codex_home.path(),

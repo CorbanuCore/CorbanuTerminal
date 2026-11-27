@@ -1,11 +1,13 @@
-# Named provider accounts (`named_accounts`, off by default)
+# Named provider accounts (`named_accounts`)
 
 One key per provider is not enough when you keep a work and a personal account,
 or want a worker on a different account than its coordinator. Named accounts
 let a provider hold several accounts besides `default`, each a named key or
 token in the vault (`corbanu account add <provider> <name>`, `corbanu account
-list`). Turn the feature on with `--enable named_accounts` or
-`[features] named_accounts = true`.
+list`). The feature is on by default; turn it off with `--disable
+named_accounts` or `[features] named_accounts = false`, and every provider
+uses its default account (a conversation recorded on a named account is then
+refused rather than run on the default, see below).
 
 ## Choosing an account
 
